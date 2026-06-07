@@ -1,0 +1,36 @@
+name: Release build
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  artifact:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run lint --if-present
+      - run: npm run test --if-present
+      - run: npm run build
+
+      - name: Create runtime archive
+        run: |
+          tar -czf betreuungskalender-${GITHUB_REF_NAME}.tar.gz \
+            dist dist-server scripts package.json package-lock.json \
+            .env.example README.md LICENSE CHANGELOG.md docs
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: betreuungskalender-${{ github.ref_name }}
+          path: betreuungskalender-${{ github.ref_name }}.tar.gz

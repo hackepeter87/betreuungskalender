@@ -1,0 +1,41 @@
+name: Feature request
+description: Propose a change and describe privacy and reporting impact.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use fictional examples only. Do not include real family or case data.
+  - type: textarea
+    id: use_case
+    attributes:
+      label: Use case
+      description: What neutral documentation task should this support?
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Desired behavior
+    validations:
+      required: true
+  - type: textarea
+    id: privacy
+    attributes:
+      label: Privacy and security impact
+      description: What sensitive data, access control, logging, or backup behavior changes?
+    validations:
+      required: true
+  - type: textarea
+    id: reports
+    attributes:
+      label: Export and report impact
+      description: Does this affect JSON, CSV, PDF, audit history, or monthly closure?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

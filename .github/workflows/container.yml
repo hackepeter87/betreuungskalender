@@ -1,0 +1,38 @@
+name: Container
+
+on:
+  push:
+    paths:
+      - Dockerfile
+      - compose.yaml
+      - package.json
+      - package-lock.json
+      - server/**
+      - shared/**
+      - src/**
+      - public/**
+      - scripts/**
+      - .github/workflows/container.yml
+  pull_request:
+    paths:
+      - Dockerfile
+      - compose.yaml
+      - package.json
+      - package-lock.json
+      - server/**
+      - shared/**
+      - src/**
+      - public/**
+      - scripts/**
+      - .github/workflows/container.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build image
+        run: docker build --tag betreuungskalender:ci .

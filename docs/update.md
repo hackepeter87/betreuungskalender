@@ -42,3 +42,7 @@ review migration notes before downgrading.
 5. Restore browser JSON only when browser-local data was changed or replaced.
 
 Never attempt a database rollback by manually deleting migration records.
+
+Application maintainers preparing a new version should follow the separate
+[release workflow](release.md), including the strict sensitive-artifact check
+before creating a tag.
