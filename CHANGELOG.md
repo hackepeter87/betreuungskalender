@@ -6,32 +6,49 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
-### Added
-
-- Production delivery of the built frontend and API from one Fastify process.
-- Configurable reverse-proxy authentication and restrictive CORS handling.
-- Security headers, content security policy, redacted proxy identity headers,
-  and production-safe error responses.
-- SQLite backup, restore verification, healthcheck, and release-check scripts.
-- Multi-stage Docker image, Compose deployment, systemd example, and operating
-  documentation for LXC, containers, reverse proxies, Keycloak, and
-  oauth2-proxy.
-- GitHub Actions, issue forms, pull request template, security policy,
-  contribution guide, code of conduct, and MIT license.
-- Typed, touch-friendly help system for form fields.
-- Documentation of unavailable periods, audit history, monthly closure,
-  exports, mobile use, and data-quality checks.
-
-### Security
-
-- `/api/health` no longer exposes the configured database path.
-- Proxy identity headers are trusted only when `TRUST_PROXY_AUTH=true`.
-- API access is denied without a trusted identity when `REQUIRE_AUTH=true`.
-
 ## [0.1.0] - 2026-06-07
 
 ### Added
 
-- Initial Betreuungskalender application with care entries, children, calendar,
-  contact schedules, holidays, unavailable periods, trips, costs, reports,
-  exports, monthly closure, audit log, mobile layouts, and PWA support.
+- First public preview of Betreuungskalender.
+- Child management and care entries with status, period, scope, overnight
+  stays, location, handovers, notes, and evidence references.
+- Configurable biweekly target schedule with planned/actual comparison,
+  additional care, cancellation reasons, and overlap notices.
+- Holiday management, unavailable periods, trips, costs, and period-based
+  statistics.
+- Monthly and yearly analyses for care days, overnights, weekends, holidays,
+  travel distance, and costs.
+- JSON backup and import, separate CSV exports, neutral PDF reports, and an
+  A4-optimized print view.
+- Monthly closure, data-quality checks, plausibility validation, soft deletion,
+  and a field-level audit log.
+- Responsive iPhone and iPad layouts, compact mobile agenda, touch-friendly
+  forms, PWA manifest, and offline frontend fallback.
+- Typed, touch-friendly help text and factual documentation rules.
+- Fastify API with SQLite migrations, validation, health endpoints,
+  configurable reverse-proxy authentication, restrictive CORS, and security
+  headers.
+- SQLite backup, restore verification, healthcheck, and release-check scripts.
+- Multi-stage container image, Compose deployment, systemd examples, and
+  operating documentation for LXC, reverse proxies, Keycloak, and
+  oauth2-proxy.
+- GitHub Actions CI using `npm ci`, the sensitive-artifact release check, and
+  the Vite production build.
+- Open-source project documentation, contribution guide, security policy, code
+  of conduct, and MIT license.
+
+### Security
+
+- The release check blocks accidentally tracked databases, reports, exports,
+  backups, and environment files.
+- `/api/health` does not expose the configured database path.
+- Proxy identity headers are trusted only when `TRUST_PROXY_AUTH=true`.
+- API access is denied without a trusted identity when `REQUIRE_AUTH=true`.
+
+### Notes
+
+- This version is the first public preview.
+- The application is a documentation tool and does not provide legal advice.
+- Reports are technical summaries of user-entered data and are not official or
+  legally reviewed documents.
