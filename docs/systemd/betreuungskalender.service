@@ -1,0 +1,31 @@
+[Unit]
+Description=Betreuungskalender
+After=network.target
+
+[Service]
+Type=simple
+User=betreuung
+Group=betreuung
+WorkingDirectory=/opt/betreuungskalender
+EnvironmentFile=/etc/betreuungskalender/.env
+ExecStart=/usr/bin/npm run start
+Restart=on-failure
+RestartSec=5
+UMask=0077
+
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=full
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+CapabilityBoundingSet=
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/betreuungskalender /var/backups/betreuungskalender
+
+[Install]
+WantedBy=multi-user.target

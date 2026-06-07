@@ -1,0 +1,31 @@
+services:
+  betreuungskalender:
+    build:
+      context: .
+    container_name: betreuungskalender
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+      DATABASE_PATH: /data/app.sqlite
+      BACKUP_DIR: /backups
+      REQUIRE_AUTH: "false"
+      TRUST_PROXY_AUTH: "false"
+      ALLOWED_ORIGIN: http://localhost:3000
+      LOG_LEVEL: info
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - betreuungskalender-data:/data
+      - betreuungskalender-backups:/backups
+    healthcheck:
+      test: ["CMD", "node", "scripts/healthcheck.js"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  betreuungskalender-data:
+  betreuungskalender-backups:

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">Betreuungskalender</title>
+  <rect width="512" height="512" rx="112" fill="#087f7b"/>
+  <rect x="106" y="126" width="300" height="276" rx="40" fill="#ffffff"/>
+  <path d="M106 204h300" stroke="#d7ecea" stroke-width="24"/>
+  <path d="M176 96v72M336 96v72" stroke="#ffffff" stroke-width="32" stroke-linecap="round"/>
+  <circle cx="186" cy="272" r="26" fill="#6967d9"/>
+  <circle cx="256" cy="272" r="26" fill="#d97706"/>
+  <circle cx="326" cy="272" r="26" fill="#c94e5b"/>
+  <path d="M173 340l48 42 118-126" fill="none" stroke="#087f7b" stroke-width="30" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
