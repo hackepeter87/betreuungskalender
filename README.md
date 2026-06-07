@@ -8,16 +8,16 @@ travel, costs, holidays, and unavailable periods.
 > record, and no guarantee that generated material will be accepted by a court,
 > authority, lawyer, or other recipient.
 
+## Screenshot
+
+![Dashboard des Betreuungskalenders](docs/assets/screenshots/dashboard-desktop.png)
+
+Beispielansicht mit fiktiven Demonstrationsdaten.
+
 [Features](#features) · [Development](#development-quick-start) ·
 [Container](#container-quick-start) · [systemd/LXC](#lxcsystemd-quick-start) ·
 [Configuration](docs/configuration.md) · [Security](docs/security.md) ·
 [Backup](docs/backup-restore.md)
-
-## Screenshots
-
-No screenshots are committed yet to avoid accidental publication of personal
-data. See [the screenshot policy](docs/screenshots.md) before adding anonymized
-images.
 
 ## Features
 
@@ -268,6 +268,24 @@ IDs, monthly closure, and backups improve internal traceability but do not
 create a qualified signature, trusted timestamp, or tamper-proof archive.
 
 Read the full [legal disclaimer](docs/legal-disclaimer.md).
+
+## Release Check
+
+Before a release, verify that the repository contains no local databases,
+exports, backups, or secrets:
+
+```bash
+npm run release:check
+npm run release:check:strict
+```
+
+The check blocks real artifacts such as `.sqlite`, `.db`, `.pdf`, `.csv`,
+`.env`, and backup/export JSON files. Source and documentation files whose
+names contain words such as `backup` or `export` remain allowed.
+
+The strict command additionally requires a clean working tree, checks that the
+release tag is available, and runs build, lint, and tests. See the complete
+[release workflow](docs/release.md).
 
 ## Project checks
 

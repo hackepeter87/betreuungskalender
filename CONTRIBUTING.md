@@ -49,6 +49,14 @@ npm run build
 - Update `SECURITY.md` and `docs/security.md` for security-relevant changes.
 - Update README and deployment documentation when runtime behavior changes.
 
+## Screenshots
+
+Screenshots für Dokumentation oder Pull Requests dürfen keine echten
+personenbezogenen Daten enthalten. Bitte ausschließlich fiktive
+Demonstrationsdaten verwenden und sensible Informationen vor dem Commit
+entfernen. Screenshots für die Projektdokumentation gehören nach
+`docs/assets/screenshots/`.
+
 ## Pull requests
 
 Explain the user-visible behavior, migration impact, tests performed, and

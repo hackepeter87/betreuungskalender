@@ -1,88 +1,395 @@
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const requiredFiles = [
-  "README.md",
-  "LICENSE",
-  "SECURITY.md",
-  "CONTRIBUTING.md",
-  "CODE_OF_CONDUCT.md",
-  "CHANGELOG.md",
-  ".env.example",
-  "Dockerfile",
-  "compose.yaml"
+export const REQUIRED_GITIGNORE_RULES = [
+  ".env",
+  ".env.*",
+  "!.env.example",
+  "/data/",
+  "/backups/",
+  "/exports/",
+  "/secrets/",
+  "*.sqlite",
+  "*.sqlite-*",
+  "*.db",
+  "*.db-*",
+  "*.pdf",
+  "*.csv",
+  "betreuungskalender-backup-*.json",
+  "backup-*.json"
 ];
 
-function run(command, args) {
-  console.log(`\n> ${command} ${args.join(" ")}`);
-  const result = spawnSync(command, args, {
-    cwd: process.cwd(),
-    stdio: "inherit",
-    shell: false
-  });
-  if (result.status !== 0) {
-    throw new Error(`${command} ${args.join(" ")} ist fehlgeschlagen.`);
-  }
+const ALLOWED_PATHS = new Set([
+  ".env.example",
+  "scripts/backup.js",
+  "scripts/release-check.js",
+  "src/lib/export.ts",
+  "src/components/MobileExportNotice.tsx",
+  "src/pages/BackupPage.tsx"
+]);
+
+const CRITICAL_PROJECT_PATHS = [
+  "package.json",
+  "package-lock.json",
+  "README.md",
+  "LICENSE",
+  "docs/backup-restore.md",
+  "server/migrations/001_initial_schema.sql",
+  ".github/workflows/ci.yml",
+  ".env.example"
+];
+
+const SEMVER_PATTERN =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|[a-zA-Z-][0-9a-zA-Z-]*))*)?(?:\+[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*)?$/;
+const SCREENSHOT_DIRECTORY = "docs/assets/screenshots/";
+const IMAGE_PATTERN = /\.(?:png|jpe?g|webp)$/i;
+
+function normalizePath(filePath) {
+  return filePath.replaceAll("\\", "/").replace(/^\.\/+/, "");
 }
 
-function checkRequiredFiles() {
-  const missing = requiredFiles.filter((file) => !existsSync(resolve(file)));
-  if (missing.length) {
-    throw new Error(`Erforderliche Dateien fehlen: ${missing.join(", ")}`);
+export function classifySensitiveArtifact(filePath) {
+  const normalized = normalizePath(filePath);
+  const lower = normalized.toLowerCase();
+  const fileName = basename(lower);
+
+  if (ALLOWED_PATHS.has(normalized) || normalized.startsWith("docs/")) {
+    return null;
   }
+
+  if (
+    fileName === ".env" ||
+    (fileName.startsWith(".env.") && fileName !== ".env.example")
+  ) {
+    return "environment file";
+  }
+  if (
+    lower.startsWith("data/") ||
+    lower.startsWith("backups/") ||
+    lower.startsWith("exports/") ||
+    lower.startsWith("secrets/")
+  ) {
+    return "file in a local data, backup, export, or secrets directory";
+  }
+  if (/\.sqlite(?:$|-)/i.test(lower)) {
+    return "SQLite database or sidecar file";
+  }
+  if (/\.db(?:$|-)/i.test(lower)) {
+    return "database or sidecar file";
+  }
+  if (/\.pdf$/i.test(lower)) {
+    return "PDF export";
+  }
+  if (/\.csv$/i.test(lower)) {
+    return "CSV export";
+  }
+  if (
+    /^betreuungskalender-backup-.*\.json$/i.test(fileName) ||
+    /^backup-.*\.json$/i.test(fileName) ||
+    /\.backup\.json$/i.test(fileName) ||
+    /\.export\.json$/i.test(fileName)
+  ) {
+    return "JSON backup or export";
+  }
+
+  return null;
 }
 
-function checkTrackedSensitiveFiles() {
-  if (!existsSync(".git")) {
-    console.warn("Kein Git-Metadatenverzeichnis gefunden; Prüfung getrackter Dateien übersprungen.");
-    return;
-  }
-  const result = spawnSync("git", ["ls-files", "-z"], {
+export function isImageOutsideScreenshotDirectory(filePath) {
+  const normalized = normalizePath(filePath);
+  return (
+    IMAGE_PATTERN.test(normalized) &&
+    !normalized.toLowerCase().startsWith(SCREENSHOT_DIRECTORY)
+  );
+}
+
+export function findMissingGitignoreRules(content) {
+  const rules = new Set(
+    content
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter((line) => line && !line.startsWith("#"))
+  );
+  return REQUIRED_GITIGNORE_RULES.filter((rule) => !rules.has(rule));
+}
+
+export function isValidSemver(version) {
+  return typeof version === "string" && SEMVER_PATTERN.test(version);
+}
+
+function parseArguments(argv) {
+  const supported = new Set(["--strict", "--build", "--lint", "--test", "--all", "--tag"]);
+  const unknown = argv.filter((argument) => argument.startsWith("-") && !supported.has(argument));
+  return {
+    strict: argv.includes("--strict"),
+    build: argv.includes("--build") || argv.includes("--all"),
+    lint: argv.includes("--lint") || argv.includes("--all"),
+    test: argv.includes("--test") || argv.includes("--all"),
+    tag: argv.includes("--tag"),
+    unknown
+  };
+}
+
+function runGit(args, cwd) {
+  return spawnSync("git", args, {
+    cwd,
     encoding: "utf8",
     shell: false
   });
-  if (result.status !== 0) {
-    throw new Error("Getrackte Dateien konnten nicht geprüft werden.");
-  }
-  const tracked = result.stdout.split("\0").filter(Boolean);
-  const forbidden = tracked.filter((file) => {
-    const lower = file.toLowerCase();
-    return (
-      (lower.startsWith(".env") && lower !== ".env.example") ||
-      /\.(sqlite|db|pdf|csv)$/.test(lower) ||
-      lower.startsWith("backups/") ||
-      lower.startsWith("exports/") ||
-      lower.startsWith("secrets/") ||
-      /^betreuungskalender-backup-.*\.json$/.test(lower)
-    );
+}
+
+function runNpmScript(scriptName, cwd) {
+  console.log(`\n> npm run ${scriptName}`);
+  return spawnSync("npm", ["run", scriptName], {
+    cwd,
+    stdio: "inherit",
+    shell: false
   });
-  if (forbidden.length) {
-    throw new Error(
-      `Sensible oder erzeugte Dateien sind getrackt: ${forbidden.join(", ")}`
+}
+
+function splitNullOutput(output = "") {
+  return output.split("\0").filter(Boolean);
+}
+
+function formatArtifactList(artifacts) {
+  return artifacts.map(({ path, reason }) => `  - ${path} (${reason})`);
+}
+
+function warnAboutImages(files, report) {
+  for (const path of files.filter(isImageOutsideScreenshotDirectory)) {
+    report.warn(
+      `Image file outside ${SCREENSHOT_DIRECTORY}: ${path}`,
+      ["  Please verify that it contains no personal data."]
     );
   }
 }
 
-function checkMigrationSources() {
-  const migrations = readdirSync("server/migrations").filter((file) =>
-    file.endsWith(".sql")
-  );
-  if (!migrations.length) throw new Error("Keine Datenbankmigrationen gefunden.");
+function createReport(strict) {
+  const items = [];
+  return {
+    pass(label, details = []) {
+      items.push({ status: "PASS", label, details });
+    },
+    warn(label, details = [], strictFailure = false) {
+      items.push({
+        status: strict && strictFailure ? "FAIL" : "WARN",
+        label,
+        details
+      });
+    },
+    fail(label, details = []) {
+      items.push({ status: "FAIL", label, details });
+    },
+    hasFailures() {
+      return items.some((item) => item.status === "FAIL");
+    },
+    print() {
+      const failed = items.some((item) => item.status === "FAIL");
+      console.log(`\nRelease check ${failed ? "failed" : "summary"}:`);
+      for (const item of items) {
+        console.log(`[${item.status}] ${item.label}`);
+        for (const detail of item.details) console.log(detail);
+      }
+      if (failed) {
+        console.log("\nResolve all [FAIL] items before creating a release.");
+      }
+    }
+  };
 }
 
-try {
-  checkRequiredFiles();
-  checkTrackedSensitiveFiles();
-  checkMigrationSources();
-  run("npm", ["ci"]);
-  run("npm", ["run", "lint", "--if-present"]);
-  run("npm", ["run", "test", "--if-present"]);
-  run("npm", ["run", "build"]);
-  console.log("\nRelease-Prüfung erfolgreich.");
-} catch (error) {
-  console.error(
-    `\nRelease-Prüfung fehlgeschlagen: ${error instanceof Error ? error.message : "unbekannter Fehler"}`
-  );
-  process.exitCode = 1;
+function checkPackageVersion(packageJson, report) {
+  if (!isValidSemver(packageJson.version)) {
+    report.fail("package.json must contain a valid SemVer version");
+    return null;
+  }
+  report.pass(`package.json version: ${packageJson.version}`);
+  return packageJson.version;
+}
+
+function checkGitRepository(cwd, options, report) {
+  const repository = runGit(["rev-parse", "--is-inside-work-tree"], cwd);
+  if (repository.status !== 0 || (repository.stdout ?? "").trim() !== "true") {
+    report.warn(
+      "Git repository checks unavailable",
+      ["  - Run the check from inside the release repository."],
+      true
+    );
+    return false;
+  }
+
+  const status = runGit(["status", "--porcelain", "--untracked-files=normal"], cwd);
+  if (status.status !== 0) {
+    report.fail("git status --porcelain failed");
+  } else if ((status.stdout ?? "").trim()) {
+    report.warn(
+      "working tree has uncommitted changes",
+      (status.stdout ?? "")
+        .trimEnd()
+        .split(/\r?\n/)
+        .map((line) => `  ${line}`),
+      true
+    );
+  } else {
+    report.pass("working tree is clean");
+  }
+
+  const trackedResult = runGit(["ls-files", "-z"], cwd);
+  if (trackedResult.status !== 0) {
+    report.fail("tracked files could not be inspected");
+  } else {
+    const trackedFiles = splitNullOutput(trackedResult.stdout ?? "");
+    const trackedArtifacts = trackedFiles
+      .map((path) => ({ path, reason: classifySensitiveArtifact(path) }))
+      .filter((artifact) => artifact.reason);
+    if (trackedArtifacts.length) {
+      report.fail(
+        "tracked sensitive artifacts found",
+        formatArtifactList(trackedArtifacts)
+      );
+    } else {
+      report.pass("no tracked sensitive artifacts found");
+    }
+    warnAboutImages(trackedFiles, report);
+  }
+
+  const untrackedResult = runGit(["ls-files", "--others", "--exclude-standard", "-z"], cwd);
+  if (untrackedResult.status !== 0) {
+    report.fail("untracked files could not be inspected");
+  } else {
+    const untrackedFiles = splitNullOutput(untrackedResult.stdout ?? "");
+    const untrackedArtifacts = untrackedFiles
+      .map((path) => ({ path, reason: classifySensitiveArtifact(path) }))
+      .filter((artifact) => artifact.reason);
+    if (untrackedArtifacts.length) {
+      report.warn(
+        "untracked sensitive artifacts found",
+        formatArtifactList(untrackedArtifacts),
+        true
+      );
+    } else {
+      report.pass("no untracked sensitive artifacts found");
+    }
+    warnAboutImages(untrackedFiles, report);
+  }
+
+  if (options.tag) {
+    checkReleaseTag(cwd, options.version, report);
+  }
+
+  return true;
+}
+
+function checkReleaseTag(cwd, version, report) {
+  if (!version) {
+    report.fail("release tag cannot be checked without a valid version");
+    return;
+  }
+  const expectedTag = `v${version}`;
+  const result = runGit(["tag", "--list", expectedTag], cwd);
+  if (result.status !== 0) {
+    report.fail(`release tag ${expectedTag} could not be checked`);
+  } else if ((result.stdout ?? "").trim() === expectedTag) {
+    report.warn(`release tag ${expectedTag} already exists`);
+  } else {
+    report.pass(`release tag ${expectedTag} is available`);
+  }
+}
+
+function checkGitignore(cwd, hasGitRepository, report) {
+  const gitignorePath = resolve(cwd, ".gitignore");
+  if (!existsSync(gitignorePath)) {
+    report.warn(".gitignore is missing", [], true);
+    return;
+  }
+
+  const missingRules = findMissingGitignoreRules(readFileSync(gitignorePath, "utf8"));
+  if (missingRules.length) {
+    report.warn(
+      ".gitignore is missing required safety rules",
+      missingRules.map((rule) => `  - ${rule}`),
+      true
+    );
+  } else {
+    report.pass(".gitignore contains required safety rules");
+  }
+
+  if (!hasGitRepository) return;
+
+  const ignoredCriticalPaths = CRITICAL_PROJECT_PATHS.filter((path) => existsSync(resolve(cwd, path)))
+    .filter((path) => runGit(["check-ignore", "--no-index", "-q", "--", path], cwd).status === 0);
+
+  if (ignoredCriticalPaths.length) {
+    report.warn(
+      "critical project files are ignored",
+      ignoredCriticalPaths.map((path) => `  - ${path}`),
+      true
+    );
+  } else {
+    report.pass("critical project files are not ignored");
+  }
+}
+
+function runOptionalChecks(cwd, packageJson, options, report) {
+  const requested = [
+    ["build", options.build],
+    ["lint", options.lint],
+    ["test", options.test]
+  ];
+
+  for (const [scriptName, enabled] of requested) {
+    if (!enabled) continue;
+    if (!packageJson.scripts?.[scriptName]) {
+      report.warn(`${scriptName} script is not defined; check skipped`);
+      continue;
+    }
+    const result = runNpmScript(scriptName, cwd);
+    if (result.status === 0) {
+      report.pass(`${scriptName} passed`);
+    } else {
+      report.fail(`${scriptName} failed`);
+    }
+  }
+}
+
+export function main(argv = process.argv.slice(2), cwd = process.cwd()) {
+  const options = parseArguments(argv);
+  const report = createReport(options.strict);
+
+  if (options.unknown.length) {
+    report.fail(
+      "unknown command-line flags",
+      options.unknown.map((argument) => `  - ${argument}`)
+    );
+  }
+
+  let packageJson;
+  try {
+    packageJson = JSON.parse(readFileSync(resolve(cwd, "package.json"), "utf8"));
+  } catch {
+    report.fail("package.json could not be read");
+    report.print();
+    return 1;
+  }
+
+  options.version = checkPackageVersion(packageJson, report);
+  const hasGitRepository = checkGitRepository(cwd, options, report);
+  checkGitignore(cwd, hasGitRepository, report);
+
+  if (!report.hasFailures()) {
+    runOptionalChecks(cwd, packageJson, options, report);
+  } else if (options.build || options.lint || options.test) {
+    report.warn("build, lint, and test checks skipped because safety checks failed");
+  }
+
+  report.print();
+  return report.hasFailures() ? 1 : 0;
+}
+
+const isMainModule =
+  process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+
+if (isMainModule) {
+  process.exitCode = main();
 }
