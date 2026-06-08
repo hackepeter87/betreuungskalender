@@ -30,7 +30,7 @@ export function UnavailablePeriodForm({
   initialDate?: string;
   onDone: () => void;
 }) {
-  const { saveUnavailablePeriod } = useAppStore();
+  const { saveUnavailablePeriod, canWrite, isSaving } = useAppStore();
   const today = toDateKey(new Date());
   const initialStart = localParts(period?.startDateTime);
   const initialEnd = localParts(period?.endDateTime);
@@ -71,7 +71,7 @@ export function UnavailablePeriodForm({
     return messages;
   }, [category, dutyRelated, evidenceReference, notes]);
 
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
     if (!startDate || !startTime || !endDate || !endTime) {
@@ -84,7 +84,7 @@ export function UnavailablePeriodForm({
       setError("Das Ende muss nach dem Beginn liegen.");
       return;
     }
-    const saved = saveUnavailablePeriod({
+    const saved = await saveUnavailablePeriod({
       id: period?.id,
       startDateTime,
       endDateTime,
@@ -246,7 +246,7 @@ export function UnavailablePeriodForm({
           <button className="button button--secondary" type="button" onClick={onDone}>
             Abbrechen
           </button>
-          <button className="button button--primary" type="submit">
+          <button className="button button--primary" type="submit" disabled={!canWrite || isSaving}>
             Nichtverfügbarkeit speichern
           </button>
         </div>

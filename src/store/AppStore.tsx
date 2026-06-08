@@ -10,29 +10,22 @@ import {
 } from "react";
 import { createDemoData, createEmptyData } from "../data/defaults";
 import {
-  auditEntryChange,
-  auditHolidayChange,
-  auditUnavailablePeriodChange,
-  softDeleteMissing
-} from "../lib/audit";
+  api,
+  ApiError,
+  checkServer,
+  loadAppData,
+  SERVER_UNAVAILABLE_MESSAGE
+} from "../lib/api";
 import { generatePatternEntries } from "../lib/contact";
-import { makeId, nowIso } from "../lib/date";
-import {
-  buildMonthlyClosureSummary,
-  monthKeysForRange
-} from "../lib/monthClosure";
-import { loadData, saveData } from "../lib/storage";
+import { buildMonthlyClosureSummary, monthKeysForRange } from "../lib/monthClosure";
 import type {
   AppData,
   AppSettings,
-  AuditLogEntry,
   CareEntry,
-  Child,
   ContactPattern,
   EntryStatus,
   HolidayPeriod,
-  MonthlyClosure
-  ,
+  MonthlyClosure,
   UnavailablePeriod
 } from "../types";
 
@@ -44,46 +37,149 @@ interface ChildInput {
   color: string;
 }
 
-type EntryInput = Omit<CareEntry, "id" | "createdAt" | "updatedAt"> & { id?: string };
+type EntryInput = Omit<CareEntry, "id" | "createdAt" | "updatedAt"> & {
+  id?: string;
+};
 type HolidayInput = Omit<HolidayPeriod, "id"> & { id?: string };
 type PatternInput = Omit<ContactPattern, "id"> & { id?: string };
 type UnavailableInput = Omit<
   UnavailablePeriod,
   "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt" | "deletedAt"
 > & { id?: string };
+export type ServerStatus = "checking" | "online" | "offline";
 
 interface AppStoreValue {
   data: AppData;
-  saveChild: (input: ChildInput) => void;
-  removeChild: (id: string) => void;
-  saveEntry: (input: EntryInput) => boolean;
-  removeEntry: (id: string) => boolean;
-  updateEntryStatus: (id: string, status: EntryStatus, cancellationReason?: string) => boolean;
-  saveHolidayPeriod: (input: HolidayInput) => boolean;
-  removeHolidayPeriod: (id: string) => boolean;
-  saveUnavailablePeriod: (input: UnavailableInput) => boolean;
-  removeUnavailablePeriod: (id: string) => boolean;
-  saveContactPattern: (input: PatternInput) => string;
-  removeContactPattern: (id: string) => void;
-  generateContactEntries: (patternId: string, startDate: string, endDate: string) => number;
-  replaceData: (data: AppData) => void;
-  updateSettings: (settings: Partial<AppSettings>) => void;
-  closeMonth: (monthKey: string) => MonthlyClosure;
-  recordBackupExport: (timestamp: string) => void;
-  loadDemo: () => void;
-  clearAll: () => void;
+  serverStatus: ServerStatus;
+  isLoading: boolean;
+  isSaving: boolean;
+  error: string | null;
+  canWrite: boolean;
+  reload: () => Promise<boolean>;
+  clearError: () => void;
+  saveChild: (input: ChildInput) => Promise<boolean>;
+  removeChild: (id: string) => Promise<boolean>;
+  saveEntry: (input: EntryInput) => Promise<boolean>;
+  removeEntry: (id: string) => Promise<boolean>;
+  updateEntryStatus: (
+    id: string,
+    status: EntryStatus,
+    cancellationReason?: string
+  ) => Promise<boolean>;
+  saveHolidayPeriod: (input: HolidayInput) => Promise<boolean>;
+  removeHolidayPeriod: (id: string) => Promise<boolean>;
+  saveUnavailablePeriod: (input: UnavailableInput) => Promise<boolean>;
+  removeUnavailablePeriod: (id: string) => Promise<boolean>;
+  saveContactPattern: (input: PatternInput) => Promise<string | null>;
+  removeContactPattern: (id: string) => Promise<boolean>;
+  generateContactEntries: (
+    patternId: string,
+    startDate: string,
+    endDate: string
+  ) => Promise<number>;
+  replaceData: (data: AppData) => Promise<boolean>;
+  updateSettings: (settings: Partial<AppSettings>) => Promise<boolean>;
+  closeMonth: (monthKey: string) => Promise<MonthlyClosure | null>;
+  recordBackupExport: (timestamp: string) => Promise<boolean>;
+  loadDemo: () => Promise<boolean>;
+  clearAll: () => Promise<boolean>;
 }
 
 const AppStoreContext = createContext<AppStoreValue | null>(null);
 
 export function AppStoreProvider({ children }: { children: ReactNode }) {
-  const [data, setData] = useState<AppData>(loadData);
+  const [data, setData] = useState<AppData>(createEmptyData);
+  const [serverStatus, setServerStatus] = useState<ServerStatus>("checking");
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const dataRef = useRef(data);
+  const serverStatusRef = useRef(serverStatus);
   dataRef.current = data;
+  serverStatusRef.current = serverStatus;
+
+  const handleError = useCallback((reason: unknown) => {
+    const unavailable = reason instanceof ApiError && reason.unavailable;
+    if (unavailable) {
+      setServerStatus("offline");
+      setError(SERVER_UNAVAILABLE_MESSAGE);
+      return;
+    }
+    setError(
+      reason instanceof Error
+        ? reason.message
+        : "Die Serveranfrage konnte nicht abgeschlossen werden."
+    );
+  }, []);
+
+  const reloadInternal = useCallback(
+    async (silent = false): Promise<boolean> => {
+      if (!silent) setIsLoading(true);
+      try {
+        const next = await loadAppData();
+        dataRef.current = next;
+        setData(next);
+        setServerStatus("online");
+        setError(null);
+        return true;
+      } catch (reason) {
+        handleError(reason);
+        return false;
+      } finally {
+        if (!silent) setIsLoading(false);
+      }
+    },
+    [handleError]
+  );
+
+  const reload = useCallback(() => reloadInternal(false), [reloadInternal]);
 
   useEffect(() => {
-    saveData(data);
-  }, [data]);
+    void reloadInternal(false);
+    const online = () => void reloadInternal(false);
+    const offline = () => {
+      setServerStatus("offline");
+      setError(SERVER_UNAVAILABLE_MESSAGE);
+    };
+    window.addEventListener("online", online);
+    window.addEventListener("offline", offline);
+    const interval = window.setInterval(async () => {
+      const available = await checkServer();
+      if (!available) {
+        setServerStatus("offline");
+        setError(SERVER_UNAVAILABLE_MESSAGE);
+      } else if (serverStatusRef.current === "offline") {
+        await reloadInternal(true);
+      }
+    }, 30_000);
+    return () => {
+      window.removeEventListener("online", online);
+      window.removeEventListener("offline", offline);
+      window.clearInterval(interval);
+    };
+  }, [reloadInternal]);
+
+  const performWrite = useCallback(
+    async <T,>(operation: () => Promise<T>, failureValue: T): Promise<T> => {
+      if (serverStatusRef.current !== "online") {
+        setError(SERVER_UNAVAILABLE_MESSAGE);
+        return failureValue;
+      }
+      setIsSaving(true);
+      setError(null);
+      try {
+        const result = await operation();
+        await reloadInternal(true);
+        return result;
+      } catch (reason) {
+        handleError(reason);
+        return failureValue;
+      } finally {
+        setIsSaving(false);
+      }
+    },
+    [handleError, reloadInternal]
+  );
 
   const confirmClosedMonthChange = useCallback((monthKeys: string[]) => {
     const closed = dataRef.current.monthClosures.filter((closure) =>
@@ -95,224 +191,99 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  const markClosuresChanged = (
-    closures: MonthlyClosure[],
-    monthKeys: string[],
-    timestamp: string
-  ) =>
-    closures.map((closure) =>
-      monthKeys.includes(closure.monthKey)
-        ? { ...closure, changedAfterCloseAt: timestamp }
-        : closure
-    );
+  const saveChild = useCallback(
+    async (input: ChildInput) =>
+      performWrite(async () => {
+        const payload = {
+          name: input.name.trim(),
+          birthMonth: input.birthMonth,
+          birthYear: input.birthYear,
+          color: input.color
+        };
+        if (input.id) await api.updateChild(input.id, payload);
+        else await api.createChild(payload);
+        return true;
+      }, false),
+    [performWrite]
+  );
 
-  const saveChild = useCallback((input: ChildInput) => {
-    setData((current) => {
-      const timestamp = nowIso();
-      const existing = input.id
-        ? current.children.find((child) => child.id === input.id)
-        : undefined;
-      const nextChild: Child = {
-        id: existing?.id ?? makeId("child"),
-        name: input.name.trim(),
-        birthMonth: input.birthMonth,
-        birthYear: input.birthYear,
-        color: input.color,
-        createdAt: existing?.createdAt ?? timestamp,
-        updatedAt: timestamp
-      };
-      return {
-        ...current,
-        children: existing
-          ? current.children.map((child) => (child.id === existing.id ? nextChild : child))
-          : [...current.children, nextChild],
-        updatedAt: timestamp
-      };
-    });
-  }, []);
+  const removeChild = useCallback(
+    async (id: string) => {
+      const current = dataRef.current;
+      const months = new Set<string>();
+      current.entries
+        .filter((entry) => entry.childIds.includes(id))
+        .forEach((entry) =>
+          monthKeysForRange(
+            entry.startDateTime.slice(0, 10),
+            entry.endDateTime.slice(0, 10)
+          ).forEach((month) => months.add(month))
+        );
+      current.holidayPeriods
+        .filter((period) => period.childIds.includes(id))
+        .forEach((period) =>
+          monthKeysForRange(period.startDate, period.endDate).forEach((month) =>
+            months.add(month)
+          )
+        );
+      if (!confirmClosedMonthChange([...months])) return false;
+      return performWrite(async () => {
+        await api.deleteChild(id);
+        return true;
+      }, false);
+    },
+    [confirmClosedMonthChange, performWrite]
+  );
 
-  const removeChild = useCallback((id: string) => {
-    const current = dataRef.current;
-    const affectedEntries = current.entries.filter(
-      (entry) => !entry.deletedAt && entry.childIds.includes(id)
-    );
-    const affectedHolidays = current.holidayPeriods.filter(
-      (period) => !period.deletedAt && period.childIds.includes(id)
-    );
-    const affectedMonths = new Set<string>();
-    affectedEntries.forEach((entry) =>
-      monthKeysForRange(
-        entry.startDateTime.slice(0, 10),
-        entry.endDateTime.slice(0, 10)
-      ).forEach((month) => affectedMonths.add(month))
-    );
-    affectedHolidays.forEach((period) =>
-      monthKeysForRange(period.startDate, period.endDate).forEach((month) =>
-        affectedMonths.add(month)
-      )
-    );
-    if (!confirmClosedMonthChange([...affectedMonths])) return;
-
-    setData((latest) => {
-      const timestamp = nowIso();
-      const audit: AuditLogEntry[] = [];
-      const entries = latest.entries.map((entry) => {
-        if (entry.deletedAt || !entry.childIds.includes(id)) return entry;
-        const childIds = entry.childIds.filter((childId) => childId !== id);
-        const nextEntry: CareEntry = childIds.length
-          ? { ...entry, childIds, updatedAt: timestamp }
-          : {
-              ...entry,
-              childIds,
-              deletedAt: timestamp,
-              updatedAt: timestamp,
-              trips: entry.trips.map((trip) =>
-                trip.deletedAt ? trip : { ...trip, deletedAt: timestamp }
-              ),
-              costs: entry.costs.map((cost) =>
-                cost.deletedAt ? cost : { ...cost, deletedAt: timestamp }
-              )
-            };
-        audit.push(...auditEntryChange(entry, nextEntry, timestamp));
-        return nextEntry;
-      });
-      const holidayPeriods = latest.holidayPeriods.map((period) => {
-        if (period.deletedAt || !period.childIds.includes(id)) return period;
-        const childIds = period.childIds.filter((childId) => childId !== id);
-        const nextPeriod: HolidayPeriod = childIds.length
-          ? { ...period, childIds }
-          : { ...period, childIds, deletedAt: timestamp };
-        audit.push(...auditHolidayChange(period, nextPeriod, timestamp));
-        return nextPeriod;
-      });
-      const next = {
-        ...latest,
-        children: latest.children.filter((child) => child.id !== id),
-        entries,
-        holidayPeriods,
-        contactPatterns: latest.contactPatterns
-          .map((pattern) => ({
-            ...pattern,
-            childIds: pattern.childIds.filter((childId) => childId !== id)
-          }))
-          .filter((pattern) => pattern.childIds.length > 0),
-        auditLog: [...latest.auditLog, ...audit],
-        monthClosures: markClosuresChanged(
-          latest.monthClosures,
-          [...affectedMonths],
-          timestamp
-        ),
-        updatedAt: timestamp
-      };
-      dataRef.current = next;
-      return next;
-    });
-  }, [confirmClosedMonthChange]);
-
-  const saveEntry = useCallback((input: EntryInput) => {
-    const current = dataRef.current;
-    const existing = input.id
-      ? current.entries.find((entry) => entry.id === input.id)
-      : undefined;
-    const affectedMonths = new Set(
-      monthKeysForRange(
-        input.startDateTime.slice(0, 10),
-        input.endDateTime.slice(0, 10)
-      )
-    );
-    if (existing) {
-      monthKeysForRange(
-        existing.startDateTime.slice(0, 10),
-        existing.endDateTime.slice(0, 10)
-      ).forEach((month) => affectedMonths.add(month));
-    }
-    if (!confirmClosedMonthChange([...affectedMonths])) return false;
-
-    setData((current) => {
-      const timestamp = nowIso();
+  const saveEntry = useCallback(
+    async (input: EntryInput) => {
+      const current = dataRef.current;
       const existing = input.id
         ? current.entries.find((entry) => entry.id === input.id)
         : undefined;
-      const nextEntry: CareEntry = {
-        ...input,
-        id: existing?.id ?? makeId("entry"),
-        createdAt: existing?.createdAt ?? timestamp,
-        updatedAt: timestamp,
-        deletedAt: undefined,
-        trips: softDeleteMissing(existing?.trips ?? [], input.trips, timestamp),
-        costs: softDeleteMissing(existing?.costs ?? [], input.costs, timestamp)
-      };
-      const next = {
-        ...current,
-        entries: existing
-          ? current.entries.map((entry) => (entry.id === existing.id ? nextEntry : entry))
-          : [...current.entries, nextEntry],
-        auditLog: [
-          ...current.auditLog,
-          ...auditEntryChange(existing, nextEntry, timestamp)
-        ],
-        monthClosures: markClosuresChanged(
-          current.monthClosures,
-          [...affectedMonths],
-          timestamp
-        ),
-        updatedAt: timestamp
-      };
-      dataRef.current = next;
-      return next;
-    });
-    return true;
-  }, [confirmClosedMonthChange]);
-
-  const removeEntry = useCallback((id: string) => {
-    const existing = dataRef.current.entries.find((entry) => entry.id === id);
-    if (!existing || existing.deletedAt) return false;
-    const affectedMonths = monthKeysForRange(
-      existing.startDateTime.slice(0, 10),
-      existing.endDateTime.slice(0, 10)
-    );
-    if (!confirmClosedMonthChange(affectedMonths)) return false;
-
-    setData((current) => {
-      const timestamp = nowIso();
-      const before = current.entries.find((entry) => entry.id === id);
-      if (!before) return current;
-      const deleted: CareEntry = {
-        ...before,
-        deletedAt: timestamp,
-        updatedAt: timestamp,
-        trips: before.trips.map((trip) =>
-          trip.deletedAt ? trip : { ...trip, deletedAt: timestamp }
-        ),
-        costs: before.costs.map((cost) =>
-          cost.deletedAt ? cost : { ...cost, deletedAt: timestamp }
+      const months = new Set(
+        monthKeysForRange(
+          input.startDateTime.slice(0, 10),
+          input.endDateTime.slice(0, 10)
         )
-      };
-      const next = {
-        ...current,
-        entries: current.entries.map((entry) => (entry.id === id ? deleted : entry)),
-        auditLog: [
-          ...current.auditLog,
-          ...auditEntryChange(before, deleted, timestamp)
-        ],
-        monthClosures: markClosuresChanged(
-          current.monthClosures,
-          affectedMonths,
-          timestamp
-        ),
-        updatedAt: timestamp
-      };
-      dataRef.current = next;
-      return next;
-    });
-    return true;
-  }, [confirmClosedMonthChange]);
+      );
+      if (existing) {
+        monthKeysForRange(
+          existing.startDateTime.slice(0, 10),
+          existing.endDateTime.slice(0, 10)
+        ).forEach((month) => months.add(month));
+      }
+      if (!confirmClosedMonthChange([...months])) return false;
+      return performWrite(async () => {
+        const { id, ...payload } = input;
+        if (id) await api.updateEntry(id, payload);
+        else await api.createEntry(payload);
+        return true;
+      }, false);
+    },
+    [confirmClosedMonthChange, performWrite]
+  );
+
+  const removeEntry = useCallback(
+    async (id: string) => {
+      const existing = dataRef.current.entries.find((entry) => entry.id === id);
+      if (!existing) return false;
+      const months = monthKeysForRange(
+        existing.startDateTime.slice(0, 10),
+        existing.endDateTime.slice(0, 10)
+      );
+      if (!confirmClosedMonthChange(months)) return false;
+      return performWrite(async () => {
+        await api.deleteEntry(id);
+        return true;
+      }, false);
+    },
+    [confirmClosedMonthChange, performWrite]
+  );
 
   const updateEntryStatus = useCallback(
-    (id: string, status: EntryStatus, cancellationReason?: string) => {
-      const entry = dataRef.current.entries.find(
-        (item) => item.id === id && !item.deletedAt
-      );
+    async (id: string, status: EntryStatus, cancellationReason?: string) => {
+      const entry = dataRef.current.entries.find((item) => item.id === id);
       if (!entry) return false;
       return saveEntry({
         ...entry,
@@ -324,294 +295,218 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     [saveEntry]
   );
 
-  const saveHolidayPeriod = useCallback((input: HolidayInput) => {
-    const current = dataRef.current;
-    const existing = input.id
-      ? current.holidayPeriods.find((period) => period.id === input.id)
-      : undefined;
-    const affectedMonths = new Set(
-      monthKeysForRange(input.startDate, input.endDate)
-    );
-    if (existing) {
-      monthKeysForRange(existing.startDate, existing.endDate).forEach((month) =>
-        affectedMonths.add(month)
-      );
-    }
-    if (!confirmClosedMonthChange([...affectedMonths])) return false;
-
-    setData((current) => {
-      const timestamp = nowIso();
-      const nextPeriod: HolidayPeriod = {
-        ...input,
-        id: input.id ?? makeId("holiday"),
-        deletedAt: undefined
-      };
-      const exists = current.holidayPeriods.some((period) => period.id === nextPeriod.id);
-      const next = {
-        ...current,
-        holidayPeriods: exists
-          ? current.holidayPeriods.map((period) =>
-              period.id === nextPeriod.id ? nextPeriod : period
-            )
-          : [...current.holidayPeriods, nextPeriod],
-        auditLog: [
-          ...current.auditLog,
-          ...auditHolidayChange(existing, nextPeriod, timestamp)
-        ],
-        monthClosures: markClosuresChanged(
-          current.monthClosures,
-          [...affectedMonths],
-          timestamp
-        ),
-        updatedAt: timestamp
-      };
-      dataRef.current = next;
-      return next;
-    });
-    return true;
-  }, [confirmClosedMonthChange]);
-
-  const removeHolidayPeriod = useCallback((id: string) => {
-    const existing = dataRef.current.holidayPeriods.find(
-      (period) => period.id === id && !period.deletedAt
-    );
-    if (!existing) return false;
-    const affectedMonths = monthKeysForRange(existing.startDate, existing.endDate);
-    if (!confirmClosedMonthChange(affectedMonths)) return false;
-
-    setData((current) => {
-      const timestamp = nowIso();
-      const before = current.holidayPeriods.find((period) => period.id === id);
-      if (!before) return current;
-      const deleted = { ...before, deletedAt: timestamp };
-      const next = {
-        ...current,
-        holidayPeriods: current.holidayPeriods.map((period) =>
-          period.id === id ? deleted : period
-        ),
-        auditLog: [
-          ...current.auditLog,
-          ...auditHolidayChange(before, deleted, timestamp)
-        ],
-        monthClosures: markClosuresChanged(
-          current.monthClosures,
-          affectedMonths,
-          timestamp
-        ),
-        updatedAt: timestamp
-      };
-      dataRef.current = next;
-      return next;
-    });
-    return true;
-  }, [confirmClosedMonthChange]);
-
-  const saveUnavailablePeriod = useCallback((input: UnavailableInput) => {
-    const existing = input.id
-      ? dataRef.current.unavailablePeriods.find((period) => period.id === input.id)
-      : undefined;
-    const affectedMonths = new Set(
-      monthKeysForRange(
-        input.startDateTime.slice(0, 10),
-        input.endDateTime.slice(0, 10)
-      )
-    );
-    if (existing) {
-      monthKeysForRange(
-        existing.startDateTime.slice(0, 10),
-        existing.endDateTime.slice(0, 10)
-      ).forEach((month) => affectedMonths.add(month));
-    }
-    if (!confirmClosedMonthChange([...affectedMonths])) return false;
-
-    setData((current) => {
-      const timestamp = nowIso();
-      const before = input.id
-        ? current.unavailablePeriods.find((period) => period.id === input.id)
+  const saveHolidayPeriod = useCallback(
+    async (input: HolidayInput) => {
+      const existing = input.id
+        ? dataRef.current.holidayPeriods.find((period) => period.id === input.id)
         : undefined;
-      const nextPeriod: UnavailablePeriod = {
-        ...input,
-        id: before?.id ?? makeId("unavailable"),
-        createdBy: before?.createdBy ?? "local-dev",
-        updatedBy: "local-dev",
-        createdAt: before?.createdAt ?? timestamp,
-        updatedAt: timestamp
-      };
-      const next = {
-        ...current,
-        unavailablePeriods: before
-          ? current.unavailablePeriods.map((period) =>
-              period.id === before.id ? nextPeriod : period
-            )
-          : [...current.unavailablePeriods, nextPeriod],
-        auditLog: [
-          ...current.auditLog,
-          ...auditUnavailablePeriodChange(before, nextPeriod, timestamp)
-        ],
-        monthClosures: markClosuresChanged(
-          current.monthClosures,
-          [...affectedMonths],
-          timestamp
-        ),
-        updatedAt: timestamp
-      };
-      dataRef.current = next;
-      return next;
-    });
-    return true;
-  }, [confirmClosedMonthChange]);
+      const months = new Set(monthKeysForRange(input.startDate, input.endDate));
+      if (existing) {
+        monthKeysForRange(existing.startDate, existing.endDate).forEach((month) =>
+          months.add(month)
+        );
+      }
+      if (!confirmClosedMonthChange([...months])) return false;
+      return performWrite(async () => {
+        const { id, ...payload } = input;
+        if (id) await api.updateHoliday(id, payload);
+        else await api.createHoliday(payload);
+        return true;
+      }, false);
+    },
+    [confirmClosedMonthChange, performWrite]
+  );
 
-  const removeUnavailablePeriod = useCallback((id: string) => {
-    const existing = dataRef.current.unavailablePeriods.find(
-      (period) => period.id === id && !period.deletedAt
-    );
-    if (!existing) return false;
-    const affectedMonths = monthKeysForRange(
-      existing.startDateTime.slice(0, 10),
-      existing.endDateTime.slice(0, 10)
-    );
-    if (!confirmClosedMonthChange(affectedMonths)) return false;
+  const removeHolidayPeriod = useCallback(
+    async (id: string) => {
+      const existing = dataRef.current.holidayPeriods.find(
+        (period) => period.id === id
+      );
+      if (!existing) return false;
+      if (
+        !confirmClosedMonthChange(
+          monthKeysForRange(existing.startDate, existing.endDate)
+        )
+      ) {
+        return false;
+      }
+      return performWrite(async () => {
+        await api.deleteHoliday(id);
+        return true;
+      }, false);
+    },
+    [confirmClosedMonthChange, performWrite]
+  );
 
-    setData((current) => {
-      const timestamp = nowIso();
-      const before = current.unavailablePeriods.find((period) => period.id === id);
-      if (!before) return current;
-      const deleted: UnavailablePeriod = {
-        ...before,
-        deletedAt: timestamp,
-        updatedBy: "local-dev",
-        updatedAt: timestamp
-      };
-      const next = {
-        ...current,
-        unavailablePeriods: current.unavailablePeriods.map((period) =>
-          period.id === id ? deleted : period
-        ),
-        auditLog: [
-          ...current.auditLog,
-          ...auditUnavailablePeriodChange(before, deleted, timestamp)
-        ],
-        monthClosures: markClosuresChanged(
-          current.monthClosures,
-          affectedMonths,
-          timestamp
-        ),
-        updatedAt: timestamp
-      };
-      dataRef.current = next;
-      return next;
-    });
-    return true;
-  }, [confirmClosedMonthChange]);
+  const saveUnavailablePeriod = useCallback(
+    async (input: UnavailableInput) => {
+      const existing = input.id
+        ? dataRef.current.unavailablePeriods.find(
+            (period) => period.id === input.id
+          )
+        : undefined;
+      const months = new Set(
+        monthKeysForRange(
+          input.startDateTime.slice(0, 10),
+          input.endDateTime.slice(0, 10)
+        )
+      );
+      if (existing) {
+        monthKeysForRange(
+          existing.startDateTime.slice(0, 10),
+          existing.endDateTime.slice(0, 10)
+        ).forEach((month) => months.add(month));
+      }
+      if (!confirmClosedMonthChange([...months])) return false;
+      return performWrite(async () => {
+        const { id, ...payload } = input;
+        if (id) await api.updateUnavailable(id, payload);
+        else await api.createUnavailable(payload);
+        return true;
+      }, false);
+    },
+    [confirmClosedMonthChange, performWrite]
+  );
 
-  const saveContactPattern = useCallback((input: PatternInput) => {
-    const id = input.id ?? makeId("pattern");
-    setData((current) => {
-      const nextPattern: ContactPattern = { ...input, id };
-      const exists = current.contactPatterns.some((pattern) => pattern.id === id);
-      return {
-        ...current,
-        contactPatterns: exists
-          ? current.contactPatterns.map((pattern) =>
-              pattern.id === id ? nextPattern : pattern
-            )
-          : [...current.contactPatterns, nextPattern],
-        updatedAt: nowIso()
-      };
-    });
-    return id;
-  }, []);
+  const removeUnavailablePeriod = useCallback(
+    async (id: string) => {
+      const existing = dataRef.current.unavailablePeriods.find(
+        (period) => period.id === id
+      );
+      if (!existing) return false;
+      if (
+        !confirmClosedMonthChange(
+          monthKeysForRange(
+            existing.startDateTime.slice(0, 10),
+            existing.endDateTime.slice(0, 10)
+          )
+        )
+      ) {
+        return false;
+      }
+      return performWrite(async () => {
+        await api.deleteUnavailable(id);
+        return true;
+      }, false);
+    },
+    [confirmClosedMonthChange, performWrite]
+  );
 
-  const removeContactPattern = useCallback((id: string) => {
-    setData((current) => ({
-      ...current,
-      contactPatterns: current.contactPatterns.filter((pattern) => pattern.id !== id),
-      updatedAt: nowIso()
-    }));
-  }, []);
+  const saveContactPattern = useCallback(
+    async (input: PatternInput) =>
+      performWrite(async () => {
+        const { id, ...payload } = input;
+        const saved = id
+          ? await api.updatePattern(id, payload)
+          : await api.createPattern(payload);
+        return saved.id;
+      }, null),
+    [performWrite]
+  );
+
+  const removeContactPattern = useCallback(
+    async (id: string) =>
+      performWrite(async () => {
+        await api.deletePattern(id);
+        return true;
+      }, false),
+    [performWrite]
+  );
 
   const generateContactEntries = useCallback(
-    (patternId: string, startDate: string, endDate: string) => {
+    async (patternId: string, startDate: string, endDate: string) => {
       const current = dataRef.current;
       const pattern = current.contactPatterns.find((item) => item.id === patternId);
       if (!pattern) return 0;
       const generated = generatePatternEntries(current, pattern, startDate, endDate);
-      if (generated.length) {
-        const affectedMonths = monthKeysForRange(startDate, endDate);
-        if (!confirmClosedMonthChange(affectedMonths)) return -1;
-        setData((current) => ({
-          ...current,
-          entries: [...current.entries, ...generated],
-          auditLog: [
-            ...current.auditLog,
-            ...generated.flatMap((entry) =>
-              auditEntryChange(undefined, entry, entry.createdAt)
-            )
-          ],
-          monthClosures: markClosuresChanged(
-            current.monthClosures,
-            affectedMonths,
-            generated[0].createdAt
-          ),
-          updatedAt: nowIso()
-        }));
-      }
-      return generated.length;
+      if (!generated.length) return 0;
+      if (!confirmClosedMonthChange(monthKeysForRange(startDate, endDate))) return -1;
+      return performWrite(async () => {
+        await Promise.all(
+          generated.map(({ id: _id, createdAt: _createdAt, updatedAt: _updatedAt, ...entry }) =>
+            api.createEntry(entry)
+          )
+        );
+        return generated.length;
+      }, -1);
     },
-    [confirmClosedMonthChange]
+    [confirmClosedMonthChange, performWrite]
   );
 
-  const replaceData = useCallback((nextData: AppData) => {
-    setData({ ...nextData, updatedAt: nowIso() });
-  }, []);
+  const replaceData = useCallback(
+    async (nextData: AppData) =>
+      performWrite(async () => {
+        await api.replaceData(nextData);
+        return true;
+      }, false),
+    [performWrite]
+  );
 
-  const updateSettings = useCallback((settings: Partial<AppSettings>) => {
-    setData((current) => ({
-      ...current,
-      settings: { ...current.settings, ...settings },
-      updatedAt: nowIso()
-    }));
-  }, []);
+  const updateSettings = useCallback(
+    async (settings: Partial<AppSettings>) =>
+      performWrite(async () => {
+        await api.updateSettings(settings);
+        return true;
+      }, false),
+    [performWrite]
+  );
 
-  const closeMonth = useCallback((monthKey: string) => {
-    const current = dataRef.current;
-    const existing = current.monthClosures.find(
-      (closure) => closure.monthKey === monthKey
-    );
-    if (existing) return existing;
-    const timestamp = nowIso();
-    const closure: MonthlyClosure = {
-      monthKey,
-      closedAt: timestamp,
-      dataUpdatedAt: current.updatedAt,
-      summary: buildMonthlyClosureSummary(current, monthKey)
-    };
-    setData((latest) => {
-      const next = {
-        ...latest,
-        monthClosures: [...latest.monthClosures, closure],
-        updatedAt: timestamp
-      };
-      dataRef.current = next;
-      return next;
-    });
-    return closure;
-  }, []);
+  const closeMonth = useCallback(
+    async (monthKey: string) => {
+      const current = dataRef.current;
+      const existing = current.monthClosures.find(
+        (closure) => closure.monthKey === monthKey
+      );
+      if (existing) return existing;
+      return performWrite(async () => {
+        const saved = await api.closeMonth({
+          monthKey,
+          dataUpdatedAt: current.updatedAt,
+          summary: buildMonthlyClosureSummary(current, monthKey)
+        });
+        return saved as MonthlyClosure;
+      }, null);
+    },
+    [performWrite]
+  );
 
-  const recordBackupExport = useCallback((timestamp: string) => {
-    setData((current) => {
-      const next = { ...current, lastJsonBackupAt: timestamp };
-      dataRef.current = next;
-      return next;
-    });
-  }, []);
+  const recordBackupExport = useCallback(
+    async (timestamp: string) =>
+      performWrite(async () => {
+        await api.updateSettings({ lastJsonBackupAt: timestamp });
+        return true;
+      }, false),
+    [performWrite]
+  );
 
-  const loadDemo = useCallback(() => setData(createDemoData()), []);
-  const clearAll = useCallback(() => setData(createEmptyData()), []);
+  const loadDemo = useCallback(
+    async () =>
+      performWrite(async () => {
+        await api.replaceData(createDemoData());
+        return true;
+      }, false),
+    [performWrite]
+  );
 
-  const value = useMemo(
+  const clearAll = useCallback(
+    async () =>
+      performWrite(async () => {
+        await api.clearData();
+        return true;
+      }, false),
+    [performWrite]
+  );
+
+  const value = useMemo<AppStoreValue>(
     () => ({
       data,
+      serverStatus,
+      isLoading,
+      isSaving,
+      error,
+      canWrite: serverStatus === "online" && !isLoading && !isSaving,
+      reload,
+      clearError: () => setError(null),
       saveChild,
       removeChild,
       saveEntry,
@@ -633,23 +528,28 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     }),
     [
       clearAll,
-      data,
-      loadDemo,
-      removeChild,
-      removeEntry,
-      updateEntryStatus,
-      saveHolidayPeriod,
-      removeHolidayPeriod,
-      saveUnavailablePeriod,
-      removeUnavailablePeriod,
-      saveContactPattern,
-      removeContactPattern,
-      generateContactEntries,
-      replaceData,
       closeMonth,
+      data,
+      error,
+      generateContactEntries,
+      isLoading,
+      isSaving,
+      loadDemo,
       recordBackupExport,
+      reload,
+      removeChild,
+      removeContactPattern,
+      removeEntry,
+      removeHolidayPeriod,
+      removeUnavailablePeriod,
+      replaceData,
       saveChild,
+      saveContactPattern,
       saveEntry,
+      saveHolidayPeriod,
+      saveUnavailablePeriod,
+      serverStatus,
+      updateEntryStatus,
       updateSettings
     ]
   );
@@ -659,6 +559,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
 export function useAppStore(): AppStoreValue {
   const value = useContext(AppStoreContext);
-  if (!value) throw new Error("useAppStore muss innerhalb des Providers verwendet werden.");
+  if (!value) {
+    throw new Error("useAppStore muss innerhalb des Providers verwendet werden.");
+  }
   return value;
 }

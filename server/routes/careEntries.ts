@@ -1,12 +1,18 @@
 import type { FastifyInstance } from "fastify";
 import type { ApiCareEntry, ApiCost, ApiTrip } from "../../shared/api.js";
 import { db } from "../db/connection.js";
-import { recordAudit, recordFieldChanges } from "../services/audit.js";
+import {
+  markClosedMonthsChanged,
+  recordAudit,
+  recordFieldChanges
+} from "../services/audit.js";
 import { assertActiveChildren, bool, makeId, nowIso, syncJunction } from "../services/common.js";
 import { careEntryInputSchema } from "../validation/schemas.js";
 
 interface EntryRow {
   id: string;
+  generated_by_pattern_id: string | null;
+  rule_occurrence_date: string | null;
   start_datetime: string;
   end_datetime: string;
   status: ApiCareEntry["status"];
@@ -18,6 +24,7 @@ interface EntryRow {
   weekend: number;
   additional_care: number;
   location: string | null;
+  custom_location: string | null;
   handover_from: string | null;
   handover_to: string | null;
   notes: string | null;
@@ -99,6 +106,8 @@ function getCosts(entryId: string): ApiCost[] {
 function mapEntry(row: EntryRow): ApiCareEntry {
   return {
     id: row.id,
+    generatedByPatternId: optional(row.generated_by_pattern_id),
+    ruleOccurrenceDate: optional(row.rule_occurrence_date),
     startDateTime: row.start_datetime,
     endDateTime: row.end_datetime,
     childIds: getChildIds(row.id),
@@ -111,6 +120,7 @@ function mapEntry(row: EntryRow): ApiCareEntry {
     weekend: bool(row.weekend),
     additionalCare: bool(row.additional_care),
     location: optional(row.location),
+    customLocation: optional(row.custom_location),
     handoverFrom: optional(row.handover_from),
     handoverTo: optional(row.handover_to),
     notes: optional(row.notes),
@@ -280,18 +290,21 @@ function persistEntry(
   if (existing) {
     db.prepare(`
       UPDATE care_entries SET
+        generated_by_pattern_id = ?, rule_occurrence_date = ?,
         start_datetime = ?, end_datetime = ?, status = ?, care_scope = ?,
         cancellation_reason = ?, overnight = ?, school_handover = ?,
-        holiday = ?, weekend = ?, additional_care = ?, location = ?,
+        holiday = ?, weekend = ?, additional_care = ?, location = ?, custom_location = ?,
         handover_from = ?, handover_to = ?, notes = ?, evidence_reference = ?,
         has_evidence = ?, duration_minutes = ?, is_contact_time = ?,
         updated_by = ?, updated_at = ?, deleted_at = NULL
       WHERE id = ?
     `).run(
+      input.generatedByPatternId ?? null, input.ruleOccurrenceDate ?? null,
       input.startDateTime, input.endDateTime, input.status, input.careScope,
       input.status === "cancelled" ? input.cancellationReason ?? null : null,
       Number(input.overnight), Number(input.schoolHandover), Number(input.holiday),
       Number(input.weekend), Number(input.additionalCare), input.location ?? null,
+      input.customLocation ?? null,
       input.handoverFrom ?? null, input.handoverTo ?? null, input.notes ?? null,
       input.evidenceReference ?? null, Number(input.hasEvidence), durationMinutes,
       Number(isContactTime), userEmail, timestamp, id
@@ -299,16 +312,19 @@ function persistEntry(
   } else {
     db.prepare(`
       INSERT INTO care_entries (
-        id, start_datetime, end_datetime, status, care_scope, cancellation_reason,
+        id, generated_by_pattern_id, rule_occurrence_date,
+        start_datetime, end_datetime, status, care_scope, cancellation_reason,
         overnight, school_handover, holiday, weekend, additional_care, location,
-        handover_from, handover_to, notes, evidence_reference, has_evidence,
+        custom_location, handover_from, handover_to, notes, evidence_reference, has_evidence,
         duration_minutes, is_contact_time, created_by, updated_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
-      id, input.startDateTime, input.endDateTime, input.status, input.careScope,
+      id, input.generatedByPatternId ?? null, input.ruleOccurrenceDate ?? null,
+      input.startDateTime, input.endDateTime, input.status, input.careScope,
       input.status === "cancelled" ? input.cancellationReason ?? null : null,
       Number(input.overnight), Number(input.schoolHandover), Number(input.holiday),
       Number(input.weekend), Number(input.additionalCare), input.location ?? null,
+      input.customLocation ?? null,
       input.handoverFrom ?? null, input.handoverTo ?? null, input.notes ?? null,
       input.evidenceReference ?? null, Number(input.hasEvidence), durationMinutes,
       Number(isContactTime), userEmail, userEmail, timestamp, timestamp
@@ -334,6 +350,20 @@ function persistEntry(
       newValue: after
     });
   }
+  const dates = [
+    input.startDateTime.slice(0, 10),
+    input.endDateTime.slice(0, 10),
+    existing?.startDateTime.slice(0, 10),
+    existing?.endDateTime.slice(0, 10)
+  ].filter((value): value is string => Boolean(value)).sort();
+  markClosedMonthsChanged(
+    userEmail,
+    "care_entry",
+    id,
+    dates[0] ?? input.startDateTime.slice(0, 10),
+    dates.at(-1) ?? input.endDateTime.slice(0, 10),
+    timestamp
+  );
 }
 
 export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
@@ -409,6 +439,14 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
         action: "deleted",
         oldValue: existing
       });
+      markClosedMonthsChanged(
+        request.userEmail,
+        "care_entry",
+        request.params.id,
+        existing.startDateTime.slice(0, 10),
+        existing.endDateTime.slice(0, 10),
+        timestamp
+      );
     })();
     return reply.code(204).send();
   });

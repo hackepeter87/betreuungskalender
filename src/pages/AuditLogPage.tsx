@@ -10,13 +10,19 @@ const objectLabels: Record<AuditObjectType, string> = {
   trip: "Fahrt",
   cost: "Kosten",
   holiday: "Ferien",
-  unavailablePeriod: "Nichtverfügbarkeit"
+  unavailablePeriod: "Nichtverfügbarkeit",
+  child: "Kind",
+  contactPattern: "Umgangsregel",
+  settings: "Einstellungen",
+  monthClosure: "Monatsabschluss",
+  appData: "Datenbestand"
 };
 
 const actionLabels: Record<AuditAction, string> = {
   created: "Erstellt",
   updated: "Geändert",
-  deleted: "Gelöscht"
+  deleted: "Gelöscht",
+  postCloseChange: "Nach Abschluss geändert"
 };
 
 export function AuditLogPage() {
@@ -50,7 +56,7 @@ export function AuditLogPage() {
 
       <section className="notice">
         <Icon name="history" />
-        <p>Änderungen an Betreuungseinträgen, Fahrten, Kosten, Ferien und Nichtverfügbarkeiten werden lokal und feldweise protokolliert. Löschungen bleiben als Protokolleintrag erhalten.</p>
+        <p>Änderungen an Betreuungseinträgen, Fahrten, Kosten, Ferien und Nichtverfügbarkeiten werden in SQLite feldweise protokolliert. Löschungen bleiben als Protokolleintrag erhalten.</p>
       </section>
 
       <section className="panel">

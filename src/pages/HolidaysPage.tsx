@@ -20,7 +20,7 @@ function HolidayForm({
   period?: HolidayPeriod;
   onDone: () => void;
 }) {
-  const { data, saveHolidayPeriod } = useAppStore();
+  const { data, saveHolidayPeriod, canWrite, isSaving } = useAppStore();
   const [name, setName] = useState(period?.name ?? "Ferienblock");
   const [startDate, setStartDate] = useState(period?.startDate ?? "");
   const [endDate, setEndDate] = useState(period?.endDate ?? "");
@@ -33,7 +33,7 @@ function HolidayForm({
   const [notes, setNotes] = useState(period?.notes ?? "");
   const [error, setError] = useState("");
 
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!startDate || !endDate || endDate < startDate) {
       setError("Bitte einen gültigen Ferienzeitraum eingeben.");
@@ -43,7 +43,7 @@ function HolidayForm({
       setError("Bitte mindestens ein Kind auswählen.");
       return;
     }
-    const saved = saveHolidayPeriod({
+    const saved = await saveHolidayPeriod({
       id: period?.id,
       name: name.trim() || "Ferienblock",
       startDate,
@@ -114,7 +114,7 @@ function HolidayForm({
         <span />
         <div className="form-actions__right">
           <button className="button button--secondary" type="button" onClick={onDone}>Abbrechen</button>
-          <button className="button button--primary" type="submit">Ferienblock speichern</button>
+          <button className="button button--primary" type="submit" disabled={!canWrite || isSaving}>Ferienblock speichern</button>
         </div>
       </footer>
     </form>
@@ -122,7 +122,7 @@ function HolidayForm({
 }
 
 export function HolidaysPage() {
-  const { data, removeHolidayPeriod } = useAppStore();
+  const { data, removeHolidayPeriod, canWrite } = useAppStore();
   const [selection, setSelection] = useState<PeriodSelection>(() =>
     periodSelection("year", toMonthKey(new Date()))
   );
@@ -153,9 +153,9 @@ export function HolidaysPage() {
     [data.holidayPeriods, selection.endDate, selection.startDate]
   );
 
-  const remove = (period: HolidayPeriod) => {
+  const remove = async (period: HolidayPeriod) => {
     if (window.confirm(`Ferienblock „${period.name}“ als gelöscht markieren? Die Änderung bleibt im Protokoll erhalten.`)) {
-      removeHolidayPeriod(period.id);
+      await removeHolidayPeriod(period.id);
     }
   };
 
@@ -166,7 +166,7 @@ export function HolidaysPage() {
           <p className="page-header__context">Ferienaufteilung</p>
           <h1>Ferienverwaltung</h1>
         </div>
-        <button className="button button--primary no-print" type="button" onClick={() => setEditing("new")}>
+        <button className="button button--primary no-print" type="button" onClick={() => setEditing("new")} disabled={!canWrite}>
           <Icon name="plus" size={17} />
           Ferienblock erfassen
         </button>
@@ -217,7 +217,7 @@ export function HolidaysPage() {
                 <button className="icon-button icon-button--bordered" type="button" onClick={() => setEditing(period)} aria-label={`${period.name} bearbeiten`}>
                   <Icon name="edit" size={16} />
                 </button>
-                <button className="icon-button icon-button--bordered icon-button--danger" type="button" onClick={() => remove(period)} aria-label={`${period.name} löschen`}>
+                <button className="icon-button icon-button--bordered icon-button--danger" type="button" onClick={() => void remove(period)} disabled={!canWrite} aria-label={`${period.name} löschen`}>
                   <Icon name="trash" size={16} />
                 </button>
               </span>

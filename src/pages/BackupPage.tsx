@@ -14,7 +14,13 @@ import {
 import { useAppStore } from "../store/AppStore";
 
 export function BackupPage() {
-  const { data, recordBackupExport, replaceData } = useAppStore();
+  const {
+    data,
+    recordBackupExport,
+    replaceData,
+    canWrite,
+    isSaving
+  } = useAppStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const backupAgeDays = data.lastJsonBackupAt
@@ -24,7 +30,7 @@ export function BackupPage() {
     : null;
   const backupIsCurrent = backupAgeDays !== null && backupAgeDays <= 7;
 
-  const exportJson = () => {
+  const exportJson = async () => {
     const timestamp = nowIso();
     const backup = createBackup({
       ...data,
@@ -37,8 +43,15 @@ export function BackupPage() {
     anchor.download = `betreuungskalender-backup-${backup.exportedAt.slice(0, 10)}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
-    recordBackupExport(timestamp);
-    setMessage({ type: "success", text: "JSON-Sicherung wurde erstellt." });
+    const recorded = await recordBackupExport(timestamp);
+    setMessage(
+      recorded
+        ? { type: "success", text: "JSON-Sicherung wurde erstellt." }
+        : {
+            type: "error",
+            text: "Die Datei wurde erzeugt, der Backup-Zeitpunkt konnte jedoch nicht in SQLite gespeichert werden."
+          }
+    );
   };
 
   const chooseImport = () => {
@@ -65,8 +78,9 @@ export function BackupPage() {
       if (!window.confirm(`Import ersetzt ${data.entries.filter((entry) => !entry.deletedAt).length} vorhandene Einträge durch ${imported.entries.filter((entry) => !entry.deletedAt).length} Einträge. Diese Wiederherstellung jetzt ausführen?`)) {
         return;
       }
-      replaceData(imported);
-      setMessage({ type: "success", text: "Sicherung wurde erfolgreich importiert." });
+      if (await replaceData(imported)) {
+        setMessage({ type: "success", text: "Sicherung wurde erfolgreich importiert." });
+      }
     } catch (error) {
       setMessage({
         type: "error",
@@ -87,8 +101,8 @@ export function BackupPage() {
       <section className="backup-hero">
         <span className="backup-hero__icon"><Icon name="backup" size={30} /></span>
         <div>
-          <h2>Deine Daten bleiben auf diesem Gerät</h2>
-          <p>Es gibt keine Cloud-Synchronisation. Eine regelmäßige JSON-Sicherung schützt vor Datenverlust beim Löschen von Browserdaten oder bei einem Gerätewechsel.</p>
+          <h2>Deine Daten liegen in der lokalen SQLite-Datenbank</h2>
+          <p>Es gibt keine Cloud-Synchronisation. Eine regelmäßige JSON-Sicherung schützt vor Datenverlust und ermöglicht die Wiederherstellung auf einer anderen Installation.</p>
         </div>
       </section>
 
@@ -129,7 +143,7 @@ export function BackupPage() {
             </dl>
           </div>
           <span className="action-with-help">
-            <button className="button button--primary" type="button" onClick={exportJson}>
+            <button className="button button--primary" type="button" onClick={() => void exportJson()} disabled={isSaving}>
               <Icon name="download" />
               JSON exportieren
             </button>
@@ -141,7 +155,7 @@ export function BackupPage() {
           <span className="backup-card__number">02</span>
           <div>
             <h2>JSON importieren</h2>
-            <p>Lädt eine zuvor exportierte Sicherung. Die Datei wird lokal geprüft, bevor vorhandene Daten ersetzt werden.</p>
+            <p>Lädt eine zuvor exportierte Sicherung. Die Datei wird geprüft und anschließend transaktional in SQLite wiederhergestellt.</p>
             <div className="import-warning">
               <Icon name="alert" size={18} />
               Ein Import ersetzt den aktuellen Datenbestand.
@@ -149,7 +163,7 @@ export function BackupPage() {
           </div>
           <input ref={fileInputRef} className="sr-only" type="file" accept="application/json,.json" onChange={importJson} />
           <span className="action-with-help">
-            <button className="button button--secondary" type="button" onClick={chooseImport}>
+            <button className="button button--secondary" type="button" onClick={chooseImport} disabled={!canWrite || isSaving}>
               <Icon name="upload" />
               JSON auswählen
             </button>

@@ -1,4 +1,6 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
+import { SERVER_UNAVAILABLE_MESSAGE } from "../lib/api";
+import { useAppStore } from "../store/AppStore";
 import type { IconName } from "./Icon";
 import { Icon } from "./Icon";
 
@@ -46,40 +48,15 @@ export function AppShell({
   children: ReactNode;
 }) {
   const [showMore, setShowMore] = useState(false);
-  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
-  const [serverAvailable, setServerAvailable] = useState<boolean | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    const checkServer = async () => {
-      if (!navigator.onLine) {
-        if (active) setServerAvailable(false);
-        return;
-      }
-      try {
-        const response = await fetch("/api/health", { cache: "no-store" });
-        if (active) setServerAvailable(response.ok);
-      } catch {
-        if (active) setServerAvailable(false);
-      }
-    };
-    const handleOnline = () => {
-      setIsOnline(true);
-      void checkServer();
-    };
-    const handleOffline = () => {
-      setIsOnline(false);
-      setServerAvailable(false);
-    };
-    window.addEventListener("online", handleOnline);
-    window.addEventListener("offline", handleOffline);
-    void checkServer();
-    return () => {
-      active = false;
-      window.removeEventListener("online", handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
-  }, []);
+  const {
+    serverStatus,
+    isLoading,
+    isSaving,
+    error,
+    canWrite,
+    reload,
+    clearError
+  } = useAppStore();
 
   const navigate = (page: PageId) => {
     setShowMore(false);
@@ -113,7 +90,7 @@ export function AppShell({
 
         <div className="sidebar__privacy">
           <Icon name="info" size={18} />
-          <p>Daten bleiben ausschließlich in diesem Browser.</p>
+          <p>Fachliche Daten werden im lokalen SQLite-Dienst gespeichert.</p>
         </div>
 
         <button
@@ -136,18 +113,41 @@ export function AppShell({
             className="button button--primary button--icon-mobile"
             type="button"
             onClick={onNewEntry}
+            disabled={!canWrite}
             aria-label="Eintrag erfassen"
           >
             <Icon name="plus" />
             <span>Eintrag</span>
           </button>
         </header>
-        {!isOnline || serverAvailable === false ? (
+        {serverStatus === "offline" ? (
           <div className="offline-banner" role="status">
             <Icon name="info" size={17} />
-            {!isOnline
-              ? "Offline: Diese Version speichert weiterhin ausschließlich lokal in diesem Browser."
-              : "SQLite-Dienst nicht erreichbar: keine Server-Synchronisierung. Diese Version speichert ausschließlich lokal im Browser."}
+            <span>{SERVER_UNAVAILABLE_MESSAGE}</span>
+            <button className="button button--quiet" type="button" onClick={() => void reload()}>
+              Erneut verbinden
+            </button>
+          </div>
+        ) : null}
+        {serverStatus === "checking" || isLoading ? (
+          <div className="offline-banner" role="status">
+            <Icon name="info" size={17} />
+            Daten werden aus SQLite geladen …
+          </div>
+        ) : null}
+        {serverStatus === "online" && isSaving ? (
+          <div className="offline-banner" role="status">
+            <Icon name="info" size={17} />
+            Änderungen werden gespeichert …
+          </div>
+        ) : null}
+        {serverStatus === "online" && error ? (
+          <div className="offline-banner" role="alert">
+            <Icon name="alert" size={17} />
+            <span>{error}</span>
+            <button className="button button--quiet" type="button" onClick={clearError}>
+              Schließen
+            </button>
           </div>
         ) : null}
         {children}

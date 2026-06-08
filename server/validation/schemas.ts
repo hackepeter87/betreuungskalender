@@ -41,6 +41,8 @@ export const careEntryInputSchema = z
     startDateTime: isoDateTime,
     endDateTime: isoDateTime,
     childIds,
+    generatedByPatternId: z.string().trim().min(1).max(200).optional(),
+    ruleOccurrenceDate: dateKey.optional(),
     status: z.enum(["planned", "completed", "cancelled"]),
     careScope: z.enum(careScopes).default("hourly"),
     cancellationReason: z.string().trim().max(4000).optional(),
@@ -50,6 +52,7 @@ export const careEntryInputSchema = z
     weekend: z.boolean().default(false),
     additionalCare: z.boolean().default(false),
     location: z.string().trim().max(200).optional(),
+    customLocation: z.string().trim().max(500).optional(),
     handoverFrom: z.string().trim().max(200).optional(),
     handoverTo: z.string().trim().max(200).optional(),
     notes: z.string().trim().max(10000).optional(),
@@ -110,6 +113,26 @@ export const contactPatternInputSchema = z
   });
 
 export const settingsInputSchema = z.record(z.string(), z.unknown());
+
+export const monthlyClosingInputSchema = z.object({
+  monthKey: z.string().regex(/^\d{4}-\d{2}$/),
+  dataUpdatedAt: isoDateTime,
+  summary: z.record(z.string(), z.unknown())
+});
+
+export const appDataImportSchema = z.object({
+  schemaVersion: z.number().int(),
+  children: z.array(z.record(z.string(), z.unknown())),
+  entries: z.array(z.record(z.string(), z.unknown())),
+  holidayPeriods: z.array(z.record(z.string(), z.unknown())).default([]),
+  unavailablePeriods: z.array(z.record(z.string(), z.unknown())).default([]),
+  contactPatterns: z.array(z.record(z.string(), z.unknown())).default([]),
+  auditLog: z.array(z.record(z.string(), z.unknown())).default([]),
+  monthClosures: z.array(z.record(z.string(), z.unknown())).default([]),
+  lastJsonBackupAt: z.string().optional(),
+  settings: z.record(z.string(), z.unknown()),
+  updatedAt: isoDateTime
+});
 
 export const unavailablePeriodInputSchema = z
   .object({

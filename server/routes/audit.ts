@@ -30,7 +30,7 @@ export async function auditRoutes(app: FastifyInstance): Promise<void> {
       values.push(`${request.query.endDate}T23:59:59.999Z`);
     }
     const requestedLimit = Number(request.query.limit ?? 500);
-    const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 500, 1), 5000);
+    const limit = Math.min(Math.max(Number.isFinite(requestedLimit) ? requestedLimit : 500, 1), 50000);
     values.push(limit);
 
     return db.prepare(`
