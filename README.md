@@ -12,6 +12,8 @@ travel, costs, holidays, and unavailable periods.
 ## Project status
 
 - Latest release: [v0.1.0 initial public preview](docs/release-notes/v0.1.0.md)
+- Prepared release: [v0.3.0 SQLite persistence and legacy migration](docs/release-notes/v0.3.0.md)
+  (not published until the `v0.3.0` tag and GitHub release are created)
 - Current `main`: SQLite/API domain persistence, legacy browser-data migration,
   responsive mobile support, backup/restore tooling, and deployment guidance
 - Roadmap and work tracking: [GitHub milestones and issues](https://github.com/hackepeter87/betreuungskalender/milestones)
