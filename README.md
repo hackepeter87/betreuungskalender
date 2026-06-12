@@ -4,15 +4,25 @@ Betreuungskalender is a self-hosted React/TypeScript application for neutral,
 traceable documentation of planned and actual childcare periods, related
 travel, costs, holidays, and unavailable periods.
 
-> **Status:** Private documentation application. No legal advice, no official
-> record, and no guarantee that generated material will be accepted by a court,
-> authority, lawyer, or other recipient.
+> **Status:** Initial public preview. The application is intended for private,
+> self-hosted documentation. It does not provide legal advice, create an
+> official record, or guarantee that generated material will be accepted by a
+> court, authority, lawyer, or other recipient.
+
+## Project status
+
+- Latest release: [v0.1.0 initial public preview](docs/release-notes/v0.1.0.md)
+- Current `main`: SQLite/API domain persistence, legacy browser-data migration,
+  responsive mobile support, backup/restore tooling, and deployment guidance
+- Roadmap and work tracking: [GitHub milestones and issues](https://github.com/hackepeter87/betreuungskalender/milestones)
+- Stability target: `v1.0.0`
 
 ## Screenshot
 
-![Dashboard des Betreuungskalenders](docs/assets/screenshots/dashboard-desktop.png)
+![Betreuungskalender dashboard with fictional demo data](docs/assets/screenshots/dashboard-desktop.png)
 
-Beispielansicht mit fiktiven Demonstrationsdaten.
+Example dashboard using fictional demonstration data. No real personal data is
+included in repository screenshots.
 
 [Features](#features) · [Development](#development-quick-start) ·
 [Container](#container-quick-start) · [systemd/LXC](#lxcsystemd-quick-start) ·
@@ -25,7 +35,8 @@ Beispielansicht mit fiktiven Demonstrationsdaten.
   reasons, overnight stays, handovers, locations, notes, and evidence references
 - Mobile agenda, tablet/desktop calendar, responsive forms, PWA manifest, and
   touch-friendly help for all input fields
-- Configurable biweekly Friday-to-Sunday target schedule and Soll-Ist analysis
+- Configurable biweekly Friday-to-Sunday target schedule and
+  planned-versus-actual analysis
 - Additional care, holiday blocks and allocation, and actual holiday statistics
 - Duty-related and other unavailable periods with overlap notices
 - Multiple trips and costs per care entry with period statistics
@@ -44,18 +55,19 @@ React + TypeScript + Vite
         |
         +-- Fastify API
                 |
-                +-- SQLite (führende fachliche Datenhaltung)
+                +-- SQLite (domain source of truth)
 ```
 
-Die Browser-Oberfläche lädt und speichert Kinder, Betreuungseinträge, Ferien,
-Umgangsregeln, Fahrten, Kosten, Nichtverfügbarkeiten, Einstellungen,
-Monatsabschlüsse und Audit-Log ausschließlich über die API in SQLite.
-`localStorage` ist nicht Teil der fachlichen Datenhaltung. Ist die API nicht
-erreichbar, zeigt die App den Serverfehler an und blockiert Schreibaktionen.
-Ein vorhandener Fachbestand aus älteren Browserversionen wird ausschließlich
-als Legacy-Quelle gelesen und kann über den
-[Migrationsassistenten](docs/migration.md) nach Vorschau, Duplikat- und
-Konfliktprüfung transaktional nach SQLite übernommen werden.
+The browser UI loads and stores children, care entries, holidays, contact
+patterns, trips, costs, unavailable periods, settings, monthly closings, and
+audit records exclusively through the API in SQLite. `localStorage` is not
+used for current domain persistence. When the API is unavailable, the
+application displays a server error and blocks write actions.
+
+Existing data from older browser-only versions is read solely as a legacy
+migration source. The [migration assistant](docs/migration.md) previews the
+data, identifies potential duplicates and conflicts, and imports it
+transactionally into SQLite.
 
 There is no cloud synchronization, analytics, or external tracking.
 
@@ -211,11 +223,10 @@ The script uses SQLite's backup API, stores restrictive files in `BACKUP_DIR`,
 and removes backups older than `BACKUP_RETENTION_DAYS` (default 14). Keep
 additional encrypted off-host generations.
 
-Der JSON-Export in der App enthält den aus SQLite geladenen fachlichen
-Datenbestand und kann über die API transaktional wiederhergestellt werden.
-Für eine vollständige Betriebs- und Desaster-Sicherung bleibt das verifizierte
-SQLite-Backup maßgeblich. CSV und PDF sind Berichtsformate, keine vollständigen
-Backups.
+The in-app JSON export contains the complete domain data loaded from SQLite and
+can be restored transactionally through the API. A verified SQLite backup
+remains the authoritative operational and disaster-recovery backup. CSV and
+PDF files are reporting formats, not complete backups.
 
 Restore procedure and testing:
 [docs/backup-restore.md](docs/backup-restore.md)
@@ -224,7 +235,7 @@ Restore procedure and testing:
 
 Before every update:
 
-1. Export JSON in der App.
+1. Export JSON from the application.
 2. Create and verify an SQLite backup.
 3. Read `CHANGELOG.md`.
 4. Install exact dependencies with `npm ci`.
@@ -245,7 +256,7 @@ Rollback details: [docs/update.md](docs/update.md)
 
 ## Exports and reports
 
-- JSON: vollständiger fachlicher Export/Import der SQLite-gestützten App-Daten
+- JSON: complete domain export/import of the SQLite-backed application data
 - CSV: care entries, trips, costs, holidays, and unavailable periods
 - PDF: neutral selected-period report with report ID, data state, statistics,
   daily list, notes, cancellation reasons, and optional audit history
