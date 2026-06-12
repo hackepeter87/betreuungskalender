@@ -6,17 +6,34 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-06-12
+
 ### Added
 
+- SQLite/API-backed domain persistence for children, care entries, holidays,
+  contact patterns, trips, costs, unavailable periods, settings, monthly
+  closings, and audit records.
 - Migration assistant for legacy browser data from `localStorage`.
 - Import preview with duplicate and conflict detection.
 - Transactional SQLite import with a required backup before replace mode.
 - Exportable migration report and audit entries for migration actions.
+- Server connectivity state, loading and error handling, and blocked writes
+  while the backend is unavailable.
+- Automated tests for legacy detection, migration conflicts, transaction
+  rollback, and backup failure handling.
 
 ### Changed
 
+- SQLite and the API are now the source of truth for domain data.
 - Legacy `localStorage` domain data is now read only as a migration source and
   is never deleted automatically.
+- The browser UI now loads and persists domain data exclusively through the
+  API.
+
+### Security
+
+- Updated the transitive `shell-quote` development dependency to `1.8.4` to
+  resolve CVE-2026-9277.
 
 ## [0.1.0] - 2026-06-07
 
