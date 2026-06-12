@@ -14,7 +14,7 @@ import { useAppStore } from "../store/AppStore";
 import type { UnavailablePeriod } from "../types";
 
 export function UnavailablePeriodsPage() {
-  const { data, removeUnavailablePeriod } = useAppStore();
+  const { data, removeUnavailablePeriod, canWrite } = useAppStore();
   const [selection, setSelection] = useState<PeriodSelection>(() =>
     periodSelection("year", toMonthKey(new Date()))
   );
@@ -29,13 +29,13 @@ export function UnavailablePeriodsPage() {
     [data.unavailablePeriods, selection.endDate, selection.startDate]
   );
 
-  const remove = (period: UnavailablePeriod) => {
+  const remove = async (period: UnavailablePeriod) => {
     if (
       window.confirm(
         "Nichtverfügbarkeit als gelöscht markieren? Die Änderung bleibt im Protokoll erhalten."
       )
     ) {
-      removeUnavailablePeriod(period.id);
+      await removeUnavailablePeriod(period.id);
     }
   };
 
@@ -50,6 +50,7 @@ export function UnavailablePeriodsPage() {
           className="button button--primary"
           type="button"
           onClick={() => setEditing("new")}
+          disabled={!canWrite}
         >
           <Icon name="plus" size={17} />
           Nichtverfügbarkeit erfassen
@@ -116,7 +117,8 @@ export function UnavailablePeriodsPage() {
                 <button
                   className="icon-button icon-button--bordered icon-button--danger"
                   type="button"
-                  onClick={() => remove(period)}
+                  onClick={() => void remove(period)}
+                  disabled={!canWrite}
                   aria-label="Nichtverfügbarkeit löschen"
                 >
                   <Icon name="trash" size={16} />

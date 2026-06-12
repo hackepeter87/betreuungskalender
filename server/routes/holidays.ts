@@ -1,6 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/connection.js";
-import { recordAudit, recordFieldChanges } from "../services/audit.js";
+import {
+  markClosedMonthsChanged,
+  recordAudit,
+  recordFieldChanges
+} from "../services/audit.js";
 import { assertActiveChildren, makeId, nowIso, syncJunction } from "../services/common.js";
 import { holidayInputSchema } from "../validation/schemas.js";
 
@@ -79,6 +83,14 @@ export async function holidayRoutes(app: FastifyInstance): Promise<void> {
           action: "created",
           newValue: getHoliday(id)
         });
+        markClosedMonthsChanged(
+          request.userEmail,
+          "holiday_period",
+          id,
+          parsed.data.startDate,
+          parsed.data.endDate,
+          timestamp
+        );
       })();
     } catch (error) {
       return reply.code(400).send({ error: "invalid_relation", message: error instanceof Error ? error.message : String(error) });
@@ -113,6 +125,20 @@ export async function holidayRoutes(app: FastifyInstance): Promise<void> {
         );
         const after = getHoliday(request.params.id);
         if (after) recordFieldChanges(request.userEmail, "holiday_period", request.params.id, before, after, ["updatedAt"]);
+        const dates = [
+          before.startDate,
+          before.endDate,
+          parsed.data.startDate,
+          parsed.data.endDate
+        ].sort();
+        markClosedMonthsChanged(
+          request.userEmail,
+          "holiday_period",
+          request.params.id,
+          dates[0] ?? parsed.data.startDate,
+          dates.at(-1) ?? parsed.data.endDate,
+          timestamp
+        );
       })();
     } catch (error) {
       return reply.code(400).send({ error: "invalid_relation", message: error instanceof Error ? error.message : String(error) });
@@ -136,6 +162,14 @@ export async function holidayRoutes(app: FastifyInstance): Promise<void> {
         action: "deleted",
         oldValue: before
       });
+      markClosedMonthsChanged(
+        request.userEmail,
+        "holiday_period",
+        request.params.id,
+        before.startDate,
+        before.endDate,
+        timestamp
+      );
     })();
     return reply.code(204).send();
   });

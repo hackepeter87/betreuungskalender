@@ -9,10 +9,13 @@ import { config } from "./config.js";
 import { db } from "./db/connection.js";
 import { runMigrations } from "./db/migrate.js";
 import { auditRoutes } from "./routes/audit.js";
+import { appDataRoutes } from "./routes/appData.js";
 import { careEntryRoutes } from "./routes/careEntries.js";
 import { childrenRoutes } from "./routes/children.js";
 import { contactPatternRoutes } from "./routes/contactPatterns.js";
 import { holidayRoutes } from "./routes/holidays.js";
+import { monthClosingRoutes } from "./routes/monthClosings.js";
+import { migrationRoutes } from "./routes/migration.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { unavailablePeriodRoutes } from "./routes/unavailablePeriods.js";
 
@@ -177,7 +180,10 @@ await app.register(holidayRoutes);
 await app.register(contactPatternRoutes);
 await app.register(settingsRoutes);
 await app.register(unavailablePeriodRoutes);
+await app.register(monthClosingRoutes);
+await app.register(migrationRoutes);
 await app.register(auditRoutes);
+await app.register(appDataRoutes);
 
 const frontendRoot = resolve(process.cwd(), "dist");
 if (existsSync(frontendRoot)) {

@@ -1,6 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { db } from "../db/connection.js";
-import { recordAudit, recordFieldChanges } from "../services/audit.js";
+import {
+  markAllClosedMonthsChanged,
+  recordAudit,
+  recordFieldChanges
+} from "../services/audit.js";
 import { makeId, nowIso } from "../services/common.js";
 import { childInputSchema } from "../validation/schemas.js";
 
@@ -106,6 +110,12 @@ export async function childrenRoutes(app: FastifyInstance): Promise<void> {
         { ...before, ...parsed.data, updatedAt: timestamp },
         ["updatedAt"]
       );
+      markAllClosedMonthsChanged(
+        request.userEmail,
+        "child",
+        request.params.id,
+        timestamp
+      );
     })();
 
     return getChild(request.params.id);
@@ -147,6 +157,12 @@ export async function childrenRoutes(app: FastifyInstance): Promise<void> {
         action: "deleted",
         oldValue: before
       });
+      markAllClosedMonthsChanged(
+        request.userEmail,
+        "child",
+        request.params.id,
+        timestamp
+      );
     })();
 
     return reply.code(204).send();

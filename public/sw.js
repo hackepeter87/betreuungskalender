@@ -1,4 +1,4 @@
-const CACHE_NAME = "betreuungskalender-v2";
+const CACHE_NAME = "betreuungskalender-v3";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/app-icon.svg"];
 
 self.addEventListener("install", (event) => {
@@ -23,6 +23,7 @@ self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   const requestUrl = new URL(event.request.url);
   if (requestUrl.origin !== self.location.origin) return;
+  if (requestUrl.pathname.startsWith("/api/")) return;
 
   if (event.request.mode === "navigate") {
     event.respondWith(

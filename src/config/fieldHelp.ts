@@ -789,7 +789,7 @@ export const fieldHelpById = {
   }),
   "export.jsonImport": help("export.jsonImport", {
     label: "JSON-Backup importieren",
-    shortHelp: "Ersetzt den aktuellen lokalen Datenstand durch eine zuvor exportierte Sicherung.",
+    shortHelp: "Ersetzt den aktuellen SQLite-Datenstand durch eine zuvor exportierte Sicherung.",
     whyRelevant: "Der Import dient der Wiederherstellung oder Übertragung.",
     usedFor: "Wiederherstellung.",
     inputGuidance: "Erstelle vor dem Import ein aktuelles Backup und prüfe Dateiname sowie Datum.",
@@ -901,7 +901,7 @@ export const fieldHelpById = {
   "settings.backup": help("settings.backup", {
     label: "Backup-Pfad und Hinweis",
     shortHelp: "Erinnert an die externe Ablage der heruntergeladenen JSON-Sicherung.",
-    whyRelevant: "Browserdaten allein sind keine dauerhafte Sicherungsstrategie.",
+    whyRelevant: "Die laufende SQLite-Datenbank allein ist keine dauerhafte Sicherungsstrategie.",
     usedFor: "Backup-Erinnerung und Wiederherstellung.",
     inputGuidance: "Lege Backups regelmäßig in einem geschützten, wiederauffindbaren Ordner ab.",
     commonMistakes: "Die App kann den tatsächlichen Speicherort im iOS-Dateisystem nicht zuverlässig erkennen.",

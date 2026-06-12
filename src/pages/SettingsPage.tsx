@@ -7,17 +7,18 @@ import { useAppStore } from "../store/AppStore";
 import type { CareLocation, Child, HandoverParty } from "../types";
 
 function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
-  const { saveChild } = useAppStore();
+  const { saveChild, canWrite, isSaving } = useAppStore();
   const [name, setName] = useState(child?.name ?? "");
   const [birthMonth, setBirthMonth] = useState(child?.birthMonth ?? 1);
   const [birthYear, setBirthYear] = useState(child?.birthYear ?? new Date().getFullYear() - 8);
   const [color, setColor] = useState(child?.color ?? CHILD_COLORS[0]);
 
-  const submit = (event: FormEvent) => {
+  const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!name.trim()) return;
-    saveChild({ id: child?.id, name, birthMonth, birthYear, color });
-    onDone();
+    if (await saveChild({ id: child?.id, name, birthMonth, birthYear, color })) {
+      onDone();
+    }
   };
 
   return (
@@ -56,7 +57,7 @@ function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
         <span />
         <div className="form-actions__right">
           <button className="button button--secondary" type="button" onClick={onDone}>Abbrechen</button>
-          <button className="button button--primary" type="submit">{child ? "Speichern" : "Kind anlegen"}</button>
+          <button className="button button--primary" type="submit" disabled={!canWrite || isSaving}>{child ? "Speichern" : "Kind anlegen"}</button>
         </div>
       </footer>
     </form>
@@ -64,27 +65,35 @@ function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
 }
 
 export function SettingsPage() {
-  const { data, removeChild, updateSettings, loadDemo, clearAll } = useAppStore();
+  const {
+    data,
+    removeChild,
+    updateSettings,
+    loadDemo,
+    clearAll,
+    canWrite,
+    isSaving
+  } = useAppStore();
   const [editingChild, setEditingChild] = useState<Child | "new" | null>(null);
 
-  const deleteChild = (child: Child) => {
+  const deleteChild = async (child: Child) => {
     const affected = data.entries.filter((entry) => !entry.deletedAt && entry.childIds.includes(child.id)).length;
     const message = affected
       ? `${child.name} ist in ${affected} Einträgen enthalten. Beim Löschen werden diese Zuordnungen entfernt. Fortfahren?`
       : `${child.name} wirklich löschen?`;
-    if (window.confirm(message)) removeChild(child.id);
+    if (window.confirm(message)) await removeChild(child.id);
   };
 
-  const loadExamples = () => {
+  const loadExamples = async () => {
     if (data.children.length || data.entries.some((entry) => !entry.deletedAt)) {
       if (!window.confirm("Beispieldaten ersetzen den aktuellen Datenbestand. Fortfahren?")) return;
     }
-    loadDemo();
+    await loadDemo();
   };
 
-  const clearData = () => {
-    if (window.confirm("Alle Kinder, Einträge, Monatsabschlüsse, Protokolle und Einstellungen dauerhaft aus diesem Browser löschen? Diese Aktion ersetzt den gesamten lokalen Datenbestand.")) {
-      clearAll();
+  const clearData = async () => {
+    if (window.confirm("Alle Kinder, Einträge, Monatsabschlüsse, Protokolle und Einstellungen dauerhaft aus der SQLite-Datenbank löschen? Diese Aktion ersetzt den gesamten Datenbestand.")) {
+      await clearAll();
     }
   };
 
@@ -101,9 +110,9 @@ export function SettingsPage() {
         <div className="panel__header">
           <div>
             <h2>Kinder</h2>
-            <p>Namen werden nur lokal gespeichert und können auch als Kürzel geführt werden.</p>
+            <p>Namen werden im lokalen SQLite-Dienst gespeichert und können auch als Kürzel geführt werden.</p>
           </div>
-          <button className="button button--primary" type="button" onClick={() => setEditingChild("new")}>
+          <button className="button button--primary" type="button" onClick={() => setEditingChild("new")} disabled={!canWrite || isSaving}>
             <Icon name="plus" size={17} />
             Kind anlegen
           </button>
@@ -120,7 +129,7 @@ export function SettingsPage() {
               </span>
               <span className="child-settings-row__actions">
                 <button className="icon-button icon-button--bordered" type="button" onClick={() => setEditingChild(child)} aria-label={`${child.name} bearbeiten`}><Icon name="edit" size={17} /></button>
-                <button className="icon-button icon-button--bordered icon-button--danger" type="button" onClick={() => deleteChild(child)} aria-label={`${child.name} löschen`}><Icon name="trash" size={17} /></button>
+                <button className="icon-button icon-button--bordered icon-button--danger" type="button" onClick={() => void deleteChild(child)} disabled={!canWrite || isSaving} aria-label={`${child.name} löschen`}><Icon name="trash" size={17} /></button>
               </span>
             </div>
           ))}
@@ -143,14 +152,15 @@ export function SettingsPage() {
               min="0"
               step="0.01"
               value={data.settings.kilometerRate}
+              disabled={!canWrite || isSaving}
               onChange={(event) =>
-                updateSettings({ kilometerRate: Number(event.target.value) })
+                void updateSettings({ kilometerRate: Number(event.target.value) })
               }
             />
           </label>
           <label className="field">
             <FieldHelpLabel fieldId="settings.defaultLocation" />
-            <select value={data.settings.defaultLocation} onChange={(event) => updateSettings({ defaultLocation: event.target.value as CareLocation })}>
+            <select value={data.settings.defaultLocation} disabled={!canWrite || isSaving} onChange={(event) => void updateSettings({ defaultLocation: event.target.value as CareLocation })}>
               <option value="commuterApartment">Pendlerwohnung</option>
               <option value="mainResidence">Hauptwohnsitz</option>
               <option value="mother">Bei der Mutter</option>
@@ -163,7 +173,7 @@ export function SettingsPage() {
             <FieldHelpLabel fieldId="settings.defaultHandoverFrom">
               Übergabe standardmäßig von
             </FieldHelpLabel>
-            <select value={data.settings.defaultHandoverFrom} onChange={(event) => updateSettings({ defaultHandoverFrom: event.target.value as HandoverParty })}>
+            <select value={data.settings.defaultHandoverFrom} disabled={!canWrite || isSaving} onChange={(event) => void updateSettings({ defaultHandoverFrom: event.target.value as HandoverParty })}>
               <option value="mother">Mutter</option>
               <option value="father">Vater</option>
               <option value="school">Schule</option>
@@ -175,7 +185,7 @@ export function SettingsPage() {
             <FieldHelpLabel fieldId="settings.defaultHandoverTo">
               Übergabe standardmäßig an
             </FieldHelpLabel>
-            <select value={data.settings.defaultHandoverTo} onChange={(event) => updateSettings({ defaultHandoverTo: event.target.value as HandoverParty })}>
+            <select value={data.settings.defaultHandoverTo} disabled={!canWrite || isSaving} onChange={(event) => void updateSettings({ defaultHandoverTo: event.target.value as HandoverParty })}>
               <option value="mother">Mutter</option>
               <option value="father">Vater</option>
               <option value="school">Schule</option>
@@ -189,13 +199,13 @@ export function SettingsPage() {
       <section className="panel settings-section">
         <div className="panel__header panel__header--compact">
           <div>
-            <h2>Beispiel- und Browserdaten</h2>
+            <h2>Beispiel- und Datenbankdaten</h2>
             <p>Beispieldaten helfen beim Kennenlernen und können vollständig entfernt werden.</p>
           </div>
         </div>
         <div className="data-actions">
-          <button className="button button--secondary" type="button" onClick={loadExamples}>Beispieldaten laden</button>
-          <button className="button button--danger-quiet" type="button" onClick={clearData}><Icon name="trash" size={17} />Alle lokalen Daten löschen</button>
+          <button className="button button--secondary" type="button" onClick={() => void loadExamples()} disabled={!canWrite || isSaving}>Beispieldaten laden</button>
+          <button className="button button--danger-quiet" type="button" onClick={() => void clearData()} disabled={!canWrite || isSaving}><Icon name="trash" size={17} />Alle Datenbankdaten löschen</button>
         </div>
       </section>
 

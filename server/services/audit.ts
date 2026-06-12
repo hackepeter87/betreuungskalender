@@ -69,3 +69,73 @@ export function recordFieldChanges(
     });
   }
 }
+
+function monthKeysForRange(startDate: string, endDate: string): string[] {
+  const [startYear, startMonth] = startDate.slice(0, 7).split("-").map(Number);
+  const [endYear, endMonth] = endDate.slice(0, 7).split("-").map(Number);
+  const current = new Date(Date.UTC(startYear ?? 1970, (startMonth ?? 1) - 1, 1));
+  const end = new Date(Date.UTC(endYear ?? 1970, (endMonth ?? 1) - 1, 1));
+  const result: string[] = [];
+  while (current <= end) {
+    result.push(
+      `${current.getUTCFullYear()}-${String(current.getUTCMonth() + 1).padStart(2, "0")}`
+    );
+    current.setUTCMonth(current.getUTCMonth() + 1);
+  }
+  return result;
+}
+
+export function markClosedMonthsChanged(
+  userEmail: string,
+  entityType: string,
+  entityId: string,
+  startDate: string,
+  endDate: string,
+  timestamp = new Date().toISOString()
+): void {
+  for (const monthKey of monthKeysForRange(startDate, endDate)) {
+    const result = db.prepare(`
+      UPDATE monthly_closings
+      SET changed_after_close_at = ?, updated_at = ?
+      WHERE month_key = ? AND deleted_at IS NULL
+    `).run(timestamp, timestamp, monthKey);
+    if (result.changes > 0) {
+      recordAudit({
+        userEmail,
+        entityType,
+        entityId,
+        action: "post_close_change",
+        fieldName: monthKey,
+        newValue: timestamp
+      });
+    }
+  }
+}
+
+export function markAllClosedMonthsChanged(
+  userEmail: string,
+  entityType: string,
+  entityId: string,
+  timestamp = new Date().toISOString()
+): void {
+  const rows = db.prepare(`
+    SELECT month_key AS monthKey
+    FROM monthly_closings
+    WHERE deleted_at IS NULL
+  `).all() as Array<{ monthKey: string }>;
+  for (const row of rows) {
+    db.prepare(`
+      UPDATE monthly_closings
+      SET changed_after_close_at = ?, updated_at = ?
+      WHERE month_key = ?
+    `).run(timestamp, timestamp, row.monthKey);
+    recordAudit({
+      userEmail,
+      entityType,
+      entityId,
+      action: "post_close_change",
+      fieldName: row.monthKey,
+      newValue: timestamp
+    });
+  }
+}

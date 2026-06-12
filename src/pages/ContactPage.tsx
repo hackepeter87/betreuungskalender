@@ -30,7 +30,9 @@ export function ContactPage({
     data,
     saveContactPattern,
     generateContactEntries,
-    updateEntryStatus
+    updateEntryStatus,
+    canWrite,
+    isSaving
   } = useAppStore();
   const existingPattern = data.contactPatterns[0];
   const currentYear = new Date().getFullYear();
@@ -73,7 +75,7 @@ export function ContactPage({
     [data.entries, generationEnd, generationStart]
   );
 
-  const saveRule = (event?: FormEvent) => {
+  const saveRule = async (event?: FormEvent) => {
     event?.preventDefault();
     if (!childIds.length) {
       setMessage("Bitte mindestens ein Kind für die Umgangsregel auswählen.");
@@ -84,7 +86,7 @@ export function ContactPage({
       setMessage("Das Startdatum der Regel muss ein Freitag sein.");
       return;
     }
-    const id = saveContactPattern({
+    const id = await saveContactPattern({
       id: patternId,
       name: name.trim() || "14-Tage-Regel",
       startDate,
@@ -94,11 +96,13 @@ export function ContactPage({
       childIds,
       active
     });
-    setPatternId(id);
-    setMessage("Umgangsregel gespeichert.");
+    if (id) {
+      setPatternId(id);
+      setMessage("Umgangsregel gespeichert.");
+    }
   };
 
-  const generate = () => {
+  const generate = async () => {
     if (!patternId) {
       setMessage("Bitte die Umgangsregel zuerst speichern.");
       return;
@@ -107,7 +111,11 @@ export function ContactPage({
       setMessage("Der Generierungszeitraum ist ungültig.");
       return;
     }
-    const count = generateContactEntries(patternId, generationStart, generationEnd);
+    const count = await generateContactEntries(
+      patternId,
+      generationStart,
+      generationEnd
+    );
     setMessage(
       count === -1
         ? "Die Erzeugung wurde abgebrochen."
@@ -117,10 +125,10 @@ export function ContactPage({
     );
   };
 
-  const confirmCancellation = (event: FormEvent) => {
+  const confirmCancellation = async (event: FormEvent) => {
     event.preventDefault();
     if (!cancelEntry || !cancelReason.trim()) return;
-    if (updateEntryStatus(cancelEntry.id, "cancelled", cancelReason)) {
+    if (await updateEntryStatus(cancelEntry.id, "cancelled", cancelReason)) {
       setCancelEntry(null);
       setCancelReason("");
     }
@@ -208,7 +216,7 @@ export function ContactPage({
               <span />
               <FieldHelpLabel fieldId="contactPattern.active" />
             </label>
-            <button className="button button--primary" type="submit" disabled={!data.children.length}>
+            <button className="button button--primary" type="submit" disabled={!data.children.length || !canWrite || isSaving}>
               <Icon name="check" size={17} />
               Regel speichern
             </button>
@@ -233,7 +241,7 @@ export function ContactPage({
                 <input type="date" value={generationEnd} onChange={(event) => setGenerationEnd(event.target.value)} />
               </label>
             </div>
-            <button className="button button--primary" type="button" onClick={generate} disabled={!patternId}>
+            <button className="button button--primary" type="button" onClick={() => void generate()} disabled={!patternId || !canWrite || isSaving}>
               <Icon name="repeat" size={17} />
               Termine erzeugen
             </button>
@@ -299,11 +307,11 @@ export function ContactPage({
               </button>
               {entry.generatedByPatternId ? (
                 <div className="rule-entry__actions">
-                  <button className="button button--quiet" type="button" onClick={() => updateEntryStatus(entry.id, "completed")}>
+                  <button className="button button--quiet" type="button" onClick={() => void updateEntryStatus(entry.id, "completed")} disabled={!canWrite || isSaving}>
                     <Icon name="check" size={15} />
                     Durchgeführt
                   </button>
-                  <button className="button button--danger-quiet" type="button" onClick={() => { setCancelEntry(entry); setCancelReason(entry.cancellationReason ?? ""); }}>
+                  <button className="button button--danger-quiet" type="button" onClick={() => { setCancelEntry(entry); setCancelReason(entry.cancellationReason ?? ""); }} disabled={!canWrite || isSaving}>
                     <Icon name="close" size={15} />
                     Ausgefallen
                   </button>
@@ -329,7 +337,7 @@ export function ContactPage({
               <span />
               <div className="form-actions__right">
                 <button className="button button--secondary" type="button" onClick={() => setCancelEntry(null)}>Abbrechen</button>
-                <button className="button button--primary" type="submit">Ausfall speichern</button>
+                <button className="button button--primary" type="submit" disabled={!canWrite || isSaving}>Ausfall speichern</button>
               </div>
             </footer>
           </form>

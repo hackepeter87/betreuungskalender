@@ -6,6 +6,18 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+### Added
+
+- Migrationsassistent für ältere Browserdaten aus `localStorage`.
+- Vorschau mit Duplikat- und Konflikterkennung.
+- Transaktionaler Import in SQLite mit verpflichtendem Backup vor Ersetzen.
+- Exportierbares Importprotokoll und Audit-Einträge für Migrationen.
+
+### Changed
+
+- Alte `localStorage`-Fachdaten werden nur noch als Legacy-Quelle zur Migration
+  gelesen und niemals automatisch gelöscht.
+
 ## [0.1.0] - 2026-06-07
 
 ### Added

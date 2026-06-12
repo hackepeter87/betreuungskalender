@@ -85,7 +85,7 @@ export function EntryForm({
   onSaved,
   onCancel
 }: EntryFormProps) {
-  const { data, saveEntry, removeEntry } = useAppStore();
+  const { data, saveEntry, removeEntry, canWrite, isSaving } = useAppStore();
   const defaultDate = initialDate ?? toDateKey(new Date());
   const initialStart = entry
     ? dateTimeParts(entry.startDateTime)
@@ -162,7 +162,7 @@ export function EntryForm({
     );
   };
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
     const nextErrors: Record<string, string> = {};
@@ -191,7 +191,7 @@ export function EntryForm({
       return;
     }
 
-    const saved = saveEntry({
+    const saved = await saveEntry({
       id: entry?.id,
       date: startDate,
       startDateTime,
@@ -229,10 +229,10 @@ export function EntryForm({
     if (saved) onSaved();
   };
 
-  const handleDelete = () => {
+  const handleDelete = async () => {
     if (!entry) return;
     if (window.confirm("Diesen Betreuungseintrag als gelöscht markieren? Die Änderung bleibt im Protokoll nachvollziehbar.")) {
-      if (removeEntry(entry.id)) onSaved();
+      if (await removeEntry(entry.id)) onSaved();
     }
   };
 
@@ -601,14 +601,14 @@ export function EntryForm({
 
       <footer className="form-actions">
         {entry ? (
-          <button className="button button--danger-quiet" type="button" onClick={handleDelete}>
+          <button className="button button--danger-quiet" type="button" onClick={() => void handleDelete()} disabled={!canWrite || isSaving}>
             <Icon name="trash" size={17} />
             Löschen
           </button>
         ) : <span />}
         <div className="form-actions__right">
           <button className="button button--secondary" type="button" onClick={onCancel}>Abbrechen</button>
-          <button className="button button--primary" type="submit" disabled={data.children.length === 0}>
+          <button className="button button--primary" type="submit" disabled={data.children.length === 0 || !canWrite || isSaving}>
             <Icon name="check" size={17} />
             {entry ? "Änderungen speichern" : "Eintrag speichern"}
           </button>

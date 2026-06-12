@@ -29,7 +29,7 @@ export function DashboardPage({
   onOpenSettings: () => void;
   onOpenCalendar: () => void;
 }) {
-  const { data, closeMonth } = useAppStore();
+  const { data, closeMonth, canWrite, isSaving } = useAppStore();
   const [showClosure, setShowClosure] = useState(false);
   const [closureConfirmed, setClosureConfirmed] = useState(false);
   const stats = useMemo(() => calculateMonthlyStats(data, monthKey), [data, monthKey]);
@@ -101,7 +101,7 @@ export function DashboardPage({
             {closure ? "Monat abgeschlossen" : "Monat abschließen"}
           </button>
           <FieldHelpButton fieldId="monthClosure.close" />
-          <button className="button button--primary desktop-only" type="button" onClick={() => onNewEntry()}>
+          <button className="button button--primary desktop-only" type="button" onClick={() => onNewEntry()} disabled={!canWrite || isSaving}>
             <Icon name="plus" />
             Eintrag erfassen
           </button>
@@ -323,8 +323,10 @@ export function DashboardPage({
                   <button
                     className="button button--primary"
                     type="button"
-                    disabled={!closureConfirmed}
-                    onClick={() => { closeMonth(monthKey); setShowClosure(false); }}
+                    disabled={!closureConfirmed || !canWrite || isSaving}
+                    onClick={async () => {
+                      if (await closeMonth(monthKey)) setShowClosure(false);
+                    }}
                   >
                     <Icon name="lock" size={17} />
                     Monat verbindlich abschließen

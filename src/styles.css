@@ -1661,6 +1661,117 @@ h3 {
   overflow-y: auto;
 }
 
+.legacy-migration {
+  display: grid;
+  gap: 1rem;
+  padding: 20px;
+}
+
+.migration-count-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: .75rem;
+}
+
+.migration-count-grid span {
+  display: grid;
+  gap: .2rem;
+  min-width: 0;
+  padding: .85rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+  color: var(--muted);
+}
+
+.migration-count-grid strong {
+  color: var(--ink);
+  font-size: 1.35rem;
+}
+
+.migration-review-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: .75rem;
+}
+
+.migration-review-grid .notice {
+  margin: 0;
+}
+
+.migration-details,
+.migration-issues,
+.migration-recommendation,
+.migration-risk {
+  padding: 1rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-soft);
+}
+
+.migration-details summary {
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.migration-details > div {
+  padding-top: .8rem;
+}
+
+.migration-details p,
+.migration-details small,
+.migration-risk,
+.migration-recommendation {
+  color: var(--muted);
+}
+
+.migration-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .75rem;
+  margin: 0;
+}
+
+.migration-summary div {
+  padding: .85rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.migration-summary dt {
+  color: var(--muted);
+  font-size: .85rem;
+}
+
+.migration-summary dd {
+  margin: .25rem 0 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.migration-progress {
+  margin: 0;
+  color: var(--muted);
+}
+
+@media (max-width: 767px) {
+  .migration-count-grid,
+  .migration-review-grid,
+  .migration-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .migration-actions,
+  .migration-actions .form-actions__right {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .migration-actions .button {
+    width: 100%;
+  }
+}
+
 .entry-form,
 .child-form {
   padding: 20px;

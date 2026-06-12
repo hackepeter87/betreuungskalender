@@ -1,7 +1,11 @@
 import type { FastifyInstance } from "fastify";
 import type { ApiUnavailablePeriod } from "../../shared/api.js";
 import { db } from "../db/connection.js";
-import { recordAudit, recordFieldChanges } from "../services/audit.js";
+import {
+  markClosedMonthsChanged,
+  recordAudit,
+  recordFieldChanges
+} from "../services/audit.js";
 import { bool, makeId, nowIso } from "../services/common.js";
 import {
   unavailablePeriodInputSchema,
@@ -122,6 +126,14 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
         action: "created",
         newValue: getPeriod(id)
       });
+      markClosedMonthsChanged(
+        request.userEmail,
+        "unavailable_period",
+        id,
+        parsed.data.startDateTime.slice(0, 10),
+        parsed.data.endDateTime.slice(0, 10),
+        timestamp
+      );
     })();
     return reply.code(201).send(getPeriod(id));
   });
@@ -173,6 +185,20 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
             ["updatedAt", "updatedBy", "warnings"]
           );
         }
+        const dates = [
+          before.startDateTime.slice(0, 10),
+          before.endDateTime.slice(0, 10),
+          parsed.data.startDateTime.slice(0, 10),
+          parsed.data.endDateTime.slice(0, 10)
+        ].sort();
+        markClosedMonthsChanged(
+          request.userEmail,
+          "unavailable_period",
+          request.params.id,
+          dates[0] ?? parsed.data.startDateTime.slice(0, 10),
+          dates.at(-1) ?? parsed.data.endDateTime.slice(0, 10),
+          timestamp
+        );
       })();
       return getPeriod(request.params.id);
     }
@@ -197,6 +223,14 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
           action: "deleted",
           oldValue: before
         });
+        markClosedMonthsChanged(
+          request.userEmail,
+          "unavailable_period",
+          request.params.id,
+          before.startDateTime.slice(0, 10),
+          before.endDateTime.slice(0, 10),
+          timestamp
+        );
       })();
       return reply.code(204).send();
     }

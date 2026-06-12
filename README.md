@@ -17,7 +17,7 @@ Beispielansicht mit fiktiven Demonstrationsdaten.
 [Features](#features) · [Development](#development-quick-start) ·
 [Container](#container-quick-start) · [systemd/LXC](#lxcsystemd-quick-start) ·
 [Configuration](docs/configuration.md) · [Security](docs/security.md) ·
-[Backup](docs/backup-restore.md)
+[Backup](docs/backup-restore.md) · [Legacy migration](docs/migration.md)
 
 ## Features
 
@@ -42,17 +42,20 @@ person's conduct.
 ```text
 React + TypeScript + Vite
         |
-        +-- browser local storage (current UI data)
-        |
-Fastify API -- SQLite (separate API persistence)
+        +-- Fastify API
+                |
+                +-- SQLite (führende fachliche Datenhaltung)
 ```
 
-The current browser UI and SQLite API are **not automatically synchronized**.
-The UI uses versioned browser local storage. API clients use SQLite. If both are
-used, back up both:
-
-- Browser data: JSON export in the app
-- SQLite data: `npm run backup`
+Die Browser-Oberfläche lädt und speichert Kinder, Betreuungseinträge, Ferien,
+Umgangsregeln, Fahrten, Kosten, Nichtverfügbarkeiten, Einstellungen,
+Monatsabschlüsse und Audit-Log ausschließlich über die API in SQLite.
+`localStorage` ist nicht Teil der fachlichen Datenhaltung. Ist die API nicht
+erreichbar, zeigt die App den Serverfehler an und blockiert Schreibaktionen.
+Ein vorhandener Fachbestand aus älteren Browserversionen wird ausschließlich
+als Legacy-Quelle gelesen und kann über den
+[Migrationsassistenten](docs/migration.md) nach Vorschau, Duplikat- und
+Konfliktprüfung transaktional nach SQLite übernommen werden.
 
 There is no cloud synchronization, analytics, or external tracking.
 
@@ -62,7 +65,7 @@ Requirements: Node.js 22 LTS, npm, and a build environment supported by
 `better-sqlite3`.
 
 ```bash
-npm install
+npm ci
 cp .env.example .env
 ```
 
@@ -208,8 +211,11 @@ The script uses SQLite's backup API, stores restrictive files in `BACKUP_DIR`,
 and removes backups older than `BACKUP_RETENTION_DAYS` (default 14). Keep
 additional encrypted off-host generations.
 
-Browser-local data must separately be exported as JSON. CSV and PDF are report
-formats, not complete backups.
+Der JSON-Export in der App enthält den aus SQLite geladenen fachlichen
+Datenbestand und kann über die API transaktional wiederhergestellt werden.
+Für eine vollständige Betriebs- und Desaster-Sicherung bleibt das verifizierte
+SQLite-Backup maßgeblich. CSV und PDF sind Berichtsformate, keine vollständigen
+Backups.
 
 Restore procedure and testing:
 [docs/backup-restore.md](docs/backup-restore.md)
@@ -218,7 +224,7 @@ Restore procedure and testing:
 
 Before every update:
 
-1. Export browser JSON.
+1. Export JSON in der App.
 2. Create and verify an SQLite backup.
 3. Read `CHANGELOG.md`.
 4. Install exact dependencies with `npm ci`.
@@ -239,7 +245,7 @@ Rollback details: [docs/update.md](docs/update.md)
 
 ## Exports and reports
 
-- JSON: full browser-local backup/import
+- JSON: vollständiger fachlicher Export/Import der SQLite-gestützten App-Daten
 - CSV: care entries, trips, costs, holidays, and unavailable periods
 - PDF: neutral selected-period report with report ID, data state, statistics,
   daily list, notes, cancellation reasons, and optional audit history
@@ -249,7 +255,7 @@ attach them to public GitHub issues.
 
 ## Privacy and security
 
-SQLite files, browser profiles, backups, exports, and reports may contain
+SQLite files, backups, exports, and reports may contain
 sensitive family data. The operator is responsible for:
 
 - TLS and authentication
@@ -257,7 +263,7 @@ sensitive family data. The operator is responsible for:
 - Firewall and reverse-proxy correctness
 - Disk encryption and filesystem permissions
 - Backup encryption, retention, restore tests, and deletion
-- Restricting access to browser profiles and generated files
+- Restricting access to the application host and generated files
 
 See [docs/security.md](docs/security.md) and [SECURITY.md](SECURITY.md).
 

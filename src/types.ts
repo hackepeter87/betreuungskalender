@@ -167,8 +167,14 @@ export type AuditObjectType =
   | "trip"
   | "cost"
   | "holiday"
-  | "unavailablePeriod";
-export type AuditAction = "created" | "updated" | "deleted";
+  | "unavailablePeriod"
+  | "child"
+  | "contactPattern"
+  | "settings"
+  | "monthClosure"
+  | "appData"
+  | "legacyMigration";
+export type AuditAction = "created" | "updated" | "deleted" | "postCloseChange";
 
 export interface AuditLogEntry {
   id: string;

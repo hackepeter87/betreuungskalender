@@ -61,6 +61,8 @@ export interface ApiCost {
 
 export interface ApiCareEntry {
   id: string;
+  generatedByPatternId?: string;
+  ruleOccurrenceDate?: string;
   startDateTime: string;
   endDateTime: string;
   childIds: string[];
@@ -73,6 +75,7 @@ export interface ApiCareEntry {
   weekend: boolean;
   additionalCare: boolean;
   location?: string;
+  customLocation?: string;
   handoverFrom?: string;
   handoverTo?: string;
   notes?: string;
@@ -86,6 +89,27 @@ export interface ApiCareEntry {
   updatedAt: string;
   trips: ApiTrip[];
   costs: ApiCost[];
+}
+
+export interface ApiMonthlyClosing {
+  monthKey: string;
+  closedAt: string;
+  dataUpdatedAt: string;
+  summary: unknown;
+  changedAfterCloseAt?: string;
+}
+
+export interface ApiAuditEntry {
+  id: number;
+  timestamp: string;
+  userEmail: string;
+  entityType: string;
+  entityId: string;
+  action: "created" | "updated" | "deleted" | "post_close_change";
+  fieldName?: string;
+  oldValue?: string;
+  newValue?: string;
+  metadataJson?: string;
 }
 
 export interface ApiUnavailablePeriod {

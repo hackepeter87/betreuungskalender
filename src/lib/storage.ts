@@ -10,8 +10,6 @@ import type {
 import { SCHEMA_VERSION } from "../types";
 import { nowIso } from "./date";
 
-const STORAGE_KEY = "betreuungskalender:data:v1";
-
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
@@ -88,7 +86,7 @@ function normalizeClosureSummary(value: unknown): MonthlyClosureSummary {
   };
 }
 
-function normalizeData(value: unknown): AppData {
+export function normalizeBackupData(value: unknown): AppData {
   if (
     !isObject(value) ||
     (value.schemaVersion !== 1 &&
@@ -292,20 +290,6 @@ function normalizeData(value: unknown): AppData {
   } as AppData;
 }
 
-export function loadData(): AppData {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? normalizeData(JSON.parse(raw)) : createEmptyData();
-  } catch (error) {
-    console.warn("Lokale Daten konnten nicht geladen werden.", error);
-    return createEmptyData();
-  }
-}
-
-export function saveData(data: AppData): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
-}
-
 export function createBackup(data: AppData): BackupEnvelope {
   return {
     application: "betreuungskalender",
@@ -317,7 +301,7 @@ export function createBackup(data: AppData): BackupEnvelope {
 export function parseBackup(raw: string): AppData {
   const parsed: unknown = JSON.parse(raw);
   if (isObject(parsed) && parsed.application === "betreuungskalender" && "data" in parsed) {
-    return normalizeData(parsed.data);
+    return normalizeBackupData(parsed.data);
   }
-  return normalizeData(parsed);
+  return normalizeBackupData(parsed);
 }
