@@ -17,7 +17,7 @@ Beispielansicht mit fiktiven Demonstrationsdaten.
 [Features](#features) · [Development](#development-quick-start) ·
 [Container](#container-quick-start) · [systemd/LXC](#lxcsystemd-quick-start) ·
 [Configuration](docs/configuration.md) · [Security](docs/security.md) ·
-[Backup](docs/backup-restore.md)
+[Backup](docs/backup-restore.md) · [Legacy migration](docs/migration.md)
 
 ## Features
 
@@ -52,6 +52,10 @@ Umgangsregeln, Fahrten, Kosten, Nichtverfügbarkeiten, Einstellungen,
 Monatsabschlüsse und Audit-Log ausschließlich über die API in SQLite.
 `localStorage` ist nicht Teil der fachlichen Datenhaltung. Ist die API nicht
 erreichbar, zeigt die App den Serverfehler an und blockiert Schreibaktionen.
+Ein vorhandener Fachbestand aus älteren Browserversionen wird ausschließlich
+als Legacy-Quelle gelesen und kann über den
+[Migrationsassistenten](docs/migration.md) nach Vorschau, Duplikat- und
+Konfliktprüfung transaktional nach SQLite übernommen werden.
 
 There is no cloud synchronization, analytics, or external tracking.
 

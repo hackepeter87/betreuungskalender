@@ -6,6 +6,13 @@ import type {
   ApiUnavailablePeriod,
   CareScope
 } from "../../shared/api";
+import type {
+  LegacyDataCounts,
+  LegacyDatabaseSummary,
+  LegacyDuplicatePolicy,
+  LegacyMigrationPreview,
+  LegacyMigrationReport
+} from "../../shared/migration";
 import { createEmptyData } from "../data/defaults";
 import type {
   AppData,
@@ -187,7 +194,8 @@ const objectTypeMap: Record<string, AuditObjectType> = {
   contact_pattern: "contactPattern",
   settings: "settings",
   month_closure: "monthClosure",
-  app_data: "appData"
+  app_data: "appData",
+  legacy_migration: "legacyMigration"
 };
 
 const actionMap: Record<string, AuditAction> = {
@@ -404,5 +412,54 @@ export const api = {
   },
   clearData() {
     return request<void>("/api/app-data", { method: "DELETE" });
+  },
+  getLegacyMigrationSummary() {
+    return request<{
+      database: LegacyDatabaseSummary;
+      reports: LegacyMigrationReport[];
+    }>("/api/migration/legacy-summary");
+  },
+  recordLegacyDetected(input: {
+    fingerprint: string;
+    counts: LegacyDataCounts;
+  }) {
+    return request<void>("/api/migration/legacy-detected", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
+  },
+  recordLegacySkip(input: {
+    fingerprint: string;
+    counts: LegacyDataCounts;
+    reason: string;
+  }) {
+    return request<void>("/api/migration/legacy-skip", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
+  },
+  previewLegacyMigration(input: {
+    data: AppData;
+    fingerprint: string;
+    invalidRecords: number;
+    warnings: string[];
+  }) {
+    return request<LegacyMigrationPreview>("/api/migration/legacy-preview", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
+  },
+  importLegacyMigration(input: {
+    data: AppData;
+    fingerprint: string;
+    invalidRecords: number;
+    warnings: string[];
+    mode: "add" | "replace";
+    duplicatePolicy: LegacyDuplicatePolicy;
+  }) {
+    return request<LegacyMigrationReport>("/api/migration/legacy-import", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
   }
 };

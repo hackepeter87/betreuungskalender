@@ -1,7 +1,14 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AppShell, type PageId } from "./components/AppShell";
 import { EntryForm } from "./components/EntryForm";
 import { Modal } from "./components/Modal";
+import { LegacyMigrationDialog } from "./components/LegacyMigrationDialog";
+import { api } from "./lib/api";
+import {
+  detectLegacyBrowserData,
+  isLegacyFingerprintIgnored,
+  type LegacyBrowserData
+} from "./migration/legacyLocalStorage";
 import { toMonthKey } from "./lib/date";
 import { AnalyticsPage } from "./pages/AnalyticsPage";
 import { AuditLogPage } from "./pages/AuditLogPage";
@@ -16,6 +23,8 @@ import { ReportPage } from "./pages/ReportPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { UnavailablePeriodsPage } from "./pages/UnavailablePeriodsPage";
 import type { CareEntry } from "./types";
+import type { LegacyDatabaseSummary } from "../shared/migration";
+import { useAppStore } from "./store/AppStore";
 
 interface EntryDialogState {
   entry?: CareEntry;
@@ -24,9 +33,34 @@ interface EntryDialogState {
 }
 
 export function App() {
+  const { isLoading, serverStatus } = useAppStore();
   const [activePage, setActivePage] = useState<PageId>("dashboard");
   const [monthKey, setMonthKey] = useState(() => toMonthKey(new Date()));
   const [entryDialog, setEntryDialog] = useState<EntryDialogState | null>(null);
+  const [legacyMigration, setLegacyMigration] = useState<{
+    legacy: LegacyBrowserData;
+    database: LegacyDatabaseSummary;
+  } | null>(null);
+  const migrationChecked = useRef(false);
+
+  useEffect(() => {
+    if (migrationChecked.current || isLoading || serverStatus !== "online") return;
+    migrationChecked.current = true;
+    const legacy = detectLegacyBrowserData();
+    if (!legacy || isLegacyFingerprintIgnored(legacy.fingerprint)) return;
+    void api.getLegacyMigrationSummary().then(async ({ database }) => {
+      try {
+        await api.recordLegacyDetected({
+          fingerprint: legacy.fingerprint,
+          counts: legacy.counts
+        });
+      } finally {
+        setLegacyMigration({ legacy, database });
+      }
+    }).catch(() => {
+      migrationChecked.current = false;
+    });
+  }, [isLoading, serverStatus]);
 
   const openNewEntry = (date?: string, additionalCare = false) =>
     setEntryDialog({ date, additionalCare });
@@ -104,6 +138,13 @@ export function App() {
             onCancel={() => setEntryDialog(null)}
           />
         </Modal>
+      ) : null}
+      {legacyMigration ? (
+        <LegacyMigrationDialog
+          legacy={legacyMigration.legacy}
+          database={legacyMigration.database}
+          onClose={() => setLegacyMigration(null)}
+        />
       ) : null}
     </>
   );

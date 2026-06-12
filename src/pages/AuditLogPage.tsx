@@ -15,7 +15,8 @@ const objectLabels: Record<AuditObjectType, string> = {
   contactPattern: "Umgangsregel",
   settings: "Einstellungen",
   monthClosure: "Monatsabschluss",
-  appData: "Datenbestand"
+  appData: "Datenbestand",
+  legacyMigration: "Legacy-Migration"
 };
 
 const actionLabels: Record<AuditAction, string> = {

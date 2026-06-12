@@ -172,7 +172,8 @@ export type AuditObjectType =
   | "contactPattern"
   | "settings"
   | "monthClosure"
-  | "appData";
+  | "appData"
+  | "legacyMigration";
 export type AuditAction = "created" | "updated" | "deleted" | "postCloseChange";
 
 export interface AuditLogEntry {

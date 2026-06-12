@@ -50,7 +50,7 @@ function stringArray(record: DataRecord, key: string): string[] {
     : [];
 }
 
-function clearDomainData(): void {
+export function clearDomainData(): void {
   for (const table of [
     "care_entry_children",
     "holiday_period_children",
@@ -70,7 +70,7 @@ function clearDomainData(): void {
   }
 }
 
-function insertChild(record: DataRecord, timestamp: string): void {
+export function insertChild(record: DataRecord, timestamp: string): void {
   const input = childInputSchema.parse({
     name: record.name,
     birthMonth: record.birthMonth,
@@ -105,7 +105,7 @@ function deriveCareScope(record: DataRecord): string {
   return "hourly";
 }
 
-function insertEntry(record: DataRecord, timestamp: string, userEmail: string): void {
+export function insertEntry(record: DataRecord, timestamp: string, userEmail: string): void {
   if (record.deletedAt) return;
   const input = careEntryInputSchema.parse({
     startDateTime: record.startDateTime,
@@ -241,7 +241,7 @@ function insertEntry(record: DataRecord, timestamp: string, userEmail: string): 
   }
 }
 
-function insertHoliday(record: DataRecord, timestamp: string): void {
+export function insertHoliday(record: DataRecord, timestamp: string): void {
   if (record.deletedAt) return;
   const input = holidayInputSchema.parse({
     name: record.name,
@@ -275,7 +275,7 @@ function insertHoliday(record: DataRecord, timestamp: string): void {
   for (const childId of input.childIds) junction.run(id, childId, timestamp, timestamp);
 }
 
-function insertPattern(record: DataRecord, timestamp: string): void {
+export function insertPattern(record: DataRecord, timestamp: string): void {
   const input = contactPatternInputSchema.parse({
     name: record.name,
     startDate: record.startDate,
@@ -311,7 +311,7 @@ function insertPattern(record: DataRecord, timestamp: string): void {
   for (const childId of input.childIds) junction.run(id, childId, timestamp, timestamp);
 }
 
-function insertUnavailable(record: DataRecord, timestamp: string, userEmail: string): void {
+export function insertUnavailable(record: DataRecord, timestamp: string, userEmail: string): void {
   if (record.deletedAt) return;
   const input = unavailablePeriodInputSchema.parse({
     startDateTime: record.startDateTime,
@@ -352,7 +352,7 @@ function insertUnavailable(record: DataRecord, timestamp: string, userEmail: str
   );
 }
 
-function importData(data: ReturnType<typeof appDataImportSchema.parse>, userEmail: string): void {
+export function importData(data: ReturnType<typeof appDataImportSchema.parse>, userEmail: string): void {
   const timestamp = nowIso();
   clearDomainData();
   for (const child of data.children) insertChild(child, timestamp);

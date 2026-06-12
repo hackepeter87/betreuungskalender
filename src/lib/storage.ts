@@ -86,7 +86,7 @@ function normalizeClosureSummary(value: unknown): MonthlyClosureSummary {
   };
 }
 
-function normalizeData(value: unknown): AppData {
+export function normalizeBackupData(value: unknown): AppData {
   if (
     !isObject(value) ||
     (value.schemaVersion !== 1 &&
@@ -301,7 +301,7 @@ export function createBackup(data: AppData): BackupEnvelope {
 export function parseBackup(raw: string): AppData {
   const parsed: unknown = JSON.parse(raw);
   if (isObject(parsed) && parsed.application === "betreuungskalender" && "data" in parsed) {
-    return normalizeData(parsed.data);
+    return normalizeBackupData(parsed.data);
   }
-  return normalizeData(parsed);
+  return normalizeBackupData(parsed);
 }
