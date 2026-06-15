@@ -20,28 +20,25 @@ async function expectNoPageOverflow(page: import("@playwright/test").Page) {
 test("keeps the side navigation and month calendar usable", async ({ page }) => {
   const childName = "Noah Muster";
   await openApp(page);
-  await expect(page.getByRole("navigation", {
-    name: "Hauptnavigation"
-  })).toBeVisible();
+  await expect(page.getByTestId("nav-calendar")).toBeVisible();
 
-  await navigate(page, "Einstellungen");
-  await expect(page.getByRole("heading", { name: "Einstellungen" })).toBeVisible();
+  await navigate(page, "settings");
+  await expect(page.getByTestId("page-settings")).toBeVisible();
   await expectNoPageOverflow(page);
-  await navigate(page, "Übersicht");
-
+  await navigate(page, "dashboard");
   await createChild(page, childName);
 
-  await navigate(page, "Übersicht");
-  await page.getByRole("button", {
-    name: "Eintrag erfassen",
-    exact: true
-  }).click();
-  const dashboardDialog = page.getByRole("dialog", {
-    name: "Betreuungseintrag erfassen"
+  await navigate(page, "dashboard");
+  await page.getByTestId("page-dashboard")
+    .locator(".page-header__actions .desktop-only")
+    .click();
+  const dashboardForm = page.getByTestId("entry-form");
+  const dashboardDialog = page.getByRole("dialog").filter({
+    has: dashboardForm
   });
   await expect(dashboardDialog).toBeVisible();
   await expectNoPageOverflow(page);
-  await dashboardDialog.getByRole("button", { name: "Schließen" }).click();
+  await dashboardDialog.locator(".modal__header .icon-button").click();
 
   await createEntry(page, {
     childName,
@@ -53,8 +50,8 @@ test("keeps the side navigation and month calendar usable", async ({ page }) => 
     overnight: true
   });
 
-  await navigate(page, "Kalender");
-  await expect(page.locator(".calendar-panel--large")).toBeVisible();
+  await navigate(page, "calendar");
+  await expect(page.getByTestId("calendar-month-view")).toBeVisible();
   await expect(page.getByText(childName).first()).toBeVisible();
   await expectNoPageOverflow(page);
 });
@@ -65,13 +62,13 @@ test("avoids page overflow at compact and landscape tablet sizes", async ({
   await page.setViewportSize({ width: 768, height: 1024 });
   await openApp(page);
   await expectNoPageOverflow(page);
-  await navigate(page, "Kalender");
+  await navigate(page, "calendar");
   await expectNoPageOverflow(page);
 
   await page.setViewportSize({ width: 1194, height: 834 });
-  await navigate(page, "Übersicht");
+  await navigate(page, "dashboard");
   await expectNoPageOverflow(page);
-  await navigate(page, "Einstellungen");
-  await expect(page.getByRole("heading", { name: "Einstellungen" })).toBeVisible();
+  await navigate(page, "settings");
+  await expect(page.getByTestId("page-settings")).toBeVisible();
   await expectNoPageOverflow(page);
 });

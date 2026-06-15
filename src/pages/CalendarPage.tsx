@@ -46,7 +46,7 @@ export function CalendarPage({
   }, [isMobile]);
 
   return (
-    <div className="page page--calendar">
+    <div className="page page--calendar" data-testid="page-calendar">
       <div className="page-header">
         <div>
           <p className="page-header__context">Kalender</p>
@@ -79,6 +79,7 @@ export function CalendarPage({
       <div className="calendar-view-toggle" role="group" aria-label="Kalenderansicht">
         <button
           type="button"
+          data-testid="calendar-view-agenda"
           className={view === "agenda" ? "is-active" : ""}
           onClick={() => setView("agenda")}
         >
@@ -87,6 +88,7 @@ export function CalendarPage({
         </button>
         <button
           type="button"
+          data-testid="calendar-view-month"
           className={view === "month" ? "is-active" : ""}
           onClick={() => setView("month")}
         >
@@ -107,7 +109,7 @@ export function CalendarPage({
         />
       ) : (
         <>
-          <section className="panel calendar-panel calendar-panel--large">
+          <section className="panel calendar-panel calendar-panel--large" data-testid="calendar-month-view">
             <CalendarGrid
               monthKey={monthKey}
               entries={entries}
@@ -131,7 +133,7 @@ export function CalendarPage({
         </>
       )}
 
-      <button className="mobile-fab" type="button" onClick={() => onNewEntry()} disabled={!canWrite} aria-label="Betreuungseintrag hinzufügen">
+      <button className="mobile-fab" data-testid="calendar-add-entry" type="button" onClick={() => onNewEntry()} disabled={!canWrite} aria-label="Betreuungseintrag hinzufügen">
         <Icon name="plus" size={21} />
         Eintrag hinzufügen
       </button>

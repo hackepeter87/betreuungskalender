@@ -16,9 +16,7 @@ test("uses mobile navigation and the agenda for entry creation", async ({
 }) => {
   const childName = "Mia Test";
   await openApp(page);
-  await expect(page.getByRole("navigation", {
-    name: "Mobile Navigation"
-  })).toBeVisible();
+  await expect(page.getByTestId("mobile-navigation")).toBeVisible();
   await createChild(page, childName);
 
   await createEntry(page, {
@@ -31,12 +29,12 @@ test("uses mobile navigation and the agenda for entry creation", async ({
     withTripAndCost: true
   });
 
-  await navigate(page, "Kalender");
-  await expect(page.getByRole("button", { name: "Agenda", exact: true }))
+  await navigate(page, "calendar");
+  await expect(page.getByTestId("calendar-view-agenda"))
     .toHaveClass(/is-active/);
   await expect(page.getByText(childName).first()).toBeVisible();
 
-  await navigate(page, "Einträge");
+  await navigate(page, "entries");
   await expect(page.getByText(childName).first()).toBeVisible();
   expect(await page.evaluate(
     () => document.documentElement.scrollWidth <= document.documentElement.clientWidth
@@ -57,16 +55,11 @@ test("explains read-only mode on mobile when the server is unavailable", async (
   await expect(banner).toContainText(
     "Vorhandene Daten können angesehen und exportiert werden."
   );
-  await expect(page.getByRole("button", {
-    name: "Eintrag erfassen",
-    exact: true
-  })).toBeDisabled();
+  await expect(page.getByTestId("mobile-entry-create")).toBeDisabled();
 
-  await navigate(page, "Kalender");
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  await expect(page.getByRole("button", {
-    name: "Betreuungseintrag hinzufügen"
-  })).toBeDisabled();
+  await navigate(page, "calendar");
+  await expect(page.getByTestId("page-calendar")).toBeVisible();
+  await expect(page.getByTestId("calendar-add-entry")).toBeDisabled();
 
   await context.setOffline(false);
 });

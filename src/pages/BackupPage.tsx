@@ -90,7 +90,7 @@ export function BackupPage() {
   };
 
   return (
-    <div className="page page--narrow">
+    <div className="page page--narrow" data-testid="page-backup">
       <div className="page-header">
         <div>
           <p className="page-header__context">Datensicherung</p>
@@ -172,7 +172,7 @@ export function BackupPage() {
         </section>
       </div>
 
-      <section className="panel csv-export-panel">
+      <section className="panel csv-export-panel" data-testid="csv-export-panel">
         <div className="panel__header">
           <div>
             <h2>CSV-Rohdatenexport</h2>
@@ -181,7 +181,7 @@ export function BackupPage() {
           <FieldHelpButton fieldId="export.csvExport" showRequirement={false} />
         </div>
         <div className="csv-export-grid">
-          <button className="button button--secondary" type="button" onClick={() => exportEntriesCsv(data)}>
+          <button className="button button--secondary" data-testid="export-entries-csv" type="button" onClick={() => exportEntriesCsv(data)}>
             <Icon name="download" size={17} />
             Betreuungseinträge
           </button>

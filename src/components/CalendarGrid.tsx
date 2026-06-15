@@ -76,6 +76,7 @@ export function CalendarGrid({
               <button
                 className="calendar-day__number"
                 type="button"
+                data-testid={`calendar-day-${day.dateKey}`}
                 onClick={() => onSelectDate(day.dateKey)}
                 disabled={!allowCreate}
                 aria-label={`Eintrag am ${day.dateKey} erfassen`}

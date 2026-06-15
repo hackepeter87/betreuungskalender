@@ -237,7 +237,7 @@ export function EntryForm({
   };
 
   return (
-    <form className="entry-form" onSubmit={handleSubmit}>
+    <form className="entry-form" data-testid="entry-form" onSubmit={handleSubmit}>
       {entry?.generatedByPatternId ? (
         <div className="notice">
           <Icon name="info" />
@@ -272,6 +272,7 @@ export function EntryForm({
                 key={child.id}
               >
                 <input
+                  data-testid="entry-child-option"
                   type="checkbox"
                   checked={checked}
                   aria-invalid={Boolean(fieldErrors.children)}
@@ -337,16 +338,17 @@ export function EntryForm({
         <div className="datetime-grid">
           <label className="field">
             <FieldHelpLabel fieldId="careEntry.startDateTime">Beginn Datum</FieldHelpLabel>
-            <input type="date" required value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+            <input data-testid="entry-start-date" type="date" required value={startDate} onChange={(event) => setStartDate(event.target.value)} />
           </label>
           <label className="field">
             <FieldHelpLabel fieldId="careEntry.startDateTime">Beginn Uhrzeit</FieldHelpLabel>
-            <input type="time" required value={startTime} onChange={(event) => setStartTime(event.target.value)} />
+            <input data-testid="entry-start-time" type="time" required value={startTime} onChange={(event) => setStartTime(event.target.value)} />
           </label>
           <label className="field">
             <FieldHelpLabel fieldId="careEntry.endDateTime">Ende Datum</FieldHelpLabel>
             <input
               type="date"
+              data-testid="entry-end-date"
               required
               value={endDate}
               aria-invalid={Boolean(fieldErrors.endDateTime)}
@@ -360,6 +362,7 @@ export function EntryForm({
             <FieldHelpLabel fieldId="careEntry.endDateTime">Ende Uhrzeit</FieldHelpLabel>
             <input
               type="time"
+              data-testid="entry-end-time"
               required
               value={endTime}
               aria-invalid={Boolean(fieldErrors.endDateTime)}
@@ -373,7 +376,7 @@ export function EntryForm({
         {fieldErrors.endDateTime ? <p className="field-error">{fieldErrors.endDateTime}</p> : null}
         <div className="toggle-row">
           <label className="toggle">
-            <input type="checkbox" checked={overnight} onChange={(event) => toggleOvernight(event.target.checked)} />
+            <input data-testid="entry-overnight" type="checkbox" checked={overnight} onChange={(event) => toggleOvernight(event.target.checked)} />
             <span />
             <FieldHelpLabel fieldId="careEntry.overnight">Übernachtung</FieldHelpLabel>
           </label>
@@ -440,19 +443,19 @@ export function EntryForm({
       ) : null}
 
       <details className="form-section form-section--collapsible">
-        <summary className="form-section__summary">Fahrten <span>{trips.length || ""}</span></summary>
+        <summary className="form-section__summary" data-testid="entry-trips-toggle">Fahrten <span>{trips.length || ""}</span></summary>
         <div className="subsection-heading">
           <div>
             <p>Mehrere Fahrten können einem Betreuungseintrag zugeordnet werden.</p>
           </div>
-          <button className="button button--secondary" type="button" onClick={() => setTrips((current) => [...current, newTrip()])}>
+          <button className="button button--secondary" data-testid="entry-trip-add" type="button" onClick={() => setTrips((current) => [...current, newTrip()])}>
             <Icon name="plus" size={16} />
             Fahrt
           </button>
         </div>
         <div className="line-item-list">
           {trips.map((trip, index) => (
-            <div className="line-item" key={trip.id}>
+            <div className="line-item" data-testid="entry-trip-item" key={trip.id}>
               <div className="line-item__heading">
                 <strong>Fahrt {index + 1}</strong>
                 <button className="icon-button icon-button--danger" type="button" onClick={() => setTrips((current) => current.filter((item) => item.id !== trip.id))} aria-label={`Fahrt ${index + 1} löschen`}>
@@ -471,6 +474,7 @@ export function EntryForm({
                   <input
                     className={trip.km <= 0 ? "input--warning" : ""}
                     type="number"
+                    data-testid="entry-trip-km"
                     min="0.1"
                     step="0.1"
                     inputMode="decimal"
@@ -510,19 +514,19 @@ export function EntryForm({
       </details>
 
       <details className="form-section form-section--collapsible">
-        <summary className="form-section__summary">Kosten <span>{costs.length || ""}</span></summary>
+        <summary className="form-section__summary" data-testid="entry-costs-toggle">Kosten <span>{costs.length || ""}</span></summary>
         <div className="subsection-heading">
           <div>
             <p>Einzelne Kostenposten bleiben mit Kategorie und Zahler nachvollziehbar.</p>
           </div>
-          <button className="button button--secondary" type="button" onClick={() => setCosts((current) => [...current, newCost()])}>
+          <button className="button button--secondary" data-testid="entry-cost-add" type="button" onClick={() => setCosts((current) => [...current, newCost()])}>
             <Icon name="plus" size={16} />
             Kosten
           </button>
         </div>
         <div className="line-item-list">
           {costs.map((cost, index) => (
-            <div className="line-item" key={cost.id}>
+            <div className="line-item" data-testid="entry-cost-item" key={cost.id}>
               <div className="line-item__heading">
                 <strong>Kostenposten {index + 1}</strong>
                 <button className="icon-button icon-button--danger" type="button" onClick={() => setCosts((current) => current.filter((item) => item.id !== cost.id))} aria-label={`Kostenposten ${index + 1} löschen`}>
@@ -541,6 +545,7 @@ export function EntryForm({
                   <input
                     className={cost.amount <= 0 ? "input--warning" : ""}
                     type="number"
+                    data-testid="entry-cost-amount"
                     min="0.01"
                     step="0.01"
                     inputMode="decimal"
@@ -572,11 +577,12 @@ export function EntryForm({
       </details>
 
       <details className="form-section form-section--collapsible">
-        <summary className="form-section__summary">Notizen und Belege</summary>
+        <summary className="form-section__summary" data-testid="entry-notes-toggle">Notizen und Belege</summary>
         <label className="field">
           <FieldHelpLabel fieldId="careEntry.notes">Besonderheiten / Notizen</FieldHelpLabel>
           <textarea
             rows={3}
+            data-testid="entry-notes"
             maxLength={1000}
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
@@ -608,7 +614,7 @@ export function EntryForm({
         ) : <span />}
         <div className="form-actions__right">
           <button className="button button--secondary" type="button" onClick={onCancel}>Abbrechen</button>
-          <button className="button button--primary" type="submit" disabled={data.children.length === 0 || !canWrite || isSaving}>
+          <button className="button button--primary" data-testid="entry-submit" type="submit" disabled={data.children.length === 0 || !canWrite || isSaving}>
             <Icon name="check" size={17} />
             {entry ? "Änderungen speichern" : "Eintrag speichern"}
           </button>

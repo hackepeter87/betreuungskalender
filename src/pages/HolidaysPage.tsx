@@ -56,19 +56,19 @@ function HolidayForm({
   };
 
   return (
-    <form className="child-form" onSubmit={submit}>
+    <form className="child-form" data-testid="holiday-form" onSubmit={submit}>
       <label className="field">
         <FieldHelpLabel fieldId="holiday.name" />
-        <input autoFocus required value={name} onChange={(event) => setName(event.target.value)} placeholder="z. B. Sommerferien Block 1" />
+        <input data-testid="holiday-name" autoFocus required value={name} onChange={(event) => setName(event.target.value)} placeholder="z. B. Sommerferien Block 1" />
       </label>
       <div className="form-grid form-grid--two">
         <label className="field">
           <FieldHelpLabel fieldId="holiday.startDate">Von</FieldHelpLabel>
-          <input type="date" required value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+          <input data-testid="holiday-start-date" type="date" required value={startDate} onChange={(event) => setStartDate(event.target.value)} />
         </label>
         <label className="field">
           <FieldHelpLabel fieldId="holiday.endDate">Bis</FieldHelpLabel>
-          <input type="date" required value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+          <input data-testid="holiday-end-date" type="date" required value={endDate} onChange={(event) => setEndDate(event.target.value)} />
         </label>
       </div>
       <label className="field">
@@ -114,7 +114,7 @@ function HolidayForm({
         <span />
         <div className="form-actions__right">
           <button className="button button--secondary" type="button" onClick={onDone}>Abbrechen</button>
-          <button className="button button--primary" type="submit" disabled={!canWrite || isSaving}>Ferienblock speichern</button>
+          <button className="button button--primary" data-testid="holiday-submit" type="submit" disabled={!canWrite || isSaving}>Ferienblock speichern</button>
         </div>
       </footer>
     </form>
@@ -160,13 +160,13 @@ export function HolidaysPage() {
   };
 
   return (
-    <div className="page">
+    <div className="page" data-testid="page-holidays">
       <div className="page-header">
         <div>
           <p className="page-header__context">Ferienaufteilung</p>
           <h1>Ferienverwaltung</h1>
         </div>
-        <button className="button button--primary no-print" type="button" onClick={() => setEditing("new")} disabled={!canWrite}>
+        <button className="button button--primary no-print" data-testid="holiday-add" type="button" onClick={() => setEditing("new")} disabled={!canWrite}>
           <Icon name="plus" size={17} />
           Ferienblock erfassen
         </button>

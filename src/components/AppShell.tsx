@@ -64,7 +64,7 @@ export function AppShell({
   };
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-testid="app-shell">
       <aside className="sidebar">
         <button className="brand" type="button" onClick={() => navigate("dashboard")}>
           <span className="brand__mark"><Icon name="calendar" size={22} /></span>
@@ -79,6 +79,7 @@ export function AppShell({
             <button
               type="button"
               key={item.id}
+              data-testid={`nav-${item.id}`}
               className={activePage === item.id ? "is-active" : ""}
               onClick={() => navigate(item.id)}
             >
@@ -96,6 +97,7 @@ export function AppShell({
         <button
           className={`sidebar__settings ${activePage === "settings" ? "is-active" : ""}`}
           type="button"
+          data-testid="nav-settings"
           onClick={() => navigate("settings")}
         >
           <Icon name="settings" />
@@ -112,6 +114,7 @@ export function AppShell({
           <button
             className="button button--primary button--icon-mobile"
             type="button"
+            data-testid="mobile-entry-create"
             onClick={onNewEntry}
             disabled={!canWrite}
             aria-label="Eintrag erfassen"
@@ -135,7 +138,7 @@ export function AppShell({
           </div>
         ) : null}
         {serverStatus === "checking" || isLoading ? (
-          <div className="offline-banner" role="status">
+          <div className="offline-banner" role="status" data-testid="app-loading">
             <Icon name="info" size={17} />
             Daten werden aus SQLite geladen …
           </div>
@@ -163,6 +166,7 @@ export function AppShell({
           <section
             className="mobile-more-sheet"
             role="dialog"
+            data-testid="mobile-more-sheet"
             aria-modal="true"
             aria-label="Weitere Bereiche"
             onClick={(event) => event.stopPropagation()}
@@ -180,6 +184,7 @@ export function AppShell({
                   <button
                     type="button"
                     key={item.id}
+                    data-testid={`mobile-more-${item.id}`}
                     className={activePage === item.id ? "is-active" : ""}
                     onClick={() => navigate(item.id)}
                   >
@@ -189,6 +194,7 @@ export function AppShell({
                 ))}
               <button
                 type="button"
+                data-testid="mobile-more-settings"
                 className={activePage === "settings" ? "is-active" : ""}
                 onClick={() => navigate("settings")}
               >
@@ -200,11 +206,12 @@ export function AppShell({
         </div>
       ) : null}
 
-      <nav className="mobile-nav" aria-label="Mobile Navigation">
+      <nav className="mobile-nav" aria-label="Mobile Navigation" data-testid="mobile-navigation">
         {mobileNavItems.map((item) => (
           <button
             type="button"
             key={item.id}
+            data-testid={`mobile-nav-${item.id}`}
             className={activePage === item.id ? "is-active" : ""}
             onClick={() => navigate(item.id)}
           >
@@ -214,6 +221,7 @@ export function AppShell({
         ))}
         <button
           type="button"
+          data-testid="mobile-nav-more"
           className={showMore || !mobileNavItems.some((item) => item.id === activePage) ? "is-active" : ""}
           onClick={() => setShowMore((current) => !current)}
           aria-expanded={showMore}
