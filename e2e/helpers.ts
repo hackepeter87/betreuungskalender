@@ -136,13 +136,7 @@ export async function createEntry(page: Page, options: EntryOptions) {
     "Sachliche Hinweise zu Übergabe, Ablauf oder Abweichungen"
   ).fill(options.note);
   const saveButton = dialog.getByRole("button", { name: "Eintrag speichern" });
-  const viewportWidth = page.viewportSize()?.width ?? 1200;
-  if (viewportWidth >= 768 && viewportWidth < 1200) {
-    await saveButton.focus();
-    await page.keyboard.press("Enter");
-  } else {
-    await saveButton.click();
-  }
+  await saveButton.click();
   await expect(dialog).toBeHidden();
 }
 
