@@ -27,7 +27,8 @@ export function CalendarAgenda({
   children,
   onSelectDate,
   onSelectEntry,
-  onSelectUnavailable
+  onSelectUnavailable,
+  allowCreate = true
 }: {
   entries: CareEntry[];
   unavailablePeriods: UnavailablePeriod[];
@@ -35,6 +36,7 @@ export function CalendarAgenda({
   onSelectDate: (date: string) => void;
   onSelectEntry: (entry: CareEntry) => void;
   onSelectUnavailable: (period: UnavailablePeriod) => void;
+  allowCreate?: boolean;
 }) {
   const childById = useMemo(
     () => new Map(children.map((child) => [child.id, child])),
@@ -69,7 +71,7 @@ export function CalendarAgenda({
         <Icon name="calendar" size={24} />
         <strong>Noch keine Einträge in diesem Monat</strong>
         <p>Erfasse den ersten Betreuungseintrag direkt aus der Agenda.</p>
-        <button className="button button--primary" type="button" onClick={() => onSelectDate("")}>
+        <button className="button button--primary" type="button" onClick={() => onSelectDate("")} disabled={!allowCreate}>
           <Icon name="plus" size={18} />
           Eintrag hinzufügen
         </button>
@@ -90,6 +92,7 @@ export function CalendarAgenda({
               className="icon-button icon-button--bordered"
               type="button"
               onClick={() => onSelectDate(date)}
+              disabled={!allowCreate}
               aria-label={`Eintrag für ${formatShortDate(date)} hinzufügen`}
             >
               <Icon name="plus" size={18} />

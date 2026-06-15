@@ -23,7 +23,7 @@ export function CalendarPage({
   onNewEntry: (date?: string) => void;
   onEditEntry: (entry: CareEntry) => void;
 }) {
-  const { data } = useAppStore();
+  const { data, canWrite } = useAppStore();
   const isMobile = useMediaQuery("(max-width: 767px)");
   const [view, setView] = useState<"agenda" | "month">(() =>
     window.matchMedia("(max-width: 767px)").matches ? "agenda" : "month"
@@ -54,11 +54,11 @@ export function CalendarPage({
         </div>
         <div className="page-header__actions">
           <MonthToolbar monthKey={monthKey} onChange={onMonthChange} />
-          <button className="button button--primary desktop-only" type="button" onClick={() => onNewEntry()}>
+          <button className="button button--primary desktop-only" type="button" onClick={() => onNewEntry()} disabled={!canWrite}>
             <Icon name="plus" />
             Eintrag erfassen
           </button>
-          <button className="button button--secondary desktop-only" type="button" onClick={() => setEditingUnavailable("new")}>
+          <button className="button button--secondary desktop-only" type="button" onClick={() => setEditingUnavailable("new")} disabled={!canWrite}>
             <Icon name="briefcase" />
             Nichtverfügbarkeit
           </button>
@@ -66,11 +66,11 @@ export function CalendarPage({
       </div>
 
       <div className="calendar-quick-actions">
-        <button className="button button--primary" type="button" onClick={() => onNewEntry()}>
+        <button className="button button--primary" type="button" onClick={() => onNewEntry()} disabled={!canWrite}>
           <Icon name="plus" size={17} />
           Betreuung
         </button>
-        <button className="button button--secondary" type="button" onClick={() => setEditingUnavailable("new")}>
+        <button className="button button--secondary" type="button" onClick={() => setEditingUnavailable("new")} disabled={!canWrite}>
           <Icon name="briefcase" size={17} />
           Nichtverfügbarkeit
         </button>
@@ -103,6 +103,7 @@ export function CalendarPage({
           onSelectDate={(date) => onNewEntry(date || undefined)}
           onSelectEntry={onEditEntry}
           onSelectUnavailable={setEditingUnavailable}
+          allowCreate={canWrite}
         />
       ) : (
         <>
@@ -115,6 +116,7 @@ export function CalendarPage({
               onSelectDate={onNewEntry}
               onSelectEntry={onEditEntry}
               onSelectUnavailable={setEditingUnavailable}
+              allowCreate={canWrite}
             />
             <div className="calendar-legend">
               {data.children.map((child) => (
@@ -129,7 +131,7 @@ export function CalendarPage({
         </>
       )}
 
-      <button className="mobile-fab" type="button" onClick={() => onNewEntry()} aria-label="Betreuungseintrag hinzufügen">
+      <button className="mobile-fab" type="button" onClick={() => onNewEntry()} disabled={!canWrite} aria-label="Betreuungseintrag hinzufügen">
         <Icon name="plus" size={21} />
         Eintrag hinzufügen
       </button>

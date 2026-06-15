@@ -14,7 +14,8 @@ export function CalendarGrid({
   unavailablePeriods = [],
   onSelectDate,
   onSelectEntry,
-  onSelectUnavailable
+  onSelectUnavailable,
+  allowCreate = true
 }: {
   monthKey: string;
   entries: CareEntry[];
@@ -23,6 +24,7 @@ export function CalendarGrid({
   onSelectDate: (dateKey: string) => void;
   onSelectEntry: (entry: CareEntry) => void;
   onSelectUnavailable?: (period: UnavailablePeriod) => void;
+  allowCreate?: boolean;
 }) {
   const calendarDays = useMemo(() => getCalendarDays(monthKey), [monthKey]);
   const childMap = useMemo(
@@ -75,6 +77,7 @@ export function CalendarGrid({
                 className="calendar-day__number"
                 type="button"
                 onClick={() => onSelectDate(day.dateKey)}
+                disabled={!allowCreate}
                 aria-label={`Eintrag am ${day.dateKey} erfassen`}
               >
                 {day.day}
