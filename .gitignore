@@ -24,3 +24,6 @@ backup-*.json
 *.backup.json
 *.export.json
 npm-debug.log*
+playwright-report/
+test-results/
+blob-report/
