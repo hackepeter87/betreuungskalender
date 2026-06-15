@@ -304,8 +304,10 @@ The check blocks real artifacts such as `.sqlite`, `.db`, `.pdf`, `.csv`,
 `.env`, and backup/export JSON files. Source and documentation files whose
 names contain words such as `backup` or `export` remain allowed.
 
-The strict command additionally requires a clean working tree, checks that the
-release tag is available, and runs build, lint, and tests. See the complete
+The strict command additionally requires a clean working tree, verifies
+package, lockfile, changelog, release-note, and tag consistency, and runs build,
+lint, and tests. A pushed `v*` tag also builds a checksummed runtime archive and
+smoke-tests the container without publishing it. See the complete
 [release workflow](docs/release.md).
 
 ## Project checks
@@ -318,7 +320,7 @@ npm run release:check
 ```
 
 CI runs install, static checks, tests, and production build. A separate workflow
-checks the container image.
+builds the container, starts it, and verifies the API health endpoint.
 
 ## License
 

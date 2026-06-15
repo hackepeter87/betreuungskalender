@@ -1,6 +1,7 @@
 name: Container
 
 on:
+  workflow_call:
   push:
     paths:
       - Dockerfile
@@ -12,6 +13,7 @@ on:
       - src/**
       - public/**
       - scripts/**
+      - .github/actions/validate-container/**
       - .github/workflows/container.yml
   pull_request:
     paths:
@@ -24,15 +26,15 @@ on:
       - src/**
       - public/**
       - scripts/**
+      - .github/actions/validate-container/**
       - .github/workflows/container.yml
 
 permissions:
   contents: read
 
 jobs:
-  build:
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Build image
-        run: docker build --tag betreuungskalender:ci .
+      - uses: ./.github/actions/validate-container

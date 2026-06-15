@@ -4,8 +4,12 @@ import {
   REQUIRED_GITIGNORE_RULES,
   classifySensitiveArtifact,
   findMissingGitignoreRules,
+  hasChangelogRelease,
+  hasReleaseNotesHeading,
   isImageOutsideScreenshotDirectory,
-  isValidSemver
+  isValidSemver,
+  releaseNotesPathForVersion,
+  releaseTagForVersion
 } from "./release-check.js";
 
 test("allows source and documentation files whose names mention backup or export", () => {
@@ -100,4 +104,38 @@ test("validates SemVer versions", () => {
   assert.equal(isValidSemver("1.2.3-beta.1+build.9"), true);
   assert.equal(isValidSemver("01.2.3"), false);
   assert.equal(isValidSemver("1.2"), false);
+});
+
+test("derives release tag and release notes path from the package version", () => {
+  assert.equal(releaseTagForVersion("0.3.0"), "v0.3.0");
+  assert.equal(
+    releaseNotesPathForVersion("0.3.0"),
+    "docs/release-notes/v0.3.0.md"
+  );
+});
+
+test("requires dated changelog entries for the package version", () => {
+  assert.equal(
+    hasChangelogRelease("## [0.3.0] - 2026-06-12\n", "0.3.0"),
+    true
+  );
+  assert.equal(
+    hasChangelogRelease("## [0.3.0] - YYYY-MM-DD\n", "0.3.0"),
+    false
+  );
+  assert.equal(
+    hasChangelogRelease("## [0.2.0] - 2026-05-01\n", "0.3.0"),
+    false
+  );
+});
+
+test("requires release notes to identify the matching tag", () => {
+  assert.equal(
+    hasReleaseNotesHeading("# v0.3.0 - SQLite persistence\n", "0.3.0"),
+    true
+  );
+  assert.equal(
+    hasReleaseNotesHeading("# Release notes\n", "0.3.0"),
+    false
+  );
 });

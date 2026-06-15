@@ -36,8 +36,12 @@ const CRITICAL_PROJECT_PATHS = [
   "README.md",
   "LICENSE",
   "docs/backup-restore.md",
+  "docs/release.md",
   "server/migrations/001_initial_schema.sql",
   ".github/workflows/ci.yml",
+  ".github/workflows/container.yml",
+  ".github/workflows/release.yml",
+  ".github/actions/validate-container/action.yml",
   ".env.example"
 ];
 
@@ -117,6 +121,27 @@ export function findMissingGitignoreRules(content) {
 
 export function isValidSemver(version) {
   return typeof version === "string" && SEMVER_PATTERN.test(version);
+}
+
+export function releaseTagForVersion(version) {
+  return `v${version}`;
+}
+
+export function releaseNotesPathForVersion(version) {
+  return `docs/release-notes/${releaseTagForVersion(version)}.md`;
+}
+
+export function hasChangelogRelease(content, version) {
+  const escapedVersion = version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(
+    `^## \\[${escapedVersion}\\] - \\d{4}-\\d{2}-\\d{2}$`,
+    "m"
+  ).test(content);
+}
+
+export function hasReleaseNotesHeading(content, version) {
+  const escapedVersion = version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`^# v${escapedVersion}(?:\\s|$)`, "m").test(content);
 }
 
 function parseArguments(argv) {
@@ -208,6 +233,53 @@ function checkPackageVersion(packageJson, report) {
   return packageJson.version;
 }
 
+function checkReleaseMetadata(cwd, packageJson, version, report) {
+  if (!version) return;
+
+  const packageLockPath = resolve(cwd, "package-lock.json");
+  try {
+    const packageLock = JSON.parse(readFileSync(packageLockPath, "utf8"));
+    const lockVersions = [
+      packageLock.version,
+      packageLock.packages?.[""]?.version
+    ].filter(Boolean);
+    if (
+      lockVersions.length < 2 ||
+      lockVersions.some((lockVersion) => lockVersion !== packageJson.version)
+    ) {
+      report.fail("package-lock.json version must match package.json");
+    } else {
+      report.pass(`package-lock.json version: ${packageJson.version}`);
+    }
+  } catch {
+    report.fail("package-lock.json could not be read");
+  }
+
+  const changelogPath = resolve(cwd, "CHANGELOG.md");
+  try {
+    const changelog = readFileSync(changelogPath, "utf8");
+    if (hasChangelogRelease(changelog, version)) {
+      report.pass(`CHANGELOG.md contains release ${version}`);
+    } else {
+      report.fail(`CHANGELOG.md is missing a dated ${version} release heading`);
+    }
+  } catch {
+    report.fail("CHANGELOG.md could not be read");
+  }
+
+  const notesPath = releaseNotesPathForVersion(version);
+  try {
+    const releaseNotes = readFileSync(resolve(cwd, notesPath), "utf8");
+    if (hasReleaseNotesHeading(releaseNotes, version)) {
+      report.pass(`${notesPath} matches version ${version}`);
+    } else {
+      report.fail(`${notesPath} must start with a v${version} heading`);
+    }
+  } catch {
+    report.fail(`${notesPath} could not be read`);
+  }
+}
+
 function checkGitRepository(cwd, options, report) {
   const repository = runGit(["rev-parse", "--is-inside-work-tree"], cwd);
   if (repository.status !== 0 || (repository.stdout ?? "").trim() !== "true") {
@@ -286,14 +358,25 @@ function checkReleaseTag(cwd, version, report) {
     report.fail("release tag cannot be checked without a valid version");
     return;
   }
-  const expectedTag = `v${version}`;
-  const result = runGit(["tag", "--list", expectedTag], cwd);
-  if (result.status !== 0) {
-    report.fail(`release tag ${expectedTag} could not be checked`);
-  } else if ((result.stdout ?? "").trim() === expectedTag) {
-    report.warn(`release tag ${expectedTag} already exists`);
-  } else {
+  const expectedTag = releaseTagForVersion(version);
+  const tagResult = runGit(
+    ["rev-parse", "--verify", `refs/tags/${expectedTag}^{commit}`],
+    cwd
+  );
+  if (tagResult.status !== 0) {
     report.pass(`release tag ${expectedTag} is available`);
+    return;
+  }
+
+  const headResult = runGit(["rev-parse", "HEAD"], cwd);
+  if (headResult.status !== 0) {
+    report.fail(`release tag ${expectedTag} could not be checked`);
+  } else if (
+    (tagResult.stdout ?? "").trim() === (headResult.stdout ?? "").trim()
+  ) {
+    report.pass(`release tag ${expectedTag} points to HEAD`);
+  } else {
+    report.fail(`release tag ${expectedTag} does not point to HEAD`);
   }
 }
 
@@ -374,6 +457,7 @@ export function main(argv = process.argv.slice(2), cwd = process.cwd()) {
   }
 
   options.version = checkPackageVersion(packageJson, report);
+  checkReleaseMetadata(cwd, packageJson, options.version, report);
   const hasGitRepository = checkGitRepository(cwd, options, report);
   checkGitignore(cwd, hasGitRepository, report);
 
