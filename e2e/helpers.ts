@@ -1,5 +1,19 @@
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
+export type AppPage =
+  | "dashboard"
+  | "calendar"
+  | "entries"
+  | "contact"
+  | "holidays"
+  | "unavailable"
+  | "analytics"
+  | "report"
+  | "backup"
+  | "audit"
+  | "rules"
+  | "settings";
+
 export function dateInCurrentMonth(day: number): string {
   const now = new Date();
   const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
@@ -17,61 +31,42 @@ export async function resetApp(request: APIRequestContext) {
 
 export async function openApp(page: Page) {
   await page.goto("/");
-  await expect(page).toHaveTitle(/Betreuungskalender/);
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-  await expect(page.getByText("Daten werden aus SQLite geladen …")).toBeHidden();
+  await expect(page.getByTestId("app-shell")).toBeVisible();
+  await expect(page.getByTestId("app-loading")).toBeHidden();
 }
 
-export async function navigate(page: Page, destination: string) {
-  const mobileNavigation = page.getByRole("navigation", {
-    name: "Mobile Navigation"
-  });
+export async function navigate(page: Page, destination: AppPage) {
+  const mobileNavigation = page.getByTestId("mobile-navigation");
   if (await mobileNavigation.isVisible()) {
-    const directButton = mobileNavigation.getByRole("button", {
-      name: destination,
-      exact: true
-    });
+    const directButton = page.getByTestId(`mobile-nav-${destination}`);
     if (await directButton.count()) {
       await directButton.click();
       return;
     }
-    await mobileNavigation.getByRole("button", {
-      name: "Weitere Bereiche öffnen"
-    }).click();
-    await page.getByRole("dialog", { name: "Weitere Bereiche" })
-      .getByRole("button", { name: destination, exact: true })
-      .click();
+    await page.getByTestId("mobile-nav-more").click();
+    await page.getByTestId(
+      destination === "settings"
+        ? "mobile-more-settings"
+        : `mobile-more-${destination}`
+    ).click();
     return;
   }
 
-  const mainNavigation = page.getByRole("navigation", {
-    name: "Hauptnavigation"
-  });
-  const navigationButton = mainNavigation.getByRole("button", {
-    name: destination,
-    exact: true
-  });
-  if (await navigationButton.count()) {
-    await navigationButton.click();
-    return;
-  }
-
-  await page.getByRole("button", {
-    name: destination,
-    exact: true
-  }).click();
+  await page.getByTestId(
+    destination === "settings" ? "nav-settings" : `nav-${destination}`
+  ).click();
 }
 
 export async function createChild(page: Page, name: string) {
-  await page.getByRole("button", { name: "Kind anlegen", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Einstellungen" })).toBeVisible();
-  await page.getByRole("button", { name: "Kind anlegen", exact: true }).click();
+  await page.getByTestId("dashboard-setup-child").click();
+  await expect(page.getByTestId("page-settings")).toBeVisible();
+  await page.getByTestId("settings-add-child").click();
 
-  const dialog = page.getByRole("dialog", { name: "Kind anlegen" });
-  await dialog.getByPlaceholder("Vorname oder Kürzel").fill(name);
-  await dialog.getByRole("button", { name: "Kind anlegen", exact: true }).click();
+  const form = page.getByTestId("child-form");
+  await form.getByTestId("child-name").fill(name);
+  await form.getByTestId("child-submit").click();
 
-  await expect(dialog).toBeHidden();
+  await expect(form).toBeHidden();
   await expect(page.getByText(name, { exact: true })).toBeVisible();
 }
 
@@ -87,75 +82,58 @@ type EntryOptions = {
 };
 
 export async function createEntry(page: Page, options: EntryOptions) {
-  await navigate(page, "Kalender");
-  const mobileAddButton = page.getByRole("button", {
-    name: "Betreuungseintrag hinzufügen"
-  });
+  await navigate(page, "calendar");
+  const mobileAddButton = page.getByTestId("calendar-add-entry");
   if (await mobileAddButton.isVisible()) {
     await mobileAddButton.click();
   } else {
-    await page.getByRole("button", {
-      name: `Eintrag am ${dateInCurrentMonth(options.startDay)} erfassen`
-    }).first().click();
+    await page.getByTestId(
+      `calendar-day-${dateInCurrentMonth(options.startDay)}`
+    ).click();
   }
-  const dialog = page.getByRole("dialog", {
-    name: "Betreuungseintrag erfassen"
-  });
+  const form = page.getByTestId("entry-form");
 
-  await dialog.getByRole("checkbox", { name: options.childName }).check();
-  const dateInputs = dialog.locator('input[type="date"]');
-  const timeInputs = dialog.locator('input[type="time"]');
-  await dateInputs.nth(0).fill(dateInCurrentMonth(options.startDay));
-  await timeInputs.nth(0).fill(options.startTime);
-  await dateInputs.nth(1).fill(dateInCurrentMonth(options.endDay));
-  await timeInputs.nth(1).fill(options.endTime);
+  await form.getByRole("checkbox", { name: options.childName }).check();
+  await form.getByTestId("entry-start-date")
+    .fill(dateInCurrentMonth(options.startDay));
+  await form.getByTestId("entry-start-time").fill(options.startTime);
+  await form.getByTestId("entry-end-date")
+    .fill(dateInCurrentMonth(options.endDay));
+  await form.getByTestId("entry-end-time").fill(options.endTime);
 
   if (options.overnight) {
-    await dialog.getByRole("checkbox", { name: /Übernachtung/ })
-      .check({ force: true });
+    await form.getByTestId("entry-overnight").check({ force: true });
   }
 
   if (options.withTripAndCost) {
-    await dialog.getByText("Fahrten", { exact: true }).click();
-    await dialog.getByRole("button", { name: "Fahrt", exact: true }).click();
-    await dialog.locator(".line-item").filter({ hasText: "Fahrt 1" })
-      .locator('input[type="number"]')
-      .first()
-      .fill("18.5");
+    await form.getByTestId("entry-trips-toggle").click();
+    await form.getByTestId("entry-trip-add").click();
+    await form.getByTestId("entry-trip-km").fill("18.5");
 
-    await dialog.locator("summary").filter({ hasText: /^Kosten/ }).click();
-    await dialog.getByRole("button", { name: "Kosten", exact: true }).click();
-    await dialog.locator(".line-item").filter({ hasText: "Kostenposten 1" })
-      .locator('input[type="number"]')
-      .first()
-      .fill("12.40");
+    await form.getByTestId("entry-costs-toggle").click();
+    await form.getByTestId("entry-cost-add").click();
+    await form.getByTestId("entry-cost-amount").fill("12.40");
   }
 
-  await dialog.getByText("Notizen und Belege", { exact: true }).click();
-  await dialog.getByPlaceholder(
-    "Sachliche Hinweise zu Übergabe, Ablauf oder Abweichungen"
-  ).fill(options.note);
-  const saveButton = dialog.getByRole("button", { name: "Eintrag speichern" });
+  await form.getByTestId("entry-notes-toggle").click();
+  await form.getByTestId("entry-notes").fill(options.note);
+  const saveButton = form.getByTestId("entry-submit");
   await saveButton.click();
-  await expect(dialog).toBeHidden();
+  await expect(form).toBeHidden();
 }
 
 export async function createHoliday(page: Page, childName: string) {
-  await navigate(page, "Ferien");
-  await expect(page.getByRole("heading", { name: "Ferienverwaltung" })).toBeVisible();
-  await page.getByRole("button", { name: "Ferienblock erfassen" }).click();
+  await navigate(page, "holidays");
+  await expect(page.getByTestId("page-holidays")).toBeVisible();
+  await page.getByTestId("holiday-add").click();
 
-  const dialog = page.getByRole("dialog", { name: "Ferienblock erfassen" });
-  await dialog.getByPlaceholder("z. B. Sommerferien Block 1")
-    .fill("Fiktiver Ferienblock");
-  const dates = dialog.locator('input[type="date"]');
-  await dates.nth(0).fill(dateInCurrentMonth(20));
-  await dates.nth(1).fill(dateInCurrentMonth(22));
-  await expect(dialog.getByRole("checkbox", { name: childName })).toBeChecked();
-  await dialog.getByRole("button", {
-    name: "Ferienblock speichern"
-  }).click();
+  const form = page.getByTestId("holiday-form");
+  await form.getByTestId("holiday-name").fill("Fiktiver Ferienblock");
+  await form.getByTestId("holiday-start-date").fill(dateInCurrentMonth(20));
+  await form.getByTestId("holiday-end-date").fill(dateInCurrentMonth(22));
+  await expect(form.getByRole("checkbox", { name: childName })).toBeChecked();
+  await form.getByTestId("holiday-submit").click();
 
-  await expect(dialog).toBeHidden();
+  await expect(form).toBeHidden();
   await expect(page.getByText("Fiktiver Ferienblock", { exact: true })).toBeVisible();
 }

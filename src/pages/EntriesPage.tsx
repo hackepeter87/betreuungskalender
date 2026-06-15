@@ -40,7 +40,7 @@ export function EntriesPage({
   }, [data.children, data.entries, deferredQuery, monthKey, status]);
 
   return (
-    <div className="page">
+    <div className="page" data-testid="page-entries">
       <div className="page-header">
         <div>
           <p className="page-header__context">Dokumentation</p>

@@ -44,26 +44,22 @@ test("covers the core documentation and export flows", async ({ page }) => {
     overnight: true
   });
 
-  await navigate(page, "Einträge");
+  await navigate(page, "entries");
   await expect(page.getByText(childName).first()).toBeVisible();
   await createHoliday(page, childName);
 
-  await navigate(page, "Bericht");
-  await expect(page.getByRole("heading", {
-    name: "Bericht & Druckansicht"
-  })).toBeVisible();
+  await navigate(page, "report");
+  await expect(page.getByTestId("page-report")).toBeVisible();
   await expect(page.getByText(childName).first()).toBeVisible();
-  await expect(page.getByText("18.5 km").first()).toBeVisible();
-  await expect(page.getByText("12,40 €").first()).toBeVisible();
+  await expect(page.locator('[data-testid="report-entry-trip-km"][data-value="18.5"]'))
+    .toBeVisible();
+  await expect(page.locator('[data-testid="report-entry-cost"][data-value="12.4"]'))
+    .toBeVisible();
 
-  await navigate(page, "Backup");
-  await expect(page.getByRole("heading", { name: "Export & Import" })).toBeVisible();
-  await expect(page.getByRole("heading", {
-    name: "CSV-Rohdatenexport"
-  })).toBeVisible();
-  await expect(page.getByRole("button", {
-    name: "Betreuungseinträge"
-  })).toBeVisible();
+  await navigate(page, "backup");
+  await expect(page.getByTestId("page-backup")).toBeVisible();
+  await expect(page.getByTestId("csv-export-panel")).toBeVisible();
+  await expect(page.getByTestId("export-entries-csv")).toBeVisible();
 });
 
 test("switches to read-only mode when the API is unavailable", async ({

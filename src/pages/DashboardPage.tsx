@@ -84,7 +84,7 @@ export function DashboardPage({
   };
 
   return (
-    <div className="page">
+    <div className="page" data-testid="page-dashboard">
       <div className="page-header">
         <div>
           <p className="page-header__context">Monatsübersicht</p>
@@ -116,7 +116,7 @@ export function DashboardPage({
             <h2>Richte deinen Betreuungskalender ein</h2>
             <p>Lege mindestens ein Kind an. Danach kannst du Betreuungseinträge erfassen und monatlich auswerten.</p>
           </div>
-          <button className="button button--primary" type="button" onClick={onOpenSettings}>
+          <button className="button button--primary" type="button" data-testid="dashboard-setup-child" onClick={onOpenSettings}>
             Kind anlegen
           </button>
         </section>

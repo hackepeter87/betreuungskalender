@@ -22,10 +22,10 @@ function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
   };
 
   return (
-    <form className="child-form" onSubmit={submit}>
+    <form className="child-form" data-testid="child-form" onSubmit={submit}>
       <label className="field">
         <FieldHelpLabel fieldId="child.name" />
-        <input autoFocus required value={name} onChange={(event) => setName(event.target.value)} placeholder="Vorname oder Kürzel" />
+        <input data-testid="child-name" autoFocus required value={name} onChange={(event) => setName(event.target.value)} placeholder="Vorname oder Kürzel" />
       </label>
       <div className="form-grid">
         <label className="field">
@@ -57,7 +57,7 @@ function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
         <span />
         <div className="form-actions__right">
           <button className="button button--secondary" type="button" onClick={onDone}>Abbrechen</button>
-          <button className="button button--primary" type="submit" disabled={!canWrite || isSaving}>{child ? "Speichern" : "Kind anlegen"}</button>
+          <button className="button button--primary" data-testid="child-submit" type="submit" disabled={!canWrite || isSaving}>{child ? "Speichern" : "Kind anlegen"}</button>
         </div>
       </footer>
     </form>
@@ -98,7 +98,7 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="page page--narrow">
+    <div className="page page--narrow" data-testid="page-settings">
       <div className="page-header">
         <div>
           <p className="page-header__context">Konfiguration</p>
@@ -112,7 +112,7 @@ export function SettingsPage() {
             <h2>Kinder</h2>
             <p>Namen werden im lokalen SQLite-Dienst gespeichert und können auch als Kürzel geführt werden.</p>
           </div>
-          <button className="button button--primary" type="button" onClick={() => setEditingChild("new")} disabled={!canWrite || isSaving}>
+          <button className="button button--primary" data-testid="settings-add-child" type="button" onClick={() => setEditingChild("new")} disabled={!canWrite || isSaving}>
             <Icon name="plus" size={17} />
             Kind anlegen
           </button>

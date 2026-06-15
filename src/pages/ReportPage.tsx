@@ -97,7 +97,7 @@ export function ReportPage() {
   };
 
   return (
-    <div className="page report-page">
+    <div className="page report-page" data-testid="page-report">
       <div className="page-header no-print">
         <div>
           <p className="page-header__context">Neutraler Bericht</p>
@@ -127,7 +127,7 @@ export function ReportPage() {
         <MobileExportNotice />
       </div>
 
-      <article className="report-document">
+      <article className="report-document" data-testid="report-document">
         <header className="report-document__header">
           <div>
             <p>Betreuungskalender</p>
@@ -294,8 +294,20 @@ export function ReportPage() {
                       {entry.overnight ? <><br />Übernachtung</> : null}
                       {entry.holiday ? <><br />Ferientag</> : null}
                     </td>
-                    <td data-label="Fahrten">{entry.trips.filter((trip) => !trip.deletedAt).reduce((sum, trip) => sum + trip.km, 0).toFixed(1)} km</td>
-                    <td data-label="Kosten">{euro.format(entry.costs.filter((cost) => !cost.deletedAt).reduce((sum, cost) => sum + cost.amount, 0))}</td>
+                    <td
+                      data-label="Fahrten"
+                      data-testid="report-entry-trip-km"
+                      data-value={entry.trips.filter((trip) => !trip.deletedAt).reduce((sum, trip) => sum + trip.km, 0)}
+                    >
+                      {entry.trips.filter((trip) => !trip.deletedAt).reduce((sum, trip) => sum + trip.km, 0).toFixed(1)} km
+                    </td>
+                    <td
+                      data-label="Kosten"
+                      data-testid="report-entry-cost"
+                      data-value={entry.costs.filter((cost) => !cost.deletedAt).reduce((sum, cost) => sum + cost.amount, 0)}
+                    >
+                      {euro.format(entry.costs.filter((cost) => !cost.deletedAt).reduce((sum, cost) => sum + cost.amount, 0))}
+                    </td>
                     <td data-label="Notizen / Ausfallgrund">{entry.cancellationReason || entry.notes || "–"}</td>
                   </tr>
                 ))}
