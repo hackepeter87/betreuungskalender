@@ -1,4 +1,4 @@
-name: Release build
+name: Release validation
 
 on:
   push:
@@ -13,6 +13,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -20,17 +22,29 @@ jobs:
           cache: npm
 
       - run: npm ci
-      - run: npm run lint --if-present
-      - run: npm run test --if-present
-      - run: npm run build
+
+      - name: Strict release validation
+        run: npm run release:check:strict
+
+      - name: Validate container
+        uses: ./.github/actions/validate-container
 
       - name: Create runtime archive
         run: |
           tar -czf betreuungskalender-${GITHUB_REF_NAME}.tar.gz \
             dist dist-server scripts package.json package-lock.json \
             .env.example README.md LICENSE CHANGELOG.md docs
+          sha256sum betreuungskalender-${GITHUB_REF_NAME}.tar.gz \
+            > betreuungskalender-${GITHUB_REF_NAME}.tar.gz.sha256
+          tar -tzf betreuungskalender-${GITHUB_REF_NAME}.tar.gz \
+            | grep -Fx "docs/release-notes/${GITHUB_REF_NAME}.md"
 
       - uses: actions/upload-artifact@v4
         with:
           name: betreuungskalender-${{ github.ref_name }}
-          path: betreuungskalender-${{ github.ref_name }}.tar.gz
+          path: |
+            betreuungskalender-${{ github.ref_name }}.tar.gz
+            betreuungskalender-${{ github.ref_name }}.tar.gz.sha256
+            docs/release-notes/${{ github.ref_name }}.md
+          if-no-files-found: error
+          retention-days: 14
