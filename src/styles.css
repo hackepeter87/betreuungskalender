@@ -3364,16 +3364,65 @@ h3 {
 }
 
 @media (min-width: 768px) and (max-width: 1199px) {
+  html,
+  body,
+  #root {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
   .sidebar {
     width: 196px;
+    overflow: hidden;
+    padding: 18px 10px 14px;
+  }
+
+  .sidebar__nav {
+    min-height: 0;
+    overflow-y: auto;
+    gap: 3px;
+    margin-top: 22px;
+  }
+
+  .sidebar__privacy {
+    flex: 0 0 auto;
+    margin-top: 8px;
+    padding: 10px;
+  }
+
+  .sidebar__settings {
+    flex: 0 0 auto;
+    margin-top: 8px;
   }
 
   .main {
+    min-width: 0;
     margin-left: 196px;
   }
 
   .page {
+    min-width: 0;
     padding: 28px 24px 44px;
+  }
+
+  .page-header {
+    min-width: 0;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .page-header > *,
+  .page-header__actions {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .page-header__actions {
+    flex-wrap: wrap;
+  }
+
+  .month-toolbar {
+    max-width: 100%;
   }
 
   .calendar-wrap {
@@ -3421,6 +3470,18 @@ h3 {
 
   .modal__body {
     max-height: calc(100dvh - 104px);
+  }
+
+  .entry-form .form-actions {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    margin: 0 -20px;
+    padding: 12px 20px;
+    border-top: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.98);
+    box-shadow: 0 -8px 22px rgba(29, 45, 73, 0.08);
+    backdrop-filter: blur(12px);
   }
 }
 
