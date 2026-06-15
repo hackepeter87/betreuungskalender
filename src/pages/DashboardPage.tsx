@@ -96,6 +96,7 @@ export function DashboardPage({
             className={closure ? "button button--secondary" : "button button--primary"}
             type="button"
             onClick={openClosureDialog}
+            disabled={!closure && (!canWrite || isSaving)}
           >
             <Icon name={closure ? "lock" : "check"} size={17} />
             {closure ? "Monat abgeschlossen" : "Monat abschließen"}
@@ -181,6 +182,7 @@ export function DashboardPage({
             children={data.children}
             onSelectDate={onNewEntry}
             onSelectEntry={onEditEntry}
+            allowCreate={canWrite}
           />
           <div className="calendar-legend">
             {data.children.map((child) => (

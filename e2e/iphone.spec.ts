@@ -42,3 +42,31 @@ test("uses mobile navigation and the agenda for entry creation", async ({
     () => document.documentElement.scrollWidth <= document.documentElement.clientWidth
   )).toBe(true);
 });
+
+test("explains read-only mode on mobile when the server is unavailable", async ({
+  context,
+  page
+}) => {
+  await openApp(page);
+
+  await context.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event("offline")));
+
+  const banner = page.getByRole("alert");
+  await expect(banner).toContainText("Nur-Lese-Modus");
+  await expect(banner).toContainText(
+    "Vorhandene Daten können angesehen und exportiert werden."
+  );
+  await expect(page.getByRole("button", {
+    name: "Eintrag erfassen",
+    exact: true
+  })).toBeDisabled();
+
+  await navigate(page, "Kalender");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  await expect(page.getByRole("button", {
+    name: "Betreuungseintrag hinzufügen"
+  })).toBeDisabled();
+
+  await context.setOffline(false);
+});

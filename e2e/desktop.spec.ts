@@ -65,3 +65,45 @@ test("covers the core documentation and export flows", async ({ page }) => {
     name: "Betreuungseinträge"
   })).toBeVisible();
 });
+
+test("switches to read-only mode when the API is unavailable", async ({
+  context,
+  page
+}) => {
+  await openApp(page);
+
+  await context.setOffline(true);
+  await page.evaluate(() => window.dispatchEvent(new Event("offline")));
+
+  const banner = page.getByRole("alert");
+  await expect(banner).toContainText("Nur-Lese-Modus");
+  await expect(banner).toContainText(
+    "Die Serververbindung ist nicht verfügbar. Änderungen können derzeit nicht gespeichert werden."
+  );
+  await expect(page.getByRole("button", {
+    name: "Eintrag erfassen",
+    exact: true
+  })).toBeDisabled();
+  await expect(page.getByRole("button", {
+    name: "Monat abschließen",
+    exact: true
+  })).toBeDisabled();
+
+  const cachedApiRequests = await page.evaluate(async () => {
+    const cacheNames = await caches.keys();
+    const requests = (
+      await Promise.all(
+        cacheNames.map(async (cacheName) => {
+          const cache = await caches.open(cacheName);
+          return cache.keys();
+        })
+      )
+    ).flat();
+    return requests
+      .map((request) => new URL(request.url).pathname)
+      .filter((path) => path.startsWith("/api/"));
+  });
+  expect(cachedApiRequests).toEqual([]);
+
+  await context.setOffline(false);
+});

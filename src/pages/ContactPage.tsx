@@ -141,7 +141,7 @@ export function ContactPage({
           <p className="page-header__context">Soll-Ist-Vergleich</p>
           <h1>Umgangsregel</h1>
         </div>
-        <button className="button button--secondary no-print" type="button" onClick={onNewEntry}>
+        <button className="button button--secondary no-print" type="button" onClick={onNewEntry} disabled={!canWrite || isSaving}>
           <Icon name="plus" size={17} />
           Zusatzbetreuung erfassen
         </button>

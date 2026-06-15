@@ -3078,6 +3078,23 @@ h3 {
   text-align: center;
 }
 
+.offline-banner > span {
+  display: grid;
+  gap: 2px;
+}
+
+.offline-banner--readonly {
+  position: sticky;
+  top: 0;
+  z-index: 35;
+}
+
+.offline-banner__mobile-note {
+  display: none;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
 .mobile-more-backdrop,
 .mobile-more-sheet {
   display: none;
@@ -3441,6 +3458,32 @@ h3 {
     min-height: 100dvh;
     margin-left: 0;
     padding-bottom: calc(68px + env(safe-area-inset-bottom));
+  }
+
+  .offline-banner {
+    align-items: flex-start;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    text-align: left;
+  }
+
+  .offline-banner--readonly {
+    top: calc(60px + env(safe-area-inset-top));
+  }
+
+  .offline-banner > span {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .offline-banner__mobile-note {
+    display: block;
+  }
+
+  .offline-banner .button {
+    width: 100%;
+    min-height: 44px;
   }
 
   .mobile-header {

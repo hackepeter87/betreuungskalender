@@ -19,7 +19,7 @@ export function EntriesPage({
   onNewEntry: () => void;
   onEditEntry: (entry: CareEntry) => void;
 }) {
-  const { data } = useAppStore();
+  const { data, canWrite } = useAppStore();
   const [status, setStatus] = useState<EntryStatus | "all">("all");
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query.toLocaleLowerCase("de"));
@@ -48,7 +48,7 @@ export function EntriesPage({
         </div>
         <div className="page-header__actions">
           <MonthToolbar monthKey={monthKey} onChange={onMonthChange} />
-          <button className="button button--primary desktop-only" type="button" onClick={onNewEntry}>
+          <button className="button button--primary desktop-only" type="button" onClick={onNewEntry} disabled={!canWrite}>
             <Icon name="plus" />
             Eintrag erfassen
           </button>
@@ -87,7 +87,7 @@ export function EntriesPage({
               <span><Icon name="list" size={25} /></span>
               <h2>Keine passenden Einträge</h2>
               <p>Erfasse einen Betreuungseintrag oder ändere die Filter.</p>
-              <button className="button button--primary" type="button" onClick={onNewEntry}>
+              <button className="button button--primary" type="button" onClick={onNewEntry} disabled={!canWrite}>
                 <Icon name="plus" size={17} />
                 Eintrag erfassen
               </button>

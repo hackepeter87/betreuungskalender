@@ -251,8 +251,12 @@ Rollback details: [docs/update.md](docs/update.md)
 - Forms use native date/time inputs and touch targets.
 - Export actions are available on mobile; saving behavior depends on the iOS
   browser and Files/Share Sheet.
-- The service worker provides an offline frontend shell. It does not imply a
-  successful server write while the API is unavailable.
+- The service worker provides an offline frontend shell. When the API is
+  unavailable, the application switches to an explicit read-only mode:
+  existing data can be viewed and exported, while create, update, delete,
+  import, and monthly closing actions remain blocked.
+- API requests are always network-only and are never served from the service
+  worker cache.
 
 ## Exports and reports
 

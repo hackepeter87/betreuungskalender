@@ -13,7 +13,7 @@
     "restore:check": "node scripts/restore-check.js",
     "healthcheck": "node scripts/healthcheck.js",
     "lint": "npm run typecheck",
-    "test": "tsx --test server/auth.test.ts server/legacyMigration.test.ts scripts/legacy-local-storage.test.ts scripts/release-check.test.js",
+    "test": "tsx --test server/auth.test.ts server/legacyMigration.test.ts scripts/legacy-local-storage.test.ts scripts/pwa-service-worker.test.js scripts/release-check.test.js",
     "test:e2e": "playwright test",
     "release:check": "node scripts/release-check.js",
     "release:check:strict": "node scripts/release-check.js --strict --all --tag",

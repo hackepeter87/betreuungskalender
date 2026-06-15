@@ -121,9 +121,14 @@ export function AppShell({
           </button>
         </header>
         {serverStatus === "offline" ? (
-          <div className="offline-banner" role="status">
+          <div className="offline-banner offline-banner--readonly" role="alert" aria-live="assertive">
             <Icon name="info" size={17} />
-            <span>{SERVER_UNAVAILABLE_MESSAGE}</span>
+            <span>
+              <strong>Nur-Lese-Modus.</strong> {SERVER_UNAVAILABLE_MESSAGE}
+              <small className="offline-banner__mobile-note">
+                Vorhandene Daten können angesehen und exportiert werden.
+              </small>
+            </span>
             <button className="button button--quiet" type="button" onClick={() => void reload()}>
               Erneut verbinden
             </button>
