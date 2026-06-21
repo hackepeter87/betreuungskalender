@@ -13,6 +13,8 @@ import {
 import { useAppStore } from "../store/AppStore";
 import { Icon } from "./Icon";
 import { Modal } from "./Modal";
+import { useI18n } from "../i18n/I18nProvider";
+import { copy } from "../i18n/catalog";
 
 interface Props {
   legacy: LegacyBrowserData;
@@ -34,6 +36,7 @@ function downloadReport(report: LegacyMigrationReport): void {
 
 export function LegacyMigrationDialog({ legacy, database, onClose }: Props) {
   const { reload, serverStatus } = useAppStore();
+  const { locale, intlLocale } = useI18n();
   const [preview, setPreview] = useState<LegacyMigrationPreview | null>(null);
   const [report, setReport] = useState<LegacyMigrationReport | null>(null);
   const [duplicatePolicy, setDuplicatePolicy] =
@@ -57,7 +60,7 @@ export function LegacyMigrationDialog({ legacy, database, onClose }: Props) {
     try {
       setPreview(await api.previewLegacyMigration(payload));
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Prüfung fehlgeschlagen.");
+      setError(reason instanceof Error ? reason.message : copy(locale, "legacy", "checkFailed"));
     } finally {
       setBusy(false);
     }
@@ -68,7 +71,7 @@ export function LegacyMigrationDialog({ legacy, database, onClose }: Props) {
     if (
       mode === "replace" &&
       !window.confirm(
-        "Die aktuellen SQLite-Daten werden nach erfolgreicher SQLite-Sicherung ersetzt. Wirklich fortfahren?"
+        copy(locale, "legacy", "replaceConfirm")
       )
     ) return;
     setBusy(true);
@@ -82,7 +85,7 @@ export function LegacyMigrationDialog({ legacy, database, onClose }: Props) {
       setReport(result);
       await reload();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "Migration fehlgeschlagen.");
+      setError(reason instanceof Error ? reason.message : copy(locale, "legacy", "migrationFailed"));
     } finally {
       setBusy(false);
     }
@@ -108,7 +111,7 @@ export function LegacyMigrationDialog({ legacy, database, onClose }: Props) {
 
   return (
     <Modal
-      title="Ältere Browserdaten"
+      title={copy(locale, "legacy", "title")}
       size="large"
       onClose={() => void skip("cancel")}
     >
@@ -118,100 +121,96 @@ export function LegacyMigrationDialog({ legacy, database, onClose }: Props) {
             <div className={`notice notice--${report.status === "success" ? "success" : "warning"}`}>
               <Icon name={report.status === "success" ? "check" : "alert"} />
               <div>
-                <strong>Migration {report.status === "success" ? "erfolgreich" : "mit Hinweisen"}</strong>
-                <p>
-                  {totalImported} Datensätze wurden übernommen,{" "}
-                  {report.skippedDuplicates} potenzielle Duplikate übersprungen.
-                </p>
+                <strong>{report.status === "success" ? copy(locale, "legacy", "success") : copy(locale, "legacy", "completedWithNotes")}</strong>
+                <p>{copy(locale, "legacy", "importedSummary", { imported: totalImported, duplicates: report.skippedDuplicates })}</p>
               </div>
             </div>
             <dl className="migration-summary">
-              <div><dt>Modus</dt><dd>{report.mode === "replace" ? "Ersetzen nach Backup" : "Zusätzlich importieren"}</dd></div>
-              <div><dt>Beginn</dt><dd>{new Date(report.startedAt).toLocaleString("de-DE")}</dd></div>
-              <div><dt>Ende</dt><dd>{new Date(report.finishedAt).toLocaleString("de-DE")}</dd></div>
-              <div><dt>Konflikte</dt><dd>{report.conflicts}</dd></div>
-              <div><dt>Backup-Datei</dt><dd>{report.backupFile ?? "Nicht erforderlich"}</dd></div>
+              <div><dt>{copy(locale, "legacy", "mode")}</dt><dd>{report.mode === "replace" ? copy(locale, "legacy", "replaceAfterBackup") : copy(locale, "legacy", "addImport")}</dd></div>
+              <div><dt>{copy(locale, "legacy", "started")}</dt><dd>{new Date(report.startedAt).toLocaleString(intlLocale)}</dd></div>
+              <div><dt>{copy(locale, "legacy", "ended")}</dt><dd>{new Date(report.finishedAt).toLocaleString(intlLocale)}</dd></div>
+              <div><dt>{copy(locale, "legacy", "conflicts")}</dt><dd>{report.conflicts}</dd></div>
+              <div><dt>{copy(locale, "legacy", "backupFile")}</dt><dd>{report.backupFile ?? copy(locale, "legacy", "notRequired")}</dd></div>
             </dl>
             {report.warnings.length ? (
               <div className="migration-issues">
-                <strong>Hinweise</strong>
+                <strong>{copy(locale, "legacy", "notes")}</strong>
                 <ul>{report.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
               </div>
             ) : null}
             <p className="migration-recommendation">
-              Die Browserdaten wurden in SQLite übernommen. Bitte erstellen Sie jetzt
-              zusätzlich ein JSON-Backup. Die alten Browserdaten wurden nicht gelöscht.
+              {copy(locale, "legacy", "recommendation")}
             </p>
             <footer className="form-actions">
               <button className="button button--secondary" type="button" onClick={() => downloadReport(report)}>
-                <Icon name="download" size={17} />Protokoll als JSON
+                <Icon name="download" size={17} />{copy(locale, "legacy", "downloadReport")}
               </button>
-              <button className="button button--primary" type="button" onClick={onClose}>Schließen</button>
+              <button className="button button--primary" type="button" onClick={onClose}>{copy(locale, "legacy", "close")}</button>
             </footer>
           </>
         ) : preview ? (
           <>
             <div className="migration-count-grid">
-              <span><strong>{preview.counts.children}</strong>Kinder</span>
-              <span><strong>{preview.counts.entries}</strong>Betreuung</span>
-              <span><strong>{preview.counts.holidays}</strong>Ferien</span>
-              <span><strong>{preview.counts.contactPatterns}</strong>Umgangsregeln</span>
-              <span><strong>{preview.counts.trips}</strong>Fahrten</span>
-              <span><strong>{preview.counts.costs}</strong>Kosten</span>
-              <span><strong>{preview.counts.unavailablePeriods}</strong>Nichtverfügbarkeiten</span>
-              <span><strong>{preview.counts.monthClosures}</strong>Monatsabschlüsse</span>
+              <span><strong>{preview.counts.children}</strong>{copy(locale, "legacy", "children")}</span>
+              <span><strong>{preview.counts.entries}</strong>{copy(locale, "legacy", "care")}</span>
+              <span><strong>{preview.counts.holidays}</strong>{copy(locale, "legacy", "holidays")}</span>
+              <span><strong>{preview.counts.contactPatterns}</strong>{copy(locale, "legacy", "contactRules")}</span>
+              <span><strong>{preview.counts.trips}</strong>{copy(locale, "legacy", "trips")}</span>
+              <span><strong>{preview.counts.costs}</strong>{copy(locale, "legacy", "costs")}</span>
+              <span><strong>{preview.counts.unavailablePeriods}</strong>{copy(locale, "legacy", "unavailability")}</span>
+              <span><strong>{preview.counts.monthClosures}</strong>{copy(locale, "legacy", "monthClosures")}</span>
             </div>
             <div className="migration-review-grid">
               <div className="notice">
-                <strong>{preview.potentialDuplicates} potenzielle Duplikate</strong>
-                <p>Standardmäßig werden diese nicht erneut importiert.</p>
+                <strong>{copy(locale, "legacy", "duplicateCount", { count: preview.potentialDuplicates })}</strong>
+                <p>{copy(locale, "legacy", "duplicateDescription")}</p>
               </div>
               <div className={preview.conflicts ? "notice notice--warning" : "notice"}>
-                <strong>{preview.conflicts} Konflikte</strong>
-                <p>Bestehende SQLite-Einträge werden nicht überschrieben.</p>
+                <strong>{copy(locale, "legacy", "conflictCount", { count: preview.conflicts })}</strong>
+                <p>{copy(locale, "legacy", "conflictDescription")}</p>
               </div>
               <div className={preview.invalidRecords ? "notice notice--error" : "notice"}>
-                <strong>{preview.invalidRecords} nicht importierbar</strong>
-                <p>Ungültige Datensätze verhindern keinen stillen Teilimport.</p>
+                <strong>{copy(locale, "legacy", "invalidCount", { count: preview.invalidRecords })}</strong>
+                <p>{copy(locale, "legacy", "invalidDescription")}</p>
               </div>
             </div>
             {preview.conflictDetails.length ? (
               <details className="migration-details">
-                <summary>Konflikte anzeigen</summary>
+                <summary>{copy(locale, "legacy", "showConflicts")}</summary>
                 {preview.conflictDetails.map((issue) => (
                   <div key={`${issue.type}-${issue.legacyId}`}>
                     <strong>{issue.label}</strong>
                     <p>{issue.reasons.join(" ")}</p>
-                    {issue.closedMonths.length ? <small>Abgeschlossen: {issue.closedMonths.join(", ")}</small> : null}
+                    {issue.closedMonths.length ? <small>{copy(locale, "legacy", "closed", { months: issue.closedMonths.join(", ") })}</small> : null}
                   </div>
                 ))}
               </details>
             ) : null}
             {preview.warnings.length ? (
               <div className="migration-issues">
-                <strong>Warnungen</strong>
+                <strong>{copy(locale, "legacy", "warnings")}</strong>
                 <ul>{preview.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
               </div>
             ) : null}
             <label className="field">
-              <span>Umgang mit potenziellen Duplikaten</span>
+              <span>{copy(locale, "legacy", "duplicatePolicy")}</span>
               <select
                 value={duplicatePolicy}
                 onChange={(event) => setDuplicatePolicy(event.target.value as LegacyDuplicatePolicy)}
               >
-                <option value="skip">Duplikate überspringen (empfohlen)</option>
-                <option value="include">Als neue Einträge importieren</option>
+                <option value="skip">{copy(locale, "legacy", "skipDuplicates")}</option>
+                <option value="include">{copy(locale, "legacy", "includeDuplicates")}</option>
               </select>
             </label>
             <footer className="form-actions migration-actions">
-              <button className="button button--secondary" type="button" onClick={() => setPreview(null)}>Zurück</button>
+              <button className="button button--secondary" type="button" onClick={() => setPreview(null)}>{copy(locale, "legacy", "back")}</button>
               <div className="form-actions__right">
                 <button className="button button--primary" type="button" disabled={busy || serverStatus !== "online" || preview.invalidRecords > 0} onClick={() => void importData("add")}>
-                  Zusätzlich importieren
+                  {copy(locale, "legacy", "addImport")}
                 </button>
                 {!database.isEmpty ? (
                   <button className="button button--danger-quiet" type="button" disabled={busy || serverStatus !== "online" || preview.invalidRecords > 0} onClick={() => void importData("replace")}>
-                    Sichern und ersetzen
+                    {copy(locale, "legacy", "replace")}
                   </button>
                 ) : null}
               </div>
@@ -224,42 +223,40 @@ export function LegacyMigrationDialog({ legacy, database, onClose }: Props) {
               <div>
                 <strong>
                   {database.isEmpty
-                    ? "Es wurden ältere Browserdaten gefunden. Diese können in die zentrale SQLite-Datenbank übernommen werden."
-                    : "Es wurden ältere Browserdaten gefunden. Die zentrale Datenbank enthält bereits Daten. Bitte wählen Sie, wie fortgefahren werden soll."}
+                    ? copy(locale, "legacy", "foundEmpty")
+                    : copy(locale, "legacy", "foundExisting")}
                 </strong>
                 <p>
-                  Der alte Browserbestand wird nur gelesen und weder automatisch
-                  verändert noch gelöscht.
+                  {copy(locale, "legacy", "readOnly")}
                 </p>
               </div>
             </div>
             <div className="migration-count-grid">
-              <span><strong>{legacy.counts.children}</strong>Kinder</span>
-              <span><strong>{legacy.counts.entries}</strong>Betreuung</span>
-              <span><strong>{legacy.counts.holidays}</strong>Ferien</span>
-              <span><strong>{legacy.counts.trips}</strong>Fahrten</span>
-              <span><strong>{legacy.counts.costs}</strong>Kosten</span>
-              <span><strong>{legacy.counts.unavailablePeriods}</strong>Nichtverfügbarkeiten</span>
+              <span><strong>{legacy.counts.children}</strong>{copy(locale, "legacy", "children")}</span>
+              <span><strong>{legacy.counts.entries}</strong>{copy(locale, "legacy", "care")}</span>
+              <span><strong>{legacy.counts.holidays}</strong>{copy(locale, "legacy", "holidays")}</span>
+              <span><strong>{legacy.counts.trips}</strong>{copy(locale, "legacy", "trips")}</span>
+              <span><strong>{legacy.counts.costs}</strong>{copy(locale, "legacy", "costs")}</span>
+              <span><strong>{legacy.counts.unavailablePeriods}</strong>{copy(locale, "legacy", "unavailability")}</span>
             </div>
             {error ? <p className="form-error" role="alert">{error}</p> : null}
             <footer className="form-actions migration-actions">
               <div className="form-actions__right">
-                <button className="button button--secondary" type="button" onClick={() => void skip("later")}>Später erinnern</button>
-                <button className="button button--secondary" type="button" onClick={() => void skip("ignore")}>Browserdaten ignorieren</button>
+                <button className="button button--secondary" type="button" onClick={() => void skip("later")}>{copy(locale, "legacy", "remindLater")}</button>
+                <button className="button button--secondary" type="button" onClick={() => void skip("ignore")}>{copy(locale, "legacy", "ignore")}</button>
                 <button className="button button--primary" type="button" disabled={!payload || busy || serverStatus !== "online"} onClick={() => void analyze()}>
-                  {database.isEmpty ? "Import prüfen" : "Nur prüfen / Import vorbereiten"}
+                  {database.isEmpty ? copy(locale, "legacy", "inspect") : copy(locale, "legacy", "prepare")}
                 </button>
               </div>
             </footer>
             {!database.isEmpty ? (
               <p className="migration-risk">
-                „Ersetzen“ wird erst nach der Vorschau angeboten und nur nach einer
-                erfolgreich erstellten SQLite-Sicherung ausgeführt.
+                {copy(locale, "legacy", "risk")}
               </p>
             ) : null}
           </>
         )}
-        {busy ? <p className="migration-progress" role="status">Migration wird verarbeitet…</p> : null}
+        {busy ? <p className="migration-progress" role="status">{copy(locale, "legacy", "processing")}</p> : null}
         {error && preview ? <p className="form-error" role="alert">{error}</p> : null}
       </div>
     </Modal>

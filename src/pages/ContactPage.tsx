@@ -9,6 +9,8 @@ import {
 } from "../lib/analytics";
 import { formatDate, formatTime, rangeForYear, toDateKey } from "../lib/date";
 import { statusLabels } from "../lib/labels";
+import { useI18n } from "../i18n/I18nProvider";
+import { copy } from "../i18n/catalog";
 import { useAppStore } from "../store/AppStore";
 import type { CareEntry } from "../types";
 
@@ -34,11 +36,12 @@ export function ContactPage({
     canWrite,
     isSaving
   } = useAppStore();
+  const { locale, intlLocale } = useI18n();
   const existingPattern = data.contactPatterns[0];
   const currentYear = new Date().getFullYear();
   const defaultRange = rangeForYear(currentYear);
   const [patternId, setPatternId] = useState(existingPattern?.id);
-  const [name, setName] = useState(existingPattern?.name ?? "14-Tage-Regel");
+  const [name, setName] = useState(existingPattern?.name ?? copy(locale, "contact", "defaultName"));
   const [startDate, setStartDate] = useState(existingPattern?.startDate ?? nextFriday());
   const [fridayStartTime, setFridayStartTime] = useState(
     existingPattern?.fridayStartTime ?? "16:00"
@@ -78,17 +81,17 @@ export function ContactPage({
   const saveRule = async (event?: FormEvent) => {
     event?.preventDefault();
     if (!childIds.length) {
-      setMessage("Bitte mindestens ein Kind für die Umgangsregel auswählen.");
+      setMessage(copy(locale, "contact", "childRequired"));
       return;
     }
     const startDay = new Date(`${startDate}T12:00:00`).getDay();
     if (startDay !== 5) {
-      setMessage("Das Startdatum der Regel muss ein Freitag sein.");
+      setMessage(copy(locale, "contact", "fridayRequired"));
       return;
     }
     const id = await saveContactPattern({
       id: patternId,
-      name: name.trim() || "14-Tage-Regel",
+      name: name.trim() || copy(locale, "contact", "defaultName"),
       startDate,
       frequency: "biweekly",
       fridayStartTime,
@@ -98,17 +101,17 @@ export function ContactPage({
     });
     if (id) {
       setPatternId(id);
-      setMessage("Umgangsregel gespeichert.");
+      setMessage(copy(locale, "contact", "saved"));
     }
   };
 
   const generate = async () => {
     if (!patternId) {
-      setMessage("Bitte die Umgangsregel zuerst speichern.");
+      setMessage(copy(locale, "contact", "saveFirst"));
       return;
     }
     if (generationEnd < generationStart) {
-      setMessage("Der Generierungszeitraum ist ungültig.");
+      setMessage(copy(locale, "contact", "invalidRange"));
       return;
     }
     const count = await generateContactEntries(
@@ -118,10 +121,10 @@ export function ContactPage({
     );
     setMessage(
       count === -1
-        ? "Die Erzeugung wurde abgebrochen."
+        ? copy(locale, "contact", "generationCancelled")
         : count
-        ? `${count} geplante Umgangstermine wurden erzeugt.`
-        : "Keine neuen Termine erzeugt. Bestehende Soll-Termine werden nicht dupliziert."
+        ? copy(locale, "contact", "generated", { count })
+        : copy(locale, "contact", "noNewDates")
     );
   };
 
@@ -138,19 +141,19 @@ export function ContactPage({
     <div className="page">
       <div className="page-header">
         <div>
-          <p className="page-header__context">Soll-Ist-Vergleich</p>
-          <h1>Umgangsregel</h1>
+          <p className="page-header__context">{copy(locale, "contact", "context")}</p>
+          <h1>{copy(locale, "contact", "title")}</h1>
         </div>
         <button className="button button--secondary no-print" type="button" onClick={onNewEntry} disabled={!canWrite || isSaving}>
           <Icon name="plus" size={17} />
-          Zusatzbetreuung erfassen
+          {copy(locale, "contact", "addAdditional")}
         </button>
       </div>
 
       {data.children.length === 0 ? (
         <section className="notice notice--warning">
           <Icon name="alert" />
-          <p>Für eine Umgangsregel muss zuerst mindestens ein Kind angelegt werden.</p>
+          <p>{copy(locale, "contact", "childrenNeeded")}</p>
         </section>
       ) : null}
 
@@ -158,13 +161,13 @@ export function ContactPage({
         <form className="panel rule-form" onSubmit={saveRule}>
           <div className="panel__header">
             <div>
-              <h2>14-Tage-Regel Freitag bis Sonntag</h2>
-              <p>Das Startdatum legt den Rhythmus der geplanten Wochenenden fest.</p>
+              <h2>{copy(locale, "contact", "ruleTitle")}</h2>
+              <p>{copy(locale, "contact", "ruleDescription")}</p>
             </div>
           </div>
           <div className="panel-form">
             <label className="field">
-              <FieldHelpLabel fieldId="contactPattern.name">Bezeichnung</FieldHelpLabel>
+              <FieldHelpLabel fieldId="contactPattern.name">{copy(locale, "contact", "name")}</FieldHelpLabel>
               <input value={name} onChange={(event) => setName(event.target.value)} />
             </label>
             <div className="form-grid">
@@ -185,7 +188,7 @@ export function ContactPage({
             </div>
             <fieldset className="inline-fieldset">
               <legend className="field-label-row">
-                <span>Kinder</span>
+                <span>{copy(locale, "contact", "children")}</span>
                 <FieldHelpButton fieldId="contactPattern.children" />
               </legend>
               <div className="child-choice-grid">
@@ -218,7 +221,7 @@ export function ContactPage({
             </label>
             <button className="button button--primary" type="submit" disabled={!data.children.length || !canWrite || isSaving}>
               <Icon name="check" size={17} />
-              Regel speichern
+              {copy(locale, "contact", "save")}
             </button>
           </div>
         </form>
@@ -226,24 +229,24 @@ export function ContactPage({
         <section className="panel generator-panel">
           <div className="panel__header">
             <div>
-              <h2>Soll-Termine generieren</h2>
-              <p>Vorhandene Termine derselben Regel werden nicht dupliziert.</p>
+              <h2>{copy(locale, "contact", "generateTitle")}</h2>
+              <p>{copy(locale, "contact", "generateDescription")}</p>
             </div>
           </div>
           <div className="panel-form">
             <div className="form-grid form-grid--two">
               <label className="field">
-                <FieldHelpLabel fieldId="contactPattern.generationRange">Von</FieldHelpLabel>
+                <FieldHelpLabel fieldId="contactPattern.generationRange">{copy(locale, "common", "from")}</FieldHelpLabel>
                 <input type="date" value={generationStart} onChange={(event) => setGenerationStart(event.target.value)} />
               </label>
               <label className="field">
-                <FieldHelpLabel fieldId="contactPattern.generationRange">Bis</FieldHelpLabel>
+                <FieldHelpLabel fieldId="contactPattern.generationRange">{copy(locale, "common", "to")}</FieldHelpLabel>
                 <input type="date" value={generationEnd} onChange={(event) => setGenerationEnd(event.target.value)} />
               </label>
             </div>
             <button className="button button--primary" type="button" onClick={() => void generate()} disabled={!patternId || !canWrite || isSaving}>
               <Icon name="repeat" size={17} />
-              Termine erzeugen
+              {copy(locale, "contact", "generate")}
             </button>
             <FieldHelpButton fieldId="contactPattern.duplicatePrevention" showRequirement={false} />
             {message ? <p className="inline-message" role="status">{message}</p> : null}
@@ -252,20 +255,20 @@ export function ContactPage({
       </div>
 
       <section className="summary-strip summary-strip--six">
-        <div><small>Soll-Termine</small><strong>{stats.scheduled}</strong></div>
-        <div><small>Noch geplant</small><strong>{stats.pending}</strong></div>
-        <div><small>Durchgeführt</small><strong>{stats.completed}</strong></div>
-        <div><small>Dienstlich ausgefallen</small><strong>{stats.cancelledDutyRelated}</strong></div>
-        <div><small>Sonstig ausgefallen</small><strong>{stats.cancelledOther}</strong></div>
-        <div><small>Zusätzlich</small><strong>{stats.additional}</strong></div>
+        <div><small>{copy(locale, "contact", "scheduled")}</small><strong>{stats.scheduled}</strong></div>
+        <div><small>{copy(locale, "contact", "pending")}</small><strong>{stats.pending}</strong></div>
+        <div><small>{copy(locale, "contact", "completed")}</small><strong>{stats.completed}</strong></div>
+        <div><small>{copy(locale, "contact", "cancelledDuty")}</small><strong>{stats.cancelledDutyRelated}</strong></div>
+        <div><small>{copy(locale, "contact", "cancelledOther")}</small><strong>{stats.cancelledOther}</strong></div>
+        <div><small>{copy(locale, "contact", "additional")}</small><strong>{stats.additional}</strong></div>
       </section>
 
       {stats.unavailableOverlaps ? (
         <section className="notice notice--recommendation">
           <Icon name="briefcase" />
           <div>
-            <strong>{stats.unavailableOverlaps} Überschneidung(en) dokumentiert</strong>
-            <p>Nichtverfügbarkeiten werden gesondert ausgewiesen und nicht automatisch als nicht wahrgenommene Betreuung bewertet.</p>
+            <strong>{copy(locale, "contact", "overlaps", { count: stats.unavailableOverlaps })}</strong>
+            <p>{copy(locale, "contact", "unavailabilityNotice")}</p>
           </div>
         </section>
       ) : null}
@@ -273,8 +276,8 @@ export function ContactPage({
       <section className="panel">
         <div className="panel__header">
           <div>
-            <h2>Soll-Ist-Termine</h2>
-            <p>{formatDate(generationStart)} bis {formatDate(generationEnd)}</p>
+            <h2>{copy(locale, "contact", "datesTitle")}</h2>
+            <p>{formatDate(generationStart, intlLocale)} {copy(locale, "contact", "through")} {formatDate(generationEnd, intlLocale)}</p>
           </div>
         </div>
         <div className="rule-entry-list">
@@ -288,20 +291,20 @@ export function ContactPage({
             <article className="rule-entry" key={entry.id}>
               <button className="rule-entry__main" type="button" onClick={() => onEditEntry(entry)}>
                 <span>
-                  <strong>{formatDate(entry.startDateTime)}</strong>
-                  <small>{formatTime(entry.startDateTime)} bis {formatDate(entry.endDateTime)}, {formatTime(entry.endDateTime)}</small>
+                  <strong>{formatDate(entry.startDateTime, intlLocale)}</strong>
+                  <small>{formatTime(entry.startDateTime, intlLocale)} {copy(locale, "contact", "through")} {formatDate(entry.endDateTime, intlLocale)}, {formatTime(entry.endDateTime, intlLocale)}</small>
                 </span>
                 <span>
-                  <strong>{entry.childIds.map((id) => data.children.find((child) => child.id === id)?.name).filter(Boolean).join(" und ")}</strong>
-                  <small>{entry.additionalCare ? "Zusatzbetreuung" : "14-Tage-Regel"}</small>
+                  <strong>{entry.childIds.map((id) => data.children.find((child) => child.id === id)?.name).filter(Boolean).join(copy(locale, "contact", "and"))}</strong>
+                  <small>{entry.additionalCare ? copy(locale, "contact", "additionalCare") : copy(locale, "contact", "defaultName")}</small>
                 </span>
                 <span className={`status-label status-label--${entry.status}`}>
-                  {entry.additionalCare ? "Zusätzlich" : statusLabels[entry.status]}
+                  {entry.additionalCare ? copy(locale, "contact", "additional") : statusLabels[entry.status]}
                 </span>
                 {overlaps.length ? (
                   <span className="rule-entry__overlap">
                     <Icon name="alert" size={15} />
-                    Dieser geplante Umgang überschneidet sich mit einer dokumentierten Nichtverfügbarkeit.
+                    {copy(locale, "contact", "overlap")}
                   </span>
                 ) : null}
               </button>
@@ -309,11 +312,11 @@ export function ContactPage({
                 <div className="rule-entry__actions">
                   <button className="button button--quiet" type="button" onClick={() => void updateEntryStatus(entry.id, "completed")} disabled={!canWrite || isSaving}>
                     <Icon name="check" size={15} />
-                    Durchgeführt
+                    {copy(locale, "contact", "completed")}
                   </button>
                   <button className="button button--danger-quiet" type="button" onClick={() => { setCancelEntry(entry); setCancelReason(entry.cancellationReason ?? ""); }} disabled={!canWrite || isSaving}>
                     <Icon name="close" size={15} />
-                    Ausgefallen
+                    {copy(locale, "contact", "cancelled")}
                   </button>
                   <FieldHelpButton fieldId="contactPattern.confirmCompleted" showRequirement={false} />
                   <FieldHelpButton fieldId="contactPattern.markCancelled" showRequirement={false} />
@@ -322,12 +325,12 @@ export function ContactPage({
             </article>
             );
           })}
-          {relevantEntries.length === 0 ? <p className="empty-copy empty-copy--padded">In diesem Zeitraum sind noch keine Soll- oder Zusatztermine dokumentiert.</p> : null}
+          {relevantEntries.length === 0 ? <p className="empty-copy empty-copy--padded">{copy(locale, "contact", "empty")}</p> : null}
         </div>
       </section>
 
       {cancelEntry ? (
-        <Modal title="Umgang als ausgefallen markieren" onClose={() => setCancelEntry(null)}>
+        <Modal title={copy(locale, "contact", "cancelTitle")} onClose={() => setCancelEntry(null)}>
           <form className="child-form" onSubmit={confirmCancellation}>
             <label className="field">
               <FieldHelpLabel fieldId="careEntry.cancellationReason" />
@@ -336,8 +339,8 @@ export function ContactPage({
             <footer className="form-actions">
               <span />
               <div className="form-actions__right">
-                <button className="button button--secondary" type="button" onClick={() => setCancelEntry(null)}>Abbrechen</button>
-                <button className="button button--primary" type="submit" disabled={!canWrite || isSaving}>Ausfall speichern</button>
+                <button className="button button--secondary" type="button" onClick={() => setCancelEntry(null)}>{copy(locale, "common", "cancel")}</button>
+                <button className="button button--primary" type="submit" disabled={!canWrite || isSaving}>{copy(locale, "contact", "saveCancellation")}</button>
               </div>
             </footer>
           </form>
