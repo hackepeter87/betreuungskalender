@@ -11,9 +11,10 @@ travel, costs, holidays, and unavailable periods.
 
 ## Project status
 
-- Latest release: [v0.3.0 SQLite persistence and legacy migration](docs/release-notes/v0.3.0.md)
-- Current `main`: SQLite/API domain persistence, legacy browser-data migration,
-  responsive mobile support, backup/restore tooling, and deployment guidance
+- Latest release: [v0.4.0 language packs and external calendars](docs/release-notes/v0.4.0.md)
+- Current `main`: SQLite/API domain persistence, language packs, external
+  read-only calendar overlays, responsive mobile support, backup/restore
+  tooling, and deployment guidance
 - Roadmap and work tracking: [GitHub milestones and issues](https://github.com/hackepeter87/betreuungskalender/milestones)
 - Stability target: `v1.0.0`
 
@@ -43,6 +44,8 @@ included in repository screenshots.
 - Multiple trips and costs per care entry with period statistics
 - Monthly closure, data-quality checks, soft delete, and field-level audit log
 - JSON backup/import, separate CSV exports, neutral PDF report, and A4 print view
+- Local `.ics` holiday calendar import with source visibility and read-only
+  overlays; imported events do not affect care statistics or reports
 - Fastify API with SQLite, migrations, validation, auth-proxy support, health
   endpoints, and production security headers
 

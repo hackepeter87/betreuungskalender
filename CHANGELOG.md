@@ -6,6 +6,32 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-06-21
+
+### Added
+
+- Typed German-first internationalization with an English language pack,
+  localized interface copy, reports, and PDF vocabulary.
+- Provider-independent import of local `.ics` holiday calendar files, source
+  visibility controls, and read-only calendar overlays.
+- Backup and restore support for external calendar sources and normalized
+  events.
+- Parser, migration, API, and responsive end-to-end coverage for recent
+  calendar, language-pack, and operational workflows.
+
+### Changed
+
+- Release validation, deployment automation, checksummed artifacts, and
+  container health validation are reproducible through the project scripts and
+  workflows.
+- Imported external calendar events remain isolated from care entries,
+  statistics, reports, exports, and month closure.
+
+### Security
+
+- Updated `dompurify` to resolve the prior moderate advisory.
+- Added rate limiting to external calendar import and source-management routes.
+
 ## [0.3.0] - 2026-06-12
 
 ### Added
