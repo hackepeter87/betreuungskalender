@@ -7,6 +7,7 @@ import type {
   TripPurpose,
   UnavailableCategory
 } from "../types";
+import type { AppLocale } from "../i18n/resources";
 
 export const statusLabels: Record<EntryStatus, string> = {
   completed: "Durchgeführt",
@@ -76,3 +77,64 @@ export const unavailableCategoryLabels: Record<UnavailableCategory, string> = {
   vacation_without_children: "Urlaub ohne Kinder",
   other: "Sonstiges"
 };
+
+const localizedLabels = {
+  de: {
+    status: statusLabels,
+    costCategory: costCategoryLabels,
+    unavailableCategory: unavailableCategoryLabels
+  },
+  en: {
+    status: {
+      completed: "Completed",
+      planned: "Planned",
+      cancelled: "Cancelled"
+    },
+    costCategory: {
+      food: "Food",
+      leisure: "Leisure",
+      school: "School",
+      clothing: "Clothing",
+      travel: "Travel costs",
+      other: "Other"
+    },
+    unavailableCategory: {
+      duty: "Duty",
+      training_course: "Training course",
+      exercise: "Exercise",
+      guard_duty: "Guard duty",
+      standby: "Standby",
+      deployment: "Deployment",
+      business_trip: "Business trip",
+      illness: "Illness",
+      private_unavailability: "Private unavailability",
+      vacation_without_children: "Holiday without children",
+      other: "Other"
+    }
+  }
+} satisfies Record<
+  AppLocale,
+  {
+    status: Record<EntryStatus, string>;
+    costCategory: Record<CostCategory, string>;
+    unavailableCategory: Record<UnavailableCategory, string>;
+  }
+>;
+
+export function statusLabel(status: EntryStatus, locale: AppLocale): string {
+  return localizedLabels[locale].status[status];
+}
+
+export function costCategoryLabel(
+  category: CostCategory,
+  locale: AppLocale
+): string {
+  return localizedLabels[locale].costCategory[category];
+}
+
+export function unavailableCategoryLabel(
+  category: UnavailableCategory,
+  locale: AppLocale
+): string {
+  return localizedLabels[locale].unavailableCategory[category];
+}

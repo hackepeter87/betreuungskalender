@@ -5,17 +5,14 @@ import {
 } from "./analytics";
 import { formatDate, formatDateTime, formatTime } from "./date";
 import {
-  costCategoryLabels,
-  statusLabels,
-  unavailableCategoryLabels
+  costCategoryLabel,
+  statusLabel,
+  unavailableCategoryLabel
 } from "./labels";
 import { reportClosureDescription } from "./monthClosure";
 import type { AppData } from "../types";
-
-const euro = new Intl.NumberFormat("de-DE", {
-  style: "currency",
-  currency: "EUR"
-});
+import { localeMetadata, type AppLocale } from "../i18n/resources";
+import { reportMessages } from "../i18n/reportMessages";
 
 function namesForEntry(data: AppData, childIds: string[]): string {
   return childIds
@@ -31,6 +28,7 @@ export async function exportPdfReport(
     reportId: string;
     includeAuditHistory: boolean;
     createdAt: string;
+    locale: AppLocale;
   }
 ): Promise<void> {
   const [{ jsPDF }, { autoTable }] = await Promise.all([
@@ -38,6 +36,12 @@ export async function exportPdfReport(
     import("jspdf-autotable")
   ]);
   const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const messages = reportMessages[options.locale];
+  const intlLocale = localeMetadata[options.locale].intlLocale;
+  const euro = new Intl.NumberFormat(intlLocale, {
+    style: "currency",
+    currency: "EUR"
+  });
   const stats = calculatePeriodStats(data, startDate, endDate);
   const entries = entriesForRange(data.entries, startDate, endDate)
     .slice()
@@ -48,7 +52,12 @@ export async function exportPdfReport(
     endDate
   ).sort((a, b) => a.startDateTime.localeCompare(b.startDateTime));
   const createdAt = new Date(options.createdAt);
-  const closureDescription = reportClosureDescription(data, startDate, endDate);
+  const closureDescription = reportClosureDescription(
+    data,
+    startDate,
+    endDate,
+    options.locale
+  );
   const auditEntries = data.auditLog
     .filter(
       (entry) =>
@@ -60,23 +69,23 @@ export async function exportPdfReport(
     .sort((a, b) => a.timestamp.localeCompare(b.timestamp));
 
   doc.setProperties({
-    title: `Betreuungsbericht ${formatDate(startDate)} bis ${formatDate(endDate)}`,
-    subject: "Dokumentierte Betreuungszeiten",
+    title: `${messages.filePrefix} ${formatDate(startDate, intlLocale)} ${messages.through} ${formatDate(endDate, intlLocale)}`,
+    subject: messages.pdfSubject,
     creator: "Betreuungskalender"
   });
   doc.setTextColor(20, 33, 61);
   doc.setFont("helvetica", "bold");
   doc.setFontSize(18);
-  doc.text("Bericht zu dokumentierten Betreuungszeiten", 14, 18);
+  doc.text(messages.documentTitle, 14, 18);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   doc.setTextColor(80, 92, 112);
-  doc.text(`Berichts-ID: ${options.reportId}`, 14, 25);
-  doc.text(`Erstellt am: ${formatDateTime(createdAt)}`, 14, 30);
-  doc.text(`Datenstand: ${formatDateTime(data.updatedAt)}`, 14, 35);
-  doc.text(`Zeitraum: ${formatDate(startDate)} bis ${formatDate(endDate)}`, 14, 40);
+  doc.text(`${messages.reportId}: ${options.reportId}`, 14, 25);
+  doc.text(`${messages.createdAt}: ${formatDateTime(createdAt, intlLocale)}`, 14, 30);
+  doc.text(`${messages.dataAsOf}: ${formatDateTime(data.updatedAt, intlLocale)}`, 14, 35);
+  doc.text(`${messages.period}: ${formatDate(startDate, intlLocale)} ${messages.through} ${formatDate(endDate, intlLocale)}`, 14, 40);
   doc.text(
-    `Kinder: ${data.children.map((child) => child.name).join(", ") || "Keine Kinder erfasst"}`,
+    `${messages.children}: ${data.children.map((child) => child.name).join(", ") || messages.noChildren}`,
     14,
     45
   );
@@ -84,7 +93,7 @@ export async function exportPdfReport(
 
   autoTable(doc, {
     startY: 57,
-    head: [["Kind", "Tage", "Nächte", "Wochenenden", "Zusätzlich", "Ferientage", "Tagquote", "Nachtquote"]],
+    head: [[messages.child, messages.days, messages.nights, messages.weekends, messages.additional, messages.holidayDays, messages.dayQuote, messages.nightQuote]],
     body: stats.byChild.map((childStats) => [
       data.children.find((child) => child.id === childStats.childId)?.name ?? "",
       childStats.careDays,
@@ -102,7 +111,7 @@ export async function exportPdfReport(
 
   autoTable(doc, {
     startY: 88,
-    head: [["Soll-Termine", "Durchgeführt", "Dienstlich ausgefallen", "Sonstig ausgefallen", "Überschneidungen", "Zusätzlich", "Fahrt-km", "Kosten"]],
+    head: [[messages.plannedDates, messages.completed, messages.cancelledDuty, messages.cancelledOther, messages.overlaps, messages.additional, messages.tripKm, messages.costs]],
     body: [[
       stats.contact.scheduled,
       stats.contact.completed,
@@ -121,24 +130,24 @@ export async function exportPdfReport(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(10);
   doc.setTextColor(20, 33, 61);
-  doc.text("Kosten nach Kategorie", 14, 112);
+  doc.text(messages.costsByCategory, 14, 112);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   const costText = Object.entries(stats.costsByCategory)
     .filter(([, amount]) => amount > 0)
-    .map(([category, amount]) => `${costCategoryLabels[category as keyof typeof costCategoryLabels]}: ${euro.format(amount)}`)
+    .map(([category, amount]) => `${costCategoryLabel(category as keyof typeof stats.costsByCategory, options.locale)}: ${euro.format(amount)}`)
     .join(" · ");
-  doc.text(costText || "Keine Kosten im Zeitraum dokumentiert.", 14, 118, {
+  doc.text(costText || messages.noCosts, 14, 118, {
     maxWidth: 180
   });
 
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.text("Tabellarische Tagesliste", 14, 129);
+  doc.text(messages.dailyList, 14, 129);
 
   autoTable(doc, {
     startY: 133,
-    head: [["Datum / Zeit", "Kinder", "Status / Einordnung", "Tage / Nächte", "km / Kosten", "Notizen / Ausfallgrund"]],
+    head: [[messages.period, messages.children, `${messages.status} / ${messages.classification}`, `${messages.days} / ${messages.nights}`, `km / ${messages.costs}`, messages.notesOrReason]],
     body: entries.map((entry) => {
       const entryCosts = entry.costs
         .filter((cost) => !cost.deletedAt)
@@ -147,10 +156,10 @@ export async function exportPdfReport(
         .filter((trip) => !trip.deletedAt)
         .reduce((sum, trip) => sum + trip.km, 0);
       return [
-        `${formatDate(entry.startDateTime)} ${formatTime(entry.startDateTime)}\nbis ${formatDate(entry.endDateTime)} ${formatTime(entry.endDateTime)}`,
+        `${formatDate(entry.startDateTime, intlLocale)} ${formatTime(entry.startDateTime, intlLocale)}\n${messages.through} ${formatDate(entry.endDateTime, intlLocale)} ${formatTime(entry.endDateTime, intlLocale)}`,
         namesForEntry(data, entry.childIds),
-        `${statusLabels[entry.status]}${entry.additionalCare ? "\nZusatzbetreuung" : ""}${entry.generatedByPatternId ? "\nSoll-Termin" : ""}`,
-        `${entry.overnight ? "Übernachtung" : "Tagesbetreuung"}${entry.schoolHandover ? "\nSchulübergabe" : ""}${entry.holiday ? "\nFerientag" : ""}`,
+        `${statusLabel(entry.status, options.locale)}${entry.additionalCare ? `\n${messages.additionalCare}` : ""}${entry.generatedByPatternId ? `\n${messages.plannedDate}` : ""}`,
+        `${entry.overnight ? messages.overnight : messages.dayCare}${entry.schoolHandover ? `\n${messages.schoolHandover}` : ""}${entry.holiday ? `\n${messages.holiday}` : ""}`,
         `${entryKm.toFixed(1)} km\n${euro.format(entryCosts)}`,
         entry.cancellationReason || entry.notes || "–"
       ];
@@ -176,7 +185,7 @@ export async function exportPdfReport(
       const pageNumber = doc.getNumberOfPages();
       doc.setFontSize(7);
       doc.setTextColor(110, 120, 135);
-      doc.text(`Seite ${pageNumber}`, 196, 289, { align: "right" });
+      doc.text(`${messages.page} ${pageNumber}`, 196, 289, { align: "right" });
     }
   });
 
@@ -184,26 +193,26 @@ export async function exportPdfReport(
   doc.setFont("helvetica", "bold");
   doc.setFontSize(14);
   doc.setTextColor(20, 33, 61);
-  doc.text("Dienstlich bedingte Nichtverfügbarkeit", 14, 18);
+  doc.text(messages.dutyUnavailabilityTitle, 14, 18);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(75, 86, 105);
   doc.text(
-    "Dokumentierte Nichtverfügbarkeiten werden gesondert ausgewiesen und nicht automatisch als nicht wahrgenommene Betreuung bewertet.",
+    messages.unavailabilityNote,
     14,
     24,
     { maxWidth: 180 }
   );
   autoTable(doc, {
     startY: 32,
-    head: [["Zeitraum", "Kategorie", "Dienstlich", "Betrifft", "Ort", "Belegreferenz", "Notiz"]],
+    head: [[messages.period, messages.category, messages.dutyRelated, messages.affects, messages.location, messages.evidenceReference, messages.note]],
     body: unavailablePeriods.map((period) => [
-      `${formatDate(period.startDateTime)} ${formatTime(period.startDateTime)}\nbis ${formatDate(period.endDateTime)} ${formatTime(period.endDateTime)}`,
-      unavailableCategoryLabels[period.category],
-      period.dutyRelated ? "Ja" : "Nein",
+      `${formatDate(period.startDateTime, intlLocale)} ${formatTime(period.startDateTime, intlLocale)}\n${messages.through} ${formatDate(period.endDateTime, intlLocale)} ${formatTime(period.endDateTime, intlLocale)}`,
+      unavailableCategoryLabel(period.category, options.locale),
+      period.dutyRelated ? messages.yes : messages.no,
       [
-        period.affectsContact ? "Umgang" : "",
-        period.affectsHolidays ? "Ferien" : ""
+        period.affectsContact ? messages.contact : "",
+        period.affectsHolidays ? messages.holidays : ""
       ].filter(Boolean).join(", ") || "–",
       period.location || "–",
       period.evidenceReference || "–",
@@ -222,12 +231,12 @@ export async function exportPdfReport(
       const pageNumber = doc.getNumberOfPages();
       doc.setFontSize(7);
       doc.setTextColor(110, 120, 135);
-      doc.text(`Seite ${pageNumber}`, 196, 289, { align: "right" });
+      doc.text(`${messages.page} ${pageNumber}`, 196, 289, { align: "right" });
     }
   });
   if (!unavailablePeriods.length) {
     doc.setFontSize(8);
-    doc.text("Im Zeitraum sind keine Nichtverfügbarkeiten dokumentiert.", 14, 39);
+    doc.text(messages.noUnavailable, 14, 39);
   }
 
   if (options.includeAuditHistory) {
@@ -235,25 +244,25 @@ export async function exportPdfReport(
     doc.setFont("helvetica", "bold");
     doc.setFontSize(14);
     doc.setTextColor(20, 33, 61);
-    doc.text("Änderungshistorie", 14, 18);
+    doc.text(messages.changeHistory, 14, 18);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
     doc.text(
-      "Enthalten sind protokollierte Änderungen mit einem Bezugsdatum im Berichtszeitraum.",
+      messages.historyNote,
       14,
       24
     );
     autoTable(doc, {
       startY: 30,
-      head: [["Zeitpunkt", "Objekt", "Vorgang", "Feld", "Alter Wert", "Neuer Wert"]],
+      head: [[messages.timestamp, messages.object, messages.action, messages.field, messages.oldValue, messages.newValue]],
       body: auditEntries.map((entry) => [
-        formatDateTime(entry.timestamp),
+        formatDateTime(entry.timestamp, intlLocale),
         entry.objectLabel,
         entry.action === "created"
-          ? "Erstellt"
+          ? messages.created
           : entry.action === "deleted"
-            ? "Gelöscht"
-            : "Geändert",
+            ? messages.deleted
+            : messages.changed,
         entry.field,
         entry.oldValue,
         entry.newValue
@@ -279,7 +288,7 @@ export async function exportPdfReport(
         const pageNumber = doc.getNumberOfPages();
         doc.setFontSize(7);
         doc.setTextColor(110, 120, 135);
-        doc.text(`Seite ${pageNumber}`, 196, 289, { align: "right" });
+        doc.text(`${messages.page} ${pageNumber}`, 196, 289, { align: "right" });
       }
     });
   }
@@ -290,11 +299,11 @@ export async function exportPdfReport(
   doc.setFont("helvetica", "normal");
   doc.setFontSize(8);
   doc.setTextColor(75, 86, 105);
-  const disclaimer =
-    "Die Auswertung basiert auf den vom Nutzer dokumentierten tatsächlichen Betreuungszeiten.";
-  doc.text(disclaimer, 14, pageHeight - 12, { maxWidth: 175 });
+  doc.text(messages.disclaimer, 14, pageHeight - 12, { maxWidth: 175 });
 
-  doc.save(`betreuungsbericht-${options.reportId}-${startDate}-bis-${endDate}.pdf`);
+  doc.save(
+    `${messages.filePrefix}-${options.reportId}-${startDate}-${messages.through}-${endDate}.pdf`
+  );
 }
 
 export function makeReportId(): string {

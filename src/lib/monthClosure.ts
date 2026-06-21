@@ -80,7 +80,8 @@ export function closuresForRange(
 export function reportClosureDescription(
   data: AppData,
   startDate: string,
-  endDate: string
+  endDate: string,
+  locale: "de" | "en" = "de"
 ): string {
   const months = monthKeysForRange(startDate, endDate);
   const closures = new Map(data.monthClosures.map((closure) => [closure.monthKey, closure]));
@@ -88,12 +89,18 @@ export function reportClosureDescription(
   const changedMonths = months.filter((month) => closures.get(month)?.changedAfterCloseAt);
 
   if (openMonths.length) {
-    return `Enthält noch offene Monatsdaten (${openMonths.join(", ")}).`;
+    return locale === "en"
+      ? `Contains open monthly data (${openMonths.join(", ")}).`
+      : `Enthält noch offene Monatsdaten (${openMonths.join(", ")}).`;
   }
   if (changedMonths.length) {
-    return `Enthält abgeschlossene, nachträglich geänderte Monatsdaten (${changedMonths.join(", ")}).`;
+    return locale === "en"
+      ? `Contains closed monthly data changed after closure (${changedMonths.join(", ")}).`
+      : `Enthält abgeschlossene, nachträglich geänderte Monatsdaten (${changedMonths.join(", ")}).`;
   }
-  return "Enthält ausschließlich abgeschlossene Monatsdaten.";
+  return locale === "en"
+    ? "Contains closed monthly data only."
+    : "Enthält ausschließlich abgeschlossene Monatsdaten.";
 }
 
 export function monthKeyForEntryDate(value: string): string {

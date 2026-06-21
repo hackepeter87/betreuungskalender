@@ -3,6 +3,8 @@ import { CHILD_COLORS } from "../data/defaults";
 import { Icon } from "../components/Icon";
 import { FieldHelpButton, FieldHelpLabel } from "../components/FieldHelp";
 import { Modal } from "../components/Modal";
+import { useI18n } from "../i18n/I18nProvider";
+import { localeMetadata, supportedLocales } from "../i18n/resources";
 import { useAppStore } from "../store/AppStore";
 import type { CareLocation, Child, HandoverParty } from "../types";
 
@@ -65,6 +67,7 @@ function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
 }
 
 export function SettingsPage() {
+  const { locale, setLocale, t } = useI18n();
   const {
     data,
     removeChild,
@@ -101,10 +104,38 @@ export function SettingsPage() {
     <div className="page page--narrow" data-testid="page-settings">
       <div className="page-header">
         <div>
-          <p className="page-header__context">Konfiguration</p>
-          <h1>Einstellungen</h1>
+          <p className="page-header__context">{t("settings.context")}</p>
+          <h1>{t("settings.title")}</h1>
         </div>
       </div>
+
+      <section className="panel settings-section">
+        <div className="panel__header panel__header--compact">
+          <div>
+            <h2>{t("settings.language.title")}</h2>
+            <p>{t("settings.language.description")}</p>
+          </div>
+        </div>
+        <div className="settings-form-grid">
+          <label className="field">
+            <span>{t("settings.language.label")}</span>
+            <select
+              data-testid="settings-language"
+              value={locale}
+              onChange={(event) =>
+                setLocale(event.target.value as (typeof supportedLocales)[number])
+              }
+            >
+              {supportedLocales.map((supportedLocale) => (
+                <option key={supportedLocale} value={supportedLocale}>
+                  {localeMetadata[supportedLocale].label}
+                </option>
+              ))}
+            </select>
+            <small>{t("settings.language.fallback")}</small>
+          </label>
+        </div>
+      </section>
 
       <section className="panel settings-section">
         <div className="panel__header">

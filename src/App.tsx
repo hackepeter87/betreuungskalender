@@ -4,6 +4,7 @@ import { EntryForm } from "./components/EntryForm";
 import { Modal } from "./components/Modal";
 import { LegacyMigrationDialog } from "./components/LegacyMigrationDialog";
 import { api } from "./lib/api";
+import { useI18n } from "./i18n/I18nProvider";
 import {
   detectLegacyBrowserData,
   isLegacyFingerprintIgnored,
@@ -33,6 +34,7 @@ interface EntryDialogState {
 }
 
 export function App() {
+  const { locale } = useI18n();
   const { isLoading, serverStatus } = useAppStore();
   const [activePage, setActivePage] = useState<PageId>("dashboard");
   const [monthKey, setMonthKey] = useState(() => toMonthKey(new Date()));
@@ -126,7 +128,15 @@ export function App() {
       </AppShell>
       {entryDialog ? (
         <Modal
-          title={entryDialog.entry ? "Betreuungseintrag bearbeiten" : "Betreuungseintrag erfassen"}
+          title={
+            locale === "en"
+              ? entryDialog.entry
+                ? "Edit care entry"
+                : "Create care entry"
+              : entryDialog.entry
+                ? "Betreuungseintrag bearbeiten"
+                : "Betreuungseintrag erfassen"
+          }
           size="large"
           onClose={() => setEntryDialog(null)}
         >

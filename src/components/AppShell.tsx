@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react";
-import { SERVER_UNAVAILABLE_MESSAGE } from "../lib/api";
+import { useI18n } from "../i18n/I18nProvider";
+import type { TranslationKey } from "../i18n/resources";
 import { useAppStore } from "../store/AppStore";
 import type { IconName } from "./Icon";
 import { Icon } from "./Icon";
@@ -18,18 +19,22 @@ export type PageId =
   | "rules"
   | "settings";
 
-const navItems: Array<{ id: PageId; label: string; icon: IconName }> = [
-  { id: "dashboard", label: "Übersicht", icon: "home" },
-  { id: "calendar", label: "Kalender", icon: "calendar" },
-  { id: "entries", label: "Einträge", icon: "list" },
-  { id: "contact", label: "Umgang", icon: "repeat" },
-  { id: "holidays", label: "Ferien", icon: "sun" },
-  { id: "unavailable", label: "Nichtverfügbarkeit", icon: "briefcase" },
-  { id: "analytics", label: "Auswertung", icon: "chart" },
-  { id: "report", label: "Bericht", icon: "fileText" },
-  { id: "backup", label: "Backup", icon: "backup" },
-  { id: "audit", label: "Protokoll", icon: "history" },
-  { id: "rules", label: "Regeln", icon: "book" }
+const navItems: Array<{
+  id: PageId;
+  labelKey: TranslationKey;
+  icon: IconName;
+}> = [
+  { id: "dashboard", labelKey: "nav.dashboard", icon: "home" },
+  { id: "calendar", labelKey: "nav.calendar", icon: "calendar" },
+  { id: "entries", labelKey: "nav.entries", icon: "list" },
+  { id: "contact", labelKey: "nav.contact", icon: "repeat" },
+  { id: "holidays", labelKey: "nav.holidays", icon: "sun" },
+  { id: "unavailable", labelKey: "nav.unavailable", icon: "briefcase" },
+  { id: "analytics", labelKey: "nav.analytics", icon: "chart" },
+  { id: "report", labelKey: "nav.report", icon: "fileText" },
+  { id: "backup", labelKey: "nav.backup", icon: "backup" },
+  { id: "audit", labelKey: "nav.audit", icon: "history" },
+  { id: "rules", labelKey: "nav.rules", icon: "book" }
 ];
 
 const mobileNavItems = navItems.filter((item) =>
@@ -47,6 +52,7 @@ export function AppShell({
   onNewEntry: () => void;
   children: ReactNode;
 }) {
+  const { t } = useI18n();
   const [showMore, setShowMore] = useState(false);
   const {
     serverStatus,
@@ -69,12 +75,12 @@ export function AppShell({
         <button className="brand" type="button" onClick={() => navigate("dashboard")}>
           <span className="brand__mark"><Icon name="calendar" size={22} /></span>
           <span>
-            <strong>Betreuungskalender</strong>
-            <small>Fakten lokal dokumentieren.</small>
+            <strong>{t("app.name")}</strong>
+            <small>{t("app.tagline")}</small>
           </span>
         </button>
 
-        <nav className="sidebar__nav" aria-label="Hauptnavigation">
+        <nav className="sidebar__nav" aria-label={t("nav.main")}>
           {navItems.map((item) => (
             <button
               type="button"
@@ -84,14 +90,14 @@ export function AppShell({
               onClick={() => navigate(item.id)}
             >
               <Icon name={item.icon} />
-              <span>{item.label}</span>
+              <span>{t(item.labelKey)}</span>
             </button>
           ))}
         </nav>
 
         <div className="sidebar__privacy">
           <Icon name="info" size={18} />
-          <p>Fachliche Daten werden im lokalen SQLite-Dienst gespeichert.</p>
+          <p>{t("app.storageNotice")}</p>
         </div>
 
         <button
@@ -101,7 +107,7 @@ export function AppShell({
           onClick={() => navigate("settings")}
         >
           <Icon name="settings" />
-          <span>Einstellungen</span>
+          <span>{t("nav.settings")}</span>
         </button>
       </aside>
 
@@ -109,7 +115,7 @@ export function AppShell({
         <header className="mobile-header">
           <button className="brand brand--compact" type="button" onClick={() => navigate("dashboard")}>
             <span className="brand__mark"><Icon name="calendar" size={20} /></span>
-            <strong>Betreuungskalender</strong>
+            <strong>{t("app.name")}</strong>
           </button>
           <button
             className="button button--primary button--icon-mobile"
@@ -117,36 +123,46 @@ export function AppShell({
             data-testid="mobile-entry-create"
             onClick={onNewEntry}
             disabled={!canWrite}
-            aria-label="Eintrag erfassen"
+            aria-label={t("action.newEntry")}
           >
             <Icon name="plus" />
-            <span>Eintrag</span>
+            <span>{t("action.entryShort")}</span>
           </button>
         </header>
         {serverStatus === "offline" ? (
-          <div className="offline-banner offline-banner--readonly" role="alert" aria-live="assertive">
+          <div
+            className="offline-banner offline-banner--readonly"
+            role="alert"
+            aria-live="assertive"
+            data-testid="offline-banner"
+            data-state="readonly"
+          >
             <Icon name="info" size={17} />
             <span>
-              <strong>Nur-Lese-Modus.</strong> {SERVER_UNAVAILABLE_MESSAGE}
-              <small className="offline-banner__mobile-note">
-                Vorhandene Daten können angesehen und exportiert werden.
+              <strong>{t("status.readOnly")}</strong>{" "}
+              {t("status.serverUnavailable")}
+              <small
+                className="offline-banner__mobile-note"
+                data-testid="offline-existing-data"
+              >
+                {t("status.offlineExistingData")}
               </small>
             </span>
             <button className="button button--quiet" type="button" onClick={() => void reload()}>
-              Erneut verbinden
+              {t("action.retryConnection")}
             </button>
           </div>
         ) : null}
         {serverStatus === "checking" || isLoading ? (
           <div className="offline-banner" role="status" data-testid="app-loading">
             <Icon name="info" size={17} />
-            Daten werden aus SQLite geladen …
+            {t("status.loading")}
           </div>
         ) : null}
         {serverStatus === "online" && isSaving ? (
           <div className="offline-banner" role="status">
             <Icon name="info" size={17} />
-            Änderungen werden gespeichert …
+            {t("status.saving")}
           </div>
         ) : null}
         {serverStatus === "online" && error ? (
@@ -154,7 +170,7 @@ export function AppShell({
             <Icon name="alert" size={17} />
             <span>{error}</span>
             <button className="button button--quiet" type="button" onClick={clearError}>
-              Schließen
+              {t("action.close")}
             </button>
           </div>
         ) : null}
@@ -168,12 +184,12 @@ export function AppShell({
             role="dialog"
             data-testid="mobile-more-sheet"
             aria-modal="true"
-            aria-label="Weitere Bereiche"
+            aria-label={t("nav.moreAreas")}
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mobile-more-sheet__header">
-              <strong>Weitere Bereiche</strong>
-              <button className="icon-button" type="button" onClick={() => setShowMore(false)} aria-label="Menü schließen">
+              <strong>{t("nav.moreAreas")}</strong>
+              <button className="icon-button" type="button" onClick={() => setShowMore(false)} aria-label={t("nav.closeMenu")}>
                 <Icon name="close" size={19} />
               </button>
             </div>
@@ -189,7 +205,7 @@ export function AppShell({
                     onClick={() => navigate(item.id)}
                   >
                     <Icon name={item.icon} size={20} />
-                    <span>{item.label}</span>
+                    <span>{t(item.labelKey)}</span>
                   </button>
                 ))}
               <button
@@ -199,14 +215,14 @@ export function AppShell({
                 onClick={() => navigate("settings")}
               >
                 <Icon name="settings" size={20} />
-                <span>Einstellungen</span>
+                <span>{t("nav.settings")}</span>
               </button>
             </div>
           </section>
         </div>
       ) : null}
 
-      <nav className="mobile-nav" aria-label="Mobile Navigation" data-testid="mobile-navigation">
+      <nav className="mobile-nav" aria-label={t("nav.mobile")} data-testid="mobile-navigation">
         {mobileNavItems.map((item) => (
           <button
             type="button"
@@ -216,7 +232,7 @@ export function AppShell({
             onClick={() => navigate(item.id)}
           >
             <Icon name={item.icon} size={19} />
-            <span>{item.label}</span>
+            <span>{t(item.labelKey)}</span>
           </button>
         ))}
         <button
@@ -225,10 +241,10 @@ export function AppShell({
           className={showMore || !mobileNavItems.some((item) => item.id === activePage) ? "is-active" : ""}
           onClick={() => setShowMore((current) => !current)}
           aria-expanded={showMore}
-          aria-label="Weitere Bereiche öffnen"
+          aria-label={t("nav.openMore")}
         >
           <Icon name="list" size={19} />
-          <span>Mehr</span>
+          <span>{t("nav.more")}</span>
         </button>
       </nav>
     </div>

@@ -71,19 +71,10 @@ test("switches to read-only mode when the API is unavailable", async ({
   await context.setOffline(true);
   await page.evaluate(() => window.dispatchEvent(new Event("offline")));
 
-  const banner = page.getByRole("alert");
-  await expect(banner).toContainText("Nur-Lese-Modus");
-  await expect(banner).toContainText(
-    "Die Serververbindung ist nicht verfügbar. Änderungen können derzeit nicht gespeichert werden."
-  );
-  await expect(page.getByRole("button", {
-    name: "Eintrag erfassen",
-    exact: true
-  })).toBeDisabled();
-  await expect(page.getByRole("button", {
-    name: "Monat abschließen",
-    exact: true
-  })).toBeDisabled();
+  const banner = page.getByTestId("offline-banner");
+  await expect(banner).toHaveAttribute("data-state", "readonly");
+  await expect(page.getByTestId("dashboard-new-entry")).toBeDisabled();
+  await expect(page.getByTestId("dashboard-close-month")).toBeDisabled();
 
   const cachedApiRequests = await page.evaluate(async () => {
     const cacheNames = await caches.keys();
@@ -102,4 +93,26 @@ test("switches to read-only mode when the API is unavailable", async ({
   expect(cachedApiRequests).toEqual([]);
 
   await context.setOffline(false);
+});
+
+test("persists the selected language and localizes the report surface", async ({
+  page
+}) => {
+  await openApp(page);
+  await navigate(page, "settings");
+
+  const language = page.getByTestId("settings-language");
+  await language.selectOption("en");
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await expect(page.getByTestId("nav-report")).toContainText("Report");
+
+  await navigate(page, "report");
+  await expect(page.getByTestId("report-title")).toHaveText(
+    "Report on documented care periods"
+  );
+
+  await page.reload();
+  await expect(page.locator("html")).toHaveAttribute("lang", "en");
+  await navigate(page, "settings");
+  await expect(page.getByTestId("settings-language")).toHaveValue("en");
 });

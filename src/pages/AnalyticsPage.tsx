@@ -10,6 +10,7 @@ import {
 import { calculatePeriodStats, entriesForRange } from "../lib/analytics";
 import { exportEntriesCsv } from "../lib/export";
 import { exportPdfReport, makeReportId } from "../lib/report";
+import { useI18n } from "../i18n/I18nProvider";
 import { costCategoryLabels } from "../lib/labels";
 import { useAppStore } from "../store/AppStore";
 
@@ -19,6 +20,7 @@ const euro = new Intl.NumberFormat("de-DE", {
 });
 
 export function AnalyticsPage({ monthKey }: { monthKey: string }) {
+  const { locale } = useI18n();
   const { data } = useAppStore();
   const [selection, setSelection] = useState<PeriodSelection>(() =>
     periodSelection("month", monthKey)
@@ -37,9 +39,10 @@ export function AnalyticsPage({ monthKey }: { monthKey: string }) {
     setCreatingPdf(true);
     try {
       await exportPdfReport(data, selection.startDate, selection.endDate, {
-        reportId: makeReportId(),
-        includeAuditHistory: false,
-        createdAt: new Date().toISOString()
+      reportId: makeReportId(),
+      includeAuditHistory: false,
+      createdAt: new Date().toISOString(),
+      locale
       });
     } finally {
       setCreatingPdf(false);

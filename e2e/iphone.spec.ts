@@ -50,11 +50,9 @@ test("explains read-only mode on mobile when the server is unavailable", async (
   await context.setOffline(true);
   await page.evaluate(() => window.dispatchEvent(new Event("offline")));
 
-  const banner = page.getByRole("alert");
-  await expect(banner).toContainText("Nur-Lese-Modus");
-  await expect(banner).toContainText(
-    "Vorhandene Daten können angesehen und exportiert werden."
-  );
+  const banner = page.getByTestId("offline-banner");
+  await expect(banner).toHaveAttribute("data-state", "readonly");
+  await expect(page.getByTestId("offline-existing-data")).toBeVisible();
   await expect(page.getByTestId("mobile-entry-create")).toBeDisabled();
 
   await navigate(page, "calendar");

@@ -95,6 +95,7 @@ export function DashboardPage({
           <button
             className={closure ? "button button--secondary" : "button button--primary"}
             type="button"
+            data-testid="dashboard-close-month"
             onClick={openClosureDialog}
             disabled={!closure && (!canWrite || isSaving)}
           >
@@ -102,7 +103,7 @@ export function DashboardPage({
             {closure ? "Monat abgeschlossen" : "Monat abschließen"}
           </button>
           <FieldHelpButton fieldId="monthClosure.close" />
-          <button className="button button--primary desktop-only" type="button" onClick={() => onNewEntry()} disabled={!canWrite || isSaving}>
+          <button className="button button--primary desktop-only" data-testid="dashboard-new-entry" type="button" onClick={() => onNewEntry()} disabled={!canWrite || isSaving}>
             <Icon name="plus" />
             Eintrag erfassen
           </button>
