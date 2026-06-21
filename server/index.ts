@@ -18,6 +18,7 @@ import { monthClosingRoutes } from "./routes/monthClosings.js";
 import { migrationRoutes } from "./routes/migration.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { unavailablePeriodRoutes } from "./routes/unavailablePeriods.js";
+import { externalCalendarRoutes } from "./routes/externalCalendars.js";
 
 runMigrations();
 
@@ -180,6 +181,7 @@ await app.register(holidayRoutes);
 await app.register(contactPatternRoutes);
 await app.register(settingsRoutes);
 await app.register(unavailablePeriodRoutes);
+await app.register(externalCalendarRoutes);
 await app.register(monthClosingRoutes);
 await app.register(migrationRoutes);
 await app.register(auditRoutes);

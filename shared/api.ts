@@ -130,3 +130,32 @@ export interface ApiUnavailablePeriod {
   updatedAt: string;
   warnings: string[];
 }
+
+export interface ApiExternalCalendarSource {
+  id: string;
+  name: string;
+  color: string;
+  visible: boolean;
+  lastImportedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiExternalCalendarEvent {
+  id: string;
+  sourceId: string;
+  sourceName: string;
+  sourceColor: string;
+  title: string;
+  description?: string;
+  startDateTime: string;
+  endDateTime: string;
+  allDay: boolean;
+  location?: string;
+}
+
+export type ExternalCalendarErrorCode =
+  | "external_calendar_invalid"
+  | "external_calendar_limit"
+  | "external_calendar_recurrence_unsupported"
+  | "external_calendar_not_found";

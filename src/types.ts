@@ -154,6 +154,29 @@ export interface UnavailablePeriod {
   deletedAt?: string;
 }
 
+export interface ExternalCalendarSource {
+  id: string;
+  name: string;
+  color: string;
+  visible: boolean;
+  lastImportedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ExternalCalendarEvent {
+  id: string;
+  sourceId: string;
+  sourceName: string;
+  sourceColor: string;
+  title: string;
+  description?: string;
+  startDateTime: string;
+  endDateTime: string;
+  allDay: boolean;
+  location?: string;
+}
+
 export interface AppSettings {
   kilometerRate: number;
   defaultLocation: CareLocation;
@@ -225,6 +248,7 @@ export interface AppData {
   entries: CareEntry[];
   holidayPeriods: HolidayPeriod[];
   unavailablePeriods: UnavailablePeriod[];
+  externalCalendarSources: ExternalCalendarSource[];
   contactPatterns: ContactPattern[];
   auditLog: AuditLogEntry[];
   monthClosures: MonthlyClosure[];

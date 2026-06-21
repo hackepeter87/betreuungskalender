@@ -3,6 +3,7 @@ import { CHILD_COLORS } from "../data/defaults";
 import { Icon } from "../components/Icon";
 import { FieldHelpButton, FieldHelpLabel } from "../components/FieldHelp";
 import { Modal } from "../components/Modal";
+import { ExternalCalendarManager } from "../components/ExternalCalendarManager";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
 import { localeMetadata, supportedLocales } from "../i18n/resources";
@@ -229,6 +230,8 @@ export function SettingsPage() {
           <button className="button button--danger-quiet" type="button" onClick={() => void clearData()} disabled={!canWrite || isSaving}><Icon name="trash" size={17} />{copy(locale, "settings", "clearData")}</button>
         </div>
       </section>
+
+      <ExternalCalendarManager />
 
       {editingChild ? (
         <Modal title={editingChild === "new" ? copy(locale, "settings", "addChild") : copy(locale, "settings", "editChild")} onClose={() => setEditingChild(null)}>
