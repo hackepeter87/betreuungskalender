@@ -12,8 +12,11 @@ import {
   exportUnavailablePeriodsCsv
 } from "../lib/export";
 import { useAppStore } from "../store/AppStore";
+import { useI18n } from "../i18n/I18nProvider";
+import { copy } from "../i18n/catalog";
 
 export function BackupPage() {
+  const { locale, intlLocale } = useI18n();
   const {
     data,
     recordBackupExport,
@@ -46,10 +49,10 @@ export function BackupPage() {
     const recorded = await recordBackupExport(timestamp);
     setMessage(
       recorded
-        ? { type: "success", text: "JSON-Sicherung wurde erstellt." }
+        ? { type: "success", text: copy(locale, "backup", "exportSuccess") }
         : {
             type: "error",
-            text: "Die Datei wurde erzeugt, der Backup-Zeitpunkt konnte jedoch nicht in SQLite gespeichert werden."
+            text: copy(locale, "backup", "exportRecordedFailed")
           }
     );
   };
@@ -59,8 +62,8 @@ export function BackupPage() {
       !backupIsCurrent &&
       !window.confirm(
         data.lastJsonBackupAt
-          ? `Das letzte JSON-Backup ist ${backupAgeDays} Tage alt. Vor einem Import wird ein aktuelles Backup empfohlen. Trotzdem eine Importdatei auswählen?`
-          : "Es wurde noch kein JSON-Backup erstellt. Vor einem Import wird ein aktuelles Backup empfohlen. Trotzdem eine Importdatei auswählen?"
+          ? copy(locale, "backup", "importOutdatedConfirm", { days: backupAgeDays ?? 0 })
+          : copy(locale, "backup", "importMissingConfirm")
       )
     ) {
       return;
@@ -75,16 +78,19 @@ export function BackupPage() {
 
     try {
       const imported = parseBackup(await file.text());
-      if (!window.confirm(`Import ersetzt ${data.entries.filter((entry) => !entry.deletedAt).length} vorhandene Einträge durch ${imported.entries.filter((entry) => !entry.deletedAt).length} Einträge. Diese Wiederherstellung jetzt ausführen?`)) {
+      if (!window.confirm(copy(locale, "backup", "importReplaceConfirm", {
+        current: data.entries.filter((entry) => !entry.deletedAt).length,
+        imported: imported.entries.filter((entry) => !entry.deletedAt).length
+      }))) {
         return;
       }
       if (await replaceData(imported)) {
-        setMessage({ type: "success", text: "Sicherung wurde erfolgreich importiert." });
+        setMessage({ type: "success", text: copy(locale, "backup", "importSuccess") });
       }
     } catch (error) {
       setMessage({
         type: "error",
-        text: error instanceof Error ? error.message : "Die Datei konnte nicht importiert werden."
+        text: error instanceof Error ? error.message : copy(locale, "backup", "importFailed")
       });
     }
   };
@@ -93,16 +99,16 @@ export function BackupPage() {
     <div className="page page--narrow" data-testid="page-backup">
       <div className="page-header">
         <div>
-          <p className="page-header__context">Datensicherung</p>
-          <h1>Export & Import</h1>
+          <p className="page-header__context">{copy(locale, "backup", "context")}</p>
+          <h1>{copy(locale, "backup", "title")}</h1>
         </div>
       </div>
 
       <section className="backup-hero">
         <span className="backup-hero__icon"><Icon name="backup" size={30} /></span>
         <div>
-          <h2>Deine Daten liegen in der lokalen SQLite-Datenbank</h2>
-          <p>Es gibt keine Cloud-Synchronisation. Eine regelmäßige JSON-Sicherung schützt vor Datenverlust und ermöglicht die Wiederherstellung auf einer anderen Installation.</p>
+          <h2>{copy(locale, "backup", "heroTitle")}</h2>
+          <p>{copy(locale, "backup", "heroDescription")}</p>
         </div>
       </section>
 
@@ -118,13 +124,13 @@ export function BackupPage() {
         <div>
           <strong>
             {data.lastJsonBackupAt
-              ? `Letztes JSON-Backup: ${formatDateTime(data.lastJsonBackupAt)}`
-              : "Noch kein JSON-Backup dokumentiert"}
+              ? copy(locale, "backup", "latestBackup", { date: formatDateTime(data.lastJsonBackupAt, intlLocale) })
+              : copy(locale, "backup", "noBackupDocumented")}
           </strong>
           <p>
             {backupIsCurrent
-              ? "Die letzte Sicherung ist höchstens sieben Tage alt."
-              : "Die letzte Sicherung fehlt oder ist älter als sieben Tage. Bitte vor größeren Änderungen oder einem Import sichern."}
+              ? copy(locale, "backup", "backupCurrent")
+              : copy(locale, "backup", "backupWarning")}
           </p>
         </div>
       </section>
@@ -133,19 +139,19 @@ export function BackupPage() {
         <section className="panel backup-card">
           <span className="backup-card__number">01</span>
           <div>
-            <h2>JSON exportieren</h2>
-            <p>Speichert Kinder, Betreuungseinträge, Umgangsregeln, Ferien, Nichtverfügbarkeiten, Fahrten, Kosten und Einstellungen vollständig in einer Datei.</p>
+            <h2>{copy(locale, "backup", "exportJson")}</h2>
+            <p>{copy(locale, "backup", "exportDescription")}</p>
             <dl>
-              <div><dt>Kinder</dt><dd>{data.children.length}</dd></div>
-              <div><dt>Einträge</dt><dd>{data.entries.filter((entry) => !entry.deletedAt).length}</dd></div>
-              <div><dt>Letzte Änderung</dt><dd>{formatDate(data.updatedAt)}</dd></div>
-              <div><dt>Letztes Backup</dt><dd>{data.lastJsonBackupAt ? formatDate(data.lastJsonBackupAt) : "Noch keines"}</dd></div>
+              <div><dt>{copy(locale, "backup", "children")}</dt><dd>{data.children.length}</dd></div>
+              <div><dt>{copy(locale, "backup", "entries")}</dt><dd>{data.entries.filter((entry) => !entry.deletedAt).length}</dd></div>
+              <div><dt>{copy(locale, "backup", "lastChange")}</dt><dd>{formatDate(data.updatedAt, intlLocale)}</dd></div>
+              <div><dt>{copy(locale, "backup", "lastBackup")}</dt><dd>{data.lastJsonBackupAt ? formatDate(data.lastJsonBackupAt, intlLocale) : copy(locale, "backup", "none")}</dd></div>
             </dl>
           </div>
           <span className="action-with-help">
             <button className="button button--primary" type="button" onClick={() => void exportJson()} disabled={isSaving}>
               <Icon name="download" />
-              JSON exportieren
+              {copy(locale, "backup", "exportJson")}
             </button>
             <FieldHelpButton fieldId="export.jsonExport" showRequirement={false} />
           </span>
@@ -154,18 +160,18 @@ export function BackupPage() {
         <section className="panel backup-card">
           <span className="backup-card__number">02</span>
           <div>
-            <h2>JSON importieren</h2>
-            <p>Lädt eine zuvor exportierte Sicherung. Die Datei wird geprüft und anschließend transaktional in SQLite wiederhergestellt.</p>
+            <h2>{copy(locale, "backup", "importJson")}</h2>
+            <p>{copy(locale, "backup", "importDescription")}</p>
             <div className="import-warning">
               <Icon name="alert" size={18} />
-              Ein Import ersetzt den aktuellen Datenbestand.
+              {copy(locale, "backup", "importWarning")}
             </div>
           </div>
           <input ref={fileInputRef} className="sr-only" type="file" accept="application/json,.json" onChange={importJson} />
           <span className="action-with-help">
             <button className="button button--secondary" type="button" onClick={chooseImport} disabled={!canWrite || isSaving}>
               <Icon name="upload" />
-              JSON auswählen
+              {copy(locale, "backup", "chooseJson")}
             </button>
             <FieldHelpButton fieldId="export.jsonImport" showRequirement={false} />
           </span>
@@ -175,31 +181,31 @@ export function BackupPage() {
       <section className="panel csv-export-panel" data-testid="csv-export-panel">
         <div className="panel__header">
           <div>
-            <h2>CSV-Rohdatenexport</h2>
-            <p>Die Dateien sind getrennt, damit Betreuungseinträge und ihre Unterpositionen ohne Informationsverlust ausgewertet werden können.</p>
+            <h2>{copy(locale, "backup", "csvTitle")}</h2>
+            <p>{copy(locale, "backup", "csvDescription")}</p>
           </div>
           <FieldHelpButton fieldId="export.csvExport" showRequirement={false} />
         </div>
         <div className="csv-export-grid">
           <button className="button button--secondary" data-testid="export-entries-csv" type="button" onClick={() => exportEntriesCsv(data)}>
             <Icon name="download" size={17} />
-            Betreuungseinträge
+            {copy(locale, "backup", "careEntries")}
           </button>
           <button className="button button--secondary" type="button" onClick={() => exportTripsCsv(data)}>
             <Icon name="car" size={17} />
-            Fahrten
+            {copy(locale, "backup", "trips")}
           </button>
           <button className="button button--secondary" type="button" onClick={() => exportCostsCsv(data)}>
             <Icon name="coins" size={17} />
-            Kosten
+            {copy(locale, "backup", "costs")}
           </button>
           <button className="button button--secondary" type="button" onClick={() => exportHolidaysCsv(data)}>
             <Icon name="sun" size={17} />
-            Ferien
+            {copy(locale, "backup", "holidays")}
           </button>
           <button className="button button--secondary" type="button" onClick={() => exportUnavailablePeriodsCsv(data)}>
             <Icon name="briefcase" size={17} />
-            Nichtverfügbarkeiten
+            {copy(locale, "backup", "unavailability")}
           </button>
         </div>
       </section>

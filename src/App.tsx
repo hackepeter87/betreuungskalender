@@ -5,6 +5,7 @@ import { Modal } from "./components/Modal";
 import { LegacyMigrationDialog } from "./components/LegacyMigrationDialog";
 import { api } from "./lib/api";
 import { useI18n } from "./i18n/I18nProvider";
+import { copy } from "./i18n/catalog";
 import {
   detectLegacyBrowserData,
   isLegacyFingerprintIgnored,
@@ -131,11 +132,11 @@ export function App() {
           title={
             locale === "en"
               ? entryDialog.entry
-                ? "Edit care entry"
-                : "Create care entry"
+                ? copy(locale, "app", "editCareEntry")
+                : copy(locale, "app", "createCareEntry")
               : entryDialog.entry
-                ? "Betreuungseintrag bearbeiten"
-                : "Betreuungseintrag erfassen"
+                ? copy(locale, "app", "editCareEntry")
+                : copy(locale, "app", "createCareEntry")
           }
           size="large"
           onClose={() => setEntryDialog(null)}

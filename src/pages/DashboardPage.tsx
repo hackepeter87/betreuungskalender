@@ -13,6 +13,8 @@ import { FieldHelpButton, FieldHelpLabel } from "../components/FieldHelp";
 import { Icon, type IconName } from "../components/Icon";
 import { Modal } from "../components/Modal";
 import { MonthToolbar } from "../components/MonthToolbar";
+import { useI18n } from "../i18n/I18nProvider";
+import { copy } from "../i18n/catalog";
 
 export function DashboardPage({
   monthKey,
@@ -29,6 +31,7 @@ export function DashboardPage({
   onOpenSettings: () => void;
   onOpenCalendar: () => void;
 }) {
+  const { locale, intlLocale } = useI18n();
   const { data, closeMonth, canWrite, isSaving } = useAppStore();
   const [showClosure, setShowClosure] = useState(false);
   const [closureConfirmed, setClosureConfirmed] = useState(false);
@@ -64,18 +67,18 @@ export function DashboardPage({
   const backupIsCurrent = backupAgeDays !== null && backupAgeDays <= 7;
 
   const metrics: Array<{ label: string; value: string; detail: string; icon: IconName; tone: string }> = [
-    { label: "Betreuungstage", value: String(stats.careDays), detail: "tatsächliche Kalendertage", icon: "calendar", tone: "teal" },
-    { label: "Übernachtungen", value: String(stats.overnights), detail: "im gewählten Monat", icon: "moon", tone: "violet" },
-    { label: "Wochenenden", value: String(stats.weekends), detail: "mit dokumentierter Betreuung", icon: "users", tone: "amber" },
-    { label: "Vollständigkeit", value: `${stats.completeness} %`, detail: `${monthEntries.length} Einträge geprüft`, icon: stats.completeness === 100 ? "check" : "alert", tone: stats.completeness === 100 ? "teal" : "coral" },
-    { label: "Datenqualität", value: String(dataQuality.totalIssues), detail: dataQuality.totalIssues ? "Hinweise im gewählten Monat" : "keine offenen Hinweise", icon: dataQuality.totalIssues ? "alert" : "check", tone: dataQuality.totalIssues ? "coral" : "teal" }
+    { label: copy(locale, "dashboard", "careDays"), value: String(stats.careDays), detail: copy(locale, "dashboard", "actualDays"), icon: "calendar", tone: "teal" },
+    { label: copy(locale, "dashboard", "overnights"), value: String(stats.overnights), detail: copy(locale, "dashboard", "selectedMonth"), icon: "moon", tone: "violet" },
+    { label: copy(locale, "dashboard", "weekends"), value: String(stats.weekends), detail: copy(locale, "dashboard", "documentedCare"), icon: "users", tone: "amber" },
+    { label: copy(locale, "dashboard", "completeness"), value: `${stats.completeness} %`, detail: copy(locale, "dashboard", "checkedEntries", { count: monthEntries.length }), icon: stats.completeness === 100 ? "check" : "alert", tone: stats.completeness === 100 ? "teal" : "coral" },
+    { label: copy(locale, "dashboard", "dataQuality"), value: String(dataQuality.totalIssues), detail: dataQuality.totalIssues ? copy(locale, "dashboard", "monthHints") : copy(locale, "dashboard", "noOpenHints"), icon: dataQuality.totalIssues ? "alert" : "check", tone: dataQuality.totalIssues ? "coral" : "teal" }
   ];
   const mobileMetrics: Array<{ label: string; value: string; detail: string; icon: IconName; tone: string }> = [
-    { label: "Übernachtungen", value: String(stats.overnights), detail: "im gewählten Monat", icon: "moon", tone: "violet" },
-    { label: "Zusatzbetreuung", value: String(monthEntries.filter((entry) => entry.status === "completed" && entry.additionalCare).length), detail: "durchgeführte Termine", icon: "plus", tone: "teal" },
-    { label: "Offene Termine", value: String(monthEntries.filter((entry) => entry.status === "planned" && entry.generatedByPatternId).length), detail: "geplante Soll-Termine", icon: "calendar", tone: "amber" },
-    { label: "Datenqualität", value: String(dataQuality.totalIssues), detail: dataQuality.totalIssues ? "offene Hinweise" : "keine Hinweise", icon: dataQuality.totalIssues ? "alert" : "check", tone: dataQuality.totalIssues ? "coral" : "teal" },
-    { label: "Letztes Backup", value: backupAgeDays === null ? "–" : backupAgeDays === 0 ? "Heute" : `${backupAgeDays} T.`, detail: backupIsCurrent ? "Sicherung aktuell" : "Sicherung erforderlich", icon: backupIsCurrent ? "backup" : "alert", tone: backupIsCurrent ? "teal" : "coral" }
+    { label: copy(locale, "dashboard", "overnights"), value: String(stats.overnights), detail: copy(locale, "dashboard", "selectedMonth"), icon: "moon", tone: "violet" },
+    { label: copy(locale, "dashboard", "additionalCare"), value: String(monthEntries.filter((entry) => entry.status === "completed" && entry.additionalCare).length), detail: copy(locale, "dashboard", "completedDates"), icon: "plus", tone: "teal" },
+    { label: copy(locale, "dashboard", "openDates"), value: String(monthEntries.filter((entry) => entry.status === "planned" && entry.generatedByPatternId).length), detail: copy(locale, "dashboard", "plannedDates"), icon: "calendar", tone: "amber" },
+    { label: copy(locale, "dashboard", "dataQuality"), value: String(dataQuality.totalIssues), detail: dataQuality.totalIssues ? copy(locale, "dashboard", "openHints") : copy(locale, "dashboard", "noHints"), icon: dataQuality.totalIssues ? "alert" : "check", tone: dataQuality.totalIssues ? "coral" : "teal" },
+    { label: copy(locale, "dashboard", "lastBackup"), value: backupAgeDays === null ? "–" : backupAgeDays === 0 ? copy(locale, "common", "today") : `${backupAgeDays} ${locale === "en" ? "d" : "T."}`, detail: backupIsCurrent ? copy(locale, "dashboard", "backupCurrent") : copy(locale, "dashboard", "backupRequired"), icon: backupIsCurrent ? "backup" : "alert", tone: backupIsCurrent ? "teal" : "coral" }
   ];
 
   const openClosureDialog = () => {
@@ -87,8 +90,8 @@ export function DashboardPage({
     <div className="page" data-testid="page-dashboard">
       <div className="page-header">
         <div>
-          <p className="page-header__context">Monatsübersicht</p>
-          <h1>{formatMonth(monthKey)}</h1>
+          <p className="page-header__context">{copy(locale, "dashboard", "context")}</p>
+          <h1>{formatMonth(monthKey, intlLocale)}</h1>
         </div>
         <div className="page-header__actions">
           <MonthToolbar monthKey={monthKey} onChange={onMonthChange} />
@@ -100,12 +103,12 @@ export function DashboardPage({
             disabled={!closure && (!canWrite || isSaving)}
           >
             <Icon name={closure ? "lock" : "check"} size={17} />
-            {closure ? "Monat abgeschlossen" : "Monat abschließen"}
+            {closure ? copy(locale, "dashboard", "monthClosed") : copy(locale, "dashboard", "closeMonth")}
           </button>
           <FieldHelpButton fieldId="monthClosure.close" />
           <button className="button button--primary desktop-only" data-testid="dashboard-new-entry" type="button" onClick={() => onNewEntry()} disabled={!canWrite || isSaving}>
             <Icon name="plus" />
-            Eintrag erfassen
+            {copy(locale, "dashboard", "createEntry")}
           </button>
         </div>
       </div>
@@ -114,16 +117,16 @@ export function DashboardPage({
         <section className="onboarding-panel">
           <div className="onboarding-panel__icon"><Icon name="child" size={28} /></div>
           <div>
-            <h2>Richte deinen Betreuungskalender ein</h2>
-            <p>Lege mindestens ein Kind an. Danach kannst du Betreuungseinträge erfassen und monatlich auswerten.</p>
+            <h2>{copy(locale, "dashboard", "setupTitle")}</h2>
+            <p>{copy(locale, "dashboard", "setupDescription")}</p>
           </div>
           <button className="button button--primary" type="button" data-testid="dashboard-setup-child" onClick={onOpenSettings}>
-            Kind anlegen
+            {copy(locale, "dashboard", "addChild")}
           </button>
         </section>
       ) : null}
 
-      <section className="metric-grid metric-grid--desktop" aria-label="Monatskennzahlen">
+      <section className="metric-grid metric-grid--desktop" aria-label={copy(locale, "dashboard", "metrics")}>
         {metrics.map((metric) => (
           <article className="metric-card" key={metric.label}>
             <span className={`metric-card__icon metric-card__icon--${metric.tone}`}>
@@ -137,7 +140,7 @@ export function DashboardPage({
           </article>
         ))}
       </section>
-      <section className="metric-grid metric-grid--mobile" aria-label="Wichtigste Monatskennzahlen">
+      <section className="metric-grid metric-grid--mobile" aria-label={copy(locale, "dashboard", "mobileMetrics")}>
         {mobileMetrics.map((metric) => (
           <article className="metric-card" key={metric.label}>
             <span className={`metric-card__icon metric-card__icon--${metric.tone}`}>
@@ -156,10 +159,10 @@ export function DashboardPage({
         <section className={`closure-banner ${closure.changedAfterCloseAt ? "closure-banner--warning" : ""}`}>
           <Icon name="lock" size={20} />
           <div>
-            <strong>Monatsabschluss vom {formatDateTime(closure.closedAt)}</strong>
+            <strong>{copy(locale, "dashboard", "closureOn", { date: formatDateTime(closure.closedAt, intlLocale) })}</strong>
             <p>
-              {closure.summary.entryCount} Einträge, {closure.summary.careDays} Betreuungstage und {closure.summary.overnights} Übernachtungen wurden zusammengefasst.
-              {closure.changedAfterCloseAt ? ` Nachträgliche Änderung am ${formatDateTime(closure.changedAfterCloseAt)}.` : ""}
+              {copy(locale, "dashboard", "closureSummary", { entries: closure.summary.entryCount, days: closure.summary.careDays, overnights: closure.summary.overnights })}
+              {closure.changedAfterCloseAt ? copy(locale, "dashboard", "changedOn", { date: formatDateTime(closure.changedAfterCloseAt, intlLocale) }) : ""}
             </p>
           </div>
         </section>
@@ -169,11 +172,11 @@ export function DashboardPage({
         <section className="panel calendar-panel">
           <div className="panel__header">
             <div>
-              <h2>Kalender</h2>
-              <p>Einträge anklicken, um Details zu bearbeiten.</p>
+              <h2>{copy(locale, "dashboard", "calendar")}</h2>
+              <p>{copy(locale, "dashboard", "calendarDescription")}</p>
             </div>
             <button className="button button--quiet" type="button" onClick={onOpenCalendar}>
-              Große Ansicht
+              {copy(locale, "dashboard", "largeView")}
               <Icon name="chevronRight" size={16} />
             </button>
           </div>
@@ -189,9 +192,9 @@ export function DashboardPage({
             {data.children.map((child) => (
               <span key={child.id}><span className="child-dot" style={{ backgroundColor: child.color }} />{child.name}</span>
             ))}
-            <span><Icon name="moon" size={14} />Übernachtung</span>
-            <span><span className="legend-line legend-line--planned" />geplant</span>
-            <span><span className="legend-line legend-line--cancelled" />ausgefallen</span>
+            <span><Icon name="moon" size={14} />{copy(locale, "agenda", "overnight")}</span>
+            <span><span className="legend-line legend-line--planned" />{copy(locale, "dashboard", "planned")}</span>
+            <span><span className="legend-line legend-line--cancelled" />{copy(locale, "dashboard", "cancelled")}</span>
           </div>
         </section>
 
@@ -199,8 +202,8 @@ export function DashboardPage({
           <section className="panel">
             <div className="panel__header panel__header--compact">
               <div>
-                <h2>Je Kind</h2>
-                <p>Tatsächliche Betreuung</p>
+                <h2>{copy(locale, "dashboard", "perChild")}</h2>
+                <p>{copy(locale, "dashboard", "actualCare")}</p>
               </div>
             </div>
             <div className="child-stat-list">
@@ -209,63 +212,63 @@ export function DashboardPage({
                 return (
                   <div className="child-stat" key={child.id}>
                     <span className="child-stat__name"><span className="child-dot" style={{ backgroundColor: child.color }} />{child.name}</span>
-                    <span><strong>{childStats?.careDays ?? 0}</strong><small>Tage</small></span>
-                    <span><strong>{childStats?.overnights ?? 0}</strong><small>Nächte</small></span>
+                    <span><strong>{childStats?.careDays ?? 0}</strong><small>{copy(locale, "dashboard", "days")}</small></span>
+                    <span><strong>{childStats?.overnights ?? 0}</strong><small>{copy(locale, "dashboard", "nights")}</small></span>
                   </div>
                 );
               })}
-              {data.children.length === 0 ? <p className="empty-copy">Noch keine Kinder angelegt.</p> : null}
+              {data.children.length === 0 ? <p className="empty-copy">{copy(locale, "dashboard", "noChildren")}</p> : null}
             </div>
           </section>
 
           <section className="panel">
             <div className="panel__header panel__header--compact">
               <div>
-                <h2>Datenqualität</h2>
-                <p>Hinweise für {formatMonth(monthKey)}</p>
+                <h2>{copy(locale, "dashboard", "dataQuality")}</h2>
+                <p>{copy(locale, "dashboard", "qualityFor", { month: formatMonth(monthKey, intlLocale) })}</p>
               </div>
               <FieldHelpButton fieldId="monthClosure.dataQuality" />
             </div>
             <dl className="quality-list">
-              <div><dt>Unvollständige Einträge</dt><dd>{dataQuality.incompleteEntries}</dd></div>
-              <div><dt>Ausfälle ohne Notiz / Grund</dt><dd>{dataQuality.cancellationsWithoutReason}</dd></div>
-              <div><dt>Fahrten ohne Zweck</dt><dd>{dataQuality.tripsWithoutPurpose}</dd></div>
-              <div><dt>Kosten ohne Kategorie</dt><dd>{dataQuality.costsWithoutCategory}</dd></div>
-              <div><dt>Vergangene Termine noch geplant</dt><dd>{dataQuality.overduePlannedEntries}</dd></div>
+              <div><dt>{copy(locale, "dashboard", "incompleteEntries")}</dt><dd>{dataQuality.incompleteEntries}</dd></div>
+              <div><dt>{copy(locale, "dashboard", "cancellationsWithoutReason")}</dt><dd>{dataQuality.cancellationsWithoutReason}</dd></div>
+              <div><dt>{copy(locale, "dashboard", "tripsWithoutPurpose")}</dt><dd>{dataQuality.tripsWithoutPurpose}</dd></div>
+              <div><dt>{copy(locale, "dashboard", "costsWithoutCategory")}</dt><dd>{dataQuality.costsWithoutCategory}</dd></div>
+              <div><dt>{copy(locale, "dashboard", "overduePlanned")}</dt><dd>{dataQuality.overduePlannedEntries}</dd></div>
             </dl>
           </section>
 
           <section className="panel">
             <div className="panel__header panel__header--compact">
               <div>
-                <h2>Nächste Einträge</h2>
-                <p>Geplant und bevorstehend</p>
+                <h2>{copy(locale, "dashboard", "upcoming")}</h2>
+                <p>{copy(locale, "dashboard", "upcomingDescription")}</p>
               </div>
             </div>
             <div className="upcoming-list">
               {upcoming.map((entry) => (
                 <button type="button" key={entry.id} onClick={() => onEditEntry(entry)}>
-                  <span className="upcoming-list__date">{formatDate(entry.startDateTime)}</span>
+                  <span className="upcoming-list__date">{formatDate(entry.startDateTime, intlLocale)}</span>
                   <strong>
-                    {entry.childIds.map((id) => data.children.find((child) => child.id === id)?.name).filter(Boolean).join(" und ")}
+                    {entry.childIds.map((id) => data.children.find((child) => child.id === id)?.name).filter(Boolean).join(locale === "en" ? " and " : " und ")}
                   </strong>
-                  <small>{entry.status === "planned" ? "Geplant" : "Durchgeführt"}{entry.overnight ? " · Übernachtung" : ""}</small>
+                  <small>{entry.status === "planned" ? copy(locale, "dashboard", "plannedTitle") : copy(locale, "dashboard", "completed")}{entry.overnight ? ` · ${copy(locale, "agenda", "overnight")}` : ""}</small>
                 </button>
               ))}
-              {upcoming.length === 0 ? <p className="empty-copy">Keine bevorstehenden Einträge.</p> : null}
+              {upcoming.length === 0 ? <p className="empty-copy">{copy(locale, "dashboard", "noUpcoming")}</p> : null}
             </div>
           </section>
 
           <section className={`privacy-card ${backupIsCurrent ? "" : "privacy-card--warning"}`}>
             <Icon name={backupIsCurrent ? "check" : "alert"} size={19} />
             <div>
-              <strong>{backupIsCurrent ? "Backup aktuell" : "Backup erforderlich"}</strong>
+              <strong>{backupIsCurrent ? copy(locale, "dashboard", "backupUpToDate") : copy(locale, "dashboard", "backupNeeded")}</strong>
               <p>
                 {backupIsCurrent && data.lastJsonBackupAt
-                  ? `Letzte JSON-Sicherung: ${formatDate(data.lastJsonBackupAt)}.`
+                  ? copy(locale, "dashboard", "latestBackup", { date: formatDate(data.lastJsonBackupAt, intlLocale) })
                   : data.lastJsonBackupAt
-                    ? `Letzte Sicherung vor ${backupAgeDays} Tagen.`
-                    : "Noch keine JSON-Sicherung dokumentiert."}
+                    ? copy(locale, "dashboard", "backupDaysAgo", { days: backupAgeDays ?? 0 })
+                    : copy(locale, "dashboard", "noBackup")}
               </p>
             </div>
           </section>
@@ -274,7 +277,7 @@ export function DashboardPage({
 
       {showClosure ? (
         <Modal
-          title={closure ? `Monatsabschluss ${formatMonth(monthKey)}` : `Monat ${formatMonth(monthKey)} abschließen`}
+          title={closure ? copy(locale, "dashboard", "closureTitle", { month: formatMonth(monthKey, intlLocale) }) : copy(locale, "dashboard", "closeTitle", { month: formatMonth(monthKey, intlLocale) })}
           onClose={() => setShowClosure(false)}
         >
           <div className="closure-dialog">
@@ -282,9 +285,9 @@ export function DashboardPage({
               <>
                 <div className="notice">
                   <Icon name="lock" />
-                  <p>Der Monat wurde am {formatDateTime(closure.closedAt)} abgeschlossen. Änderungen bleiben nach einem Warnhinweis möglich und werden protokolliert.</p>
+                  <p>{copy(locale, "dashboard", "closedInfo", { date: formatDateTime(closure.closedAt, intlLocale) })}</p>
                 </div>
-                <ClosureSummary summary={closure.summary} />
+                <ClosureSummary summary={closure.summary} locale={locale} />
               </>
             ) : (
               <>
@@ -292,7 +295,7 @@ export function DashboardPage({
                   <div className="notice notice--warning">
                     <Icon name="alert" />
                     <div>
-                      <strong>Hinweise vor dem Abschluss</strong>
+                      <strong>{copy(locale, "dashboard", "warningsBeforeClose")}</strong>
                       <ul>
                         {closurePreview.warnings.map((warning) => <li key={warning}>{warning}</li>)}
                       </ul>
@@ -301,11 +304,11 @@ export function DashboardPage({
                 ) : (
                   <div className="notice notice--success">
                     <Icon name="check" />
-                    <p>Die Plausibilitätsprüfung enthält keine offenen Hinweise.</p>
+                    <p>{copy(locale, "dashboard", "noValidationHints")}</p>
                   </div>
                 )}
-                <ClosureSummary summary={closurePreview} />
-                <p className="muted-copy">Der Abschluss speichert diese Monatszusammenfassung. Spätere Änderungen sind nur nach einem ausdrücklichen Warnhinweis möglich.</p>
+                <ClosureSummary summary={closurePreview} locale={locale} />
+                <p className="muted-copy">{copy(locale, "dashboard", "closureDescription")}</p>
                 <label className="closure-confirmation">
                   <input
                     type="checkbox"
@@ -313,7 +316,7 @@ export function DashboardPage({
                     onChange={(event) => setClosureConfirmed(event.target.checked)}
                   />
                   <FieldHelpLabel fieldId="monthClosure.warnings">
-                    Ich habe die Hinweise und die Monatszusammenfassung geprüft.
+                    {copy(locale, "dashboard", "confirmed")}
                   </FieldHelpLabel>
                 </label>
               </>
@@ -321,7 +324,7 @@ export function DashboardPage({
             <footer className="form-actions">
               <span />
               <div className="form-actions__right">
-                <button className="button button--secondary" type="button" onClick={() => setShowClosure(false)}>Schließen</button>
+                <button className="button button--secondary" type="button" onClick={() => setShowClosure(false)}>{copy(locale, "common", "cancel")}</button>
                 {!closure ? (
                   <button
                     className="button button--primary"
@@ -332,7 +335,7 @@ export function DashboardPage({
                     }}
                   >
                     <Icon name="lock" size={17} />
-                    Monat verbindlich abschließen
+                    {copy(locale, "dashboard", "finalClose")}
                   </button>
                 ) : null}
               </div>
@@ -345,20 +348,22 @@ export function DashboardPage({
 }
 
 function ClosureSummary({
-  summary
+  summary,
+  locale
 }: {
   summary: ReturnType<typeof buildMonthlyClosureSummary>;
+  locale: "de" | "en";
 }) {
   return (
     <dl className="closure-summary">
-      <div><dt>Einträge</dt><dd>{summary.entryCount}</dd></div>
-      <div><dt>Durchgeführt</dt><dd>{summary.completedEntries}</dd></div>
-      <div><dt>Geplant</dt><dd>{summary.plannedEntries}</dd></div>
-      <div><dt>Ausgefallen</dt><dd>{summary.cancelledEntries}</dd></div>
-      <div><dt>Betreuungstage</dt><dd>{summary.careDays}</dd></div>
-      <div><dt>Übernachtungen</dt><dd>{summary.overnights}</dd></div>
-      <div><dt>Wochenenden</dt><dd>{summary.weekends}</dd></div>
-      <div><dt>Vollständigkeit</dt><dd>{summary.completeness} %</dd></div>
+      <div><dt>{copy(locale, "dashboard", "entries")}</dt><dd>{summary.entryCount}</dd></div>
+      <div><dt>{copy(locale, "dashboard", "completed")}</dt><dd>{summary.completedEntries}</dd></div>
+      <div><dt>{copy(locale, "dashboard", "plannedTitle")}</dt><dd>{summary.plannedEntries}</dd></div>
+      <div><dt>{copy(locale, "dashboard", "cancelledTitle")}</dt><dd>{summary.cancelledEntries}</dd></div>
+      <div><dt>{copy(locale, "dashboard", "careDays")}</dt><dd>{summary.careDays}</dd></div>
+      <div><dt>{copy(locale, "dashboard", "overnights")}</dt><dd>{summary.overnights}</dd></div>
+      <div><dt>{copy(locale, "dashboard", "weekends")}</dt><dd>{summary.weekends}</dd></div>
+      <div><dt>{copy(locale, "app", "completeness")}</dt><dd>{summary.completeness} %</dd></div>
     </dl>
   );
 }

@@ -1,10 +1,14 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { addDays, isWeekendDate, makeId, toDateKey } from "../lib/date";
 import {
-  costCategoryLabels,
-  paidByLabels,
-  tripPurposeLabels
+  costCategoryLabel,
+  handoverLabel,
+  locationLabel,
+  paidByLabel,
+  tripPurposeLabel
 } from "../lib/labels";
+import { useI18n } from "../i18n/I18nProvider";
+import { copy } from "../i18n/catalog";
 import { useAppStore } from "../store/AppStore";
 import type {
   CareEntry,
@@ -40,22 +44,8 @@ function dateTimeParts(value: string): { date: string; time: string } {
   return { date, time: time.slice(0, 5) };
 }
 
-const locationOptions: Array<[CareLocation, string]> = [
-  ["commuterApartment", "Pendlerwohnung"],
-  ["mainResidence", "Hauptwohnsitz"],
-  ["mother", "Bei der Mutter"],
-  ["school", "Schule"],
-  ["ogs", "OGS"],
-  ["other", "Anderer Ort"]
-];
-
-const handoverOptions: Array<[HandoverParty, string]> = [
-  ["mother", "Mutter"],
-  ["father", "Vater"],
-  ["school", "Schule"],
-  ["ogs", "OGS"],
-  ["thirdParty", "Dritte"]
-];
+const locationOptions: CareLocation[] = ["commuterApartment", "mainResidence", "mother", "school", "ogs", "other"];
+const handoverOptions: HandoverParty[] = ["mother", "father", "school", "ogs", "thirdParty"];
 
 function newTrip(): Trip {
   return {
@@ -85,6 +75,7 @@ export function EntryForm({
   onSaved,
   onCancel
 }: EntryFormProps) {
+  const { locale } = useI18n();
   const { data, saveEntry, removeEntry, canWrite, isSaving } = useAppStore();
   const defaultDate = initialDate ?? toDateKey(new Date());
   const initialStart = entry
@@ -167,27 +158,27 @@ export function EntryForm({
     setError("");
     const nextErrors: Record<string, string> = {};
     if (!childIds.length) {
-      nextErrors.children = "Bitte mindestens ein Kind auswählen.";
+      nextErrors.children = copy(locale, "entryForm", "childRequired");
     }
     if (new Date(endDateTime) <= new Date(startDateTime)) {
-      nextErrors.endDateTime = "Das Ende muss nach dem Beginn liegen.";
+      nextErrors.endDateTime = copy(locale, "entryForm", "endAfterStart");
     }
     if (status === "cancelled" && !cancellationReason.trim()) {
-      nextErrors.cancellationReason = "Bitte den Grund des Ausfalls dokumentieren.";
+      nextErrors.cancellationReason = copy(locale, "entryForm", "cancellationReasonRequired");
     }
     for (const trip of trips) {
       if (!Number.isFinite(trip.km) || trip.km <= 0) {
-        nextErrors[`trip-${trip.id}`] = "Kilometer müssen größer als 0 sein.";
+        nextErrors[`trip-${trip.id}`] = copy(locale, "entryForm", "kmPositive");
       }
     }
     for (const cost of costs) {
       if (!Number.isFinite(cost.amount) || cost.amount <= 0) {
-        nextErrors[`cost-${cost.id}`] = "Der Betrag muss größer als 0 sein.";
+        nextErrors[`cost-${cost.id}`] = copy(locale, "entryForm", "amountPositive");
       }
     }
     setFieldErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
-      setError("Bitte prüfe die markierten Pflichtfelder.");
+      setError(copy(locale, "entryForm", "fixFields"));
       return;
     }
 
@@ -231,7 +222,7 @@ export function EntryForm({
 
   const handleDelete = async () => {
     if (!entry) return;
-    if (window.confirm("Diesen Betreuungseintrag als gelöscht markieren? Die Änderung bleibt im Protokoll nachvollziehbar.")) {
+    if (window.confirm(copy(locale, "entryForm", "deleteConfirm"))) {
       if (await removeEntry(entry.id)) onSaved();
     }
   };
@@ -242,8 +233,8 @@ export function EntryForm({
         <div className="notice">
           <Icon name="info" />
           <div>
-            <strong>Soll-Termin aus der 14-Tage-Regel</strong>
-            <p>Der Status kann als durchgeführt oder mit Grund als ausgefallen dokumentiert werden.</p>
+            <strong>{copy(locale, "entryForm", "plannedRuleTitle")}</strong>
+            <p>{copy(locale, "entryForm", "plannedRuleDescription")}</p>
           </div>
         </div>
       ) : null}
@@ -252,15 +243,15 @@ export function EntryForm({
         <div className="notice notice--warning">
           <Icon name="alert" />
           <div>
-            <strong>Noch kein Kind angelegt</strong>
-            <p>Lege zuerst unter Einstellungen ein Kind an.</p>
+            <strong>{copy(locale, "entryForm", "noChildTitle")}</strong>
+            <p>{copy(locale, "entryForm", "noChildDescription")}</p>
           </div>
         </div>
       ) : null}
 
       <fieldset className="form-section" aria-describedby={fieldErrors.children ? "children-error" : undefined}>
         <legend className="field-label-row">
-          <span>Kinder <span className="required-mark">*</span></span>
+          <span>{copy(locale, "entryForm", "children")} <span className="required-mark">*</span></span>
           <FieldHelpButton fieldId="careEntry.children" />
         </legend>
         <div className="child-choice-grid">
@@ -296,15 +287,15 @@ export function EntryForm({
 
       <fieldset className="form-section">
         <legend className="field-label-row">
-          <span>Status und Einordnung</span>
+          <span>{copy(locale, "entryForm", "statusClassification")}</span>
           <FieldHelpButton fieldId="careEntry.status" />
         </legend>
         <div className="segmented-control segmented-control--three">
           {(
             [
-              ["completed", "Durchgeführt"],
-              ["planned", "Geplant"],
-              ["cancelled", "Ausgefallen"]
+              ["completed", copy(locale, "entryForm", "completed")],
+              ["planned", copy(locale, "entryForm", "planned")],
+              ["cancelled", copy(locale, "entryForm", "cancelled")]
             ] as Array<[EntryStatus, string]>
           ).map(([value, label]) => (
             <label key={value} className={status === value ? "is-active" : ""}>
@@ -327,25 +318,25 @@ export function EntryForm({
               onChange={(event) => setAdditionalCare(event.target.checked)}
             />
             <FieldHelpLabel fieldId="careEntry.additionalCare">
-              Als zusätzliche Betreuung kennzeichnen
+              {copy(locale, "entryForm", "additionalCare")}
             </FieldHelpLabel>
           </label>
         ) : null}
       </fieldset>
 
       <details className="form-section form-section--collapsible" open>
-        <summary className="form-section__summary">Zeitraum *</summary>
+        <summary className="form-section__summary">{copy(locale, "entryForm", "period")}</summary>
         <div className="datetime-grid">
           <label className="field">
-            <FieldHelpLabel fieldId="careEntry.startDateTime">Beginn Datum</FieldHelpLabel>
+            <FieldHelpLabel fieldId="careEntry.startDateTime">{copy(locale, "entryForm", "startDate")}</FieldHelpLabel>
             <input data-testid="entry-start-date" type="date" required value={startDate} onChange={(event) => setStartDate(event.target.value)} />
           </label>
           <label className="field">
-            <FieldHelpLabel fieldId="careEntry.startDateTime">Beginn Uhrzeit</FieldHelpLabel>
+            <FieldHelpLabel fieldId="careEntry.startDateTime">{copy(locale, "entryForm", "startTime")}</FieldHelpLabel>
             <input data-testid="entry-start-time" type="time" required value={startTime} onChange={(event) => setStartTime(event.target.value)} />
           </label>
           <label className="field">
-            <FieldHelpLabel fieldId="careEntry.endDateTime">Ende Datum</FieldHelpLabel>
+            <FieldHelpLabel fieldId="careEntry.endDateTime">{copy(locale, "entryForm", "endDate")}</FieldHelpLabel>
             <input
               type="date"
               data-testid="entry-end-date"
@@ -359,7 +350,7 @@ export function EntryForm({
             />
           </label>
           <label className="field">
-            <FieldHelpLabel fieldId="careEntry.endDateTime">Ende Uhrzeit</FieldHelpLabel>
+            <FieldHelpLabel fieldId="careEntry.endDateTime">{copy(locale, "entryForm", "endTime")}</FieldHelpLabel>
             <input
               type="time"
               data-testid="entry-end-time"
@@ -378,46 +369,46 @@ export function EntryForm({
           <label className="toggle">
             <input data-testid="entry-overnight" type="checkbox" checked={overnight} onChange={(event) => toggleOvernight(event.target.checked)} />
             <span />
-            <FieldHelpLabel fieldId="careEntry.overnight">Übernachtung</FieldHelpLabel>
+            <FieldHelpLabel fieldId="careEntry.overnight">{copy(locale, "entryForm", "overnight")}</FieldHelpLabel>
           </label>
           <label className="toggle">
             <input type="checkbox" checked={schoolHandover} onChange={(event) => setSchoolHandover(event.target.checked)} />
             <span />
-            <FieldHelpLabel fieldId="careEntry.schoolHandover">Morgens zur Schule</FieldHelpLabel>
+            <FieldHelpLabel fieldId="careEntry.schoolHandover">{copy(locale, "entryForm", "schoolHandover")}</FieldHelpLabel>
           </label>
           <label className="toggle">
             <input type="checkbox" checked={holiday} onChange={(event) => setHoliday(event.target.checked)} />
             <span />
-            <FieldHelpLabel fieldId="careEntry.holiday">Ferientag</FieldHelpLabel>
+            <FieldHelpLabel fieldId="careEntry.holiday">{copy(locale, "entryForm", "holiday")}</FieldHelpLabel>
           </label>
         </div>
       </details>
 
       <details className="form-section form-section--collapsible" open>
-        <summary className="form-section__summary">Ort und Übergabe</summary>
+        <summary className="form-section__summary">{copy(locale, "entryForm", "locationHandover")}</summary>
         <div className="form-grid">
           <label className="field">
             <FieldHelpLabel fieldId="careEntry.location" />
             <select value={location} onChange={(event) => setLocation(event.target.value as CareLocation)}>
-              {locationOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              {locationOptions.map((value) => <option key={value} value={value}>{locationLabel(value, locale)}</option>)}
             </select>
           </label>
           <label className="field">
             <FieldHelpLabel fieldId="careEntry.handoverFrom" />
             <select value={handoverFrom} onChange={(event) => setHandoverFrom(event.target.value as HandoverParty)}>
-              {handoverOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              {handoverOptions.map((value) => <option key={value} value={value}>{handoverLabel(value, locale)}</option>)}
             </select>
           </label>
           <label className="field">
             <FieldHelpLabel fieldId="careEntry.handoverTo" />
             <select value={handoverTo} onChange={(event) => setHandoverTo(event.target.value as HandoverParty)}>
-              {handoverOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              {handoverOptions.map((value) => <option key={value} value={value}>{handoverLabel(value, locale)}</option>)}
             </select>
           </label>
           {location === "other" ? (
             <label className="field">
               <FieldHelpLabel fieldId="careEntry.customLocation" />
-              <input value={customLocation} onChange={(event) => setCustomLocation(event.target.value)} placeholder="Ort eintragen" />
+              <input value={customLocation} onChange={(event) => setCustomLocation(event.target.value)} placeholder={copy(locale, "entryForm", "customLocation")} />
             </label>
           ) : null}
         </div>
@@ -443,22 +434,22 @@ export function EntryForm({
       ) : null}
 
       <details className="form-section form-section--collapsible">
-        <summary className="form-section__summary" data-testid="entry-trips-toggle">Fahrten <span>{trips.length || ""}</span></summary>
+        <summary className="form-section__summary" data-testid="entry-trips-toggle">{copy(locale, "entryForm", "trips")} <span>{trips.length || ""}</span></summary>
         <div className="subsection-heading">
           <div>
-            <p>Mehrere Fahrten können einem Betreuungseintrag zugeordnet werden.</p>
+            <p>{copy(locale, "entryForm", "tripsDescription")}</p>
           </div>
           <button className="button button--secondary" data-testid="entry-trip-add" type="button" onClick={() => setTrips((current) => [...current, newTrip()])}>
             <Icon name="plus" size={16} />
-            Fahrt
+            {copy(locale, "entryForm", "addTrip")}
           </button>
         </div>
         <div className="line-item-list">
           {trips.map((trip, index) => (
             <div className="line-item" data-testid="entry-trip-item" key={trip.id}>
               <div className="line-item__heading">
-                <strong>Fahrt {index + 1}</strong>
-                <button className="icon-button icon-button--danger" type="button" onClick={() => setTrips((current) => current.filter((item) => item.id !== trip.id))} aria-label={`Fahrt ${index + 1} löschen`}>
+                <strong>{copy(locale, "entryForm", "trip", { index: index + 1 })}</strong>
+                <button className="icon-button icon-button--danger" type="button" onClick={() => setTrips((current) => current.filter((item) => item.id !== trip.id))} aria-label={copy(locale, "entryForm", "deleteTrip", { index: index + 1 })}>
                   <Icon name="trash" size={16} />
                 </button>
               </div>
@@ -466,7 +457,7 @@ export function EntryForm({
                 <label className="field">
                   <FieldHelpLabel fieldId="trip.purpose" />
                   <select value={trip.purpose} onChange={(event) => updateTrip(trip.id, { purpose: event.target.value as TripPurpose })}>
-                    {Object.entries(tripPurposeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    {(["pickup", "return", "school", "doctor", "leisure", "workplace", "other"] as TripPurpose[]).map((value) => <option key={value} value={value}>{tripPurposeLabel(value, locale)}</option>)}
                   </select>
                 </label>
                 <label className="field">
@@ -484,7 +475,7 @@ export function EntryForm({
                       updateTrip(trip.id, { km: Number(event.target.value) });
                       setFieldErrors((errors) => ({ ...errors, [`trip-${trip.id}`]: "" }));
                     }}
-                    placeholder="0,0"
+                    placeholder={locale === "en" ? "0.0" : "0,0"}
                   />
                   {fieldErrors[`trip-${trip.id}`] ? <span className="field-error">{fieldErrors[`trip-${trip.id}`]}</span> : null}
                 </label>
@@ -509,27 +500,27 @@ export function EntryForm({
               </div>
             </div>
           ))}
-          {trips.length === 0 ? <p className="empty-copy">Keine Fahrten erfasst.</p> : null}
+          {trips.length === 0 ? <p className="empty-copy">{copy(locale, "entryForm", "noTrips")}</p> : null}
         </div>
       </details>
 
       <details className="form-section form-section--collapsible">
-        <summary className="form-section__summary" data-testid="entry-costs-toggle">Kosten <span>{costs.length || ""}</span></summary>
+        <summary className="form-section__summary" data-testid="entry-costs-toggle">{copy(locale, "entryForm", "costs")} <span>{costs.length || ""}</span></summary>
         <div className="subsection-heading">
           <div>
-            <p>Einzelne Kostenposten bleiben mit Kategorie und Zahler nachvollziehbar.</p>
+            <p>{copy(locale, "entryForm", "costsDescription")}</p>
           </div>
           <button className="button button--secondary" data-testid="entry-cost-add" type="button" onClick={() => setCosts((current) => [...current, newCost()])}>
             <Icon name="plus" size={16} />
-            Kosten
+            {copy(locale, "entryForm", "addCost")}
           </button>
         </div>
         <div className="line-item-list">
           {costs.map((cost, index) => (
             <div className="line-item" data-testid="entry-cost-item" key={cost.id}>
               <div className="line-item__heading">
-                <strong>Kostenposten {index + 1}</strong>
-                <button className="icon-button icon-button--danger" type="button" onClick={() => setCosts((current) => current.filter((item) => item.id !== cost.id))} aria-label={`Kostenposten ${index + 1} löschen`}>
+                <strong>{copy(locale, "entryForm", "cost", { index: index + 1 })}</strong>
+                <button className="icon-button icon-button--danger" type="button" onClick={() => setCosts((current) => current.filter((item) => item.id !== cost.id))} aria-label={copy(locale, "entryForm", "deleteCost", { index: index + 1 })}>
                   <Icon name="trash" size={16} />
                 </button>
               </div>
@@ -537,11 +528,11 @@ export function EntryForm({
                 <label className="field">
                   <FieldHelpLabel fieldId="cost.category" />
                   <select value={cost.category} onChange={(event) => updateCost(cost.id, { category: event.target.value as CostCategory })}>
-                    {Object.entries(costCategoryLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    {(["food", "leisure", "school", "clothing", "travel", "other"] as CostCategory[]).map((value) => <option key={value} value={value}>{costCategoryLabel(value, locale)}</option>)}
                   </select>
                 </label>
                 <label className="field">
-                  <FieldHelpLabel fieldId="cost.amount">Betrag in EUR</FieldHelpLabel>
+                  <FieldHelpLabel fieldId="cost.amount">{copy(locale, "entryForm", "amountEur")}</FieldHelpLabel>
                   <input
                     className={cost.amount <= 0 ? "input--warning" : ""}
                     type="number"
@@ -555,14 +546,14 @@ export function EntryForm({
                       updateCost(cost.id, { amount: Number(event.target.value) });
                       setFieldErrors((errors) => ({ ...errors, [`cost-${cost.id}`]: "" }));
                     }}
-                    placeholder="0,00"
+                    placeholder={locale === "en" ? "0.00" : "0,00"}
                   />
                   {fieldErrors[`cost-${cost.id}`] ? <span className="field-error">{fieldErrors[`cost-${cost.id}`]}</span> : null}
                 </label>
                 <label className="field">
                   <FieldHelpLabel fieldId="cost.paidBy" />
                   <select value={cost.paidBy} onChange={(event) => updateCost(cost.id, { paidBy: event.target.value as PaidBy })}>
-                    {Object.entries(paidByLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    {(["father", "mother", "both", "thirdParty"] as PaidBy[]).map((value) => <option key={value} value={value}>{paidByLabel(value, locale)}</option>)}
                   </select>
                 </label>
                 <label className="field line-item__note">
@@ -572,33 +563,33 @@ export function EntryForm({
               </div>
             </div>
           ))}
-          {costs.length === 0 ? <p className="empty-copy">Keine Kosten erfasst.</p> : null}
+          {costs.length === 0 ? <p className="empty-copy">{copy(locale, "entryForm", "noCosts")}</p> : null}
         </div>
       </details>
 
       <details className="form-section form-section--collapsible">
-        <summary className="form-section__summary" data-testid="entry-notes-toggle">Notizen und Belege</summary>
+        <summary className="form-section__summary" data-testid="entry-notes-toggle">{copy(locale, "entryForm", "notesEvidence")}</summary>
         <label className="field">
-          <FieldHelpLabel fieldId="careEntry.notes">Besonderheiten / Notizen</FieldHelpLabel>
+          <FieldHelpLabel fieldId="careEntry.notes">{copy(locale, "entryForm", "notesEvidence")}</FieldHelpLabel>
           <textarea
             rows={3}
             data-testid="entry-notes"
             maxLength={1000}
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
-            placeholder="Sachliche Hinweise zu Übergabe, Ablauf oder Abweichungen"
+            placeholder={copy(locale, "entryForm", "notesPlaceholder")}
           />
         </label>
         <label className="check-row">
           <input type="checkbox" checked={hasEvidence} onChange={(event) => setHasEvidence(event.target.checked)} />
           <FieldHelpLabel fieldId="careEntry.hasEvidence">
-            Beleg oder Dokument vorhanden
+            {copy(locale, "entryForm", "evidenceAvailable")}
           </FieldHelpLabel>
         </label>
         {hasEvidence ? (
           <label className="field">
             <FieldHelpLabel fieldId="careEntry.evidenceReference" />
-            <input value={evidenceReference} onChange={(event) => setEvidenceReference(event.target.value)} placeholder="z. B. E-Mail vom 12.05." />
+            <input value={evidenceReference} onChange={(event) => setEvidenceReference(event.target.value)} placeholder={copy(locale, "entryForm", "evidenceReferencePlaceholder")} />
           </label>
         ) : null}
       </details>
@@ -609,19 +600,19 @@ export function EntryForm({
         {entry ? (
           <button className="button button--danger-quiet" type="button" onClick={() => void handleDelete()} disabled={!canWrite || isSaving}>
             <Icon name="trash" size={17} />
-            Löschen
+            {copy(locale, "common", "delete")}
           </button>
         ) : <span />}
         <div className="form-actions__right">
-          <button className="button button--secondary" type="button" onClick={onCancel}>Abbrechen</button>
+          <button className="button button--secondary" type="button" onClick={onCancel}>{copy(locale, "common", "cancel")}</button>
           <button className="button button--primary" data-testid="entry-submit" type="submit" disabled={data.children.length === 0 || !canWrite || isSaving}>
             <Icon name="check" size={17} />
-            {entry ? "Änderungen speichern" : "Eintrag speichern"}
+            {entry ? copy(locale, "entryForm", "saveChanges") : copy(locale, "entryForm", "saveEntry")}
           </button>
         </div>
       </footer>
 
-      {selectedNames.length ? <p className="form-summary">Eintrag für {selectedNames.join(" und ")}</p> : null}
+      {selectedNames.length ? <p className="form-summary">{copy(locale, "entryForm", "entryFor", { names: selectedNames.join(locale === "en" ? " and " : " und ") })}</p> : null}
     </form>
   );
 }

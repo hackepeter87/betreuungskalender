@@ -4,12 +4,15 @@ import { Icon } from "../components/Icon";
 import { FieldHelpButton, FieldHelpLabel } from "../components/FieldHelp";
 import { Modal } from "../components/Modal";
 import { useI18n } from "../i18n/I18nProvider";
+import { copy } from "../i18n/catalog";
 import { localeMetadata, supportedLocales } from "../i18n/resources";
+import { handoverLabel, locationLabel } from "../lib/labels";
 import { useAppStore } from "../store/AppStore";
 import type { CareLocation, Child, HandoverParty } from "../types";
 
 function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
   const { saveChild, canWrite, isSaving } = useAppStore();
+  const { locale } = useI18n();
   const [name, setName] = useState(child?.name ?? "");
   const [birthMonth, setBirthMonth] = useState(child?.birthMonth ?? 1);
   const [birthYear, setBirthYear] = useState(child?.birthYear ?? new Date().getFullYear() - 8);
@@ -27,7 +30,7 @@ function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
     <form className="child-form" data-testid="child-form" onSubmit={submit}>
       <label className="field">
         <FieldHelpLabel fieldId="child.name" />
-        <input data-testid="child-name" autoFocus required value={name} onChange={(event) => setName(event.target.value)} placeholder="Vorname oder Kürzel" />
+        <input data-testid="child-name" autoFocus required value={name} onChange={(event) => setName(event.target.value)} placeholder={copy(locale, "settings", "childNamePlaceholder")} />
       </label>
       <div className="form-grid">
         <label className="field">
@@ -43,7 +46,7 @@ function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
       </div>
       <fieldset className="color-field">
         <legend className="field-label-row">
-          <span>Farbe im Kalender</span>
+          <span>{copy(locale, "settings", "calendarColor")}</span>
           <FieldHelpButton fieldId="child.color" />
         </legend>
         <div>
@@ -58,8 +61,8 @@ function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
       <footer className="form-actions">
         <span />
         <div className="form-actions__right">
-          <button className="button button--secondary" type="button" onClick={onDone}>Abbrechen</button>
-          <button className="button button--primary" data-testid="child-submit" type="submit" disabled={!canWrite || isSaving}>{child ? "Speichern" : "Kind anlegen"}</button>
+          <button className="button button--secondary" type="button" onClick={onDone}>{copy(locale, "settings", "cancel")}</button>
+          <button className="button button--primary" data-testid="child-submit" type="submit" disabled={!canWrite || isSaving}>{child ? copy(locale, "settings", "saveChild") : copy(locale, "settings", "addChild")}</button>
         </div>
       </footer>
     </form>
@@ -82,20 +85,20 @@ export function SettingsPage() {
   const deleteChild = async (child: Child) => {
     const affected = data.entries.filter((entry) => !entry.deletedAt && entry.childIds.includes(child.id)).length;
     const message = affected
-      ? `${child.name} ist in ${affected} Einträgen enthalten. Beim Löschen werden diese Zuordnungen entfernt. Fortfahren?`
-      : `${child.name} wirklich löschen?`;
+      ? copy(locale, "settings", "childDeleteAffected", { name: child.name, count: affected })
+      : copy(locale, "settings", "childDelete", { name: child.name });
     if (window.confirm(message)) await removeChild(child.id);
   };
 
   const loadExamples = async () => {
     if (data.children.length || data.entries.some((entry) => !entry.deletedAt)) {
-      if (!window.confirm("Beispieldaten ersetzen den aktuellen Datenbestand. Fortfahren?")) return;
+      if (!window.confirm(copy(locale, "settings", "demoReplaceConfirm"))) return;
     }
     await loadDemo();
   };
 
   const clearData = async () => {
-    if (window.confirm("Alle Kinder, Einträge, Monatsabschlüsse, Protokolle und Einstellungen dauerhaft aus der SQLite-Datenbank löschen? Diese Aktion ersetzt den gesamten Datenbestand.")) {
+    if (window.confirm(copy(locale, "settings", "clearDataConfirm"))) {
       await clearAll();
     }
   };
@@ -140,12 +143,12 @@ export function SettingsPage() {
       <section className="panel settings-section">
         <div className="panel__header">
           <div>
-            <h2>Kinder</h2>
-            <p>Namen werden im lokalen SQLite-Dienst gespeichert und können auch als Kürzel geführt werden.</p>
+            <h2>{copy(locale, "settings", "children")}</h2>
+            <p>{copy(locale, "settings", "childrenDescription")}</p>
           </div>
           <button className="button button--primary" data-testid="settings-add-child" type="button" onClick={() => setEditingChild("new")} disabled={!canWrite || isSaving}>
             <Icon name="plus" size={17} />
-            Kind anlegen
+            {copy(locale, "settings", "addChild")}
           </button>
         </div>
         <div className="child-settings-list">
@@ -156,28 +159,28 @@ export function SettingsPage() {
               </span>
               <span>
                 <strong>{child.name}</strong>
-                <small>Geboren {String(child.birthMonth).padStart(2, "0")}/{child.birthYear}</small>
+                <small>{copy(locale, "settings", "born", { month: String(child.birthMonth).padStart(2, "0"), year: child.birthYear })}</small>
               </span>
               <span className="child-settings-row__actions">
-                <button className="icon-button icon-button--bordered" type="button" onClick={() => setEditingChild(child)} aria-label={`${child.name} bearbeiten`}><Icon name="edit" size={17} /></button>
-                <button className="icon-button icon-button--bordered icon-button--danger" type="button" onClick={() => void deleteChild(child)} disabled={!canWrite || isSaving} aria-label={`${child.name} löschen`}><Icon name="trash" size={17} /></button>
+                <button className="icon-button icon-button--bordered" type="button" onClick={() => setEditingChild(child)} aria-label={copy(locale, "settings", "editChildAria", { name: child.name })}><Icon name="edit" size={17} /></button>
+                <button className="icon-button icon-button--bordered icon-button--danger" type="button" onClick={() => void deleteChild(child)} disabled={!canWrite || isSaving} aria-label={copy(locale, "settings", "deleteChildAria", { name: child.name })}><Icon name="trash" size={17} /></button>
               </span>
             </div>
           ))}
-          {data.children.length === 0 ? <p className="empty-copy empty-copy--padded">Noch kein Kind angelegt.</p> : null}
+          {data.children.length === 0 ? <p className="empty-copy empty-copy--padded">{copy(locale, "settings", "noChildren")}</p> : null}
         </div>
       </section>
 
       <section className="panel settings-section">
         <div className="panel__header panel__header--compact">
           <div>
-            <h2>Standardwerte</h2>
-            <p>Neue Einträge werden mit diesen Werten vorbelegt.</p>
+            <h2>{copy(locale, "settings", "defaults")}</h2>
+            <p>{copy(locale, "settings", "defaultsDescription")}</p>
           </div>
         </div>
         <div className="settings-form-grid">
           <label className="field">
-            <FieldHelpLabel fieldId="settings.kilometerRate">Kilometersatz in EUR</FieldHelpLabel>
+            <FieldHelpLabel fieldId="settings.kilometerRate">{copy(locale, "settings", "kilometerRate")}</FieldHelpLabel>
             <input
               type="number"
               min="0"
@@ -192,36 +195,23 @@ export function SettingsPage() {
           <label className="field">
             <FieldHelpLabel fieldId="settings.defaultLocation" />
             <select value={data.settings.defaultLocation} disabled={!canWrite || isSaving} onChange={(event) => void updateSettings({ defaultLocation: event.target.value as CareLocation })}>
-              <option value="commuterApartment">Pendlerwohnung</option>
-              <option value="mainResidence">Hauptwohnsitz</option>
-              <option value="mother">Bei der Mutter</option>
-              <option value="school">Schule</option>
-              <option value="ogs">OGS</option>
-              <option value="other">Anderer Ort</option>
+              {(["commuterApartment", "mainResidence", "mother", "school", "ogs", "other"] as const).map((value) => <option key={value} value={value}>{locationLabel(value, locale)}</option>)}
             </select>
           </label>
           <label className="field">
             <FieldHelpLabel fieldId="settings.defaultHandoverFrom">
-              Übergabe standardmäßig von
+              {copy(locale, "settings", "defaultHandoverFrom")}
             </FieldHelpLabel>
             <select value={data.settings.defaultHandoverFrom} disabled={!canWrite || isSaving} onChange={(event) => void updateSettings({ defaultHandoverFrom: event.target.value as HandoverParty })}>
-              <option value="mother">Mutter</option>
-              <option value="father">Vater</option>
-              <option value="school">Schule</option>
-              <option value="ogs">OGS</option>
-              <option value="thirdParty">Dritte</option>
+              {(["mother", "father", "school", "ogs", "thirdParty"] as const).map((value) => <option key={value} value={value}>{handoverLabel(value, locale)}</option>)}
             </select>
           </label>
           <label className="field">
             <FieldHelpLabel fieldId="settings.defaultHandoverTo">
-              Übergabe standardmäßig an
+              {copy(locale, "settings", "defaultHandoverTo")}
             </FieldHelpLabel>
             <select value={data.settings.defaultHandoverTo} disabled={!canWrite || isSaving} onChange={(event) => void updateSettings({ defaultHandoverTo: event.target.value as HandoverParty })}>
-              <option value="mother">Mutter</option>
-              <option value="father">Vater</option>
-              <option value="school">Schule</option>
-              <option value="ogs">OGS</option>
-              <option value="thirdParty">Dritte</option>
+              {(["mother", "father", "school", "ogs", "thirdParty"] as const).map((value) => <option key={value} value={value}>{handoverLabel(value, locale)}</option>)}
             </select>
           </label>
         </div>
@@ -230,18 +220,18 @@ export function SettingsPage() {
       <section className="panel settings-section">
         <div className="panel__header panel__header--compact">
           <div>
-            <h2>Beispiel- und Datenbankdaten</h2>
-            <p>Beispieldaten helfen beim Kennenlernen und können vollständig entfernt werden.</p>
+            <h2>{copy(locale, "settings", "demoData")}</h2>
+            <p>{copy(locale, "settings", "demoDataDescription")}</p>
           </div>
         </div>
         <div className="data-actions">
-          <button className="button button--secondary" type="button" onClick={() => void loadExamples()} disabled={!canWrite || isSaving}>Beispieldaten laden</button>
-          <button className="button button--danger-quiet" type="button" onClick={() => void clearData()} disabled={!canWrite || isSaving}><Icon name="trash" size={17} />Alle Datenbankdaten löschen</button>
+          <button className="button button--secondary" type="button" onClick={() => void loadExamples()} disabled={!canWrite || isSaving}>{copy(locale, "settings", "loadDemo")}</button>
+          <button className="button button--danger-quiet" type="button" onClick={() => void clearData()} disabled={!canWrite || isSaving}><Icon name="trash" size={17} />{copy(locale, "settings", "clearData")}</button>
         </div>
       </section>
 
       {editingChild ? (
-        <Modal title={editingChild === "new" ? "Kind anlegen" : "Kind bearbeiten"} onClose={() => setEditingChild(null)}>
+        <Modal title={editingChild === "new" ? copy(locale, "settings", "addChild") : copy(locale, "settings", "editChild")} onClose={() => setEditingChild(null)}>
           <ChildForm child={editingChild === "new" ? undefined : editingChild} onDone={() => setEditingChild(null)} />
         </Modal>
       ) : null}

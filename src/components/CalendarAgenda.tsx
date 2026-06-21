@@ -8,17 +8,25 @@ import {
 } from "../lib/labels";
 import type { CareEntry, Child, UnavailablePeriod } from "../types";
 import { Icon } from "./Icon";
+import { useI18n } from "../i18n/I18nProvider";
+import { copy } from "../i18n/catalog";
 
-function durationLabel(entry: CareEntry): string {
+function durationLabel(entry: CareEntry, locale: "de" | "en"): string {
   const milliseconds =
     new Date(entry.endDateTime).getTime() - new Date(entry.startDateTime).getTime();
   const hours = Math.max(0, milliseconds / 3_600_000);
   if (hours >= 24) {
     const days = Math.floor(hours / 24);
     const remainingHours = Math.round(hours % 24);
-    return remainingHours ? `${days} T. ${remainingHours} Std.` : `${days} Tage`;
+    return remainingHours
+      ? copy(locale, "agenda", "durationDaysHours", { days, hours: remainingHours })
+      : copy(locale, "agenda", "durationDays", { days });
   }
-  return `${hours.toLocaleString("de-DE", { maximumFractionDigits: 1 })} Std.`;
+  return copy(locale, "agenda", "durationHours", {
+    hours: hours.toLocaleString(locale === "en" ? "en-GB" : "de-DE", {
+      maximumFractionDigits: 1
+    })
+  });
 }
 
 export function CalendarAgenda({
@@ -38,6 +46,7 @@ export function CalendarAgenda({
   onSelectUnavailable: (period: UnavailablePeriod) => void;
   allowCreate?: boolean;
 }) {
+  const { locale, intlLocale } = useI18n();
   const childById = useMemo(
     () => new Map(children.map((child) => [child.id, child])),
     [children]
@@ -69,11 +78,11 @@ export function CalendarAgenda({
     return (
       <div className="agenda-empty">
         <Icon name="calendar" size={24} />
-        <strong>Noch keine Einträge in diesem Monat</strong>
-        <p>Erfasse den ersten Betreuungseintrag direkt aus der Agenda.</p>
+        <strong>{copy(locale, "agenda", "emptyTitle")}</strong>
+        <p>{copy(locale, "agenda", "emptyDescription")}</p>
         <button className="button button--primary" type="button" onClick={() => onSelectDate("")} disabled={!allowCreate}>
           <Icon name="plus" size={18} />
-          Eintrag hinzufügen
+          {copy(locale, "agenda", "addEntry")}
         </button>
       </div>
     );
@@ -85,15 +94,15 @@ export function CalendarAgenda({
         <section className="agenda-day" key={date}>
           <header className="agenda-day__header">
             <div>
-              <strong>{formatShortDate(date)}</strong>
-              <small>{group.entries.length + group.unavailable.length} Dokumentationen</small>
+              <strong>{formatShortDate(date, intlLocale)}</strong>
+              <small>{copy(locale, "agenda", "documentationCount", { count: group.entries.length + group.unavailable.length })}</small>
             </div>
             <button
               className="icon-button icon-button--bordered"
               type="button"
               onClick={() => onSelectDate(date)}
               disabled={!allowCreate}
-              aria-label={`Eintrag für ${formatShortDate(date)} hinzufügen`}
+              aria-label={copy(locale, "agenda", "addEntryForDate", { date: formatShortDate(date, intlLocale) })}
             >
               <Icon name="plus" size={18} />
             </button>
@@ -111,16 +120,16 @@ export function CalendarAgenda({
                   <span className="agenda-card__topline">
                     <strong>{unavailableCategoryLabels[period.category]}</strong>
                     <span className="status-label status-label--unavailable">
-                      {period.dutyRelated ? "Dienstlich" : "Nichtverfügbar"}
+                      {period.dutyRelated ? copy(locale, "agenda", "dutyRelated") : copy(locale, "agenda", "unavailable")}
                     </span>
                   </span>
                   <span className="agenda-card__details">
-                    <span><Icon name="clock" size={15} />{formatTime(period.startDateTime)}–{formatTime(period.endDateTime)}</span>
+                    <span><Icon name="clock" size={15} />{formatTime(period.startDateTime, intlLocale)}–{formatTime(period.endDateTime, intlLocale)}</span>
                     {period.location ? <span><Icon name="home" size={15} />{period.location}</span> : null}
                   </span>
                   <span className="agenda-card__flags">
-                    {period.affectsContact ? <span><Icon name="repeat" size={14} />Betrifft Umgang</span> : null}
-                    {period.affectsHolidays ? <span><Icon name="sun" size={14} />Betrifft Ferien</span> : null}
+                    {period.affectsContact ? <span><Icon name="repeat" size={14} />{copy(locale, "agenda", "affectsContact")}</span> : null}
+                    {period.affectsHolidays ? <span><Icon name="sun" size={14} />{copy(locale, "agenda", "affectsHolidays")}</span> : null}
                   </span>
                 </span>
                 <Icon name="chevronRight" size={18} />
@@ -150,25 +159,25 @@ export function CalendarAgenda({
                   </span>
                   <span className="agenda-card__main">
                     <span className="agenda-card__topline">
-                      <strong>{entryChildren.map((child) => child.name).join(" und ") || "Ohne Kind"}</strong>
+                      <strong>{entryChildren.map((child) => child.name).join(locale === "en" ? " and " : " und ") || copy(locale, "common", "noChild")}</strong>
                       <span className={`status-label status-label--${entry.status}`}>
                         {statusLabels[entry.status]}
                       </span>
                     </span>
                     <span className="agenda-card__details">
-                      <span><Icon name="calendar" size={15} />{formatTime(entry.startDateTime)}–{formatTime(entry.endDateTime)}</span>
-                      <span><Icon name="history" size={15} />{durationLabel(entry)}</span>
+                      <span><Icon name="calendar" size={15} />{formatTime(entry.startDateTime, intlLocale)}–{formatTime(entry.endDateTime, intlLocale)}</span>
+                      <span><Icon name="history" size={15} />{durationLabel(entry, locale)}</span>
                       <span><Icon name="home" size={15} />{entry.customLocation || locationLabels[entry.location]}</span>
                     </span>
                     <span className="agenda-card__flags">
-                      {entry.overnight ? <span><Icon name="moon" size={14} />Übernachtung</span> : null}
-                      {entry.additionalCare ? <span><Icon name="plus" size={14} />Zusatzbetreuung</span> : null}
-                      {entry.holiday ? <span><Icon name="sun" size={14} />Ferientag</span> : null}
+                      {entry.overnight ? <span><Icon name="moon" size={14} />{copy(locale, "agenda", "overnight")}</span> : null}
+                      {entry.additionalCare ? <span><Icon name="plus" size={14} />{copy(locale, "agenda", "additionalCare")}</span> : null}
+                      {entry.holiday ? <span><Icon name="sun" size={14} />{copy(locale, "agenda", "holiday")}</span> : null}
                     </span>
                     {hasOverlap ? (
                       <span className="agenda-card__warning">
                         <Icon name="alert" size={15} />
-                        Dieser geplante Umgang überschneidet sich mit einer dokumentierten Nichtverfügbarkeit.
+                        {copy(locale, "agenda", "overlap")}
                       </span>
                     ) : null}
                   </span>
