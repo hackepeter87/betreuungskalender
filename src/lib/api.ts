@@ -4,6 +4,8 @@ import type {
   ApiChild,
   ApiMonthlyClosing,
   ApiUnavailablePeriod,
+  ApiExternalCalendarEvent,
+  ApiExternalCalendarSource,
   CareScope
 } from "../../shared/api";
 import type {
@@ -24,7 +26,8 @@ import type {
   ContactPattern,
   HolidayPeriod,
   MonthlyClosure,
-  UnavailablePeriod
+  UnavailablePeriod,
+  ExternalCalendarSource
 } from "../types";
 
 export const SERVER_UNAVAILABLE_MESSAGE =
@@ -246,6 +249,7 @@ export async function loadAppData(): Promise<AppData> {
     rawSettings,
     auditLog,
     monthClosures
+    ,externalCalendarSources
   ] = await Promise.all([
     request<ApiChild[]>("/api/children"),
     request<ApiCareEntry[]>("/api/care-entries"),
@@ -255,6 +259,7 @@ export async function loadAppData(): Promise<AppData> {
     request<Record<string, unknown>>("/api/settings"),
     request<ApiAuditEntry[]>("/api/audit-log?limit=50000"),
     request<ApiMonthlyClosing[]>("/api/month-closings")
+    ,request<ApiExternalCalendarSource[]>("/api/external-calendars")
   ]);
   const empty = createEmptyData();
   const { lastJsonBackupAt, ...settings } = rawSettings;
@@ -269,6 +274,7 @@ export async function loadAppData(): Promise<AppData> {
     entries: mappedEntries,
     holidayPeriods,
     unavailablePeriods: mappedUnavailable,
+    externalCalendarSources,
     contactPatterns,
     settings: { ...empty.settings, ...settings } as AppSettings,
     lastJsonBackupAt:
@@ -462,4 +468,17 @@ export const api = {
       body: JSON.stringify(input)
     });
   }
+  ,listExternalCalendarEvents(from: string, to: string) {
+    return request<ApiExternalCalendarEvent[]>(`/api/external-calendar-events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+  },
+  importExternalCalendar(input: { name: string; color: string; content: string }) {
+    return request<{ source: ExternalCalendarSource; importedEvents: number }>("/api/external-calendars/import", { method: "POST", body: JSON.stringify(input) });
+  },
+  replaceExternalCalendar(id: string, input: { name: string; color: string; content: string }) {
+    return request<{ source: ExternalCalendarSource; importedEvents: number }>(`/api/external-calendars/${encodeURIComponent(id)}/import`, { method: "PUT", body: JSON.stringify(input) });
+  },
+  updateExternalCalendar(id: string, input: Partial<Pick<ExternalCalendarSource, "name" | "color" | "visible">>) {
+    return request<ExternalCalendarSource>(`/api/external-calendars/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
+  },
+  deleteExternalCalendar(id: string) { return request<void>(`/api/external-calendars/${encodeURIComponent(id)}`, { method: "DELETE" }); }
 };

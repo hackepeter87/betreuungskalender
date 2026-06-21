@@ -61,6 +61,8 @@ export function clearDomainData(): void {
     "holiday_periods",
     "contact_patterns",
     "unavailable_periods",
+    "external_calendar_events",
+    "external_calendar_sources",
     "monthly_closings",
     "settings",
     "children",
@@ -360,6 +362,18 @@ export function importData(data: ReturnType<typeof appDataImportSchema.parse>, u
   for (const holiday of data.holidayPeriods) insertHoliday(holiday, timestamp);
   for (const pattern of data.contactPatterns) insertPattern(pattern, timestamp);
   for (const period of data.unavailablePeriods) insertUnavailable(period, timestamp, userEmail);
+  const sourceInsert = db.prepare(`INSERT INTO external_calendar_sources (id, name, color, visible, last_imported_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+  for (const source of data.externalCalendarSources) {
+    const id = text(source, "id");
+    if (!id) throw new Error("External calendar source without ID.");
+    sourceInsert.run(id, text(source, "name"), text(source, "color"), Number(booleanValue(source, "visible", true)), text(source, "lastImportedAt", timestamp), text(source, "createdAt", timestamp), text(source, "updatedAt", timestamp));
+  }
+  const eventInsert = db.prepare(`INSERT INTO external_calendar_events (id, source_id, ical_uid, recurrence_id, title, description, start_datetime, end_datetime, all_day, location, raw_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  for (const event of data.externalCalendarEvents) {
+    const id = text(event, "id");
+    if (!id || !text(event, "sourceId")) throw new Error("External calendar event is incomplete.");
+    eventInsert.run(id, text(event, "sourceId"), text(event, "icalUid"), text(event, "recurrenceId"), text(event, "title"), optionalText(event, "description"), text(event, "startDateTime"), text(event, "endDateTime"), Number(booleanValue(event, "allDay")), optionalText(event, "location"), text(event, "rawHash"), text(event, "createdAt", timestamp), text(event, "updatedAt", timestamp));
+  }
 
   const settingInsert = db.prepare(`
     INSERT INTO settings (key, value_json, created_at, updated_at)

@@ -13,6 +13,7 @@ const expectedMigrations = [
   "002_unavailable_periods",
   "003_api_source_of_truth",
   "004_legacy_migration"
+  ,"005_external_calendars"
 ];
 
 async function withTemporaryDirectory(

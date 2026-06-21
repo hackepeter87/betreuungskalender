@@ -126,6 +126,8 @@ export const appDataImportSchema = z.object({
   entries: z.array(z.record(z.string(), z.unknown())),
   holidayPeriods: z.array(z.record(z.string(), z.unknown())).default([]),
   unavailablePeriods: z.array(z.record(z.string(), z.unknown())).default([]),
+  externalCalendarSources: z.array(z.record(z.string(), z.unknown())).default([]),
+  externalCalendarEvents: z.array(z.record(z.string(), z.unknown())).default([]),
   contactPatterns: z.array(z.record(z.string(), z.unknown())).default([]),
   auditLog: z.array(z.record(z.string(), z.unknown())).default([]),
   monthClosures: z.array(z.record(z.string(), z.unknown())).default([]),
@@ -154,6 +156,20 @@ export const unavailablePeriodInputSchema = z
       message: "Das Ende muss nach dem Beginn liegen."
     }
   );
+
+export const externalCalendarImportSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/),
+  content: z.string().min(1).max(1_000_000)
+});
+
+export const externalCalendarUpdateSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200).optional(),
+    color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/).optional(),
+    visible: z.boolean().optional()
+  })
+  .refine((value) => Object.keys(value).length > 0);
 
 export function unavailablePeriodWarnings(input: {
   category: string;

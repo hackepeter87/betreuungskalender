@@ -12,7 +12,8 @@ import { useAppStore } from "../store/AppStore";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
-import type { CareEntry, UnavailablePeriod } from "../types";
+import { api } from "../lib/api";
+import type { CareEntry, ExternalCalendarEvent, UnavailablePeriod } from "../types";
 
 export function CalendarPage({
   monthKey,
@@ -34,6 +35,7 @@ export function CalendarPage({
   const [editingUnavailable, setEditingUnavailable] = useState<
     UnavailablePeriod | "new" | null
   >(null);
+  const [externalEvents, setExternalEvents] = useState<ExternalCalendarEvent[]>([]);
   const entries = useMemo(() => entriesForMonth(data.entries, monthKey), [data.entries, monthKey]);
   const unavailablePeriods = useMemo(() => {
     const range = rangeForMonth(monthKey);
@@ -43,6 +45,11 @@ export function CalendarPage({
       range.endDate
     );
   }, [data.unavailablePeriods, monthKey]);
+
+  useEffect(() => {
+    const range = rangeForMonth(monthKey);
+    void api.listExternalCalendarEvents(`${range.startDate}T00:00:00.000Z`, `${range.endDate}T23:59:59.999Z`).then(setExternalEvents).catch(() => setExternalEvents([]));
+  }, [monthKey]);
 
   useEffect(() => {
     setView(isMobile ? "agenda" : "month");
@@ -104,6 +111,7 @@ export function CalendarPage({
         <CalendarAgenda
           entries={entries}
           unavailablePeriods={unavailablePeriods}
+          externalEvents={externalEvents}
           children={data.children}
           onSelectDate={(date) => onNewEntry(date || undefined)}
           onSelectEntry={onEditEntry}
@@ -117,6 +125,7 @@ export function CalendarPage({
               monthKey={monthKey}
               entries={entries}
               unavailablePeriods={unavailablePeriods}
+              externalEvents={externalEvents}
               children={data.children}
               onSelectDate={onNewEntry}
               onSelectEntry={onEditEntry}

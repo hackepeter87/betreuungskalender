@@ -1,5 +1,9 @@
 # Data model
 
+## External calendars
+
+`external_calendar_sources` stores imported file sources and visibility. `external_calendar_events` stores normalized, read-only event data and references its source with cascade deletion. The unique `(source_id, ical_uid, recurrence_id)` key makes re-import idempotent; missing recurrence IDs are stored as an empty string.
+
 ## Persistence surfaces
 
 The application currently has two separate data models:
