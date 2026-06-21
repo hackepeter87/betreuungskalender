@@ -1,5 +1,7 @@
 import { useEffect, type ReactNode } from "react";
 import { Icon } from "./Icon";
+import { useI18n } from "../i18n/I18nProvider";
+import { copy } from "../i18n/catalog";
 
 export function Modal({
   title,
@@ -12,6 +14,7 @@ export function Modal({
   onClose: () => void;
   size?: "medium" | "large";
 }) {
+  const { locale } = useI18n();
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") onClose();
@@ -31,7 +34,7 @@ export function Modal({
       >
         <header className="modal__header">
           <h2 id="modal-title">{title}</h2>
-          <button className="icon-button" type="button" onClick={onClose} aria-label="Schließen">
+          <button className="icon-button" type="button" onClick={onClose} aria-label={copy(locale, "common", "cancel")}>
             <Icon name="close" size={18} />
           </button>
         </header>

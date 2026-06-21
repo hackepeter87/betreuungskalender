@@ -9,7 +9,9 @@ import {
 } from "../components/PeriodSelector";
 import { calculateHolidayStats } from "../lib/analytics";
 import { formatDate, toMonthKey } from "../lib/date";
-import { holidayAssignmentLabels } from "../lib/labels";
+import { holidayAssignmentLabel } from "../lib/labels";
+import { useI18n } from "../i18n/I18nProvider";
+import { copy } from "../i18n/catalog";
 import { useAppStore } from "../store/AppStore";
 import type { HolidayPeriod } from "../types";
 
@@ -20,8 +22,9 @@ function HolidayForm({
   period?: HolidayPeriod;
   onDone: () => void;
 }) {
+  const { locale } = useI18n();
   const { data, saveHolidayPeriod, canWrite, isSaving } = useAppStore();
-  const [name, setName] = useState(period?.name ?? "Ferienblock");
+  const [name, setName] = useState(period?.name ?? copy(locale, "holiday", "defaultName"));
   const [startDate, setStartDate] = useState(period?.startDate ?? "");
   const [endDate, setEndDate] = useState(period?.endDate ?? "");
   const [assignedTo, setAssignedTo] = useState<HolidayPeriod["assignedTo"]>(
@@ -36,16 +39,16 @@ function HolidayForm({
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!startDate || !endDate || endDate < startDate) {
-      setError("Bitte einen gültigen Ferienzeitraum eingeben.");
+      setError(copy(locale, "holiday", "validPeriod"));
       return;
     }
     if (data.children.length && !childIds.length) {
-      setError("Bitte mindestens ein Kind auswählen.");
+      setError(copy(locale, "holiday", "childRequired"));
       return;
     }
     const saved = await saveHolidayPeriod({
       id: period?.id,
-      name: name.trim() || "Ferienblock",
+      name: name.trim() || copy(locale, "holiday", "defaultName"),
       startDate,
       endDate,
       childIds,
@@ -59,27 +62,27 @@ function HolidayForm({
     <form className="child-form" data-testid="holiday-form" onSubmit={submit}>
       <label className="field">
         <FieldHelpLabel fieldId="holiday.name" />
-        <input data-testid="holiday-name" autoFocus required value={name} onChange={(event) => setName(event.target.value)} placeholder="z. B. Sommerferien Block 1" />
+        <input data-testid="holiday-name" autoFocus required value={name} onChange={(event) => setName(event.target.value)} placeholder={copy(locale, "holiday", "namePlaceholder")} />
       </label>
       <div className="form-grid form-grid--two">
         <label className="field">
-          <FieldHelpLabel fieldId="holiday.startDate">Von</FieldHelpLabel>
+          <FieldHelpLabel fieldId="holiday.startDate">{copy(locale, "common", "from")}</FieldHelpLabel>
           <input data-testid="holiday-start-date" type="date" required value={startDate} onChange={(event) => setStartDate(event.target.value)} />
         </label>
         <label className="field">
-          <FieldHelpLabel fieldId="holiday.endDate">Bis</FieldHelpLabel>
+          <FieldHelpLabel fieldId="holiday.endDate">{copy(locale, "common", "to")}</FieldHelpLabel>
           <input data-testid="holiday-end-date" type="date" required value={endDate} onChange={(event) => setEndDate(event.target.value)} />
         </label>
       </div>
       <label className="field">
         <FieldHelpLabel fieldId="holiday.assignedTo" />
         <select value={assignedTo} onChange={(event) => setAssignedTo(event.target.value as HolidayPeriod["assignedTo"])}>
-          {Object.entries(holidayAssignmentLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          {(["father", "mother", "shared"] as HolidayPeriod["assignedTo"][]).map((value) => <option key={value} value={value}>{holidayAssignmentLabel(value, locale)}</option>)}
         </select>
       </label>
       <fieldset className="inline-fieldset">
         <legend className="field-label-row">
-          <span>Kinder</span>
+          <span>{copy(locale, "holiday", "children")}</span>
           <FieldHelpButton fieldId="holiday.children" />
         </legend>
         <div className="child-choice-grid">
@@ -113,8 +116,8 @@ function HolidayForm({
       <footer className="form-actions">
         <span />
         <div className="form-actions__right">
-          <button className="button button--secondary" type="button" onClick={onDone}>Abbrechen</button>
-          <button className="button button--primary" data-testid="holiday-submit" type="submit" disabled={!canWrite || isSaving}>Ferienblock speichern</button>
+          <button className="button button--secondary" type="button" onClick={onDone}>{copy(locale, "common", "cancel")}</button>
+          <button className="button button--primary" data-testid="holiday-submit" type="submit" disabled={!canWrite || isSaving}>{copy(locale, "holiday", "save")}</button>
         </div>
       </footer>
     </form>
@@ -122,6 +125,7 @@ function HolidayForm({
 }
 
 export function HolidaysPage() {
+  const { locale, intlLocale } = useI18n();
   const { data, removeHolidayPeriod, canWrite } = useAppStore();
   const [selection, setSelection] = useState<PeriodSelection>(() =>
     periodSelection("year", toMonthKey(new Date()))
@@ -154,7 +158,7 @@ export function HolidaysPage() {
   );
 
   const remove = async (period: HolidayPeriod) => {
-    if (window.confirm(`Ferienblock „${period.name}“ als gelöscht markieren? Die Änderung bleibt im Protokoll erhalten.`)) {
+    if (window.confirm(copy(locale, "holiday", "deleteConfirm", { name: period.name }))) {
       await removeHolidayPeriod(period.id);
     }
   };
@@ -163,31 +167,31 @@ export function HolidaysPage() {
     <div className="page" data-testid="page-holidays">
       <div className="page-header">
         <div>
-          <p className="page-header__context">Ferienaufteilung</p>
-          <h1>Ferienverwaltung</h1>
+          <p className="page-header__context">{copy(locale, "holiday", "context")}</p>
+          <h1>{copy(locale, "holiday", "title")}</h1>
         </div>
         <button className="button button--primary no-print" data-testid="holiday-add" type="button" onClick={() => setEditing("new")} disabled={!canWrite}>
           <Icon name="plus" size={17} />
-          Ferienblock erfassen
+          {copy(locale, "holiday", "add")}
         </button>
       </div>
 
       <PeriodSelector value={selection} onChange={setSelection} />
 
       <section className="summary-strip summary-strip--five">
-        <div><small>Ferientage gesamt</small><strong>{stats.totalDays}</strong></div>
-        <div><small>Beim Vater</small><strong>{stats.fatherDays}</strong></div>
-        <div><small>Bei der Mutter</small><strong>{stats.motherDays}</strong></div>
-        <div><small>Vaterquote</small><strong>{stats.fatherQuote} %</strong></div>
-        <div><small>Hälfte / Abweichung</small><strong>{stats.halfTarget} / {stats.differenceFromHalf > 0 ? "+" : ""}{stats.differenceFromHalf}</strong></div>
+        <div><small>{copy(locale, "holiday", "totalDays")}</small><strong>{stats.totalDays}</strong></div>
+        <div><small>{copy(locale, "holiday", "fatherDays")}</small><strong>{stats.fatherDays}</strong></div>
+        <div><small>{copy(locale, "holiday", "motherDays")}</small><strong>{stats.motherDays}</strong></div>
+        <div><small>{copy(locale, "holiday", "fatherQuote")}</small><strong>{stats.fatherQuote} %</strong></div>
+        <div><small>{copy(locale, "holiday", "halfDifference")}</small><strong>{stats.halfTarget} / {stats.differenceFromHalf > 0 ? "+" : ""}{stats.differenceFromHalf}</strong></div>
       </section>
 
       {stats.unavailablePeriods > 0 ? (
         <section className="notice notice--recommendation">
           <Icon name="briefcase" />
           <div>
-            <strong>Dienstliche Nichtverfügbarkeit</strong>
-            <p>Im Ferienzeitraum lagen dokumentierte Nichtverfügbarkeiten vor. Die hälftige Ferienquote wird weiterhin aus der dokumentierten tatsächlichen Betreuung berechnet.</p>
+            <strong>{copy(locale, "holiday", "dutyUnavailability")}</strong>
+            <p>{copy(locale, "holiday", "dutyUnavailabilityDescription")}</p>
           </div>
         </section>
       ) : null}
@@ -195,40 +199,40 @@ export function HolidaysPage() {
       <section className="panel">
         <div className="panel__header">
           <div>
-            <h2>Erfasste Ferienblöcke</h2>
-            <p>Geteilte Tage werden bei Vater und Mutter jeweils mit einem halben Tag berücksichtigt.</p>
+            <h2>{copy(locale, "holiday", "recorded")}</h2>
+            <p>{copy(locale, "holiday", "recordedDescription")}</p>
           </div>
         </div>
         <div className="holiday-list">
           {periods.map((period) => (
             <article className="holiday-row" key={period.id}>
               <span className={`holiday-row__assignment holiday-row__assignment--${period.assignedTo}`}>
-                {holidayAssignmentLabels[period.assignedTo]}
+                {holidayAssignmentLabel(period.assignedTo, locale)}
               </span>
               <span>
                 <strong>{period.name}</strong>
-                <small>{formatDate(period.startDate)} bis {formatDate(period.endDate)}</small>
+                <small>{formatDate(period.startDate, intlLocale)} {copy(locale, "common", "to")} {formatDate(period.endDate, intlLocale)}</small>
               </span>
               <span>
-                <strong>{period.childIds.map((id) => data.children.find((child) => child.id === id)?.name).filter(Boolean).join(", ") || "Alle Kinder"}</strong>
-                <small>{period.notes || "Keine Notiz"}</small>
+                <strong>{period.childIds.map((id) => data.children.find((child) => child.id === id)?.name).filter(Boolean).join(", ") || copy(locale, "holiday", "allChildren")}</strong>
+                <small>{period.notes || copy(locale, "common", "noNote")}</small>
               </span>
               <span className="holiday-row__actions">
-                <button className="icon-button icon-button--bordered" type="button" onClick={() => setEditing(period)} aria-label={`${period.name} bearbeiten`}>
+                <button className="icon-button icon-button--bordered" type="button" onClick={() => setEditing(period)} aria-label={copy(locale, "holiday", "edit", { name: period.name })}>
                   <Icon name="edit" size={16} />
                 </button>
-                <button className="icon-button icon-button--bordered icon-button--danger" type="button" onClick={() => void remove(period)} disabled={!canWrite} aria-label={`${period.name} löschen`}>
+                <button className="icon-button icon-button--bordered icon-button--danger" type="button" onClick={() => void remove(period)} disabled={!canWrite} aria-label={copy(locale, "holiday", "delete", { name: period.name })}>
                   <Icon name="trash" size={16} />
                 </button>
               </span>
             </article>
           ))}
-          {periods.length === 0 ? <p className="empty-copy empty-copy--padded">Für den gewählten Zeitraum sind keine Ferienblöcke erfasst.</p> : null}
+          {periods.length === 0 ? <p className="empty-copy empty-copy--padded">{copy(locale, "holiday", "empty")}</p> : null}
         </div>
       </section>
 
       {editing ? (
-        <Modal title={editing === "new" ? "Ferienblock erfassen" : "Ferienblock bearbeiten"} onClose={() => setEditing(null)}>
+        <Modal title={editing === "new" ? copy(locale, "holiday", "createTitle") : copy(locale, "holiday", "editTitle")} onClose={() => setEditing(null)}>
           <HolidayForm period={editing === "new" ? undefined : editing} onDone={() => setEditing(null)} />
         </Modal>
       ) : null}

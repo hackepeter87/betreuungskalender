@@ -4,8 +4,8 @@ import { entryDateKeys, formatTime, getCalendarDays } from "../lib/date";
 import { unavailableCategoryLabels } from "../lib/labels";
 import type { CareEntry, Child, UnavailablePeriod } from "../types";
 import { Icon } from "./Icon";
-
-const weekdayLabels = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+import { useI18n } from "../i18n/I18nProvider";
+import { copy, copyList } from "../i18n/catalog";
 
 export function CalendarGrid({
   monthKey,
@@ -26,6 +26,7 @@ export function CalendarGrid({
   onSelectUnavailable?: (period: UnavailablePeriod) => void;
   allowCreate?: boolean;
 }) {
+  const { locale, intlLocale } = useI18n();
   const calendarDays = useMemo(() => getCalendarDays(monthKey), [monthKey]);
   const childMap = useMemo(
     () => new Map(children.map((child) => [child.id, child])),
@@ -56,7 +57,7 @@ export function CalendarGrid({
   return (
     <div className="calendar-wrap">
       <div className="calendar-weekdays">
-        {weekdayLabels.map((label) => <div key={label}>{label}</div>)}
+        {copyList(locale, "calendar", "weekdays").map((label) => <div key={label}>{label}</div>)}
       </div>
       <div className="calendar-grid">
         {calendarDays.map((day) => {
@@ -79,7 +80,7 @@ export function CalendarGrid({
                 data-testid={`calendar-day-${day.dateKey}`}
                 onClick={() => onSelectDate(day.dateKey)}
                 disabled={!allowCreate}
-                aria-label={`Eintrag am ${day.dateKey} erfassen`}
+                aria-label={copy(locale, "calendar", "addEntryOnDate", { date: day.dateKey })}
               >
                 {day.day}
               </button>
@@ -90,11 +91,11 @@ export function CalendarGrid({
                     type="button"
                     key={`unavailable-${period.id}`}
                     onClick={() => onSelectUnavailable?.(period)}
-                    title={`${unavailableCategoryLabels[period.category]} · ${formatTime(period.startDateTime)}`}
+                    title={`${unavailableCategoryLabels[period.category]} · ${formatTime(period.startDateTime, intlLocale)}`}
                   >
                     <span className="calendar-event__unavailable-icon"><Icon name="briefcase" size={13} /></span>
                     <span className="calendar-event__label">
-                      {period.dutyRelated ? "Dienstliche Abwesenheit" : "Nichtverfügbarkeit"}
+                      {period.dutyRelated ? copy(locale, "calendar", "dutyAbsence") : copy(locale, "calendar", "unavailability")}
                     </span>
                   </button>
                 ))}
@@ -112,8 +113,8 @@ export function CalendarGrid({
                     key={entry.id}
                     onClick={() => onSelectEntry(entry)}
                     title={hasOverlap
-                      ? "Dieser geplante Umgang überschneidet sich mit einer dokumentierten Nichtverfügbarkeit."
-                      : `${entry.status === "completed" ? "Durchgeführt" : entry.status === "planned" ? "Geplant" : "Ausgefallen"} · ${formatTime(entry.startDateTime)}`}
+                      ? copy(locale, "agenda", "overlap")
+                      : `${entry.status === "completed" ? copy(locale, "calendar", "completed") : entry.status === "planned" ? copy(locale, "calendar", "planned") : copy(locale, "calendar", "cancelled")} · ${formatTime(entry.startDateTime, intlLocale)}`}
                   >
                     <span className="calendar-event__colors">
                       {entry.childIds.map((id) => (
@@ -122,19 +123,19 @@ export function CalendarGrid({
                     </span>
                     <span className="calendar-event__label">
                       {entry.status === "cancelled"
-                        ? "Ausgefallen"
+                        ? copy(locale, "calendar", "cancelled")
                         : entry.additionalCare
-                          ? "Zusatzbetreuung"
+                          ? copy(locale, "agenda", "additionalCare")
                         : entry.childIds.length > 1
-                          ? "Beide Kinder"
-                          : childMap.get(entry.childIds[0])?.name ?? "Eintrag"}
+                          ? copy(locale, "calendar", "bothChildren")
+                          : childMap.get(entry.childIds[0])?.name ?? copy(locale, "calendar", "entry")}
                     </span>
                     {entry.overnight ? <Icon name="moon" size={13} /> : null}
                     {hasOverlap ? <Icon name="alert" size={13} /> : null}
                   </button>
                   );
                 })}
-                {visibleCount > 3 ? <span className="calendar-day__more">+{visibleCount - 3} weitere</span> : null}
+                {visibleCount > 3 ? <span className="calendar-day__more">{copy(locale, "calendar", "more", { count: visibleCount - 3 })}</span> : null}
               </div>
             </div>
           );

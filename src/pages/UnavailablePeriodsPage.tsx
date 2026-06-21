@@ -12,8 +12,11 @@ import { formatDate, formatTime, toMonthKey } from "../lib/date";
 import { unavailableCategoryLabels } from "../lib/labels";
 import { useAppStore } from "../store/AppStore";
 import type { UnavailablePeriod } from "../types";
+import { useI18n } from "../i18n/I18nProvider";
+import { copy } from "../i18n/catalog";
 
 export function UnavailablePeriodsPage() {
+  const { locale, intlLocale } = useI18n();
   const { data, removeUnavailablePeriod, canWrite } = useAppStore();
   const [selection, setSelection] = useState<PeriodSelection>(() =>
     periodSelection("year", toMonthKey(new Date()))
@@ -32,7 +35,7 @@ export function UnavailablePeriodsPage() {
   const remove = async (period: UnavailablePeriod) => {
     if (
       window.confirm(
-        "Nichtverfügbarkeit als gelöscht markieren? Die Änderung bleibt im Protokoll erhalten."
+        copy(locale, "unavailable", "deleteConfirm")
       )
     ) {
       await removeUnavailablePeriod(period.id);
@@ -43,8 +46,8 @@ export function UnavailablePeriodsPage() {
     <div className="page">
       <div className="page-header">
         <div>
-          <p className="page-header__context">Sachliche Abwesenheitsdokumentation</p>
-          <h1>Nichtverfügbarkeiten</h1>
+          <p className="page-header__context">{copy(locale, "unavailable", "context")}</p>
+          <h1>{copy(locale, "unavailable", "title")}</h1>
         </div>
         <button
           className="button button--primary"
@@ -53,32 +56,32 @@ export function UnavailablePeriodsPage() {
           disabled={!canWrite}
         >
           <Icon name="plus" size={17} />
-          Nichtverfügbarkeit erfassen
+          {copy(locale, "unavailable", "add")}
         </button>
       </div>
 
       <PeriodSelector value={selection} onChange={setSelection} />
 
       <section className="summary-strip summary-strip--four">
-        <div><small>Zeiträume</small><strong>{periods.length}</strong></div>
-        <div><small>Dienstlich</small><strong>{periods.filter((item) => item.dutyRelated).length}</strong></div>
-        <div><small>Betrifft Umgang</small><strong>{periods.filter((item) => item.affectsContact).length}</strong></div>
-        <div><small>Betrifft Ferien</small><strong>{periods.filter((item) => item.affectsHolidays).length}</strong></div>
+        <div><small>{copy(locale, "unavailable", "periods")}</small><strong>{periods.length}</strong></div>
+        <div><small>{copy(locale, "unavailable", "dutyRelated")}</small><strong>{periods.filter((item) => item.dutyRelated).length}</strong></div>
+        <div><small>{copy(locale, "unavailable", "affectsContact")}</small><strong>{periods.filter((item) => item.affectsContact).length}</strong></div>
+        <div><small>{copy(locale, "unavailable", "affectsHolidays")}</small><strong>{periods.filter((item) => item.affectsHolidays).length}</strong></div>
       </section>
 
       <section className="notice">
         <Icon name="info" />
         <div>
-          <strong>Neutrale Dokumentation</strong>
-          <p>Dokumentierte Nichtverfügbarkeiten werden gesondert ausgewiesen und nicht automatisch als nicht wahrgenommene Betreuung bewertet.</p>
+          <strong>{copy(locale, "unavailable", "neutralTitle")}</strong>
+          <p>{copy(locale, "unavailable", "neutralDescription")}</p>
         </div>
       </section>
 
       <section className="panel unavailable-panel">
         <div className="panel__header">
           <div>
-            <h2>Erfasste Zeiträume</h2>
-            <p>Dienstliche und sonstige Abwesenheiten im gewählten Zeitraum</p>
+            <h2>{copy(locale, "unavailable", "recorded")}</h2>
+            <p>{copy(locale, "unavailable", "recordedDescription")}</p>
           </div>
         </div>
         <div className="unavailable-list">
@@ -86,31 +89,31 @@ export function UnavailablePeriodsPage() {
             <article className="unavailable-row" key={period.id}>
               <span className={`unavailable-row__type ${period.dutyRelated ? "is-duty" : ""}`}>
                 <Icon name="briefcase" size={17} />
-                {period.dutyRelated ? "Dienstlich" : "Sonstig"}
+                {period.dutyRelated ? copy(locale, "unavailable", "dutyRelated") : copy(locale, "unavailable", "other")}
               </span>
               <span>
                 <strong>{unavailableCategoryLabels[period.category]}</strong>
                 <small>
-                  {formatDate(period.startDateTime)} {formatTime(period.startDateTime)}
-                  {" bis "}
-                  {formatDate(period.endDateTime)} {formatTime(period.endDateTime)}
+                  {formatDate(period.startDateTime, intlLocale)} {formatTime(period.startDateTime, intlLocale)}
+                  {` ${copy(locale, "common", "to")} `}
+                  {formatDate(period.endDateTime, intlLocale)} {formatTime(period.endDateTime, intlLocale)}
                 </small>
               </span>
               <span>
                 <strong>
                   {[
-                    period.affectsContact ? "Umgang" : "",
-                    period.affectsHolidays ? "Ferienplanung" : ""
-                  ].filter(Boolean).join(" · ") || "Keine Auswirkung markiert"}
+                    period.affectsContact ? copy(locale, "unavailable", "affectsContact") : "",
+                    period.affectsHolidays ? copy(locale, "unavailable", "holidayPlanning") : ""
+                  ].filter(Boolean).join(" · ") || copy(locale, "unavailable", "noEffect")}
                 </strong>
-                <small>{period.location || period.notes || "Keine ergänzende Angabe"}</small>
+                <small>{period.location || period.notes || copy(locale, "common", "noAdditionalInformation")}</small>
               </span>
               <span className="unavailable-row__actions">
                 <button
                   className="icon-button icon-button--bordered"
                   type="button"
                   onClick={() => setEditing(period)}
-                  aria-label="Nichtverfügbarkeit bearbeiten"
+                  aria-label={copy(locale, "unavailable", "edit")}
                 >
                   <Icon name="edit" size={16} />
                 </button>
@@ -119,7 +122,7 @@ export function UnavailablePeriodsPage() {
                   type="button"
                   onClick={() => void remove(period)}
                   disabled={!canWrite}
-                  aria-label="Nichtverfügbarkeit löschen"
+                  aria-label={copy(locale, "unavailable", "delete")}
                 >
                   <Icon name="trash" size={16} />
                 </button>
@@ -128,7 +131,7 @@ export function UnavailablePeriodsPage() {
           ))}
           {periods.length === 0 ? (
             <p className="empty-copy empty-copy--padded">
-              Für den gewählten Zeitraum sind keine Nichtverfügbarkeiten dokumentiert.
+              {copy(locale, "unavailable", "empty")}
             </p>
           ) : null}
         </div>
@@ -138,8 +141,8 @@ export function UnavailablePeriodsPage() {
         <Modal
           title={
             editing === "new"
-              ? "Nichtverfügbarkeit erfassen"
-              : "Nichtverfügbarkeit bearbeiten"
+              ? copy(locale, "unavailable", "createTitle")
+              : copy(locale, "unavailable", "editTitle")
           }
           onClose={() => setEditing(null)}
         >

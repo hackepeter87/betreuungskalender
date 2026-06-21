@@ -27,7 +27,8 @@ included in repository screenshots.
 [Features](#features) · [Development](#development-quick-start) ·
 [Container](#container-quick-start) · [systemd/LXC](#lxcsystemd-quick-start) ·
 [Configuration](docs/configuration.md) · [Security](docs/security.md) ·
-[Backup](docs/backup-restore.md) · [Legacy migration](docs/migration.md)
+[Backup](docs/backup-restore.md) · [Legacy migration](docs/migration.md) ·
+[Internationalization](docs/internationalization.md)
 
 ## Features
 
@@ -321,6 +322,15 @@ npm run release:check
 
 CI runs install, static checks, tests, and production build. A separate workflow
 builds the container, starts it, and verifies the API health endpoint.
+
+## Language packs
+
+German is the default UI language. The app includes an initial English language
+pack for the application shell, settings, reports, and PDF output. Remaining
+screens fall back to German while they are migrated incrementally. Language is
+a browser UI preference and does not change API or SQLite data.
+
+See [docs/internationalization.md](docs/internationalization.md).
 
 ## License
 

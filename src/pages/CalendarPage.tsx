@@ -10,6 +10,8 @@ import { formatMonth } from "../lib/date";
 import { rangeForMonth } from "../lib/date";
 import { useAppStore } from "../store/AppStore";
 import { useMediaQuery } from "../hooks/useMediaQuery";
+import { useI18n } from "../i18n/I18nProvider";
+import { copy } from "../i18n/catalog";
 import type { CareEntry, UnavailablePeriod } from "../types";
 
 export function CalendarPage({
@@ -24,6 +26,7 @@ export function CalendarPage({
   onEditEntry: (entry: CareEntry) => void;
 }) {
   const { data, canWrite } = useAppStore();
+  const { locale, intlLocale } = useI18n();
   const isMobile = useMediaQuery("(max-width: 767px)");
   const [view, setView] = useState<"agenda" | "month">(() =>
     window.matchMedia("(max-width: 767px)").matches ? "agenda" : "month"
@@ -49,18 +52,18 @@ export function CalendarPage({
     <div className="page page--calendar" data-testid="page-calendar">
       <div className="page-header">
         <div>
-          <p className="page-header__context">Kalender</p>
-          <h1>{formatMonth(monthKey)}</h1>
+          <p className="page-header__context">{copy(locale, "calendarPage", "context")}</p>
+          <h1>{formatMonth(monthKey, intlLocale)}</h1>
         </div>
         <div className="page-header__actions">
           <MonthToolbar monthKey={monthKey} onChange={onMonthChange} />
           <button className="button button--primary desktop-only" type="button" onClick={() => onNewEntry()} disabled={!canWrite}>
             <Icon name="plus" />
-            Eintrag erfassen
+            {copy(locale, "calendarPage", "createEntry")}
           </button>
           <button className="button button--secondary desktop-only" type="button" onClick={() => setEditingUnavailable("new")} disabled={!canWrite}>
             <Icon name="briefcase" />
-            Nichtverfügbarkeit
+            {copy(locale, "calendarPage", "unavailability")}
           </button>
         </div>
       </div>
@@ -68,15 +71,15 @@ export function CalendarPage({
       <div className="calendar-quick-actions">
         <button className="button button--primary" type="button" onClick={() => onNewEntry()} disabled={!canWrite}>
           <Icon name="plus" size={17} />
-          Betreuung
+          {copy(locale, "calendarPage", "care")}
         </button>
         <button className="button button--secondary" type="button" onClick={() => setEditingUnavailable("new")} disabled={!canWrite}>
           <Icon name="briefcase" size={17} />
-          Nichtverfügbarkeit
+          {copy(locale, "calendarPage", "unavailability")}
         </button>
       </div>
 
-      <div className="calendar-view-toggle" role="group" aria-label="Kalenderansicht">
+      <div className="calendar-view-toggle" role="group" aria-label={copy(locale, "calendarPage", "viewLabel")}>
         <button
           type="button"
           data-testid="calendar-view-agenda"
@@ -84,7 +87,7 @@ export function CalendarPage({
           onClick={() => setView("agenda")}
         >
           <Icon name="list" size={17} />
-          Agenda
+          {copy(locale, "calendarPage", "agenda")}
         </button>
         <button
           type="button"
@@ -93,7 +96,7 @@ export function CalendarPage({
           onClick={() => setView("month")}
         >
           <Icon name="calendar" size={17} />
-          Monat
+          {copy(locale, "calendarPage", "month")}
         </button>
       </div>
 
@@ -124,25 +127,25 @@ export function CalendarPage({
               {data.children.map((child) => (
                 <span key={child.id}><span className="child-dot" style={{ backgroundColor: child.color }} />{child.name}</span>
               ))}
-              <span><Icon name="moon" size={14} />Übernachtung</span>
-              <span><span className="legend-line legend-line--planned" />geplant</span>
-              <span><span className="legend-line legend-line--cancelled" />ausgefallen</span>
+              <span><Icon name="moon" size={14} />{copy(locale, "calendarPage", "overnight")}</span>
+              <span><span className="legend-line legend-line--planned" />{copy(locale, "calendarPage", "planned")}</span>
+              <span><span className="legend-line legend-line--cancelled" />{copy(locale, "calendarPage", "cancelled")}</span>
             </div>
           </section>
-          <p className="page-tip"><Icon name="info" size={16} /> Tippe auf einen Tag für einen neuen Eintrag oder auf einen bestehenden Balken zum Bearbeiten.</p>
+          <p className="page-tip"><Icon name="info" size={16} /> {copy(locale, "calendarPage", "tip")}</p>
         </>
       )}
 
-      <button className="mobile-fab" data-testid="calendar-add-entry" type="button" onClick={() => onNewEntry()} disabled={!canWrite} aria-label="Betreuungseintrag hinzufügen">
+      <button className="mobile-fab" data-testid="calendar-add-entry" type="button" onClick={() => onNewEntry()} disabled={!canWrite} aria-label={copy(locale, "calendarPage", "addEntryAria")}>
         <Icon name="plus" size={21} />
-        Eintrag hinzufügen
+        {copy(locale, "calendarPage", "addEntry")}
       </button>
       {editingUnavailable ? (
         <Modal
           title={
             editingUnavailable === "new"
-              ? "Nichtverfügbarkeit erfassen"
-              : "Nichtverfügbarkeit bearbeiten"
+              ? copy(locale, "unavailable", "createTitle")
+              : copy(locale, "unavailable", "editTitle")
           }
           onClose={() => setEditingUnavailable(null)}
         >

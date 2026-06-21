@@ -1,12 +1,14 @@
 import { Icon } from "./Icon";
+import { useI18n } from "../i18n/I18nProvider";
+import { copy } from "../i18n/catalog";
 
 export function MobileExportNotice() {
+  const { locale } = useI18n();
   return (
     <div className="mobile-export-notice">
       <Icon name="info" size={17} />
       <p>
-        Auf iPhone und iPad öffnet Safari Dateien je nach Format zunächst in einer
-        Vorschau. Nutze anschließend „Teilen“ und „In Dateien sichern“.
+        {copy(locale, "mobileExport", "notice")}
       </p>
     </div>
   );

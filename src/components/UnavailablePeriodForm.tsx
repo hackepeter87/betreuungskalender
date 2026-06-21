@@ -1,5 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { unavailableCategoryLabels } from "../lib/labels";
+import { unavailableCategoryLabel } from "../lib/labels";
+import { useI18n } from "../i18n/I18nProvider";
+import { copy } from "../i18n/catalog";
 import { toDateKey } from "../lib/date";
 import { useAppStore } from "../store/AppStore";
 import type { UnavailableCategory, UnavailablePeriod } from "../types";
@@ -30,6 +32,7 @@ export function UnavailablePeriodForm({
   initialDate?: string;
   onDone: () => void;
 }) {
+  const { locale } = useI18n();
   const { saveUnavailablePeriod, canWrite, isSaving } = useAppStore();
   const today = toDateKey(new Date());
   const initialStart = localParts(period?.startDateTime);
@@ -61,27 +64,27 @@ export function UnavailablePeriodForm({
   const recommendations = useMemo(() => {
     const messages: string[] = [];
     if (category === "other" && !notes.trim()) {
-      messages.push("Bei „Sonstiges“ wird eine kurze Notiz empfohlen.");
+      messages.push(copy(locale, "unavailable", "otherNoteRecommendation"));
     }
     if (dutyRelated && !evidenceReference.trim()) {
       messages.push(
-        "Bei dienstlicher Veranlassung wird eine Belegreferenz empfohlen."
+        copy(locale, "unavailable", "dutyEvidenceRecommendation")
       );
     }
     return messages;
-  }, [category, dutyRelated, evidenceReference, notes]);
+  }, [category, dutyRelated, evidenceReference, locale, notes]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setError("");
     if (!startDate || !startTime || !endDate || !endTime) {
-      setError("Bitte Beginn und Ende vollständig angeben.");
+      setError(copy(locale, "unavailable", "completePeriod"));
       return;
     }
     const startDateTime = fromInputValue(startDate, startTime);
     const endDateTime = fromInputValue(endDate, endTime);
     if (new Date(endDateTime) <= new Date(startDateTime)) {
-      setError("Das Ende muss nach dem Beginn liegen.");
+      setError(copy(locale, "unavailable", "endAfterStart"));
       return;
     }
     const saved = await saveUnavailablePeriod({
@@ -103,10 +106,10 @@ export function UnavailablePeriodForm({
   return (
     <form className="child-form unavailable-form" onSubmit={submit}>
       <section className="form-section">
-        <h3>Zeitraum und Kategorie</h3>
+        <h3>{copy(locale, "unavailable", "periodCategory")}</h3>
         <div className="datetime-grid">
           <label className="field">
-            <FieldHelpLabel fieldId="unavailable.startDateTime">Beginn Datum</FieldHelpLabel>
+            <FieldHelpLabel fieldId="unavailable.startDateTime">{copy(locale, "entryForm", "startDate")}</FieldHelpLabel>
             <input
               autoFocus
               required
@@ -116,7 +119,7 @@ export function UnavailablePeriodForm({
             />
           </label>
           <label className="field">
-            <FieldHelpLabel fieldId="unavailable.startDateTime">Beginn Uhrzeit</FieldHelpLabel>
+            <FieldHelpLabel fieldId="unavailable.startDateTime">{copy(locale, "entryForm", "startTime")}</FieldHelpLabel>
             <input
               required
               type="time"
@@ -125,7 +128,7 @@ export function UnavailablePeriodForm({
             />
           </label>
           <label className="field">
-            <FieldHelpLabel fieldId="unavailable.endDateTime">Ende Datum</FieldHelpLabel>
+            <FieldHelpLabel fieldId="unavailable.endDateTime">{copy(locale, "entryForm", "endDate")}</FieldHelpLabel>
             <input
               required
               type="date"
@@ -134,7 +137,7 @@ export function UnavailablePeriodForm({
             />
           </label>
           <label className="field">
-            <FieldHelpLabel fieldId="unavailable.endDateTime">Ende Uhrzeit</FieldHelpLabel>
+            <FieldHelpLabel fieldId="unavailable.endDateTime">{copy(locale, "entryForm", "endTime")}</FieldHelpLabel>
             <input
               required
               type="time"
@@ -152,15 +155,15 @@ export function UnavailablePeriodForm({
               setCategory(event.target.value as UnavailableCategory)
             }
           >
-            {Object.entries(unavailableCategoryLabels).map(([value, label]) => (
-              <option key={value} value={value}>{label}</option>
+            {(["duty", "training_course", "exercise", "guard_duty", "standby", "deployment", "business_trip", "illness", "private_unavailability", "vacation_without_children", "other"] as UnavailableCategory[]).map((value) => (
+              <option key={value} value={value}>{unavailableCategoryLabel(value, locale)}</option>
             ))}
           </select>
         </label>
       </section>
 
       <section className="form-section">
-        <h3>Auswirkungen</h3>
+        <h3>{copy(locale, "unavailable", "effects")}</h3>
         <div className="unavailable-toggle-list">
           <label className="toggle">
             <input
@@ -193,13 +196,13 @@ export function UnavailablePeriodForm({
       </section>
 
       <section className="form-section">
-        <h3>Ort, Notiz und Beleg</h3>
+        <h3>{copy(locale, "unavailable", "locationNotesEvidence")}</h3>
         <label className="field">
           <FieldHelpLabel fieldId="unavailable.location" />
           <input
             value={location}
             onChange={(event) => setLocation(event.target.value)}
-            placeholder="z. B. Dienststätte, Lehrgangsort"
+            placeholder={copy(locale, "unavailable", "locationPlaceholder")}
           />
         </label>
         <label className="field">
@@ -208,7 +211,7 @@ export function UnavailablePeriodForm({
             rows={4}
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
-            placeholder="Sachliche ergänzende Angaben"
+            placeholder={copy(locale, "unavailable", "notesPlaceholder")}
           />
         </label>
         <label className="check-row">
@@ -224,7 +227,7 @@ export function UnavailablePeriodForm({
           <input
             value={evidenceReference}
             onChange={(event) => setEvidenceReference(event.target.value)}
-            placeholder="z. B. Dienstplan 06/2026"
+            placeholder={copy(locale, "unavailable", "evidencePlaceholder")}
           />
         </label>
       </section>
@@ -233,7 +236,7 @@ export function UnavailablePeriodForm({
         <div className="notice notice--recommendation">
           <Icon name="info" size={18} />
           <div>
-            <strong>Dokumentationsempfehlung</strong>
+            <strong>{copy(locale, "unavailable", "recommendation")}</strong>
             {recommendations.map((message) => <p key={message}>{message}</p>)}
           </div>
         </div>
@@ -244,10 +247,10 @@ export function UnavailablePeriodForm({
         <span />
         <div className="form-actions__right">
           <button className="button button--secondary" type="button" onClick={onDone}>
-            Abbrechen
+            {copy(locale, "common", "cancel")}
           </button>
           <button className="button button--primary" type="submit" disabled={!canWrite || isSaving}>
-            Nichtverfügbarkeit speichern
+            {copy(locale, "unavailable", "save")}
           </button>
         </div>
       </footer>

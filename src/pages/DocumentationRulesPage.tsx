@@ -1,49 +1,12 @@
 import { Icon } from "../components/Icon";
 import { FieldHelpButton } from "../components/FieldHelp";
+import { useI18n } from "../i18n/I18nProvider";
+import { copy, copyList } from "../i18n/catalog";
 import {
   allFieldHelp,
   requirementLevelLabels,
   type FieldHelpId
 } from "../config/fieldHelp";
-
-const rules = [
-  {
-    title: "Tatsachen statt Bewertungen",
-    text: "Dokumentiere konkrete Zeitpunkte, Abläufe und Beträge. Die Anwendung trifft keine rechtliche Bewertung und dient nicht der Beurteilung anderer Personen."
-  },
-  {
-    title: "Planung und tatsächliche Betreuung trennen",
-    text: "Geplante Soll-Termine bleiben als Planung erkennbar. Nach dem Termin wird der Status auf durchgeführt oder mit sachlichem Grund auf ausgefallen gesetzt."
-  },
-  {
-    title: "Übernachtung",
-    text: "Eine Übernachtung wird nur markiert, wenn das Kind tatsächlich über Nacht betreut wurde. Abendbetreuung und kurze Kontakte bleiben davon getrennt."
-  },
-  {
-    title: "Umfang nicht künstlich aufwerten",
-    text: "Stundenweise Betreuung, Besuch, Freizeitkontakt, Abholung und Begleitung werden nicht ohne Weiteres als voller Betreuungstag dargestellt."
-  },
-  {
-    title: "Ausgefallene Termine erhalten",
-    text: "Ein ausgefallener Soll-Termin wird nicht gelöscht, sondern als ausgefallen mit einem konkreten, neutral formulierten Grund dokumentiert."
-  },
-  {
-    title: "Dienstliche Abwesenheit getrennt erfassen",
-    text: "Nichtverfügbarkeiten werden als eigener Zeitraum dokumentiert. Sie werden nicht automatisch als ausgefallener oder nicht wahrgenommener Umgang bewertet."
-  },
-  {
-    title: "Kosten und Fahrten konkret erfassen",
-    text: "Erfasse tatsächliche Einzelbeträge und realistische Kilometer mit nachvollziehbarem Anlass. Rechnerische Fahrtkosten sind kein Zahlungsnachweis."
-  },
-  {
-    title: "Belege eindeutig benennen",
-    text: "Belege bleiben extern gespeichert und werden mit einem eindeutigen Dateinamen oder einer festen Referenz verknüpft."
-  },
-  {
-    title: "Monatsabschluss und Backups",
-    text: "Prüfe offene Termine vor dem Monatsabschluss. Erstelle regelmäßig JSON-Backups und teste gelegentlich, ob eine Sicherung wieder eingelesen werden kann."
-  }
-];
 
 const helpGroups: Array<{
   prefix: string;
@@ -66,20 +29,25 @@ const helpGroups: Array<{
 ];
 
 export function DocumentationRulesPage() {
+  const { locale } = useI18n();
+  const rules = copyList(locale, "documentation", "rules").map((rule) => {
+    const [title, text] = rule.split("|", 2);
+    return { title, text };
+  });
   return (
     <div className="page documentation-page">
       <div className="page-header">
         <div>
-          <p className="page-header__context">Einheitliche Erfassung</p>
-          <h1>Dokumentationsregeln</h1>
+          <p className="page-header__context">{copy(locale, "documentation", "context")}</p>
+          <h1>{copy(locale, "documentation", "title")}</h1>
         </div>
       </div>
 
       <section className="rules-intro">
         <Icon name="book" size={28} />
         <div>
-          <h2>Sachlich, zeitnah und nachvollziehbar dokumentieren</h2>
-          <p>Die Regeln und Feldhilfen unterstützen eine konsistente Datenerfassung. Sie enthalten keine Rechtsberatung und keine Bewertung anderer Personen.</p>
+          <h2>{copy(locale, "documentation", "introTitle")}</h2>
+          <p>{copy(locale, "documentation", "intro")}</p>
         </div>
       </section>
 
@@ -97,23 +65,20 @@ export function DocumentationRulesPage() {
 
       <section className="notice notice--warning">
         <Icon name="info" />
-        <p>Die Anwendung dokumentiert Nutzereingaben und erzeugt technische Auswertungen. Sie beurteilt weder das Verhalten beteiligter Personen noch die rechtliche Bedeutung einzelner Angaben.</p>
+        <p>{copy(locale, "documentation", "notice")}</p>
       </section>
 
       <section className="field-help-catalog">
         <header className="field-help-catalog__header">
           <div>
-            <p className="page-header__context">Zentrale Feldhilfe</p>
-            <h2>Hilfetexte für alle Eingabebereiche</h2>
-            <p>
-              Öffne die Hilfe über das Info-Symbol. Dieselben zentral gepflegten
-              Texte werden direkt in den Formularen verwendet.
-            </p>
+            <p className="page-header__context">{copy(locale, "documentation", "helpContext")}</p>
+            <h2>{copy(locale, "documentation", "helpTitle")}</h2>
+            <p>{copy(locale, "documentation", "helpDescription")}</p>
           </div>
-          <div className="requirement-legend" aria-label="Anforderungsstufen">
-            <span className="requirement-badge requirement-badge--required">Pflichtfeld</span>
-            <span className="requirement-badge requirement-badge--recommended">Empfohlen</span>
-            <span className="requirement-badge requirement-badge--optional">Optional</span>
+          <div className="requirement-legend" aria-label={copy(locale, "documentation", "requirements")}>
+            <span className="requirement-badge requirement-badge--required">{copy(locale, "documentation", "required")}</span>
+            <span className="requirement-badge requirement-badge--recommended">{copy(locale, "documentation", "recommended")}</span>
+            <span className="requirement-badge requirement-badge--optional">{copy(locale, "documentation", "optional")}</span>
           </div>
         </header>
 

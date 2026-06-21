@@ -1,14 +1,17 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { I18nProvider } from "./i18n/I18nProvider";
 import { AppStoreProvider } from "./store/AppStore";
 import "./styles.css";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <AppStoreProvider>
-      <App />
-    </AppStoreProvider>
+    <I18nProvider>
+      <AppStoreProvider>
+        <App />
+      </AppStoreProvider>
+    </I18nProvider>
   </StrictMode>
 );
 

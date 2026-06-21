@@ -12,6 +12,8 @@ import {
   type FieldHelpId
 } from "../config/fieldHelp";
 import { Icon } from "./Icon";
+import { useI18n } from "../i18n/I18nProvider";
+import { copy } from "../i18n/catalog";
 
 function stopLabelToggle(event: MouseEvent) {
   event.preventDefault();
@@ -25,6 +27,7 @@ export function FieldHelpButton({
   fieldId: FieldHelpId;
   showRequirement?: boolean;
 }) {
+  const { locale } = useI18n();
   const [open, setOpen] = useState(false);
   const titleId = useId();
   const help = getFieldHelp(fieldId);
@@ -51,7 +54,7 @@ export function FieldHelpButton({
         <button
           className="field-help-button"
           type="button"
-          aria-label={`Hilfe zu ${help.label}`}
+          aria-label={copy(locale, "fieldHelp", "helpFor", { label: help.label })}
           aria-haspopup="dialog"
           aria-expanded={open}
           onMouseDown={stopLabelToggle}
@@ -91,7 +94,7 @@ export function FieldHelpButton({
                     className="icon-button icon-button--bordered"
                     type="button"
                     onClick={() => setOpen(false)}
-                    aria-label="Hilfe schließen"
+                    aria-label={copy(locale, "fieldHelp", "close")}
                     autoFocus
                   >
                     <Icon name="close" size={18} />
@@ -102,20 +105,20 @@ export function FieldHelpButton({
 
                 <dl className="field-help-details">
                   <div>
-                    <dt>Warum relevant?</dt>
+                    <dt>{copy(locale, "fieldHelp", "why")}</dt>
                     <dd>{help.whyRelevant}</dd>
                   </div>
                   <div>
-                    <dt>Verwendung</dt>
+                    <dt>{copy(locale, "fieldHelp", "usage")}</dt>
                     <dd>{help.usedFor}</dd>
                   </div>
                   <div>
-                    <dt>Eingabehinweis</dt>
+                    <dt>{copy(locale, "fieldHelp", "guidance")}</dt>
                     <dd>{help.inputGuidance}</dd>
                   </div>
                   {help.commonMistakes?.length ? (
                     <div>
-                      <dt>Typische Fehler vermeiden</dt>
+                      <dt>{copy(locale, "fieldHelp", "mistakes")}</dt>
                       <dd>
                         <ul>
                           {help.commonMistakes.map((mistake) => (
@@ -127,21 +130,20 @@ export function FieldHelpButton({
                   ) : null}
                   {help.examples?.length ? (
                     <div>
-                      <dt>Beispiel</dt>
+                      <dt>{copy(locale, "fieldHelp", "example")}</dt>
                       <dd>{help.examples.join(" · ")}</dd>
                     </div>
                   ) : null}
                   {help.relatedReportSection ? (
                     <div>
-                      <dt>Berichtsbezug</dt>
+                      <dt>{copy(locale, "fieldHelp", "reportLink")}</dt>
                       <dd>{help.relatedReportSection}</dd>
                     </div>
                   ) : null}
                 </dl>
 
                 <p className="field-help-dialog__notice">
-                  Die Hilfe unterstützt eine sachliche Dokumentation. Sie enthält
-                  keine Rechtsberatung und keine rechtliche Bewertung.
+                  {copy(locale, "fieldHelp", "notice")}
                 </p>
               </section>
             </div>,

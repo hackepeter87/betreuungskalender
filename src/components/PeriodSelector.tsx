@@ -1,5 +1,7 @@
 import { formatDate, rangeForMonth, rangeForQuarter, rangeForYear } from "../lib/date";
 import { FieldHelpLabel } from "./FieldHelp";
+import { useI18n } from "../i18n/I18nProvider";
+import { copy } from "../i18n/catalog";
 
 export type PeriodMode = "month" | "quarter" | "year" | "custom";
 
@@ -35,6 +37,7 @@ export function PeriodSelector({
   value: PeriodSelection;
   onChange: (value: PeriodSelection) => void;
 }) {
+  const { locale, intlLocale } = useI18n();
   const setMode = (mode: PeriodMode) => {
     onChange(periodSelection(mode, value.anchorMonth, value));
   };
@@ -44,12 +47,12 @@ export function PeriodSelector({
   };
 
   return (
-    <section className="period-selector no-print" aria-label="Auswertungszeitraum">
+    <section className="period-selector no-print" aria-label={copy(locale, "periodSelector", "label")}>
       <div className="segmented-control period-selector__modes">
-        <button type="button" className={value.mode === "month" ? "is-active" : ""} onClick={() => setMode("month")}>Monat</button>
-        <button type="button" className={value.mode === "quarter" ? "is-active" : ""} onClick={() => setMode("quarter")}>Quartal</button>
-        <button type="button" className={value.mode === "year" ? "is-active" : ""} onClick={() => setMode("year")}>Jahr</button>
-        <button type="button" className={value.mode === "custom" ? "is-active" : ""} onClick={() => setMode("custom")}>Frei</button>
+        <button type="button" className={value.mode === "month" ? "is-active" : ""} onClick={() => setMode("month")}>{copy(locale, "periodSelector", "month")}</button>
+        <button type="button" className={value.mode === "quarter" ? "is-active" : ""} onClick={() => setMode("quarter")}>{copy(locale, "periodSelector", "quarter")}</button>
+        <button type="button" className={value.mode === "year" ? "is-active" : ""} onClick={() => setMode("year")}>{copy(locale, "periodSelector", "year")}</button>
+        <button type="button" className={value.mode === "custom" ? "is-active" : ""} onClick={() => setMode("custom")}>{copy(locale, "periodSelector", "custom")}</button>
       </div>
 
       {value.mode !== "custom" ? (
@@ -57,7 +60,7 @@ export function PeriodSelector({
           <FieldHelpLabel
             fieldId={value.mode === "year" ? "analytics.year" : value.mode === "quarter" ? "analytics.quarter" : "analytics.month"}
           >
-            {value.mode === "year" ? "Bezugsjahr" : "Bezugsmonat"}
+            {value.mode === "year" ? copy(locale, "periodSelector", "year") : copy(locale, "periodSelector", "anchorMonth")}
           </FieldHelpLabel>
           {value.mode === "year" ? (
             <input
@@ -78,7 +81,7 @@ export function PeriodSelector({
       ) : (
         <div className="period-selector__custom">
           <label className="field">
-            <FieldHelpLabel fieldId="analytics.startDate">Von</FieldHelpLabel>
+            <FieldHelpLabel fieldId="analytics.startDate">{copy(locale, "periodSelector", "startDate")}</FieldHelpLabel>
             <input
               type="date"
               value={value.startDate}
@@ -88,7 +91,7 @@ export function PeriodSelector({
             />
           </label>
           <label className="field">
-            <FieldHelpLabel fieldId="analytics.endDate">Bis</FieldHelpLabel>
+            <FieldHelpLabel fieldId="analytics.endDate">{copy(locale, "periodSelector", "endDate")}</FieldHelpLabel>
             <input
               type="date"
               value={value.endDate}
@@ -99,7 +102,7 @@ export function PeriodSelector({
       )}
 
       <p className="period-selector__result">
-        {formatDate(value.startDate)} bis {formatDate(value.endDate)}
+        {formatDate(value.startDate, intlLocale)} {copy(locale, "common", "to")} {formatDate(value.endDate, intlLocale)}
       </p>
     </section>
   );

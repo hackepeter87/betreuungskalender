@@ -1,20 +1,3 @@
-const germanMonthFormatter = new Intl.DateTimeFormat("de-DE", {
-  month: "long",
-  year: "numeric"
-});
-
-const germanDateFormatter = new Intl.DateTimeFormat("de-DE", {
-  day: "2-digit",
-  month: "2-digit",
-  year: "numeric"
-});
-
-const shortDateFormatter = new Intl.DateTimeFormat("de-DE", {
-  weekday: "short",
-  day: "2-digit",
-  month: "2-digit"
-});
-
 export function localDate(value: string | Date): Date {
   if (value instanceof Date) return new Date(value);
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date(`${value}T12:00:00`);
@@ -36,28 +19,39 @@ export function parseMonthKey(monthKey: string): Date {
   return new Date(`${monthKey}-01T12:00:00`);
 }
 
-export function formatMonth(monthKey: string): string {
-  return germanMonthFormatter.format(parseMonthKey(monthKey));
+export function formatMonth(monthKey: string, locale = "de-DE"): string {
+  return dateFormatter(locale, {
+    month: "long",
+    year: "numeric"
+  }).format(parseMonthKey(monthKey));
 }
 
-export function formatDate(value: string | Date): string {
-  return germanDateFormatter.format(localDate(value));
+export function formatDate(value: string | Date, locale = "de-DE"): string {
+  return dateFormatter(locale, {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric"
+  }).format(localDate(value));
 }
 
-export function formatShortDate(value: string | Date): string {
-  return shortDateFormatter.format(localDate(value));
+export function formatShortDate(value: string | Date, locale = "de-DE"): string {
+  return dateFormatter(locale, {
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit"
+  }).format(localDate(value));
 }
 
-export function formatTime(value: string): string {
-  return new Intl.DateTimeFormat("de-DE", {
+export function formatTime(value: string, locale = "de-DE"): string {
+  return dateFormatter(locale, {
     hour: "2-digit",
     minute: "2-digit"
   }).format(new Date(value));
 }
 
-export function formatDateTime(value: string | Date): string {
+export function formatDateTime(value: string | Date, locale = "de-DE"): string {
   const date = value instanceof Date ? value : new Date(value);
-  return new Intl.DateTimeFormat("de-DE", {
+  return dateFormatter(locale, {
     day: "2-digit",
     month: "2-digit",
     year: "numeric",
@@ -191,4 +185,17 @@ export function nowIso(): string {
 
 export function makeId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID()}`;
+}
+const formatterCache = new Map<string, Intl.DateTimeFormat>();
+
+function dateFormatter(
+  locale: string,
+  options: Intl.DateTimeFormatOptions
+): Intl.DateTimeFormat {
+  const key = `${locale}:${JSON.stringify(options)}`;
+  const cached = formatterCache.get(key);
+  if (cached) return cached;
+  const formatter = new Intl.DateTimeFormat(locale, options);
+  formatterCache.set(key, formatter);
+  return formatter;
 }
