@@ -1,6 +1,7 @@
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import fastifyStatic from "@fastify/static";
+import rateLimit from "@fastify/rate-limit";
 import Fastify from "fastify";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
@@ -78,6 +79,8 @@ await app.register(cors, {
     "x-forwarded-user"
   ]
 });
+
+await app.register(rateLimit, { global: false });
 
 app.decorateRequest("userEmail", "local-dev");
 
