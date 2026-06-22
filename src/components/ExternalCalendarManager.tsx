@@ -38,20 +38,20 @@ export function ExternalCalendarManager() {
   return <section className="panel settings-section" data-testid="external-calendar-manager">
     <div className="panel__header panel__header--compact"><div><h2>{copy(locale, "externalCalendar", "title")}</h2><p>{copy(locale, "externalCalendar", "description")}</p></div></div>
     <div className="settings-form-grid">
-      <label className="field"><span>{copy(locale, "externalCalendar", "sourceName")}</span><input value={name} onChange={(event) => setName(event.target.value)} /></label>
-      <label className="field"><span>{copy(locale, "externalCalendar", "color")}</span><input type="color" value={color} onChange={(event) => setColor(event.target.value)} /></label>
+      <label className="field"><span>{copy(locale, "externalCalendar", "sourceName")}</span><input data-testid="external-calendar-name" value={name} onChange={(event) => setName(event.target.value)} /></label>
+      <label className="field"><span>{copy(locale, "externalCalendar", "color")}</span><input data-testid="external-calendar-color" type="color" value={color} onChange={(event) => setColor(event.target.value)} /></label>
       <label className="field"><span>{copy(locale, "externalCalendar", "file")}</span><input ref={inputRef} type="file" accept=".ics,text/calendar" data-testid="external-calendar-file" onChange={(event) => { if (replacingId) void importFile(event.target.files?.[0], replacingId).finally(() => setReplacingId(null)); }} /></label>
     </div>
     <button className="button button--primary" type="button" data-testid="external-calendar-import" disabled={!canWrite || isSaving || !name.trim()} onClick={() => void importFile(inputRef.current?.files?.[0])}><Icon name="upload" size={17} />{copy(locale, "externalCalendar", "import")}</button>
-    {message ? <p className="inline-message" role="status">{message}</p> : null}
+    {message ? <p className="inline-message" role="status" data-testid="external-calendar-message">{message}</p> : null}
     <div className="child-settings-list">
-      {data.externalCalendarSources.map((source) => <div className="child-settings-row" key={source.id}>
+      {data.externalCalendarSources.map((source) => <div className="child-settings-row" key={source.id} data-testid={`external-calendar-source-${source.id}`}>
         <span className="child-avatar" style={{ backgroundColor: `${source.color}18`, color: source.color }}><Icon name="calendar" size={18} /></span>
         <span><strong>{source.name}</strong><small>{new Date(source.lastImportedAt).toLocaleString(intlLocale)}</small></span>
         <span className="child-settings-row__actions">
-          <label className="toggle"><input type="checkbox" checked={source.visible} disabled={!canWrite || isSaving} onChange={(event) => void api.updateExternalCalendar(source.id, { visible: event.target.checked }).then(reload)} /><span />{copy(locale, "externalCalendar", "visible")}</label>
-          <button className="button button--secondary" type="button" disabled={!canWrite || isSaving} onClick={() => { setName(source.name); setColor(source.color); setReplacingId(source.id); inputRef.current?.click(); }}>{copy(locale, "externalCalendar", "replace")}</button>
-          <button className="icon-button icon-button--danger" aria-label={copy(locale, "externalCalendar", "delete")} type="button" disabled={!canWrite || isSaving} onClick={() => { if (window.confirm(copy(locale, "externalCalendar", "deleteConfirm"))) void api.deleteExternalCalendar(source.id).then(reload); }}><Icon name="trash" size={17} /></button>
+          <label className="toggle" data-testid={`external-calendar-visible-control-${source.id}`}><input data-testid={`external-calendar-visible-${source.id}`} type="checkbox" checked={source.visible} disabled={!canWrite || isSaving} onChange={(event) => void api.updateExternalCalendar(source.id, { visible: event.target.checked }).then(reload)} /><span />{copy(locale, "externalCalendar", "visible")}</label>
+          <button className="button button--secondary" type="button" data-testid={`external-calendar-replace-${source.id}`} disabled={!canWrite || isSaving} onClick={() => { setName(source.name); setColor(source.color); setReplacingId(source.id); inputRef.current?.click(); }}>{copy(locale, "externalCalendar", "replace")}</button>
+          <button className="icon-button icon-button--danger" data-testid={`external-calendar-delete-${source.id}`} aria-label={copy(locale, "externalCalendar", "delete")} type="button" disabled={!canWrite || isSaving} onClick={() => { if (window.confirm(copy(locale, "externalCalendar", "deleteConfirm"))) void api.deleteExternalCalendar(source.id).then(reload); }}><Icon name="trash" size={17} /></button>
         </span>
       </div>)}
       {!data.externalCalendarSources.length ? <p className="empty-copy empty-copy--padded">{copy(locale, "externalCalendar", "empty")}</p> : null}

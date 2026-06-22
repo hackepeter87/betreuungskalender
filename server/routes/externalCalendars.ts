@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { ExternalCalendarError, deleteExternalCalendarSource, importExternalCalendar, listExternalCalendarSources, updateExternalCalendarSource, visibleExternalCalendarEvents } from "../services/externalCalendars.js";
+import { ExternalCalendarError, deleteExternalCalendarSource, importExternalCalendar, listExternalCalendarBackupEvents, listExternalCalendarSources, updateExternalCalendarSource, visibleExternalCalendarEvents } from "../services/externalCalendars.js";
 import { externalCalendarImportSchema, externalCalendarUpdateSchema } from "../validation/schemas.js";
 
 function errorReply(reply: { code(status: number): { send(payload: unknown): unknown } }, error: unknown) {
@@ -11,6 +11,7 @@ export async function externalCalendarRoutes(app: FastifyInstance): Promise<void
   const readLimit = { config: { rateLimit: { max: 120, timeWindow: "1 minute" } } };
   const writeLimit = { config: { rateLimit: { max: 20, timeWindow: "1 minute" } } };
   app.get("/api/external-calendars", readLimit, async () => listExternalCalendarSources());
+  app.get("/api/external-calendar-events/export", readLimit, async () => listExternalCalendarBackupEvents());
   app.post("/api/external-calendars/import", writeLimit, async (request, reply) => {
     const parsed = externalCalendarImportSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "external_calendar_invalid" });

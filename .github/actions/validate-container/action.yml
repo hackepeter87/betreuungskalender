@@ -1,38 +1,9 @@
-name: Validate container
-description: Build the production image and verify its API health endpoint.
+name: Validate container smoke test
+description: Build the production image and verify startup, restart, persistence, and migrations.
 
 runs:
   using: composite
   steps:
-    - name: Build image
+    - name: Run container smoke test
       shell: bash
-      run: docker build --tag betreuungskalender:ci .
-
-    - name: Start container
-      shell: bash
-      run: |
-        docker run --detach \
-          --name betreuungskalender-ci \
-          --publish 127.0.0.1:3000:3000 \
-          --env REQUIRE_AUTH=false \
-          --env TRUST_PROXY_AUTH=false \
-          --env ALLOWED_ORIGIN=http://localhost:3000 \
-          betreuungskalender:ci
-
-    - name: Verify container health
-      shell: bash
-      run: |
-        for attempt in {1..30}; do
-          if docker exec betreuungskalender-ci node scripts/healthcheck.js; then
-            exit 0
-          fi
-          sleep 2
-        done
-
-        docker logs betreuungskalender-ci
-        exit 1
-
-    - name: Stop container
-      if: always()
-      shell: bash
-      run: docker rm --force betreuungskalender-ci
+      run: bash scripts/container-smoke.sh
