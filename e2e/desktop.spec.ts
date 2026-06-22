@@ -3,6 +3,7 @@ import {
   createChild,
   createEntry,
   createHoliday,
+  importExternalCalendar,
   navigate,
   openApp,
   resetApp
@@ -115,4 +116,60 @@ test("persists the selected language and localizes the report surface", async ({
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await navigate(page, "settings");
   await expect(page.getByTestId("settings-language")).toHaveValue("en");
+});
+
+test("downloads a complete JSON backup without raw calendar payloads", async ({
+  page
+}) => {
+  const childName = "Export Kind";
+  await openApp(page);
+  await createChild(page, childName);
+  await createEntry(page, {
+    childName,
+    startDay: 6,
+    startTime: "09:00",
+    endDay: 6,
+    endTime: "15:00",
+    note: "Synthetic export entry"
+  });
+  await importExternalCalendar(page, "Synthetic Export Calendar");
+
+  await navigate(page, "backup");
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByTestId("export-json").click();
+  const download = await downloadPromise;
+  const stream = await download.createReadStream();
+  expect(stream).not.toBeNull();
+  let raw = "";
+  for await (const chunk of stream!) raw += chunk.toString();
+  const backup = JSON.parse(raw) as {
+    application: string;
+    data: {
+      children: Array<{ name: string }>;
+      entries: Array<{ notes?: string }>;
+      settings: Record<string, unknown>;
+      externalCalendarSources: Array<{ id: string; name: string }>;
+      externalCalendarEvents: Array<{ sourceId: string; title: string; rawHash: string }>;
+    };
+  };
+
+  expect(backup.application).toBe("betreuungskalender");
+  expect(backup.data.children).toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: childName })
+  ]));
+  expect(backup.data.entries).toEqual(expect.arrayContaining([
+    expect.objectContaining({ notes: "Synthetic export entry" })
+  ]));
+  expect(backup.data.settings).toEqual(expect.objectContaining({ kilometerRate: expect.any(Number) }));
+  expect(backup.data.externalCalendarSources).toHaveLength(1);
+  expect(backup.data.externalCalendarEvents).toEqual([
+    expect.objectContaining({ title: "E2E Holiday", rawHash: expect.any(String) })
+  ]);
+  expect(backup.data.externalCalendarEvents[0]?.sourceId).toBe(
+    backup.data.externalCalendarSources[0]?.id
+  );
+  expect(raw).not.toContain("BEGIN:VCALENDAR");
+  expect(raw).not.toContain("NODE_ENV");
+  expect(raw).not.toContain("DATABASE_PATH");
+  expect(raw).not.toContain("process.env");
 });

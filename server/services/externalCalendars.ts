@@ -92,6 +92,18 @@ export function listExternalCalendarSources() {
   return (db.prepare("SELECT * FROM external_calendar_sources ORDER BY name").all() as Record<string, unknown>[]).map(mapSource);
 }
 
+export function listExternalCalendarBackupEvents() {
+  return db.prepare(`
+    SELECT id, source_id AS sourceId, ical_uid AS icalUid,
+      recurrence_id AS recurrenceId, title, description,
+      start_datetime AS startDateTime, end_datetime AS endDateTime,
+      all_day AS allDay, location, raw_hash AS rawHash,
+      created_at AS createdAt, updated_at AS updatedAt
+    FROM external_calendar_events
+    ORDER BY start_datetime, id
+  `).all() as Array<Record<string, unknown>>;
+}
+
 function writeEvents(sourceId: string, events: ParsedExternalCalendarEvent[], timestamp: string) {
   const retained = new Set(events.map((event) => `${event.icalUid}\u0000${event.recurrenceId}`));
   const upsert = db.prepare(`

@@ -25,6 +25,7 @@ export function MonthToolbar({
       <label className="month-toolbar__picker">
         <span>{formatMonth(monthKey, intlLocale)}</span>
         <input
+          data-testid="month-picker"
           type="month"
           value={monthKey}
           onChange={(event) => onChange(event.target.value)}

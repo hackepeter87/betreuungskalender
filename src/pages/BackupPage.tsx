@@ -3,6 +3,7 @@ import { Icon } from "../components/Icon";
 import { FieldHelpButton } from "../components/FieldHelp";
 import { MobileExportNotice } from "../components/MobileExportNotice";
 import { createBackup, parseBackup } from "../lib/storage";
+import { api } from "../lib/api";
 import { formatDate, formatDateTime, nowIso } from "../lib/date";
 import {
   exportCostsCsv,
@@ -35,8 +36,10 @@ export function BackupPage() {
 
   const exportJson = async () => {
     const timestamp = nowIso();
+    const externalCalendarEvents = await api.listExternalCalendarBackupEvents();
     const backup = createBackup({
       ...data,
+      externalCalendarEvents,
       lastJsonBackupAt: timestamp
     });
     const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
@@ -149,7 +152,7 @@ export function BackupPage() {
             </dl>
           </div>
           <span className="action-with-help">
-            <button className="button button--primary" type="button" onClick={() => void exportJson()} disabled={isSaving}>
+            <button className="button button--primary" data-testid="export-json" type="button" onClick={() => void exportJson()} disabled={isSaving}>
               <Icon name="download" />
               {copy(locale, "backup", "exportJson")}
             </button>

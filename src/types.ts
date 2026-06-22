@@ -177,6 +177,22 @@ export interface ExternalCalendarEvent {
   location?: string;
 }
 
+export interface ExternalCalendarBackupEvent {
+  id: string;
+  sourceId: string;
+  icalUid: string;
+  recurrenceId: string;
+  title: string;
+  description?: string;
+  startDateTime: string;
+  endDateTime: string;
+  allDay: boolean;
+  location?: string;
+  rawHash: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface AppSettings {
   kilometerRate: number;
   defaultLocation: CareLocation;
@@ -249,6 +265,7 @@ export interface AppData {
   holidayPeriods: HolidayPeriod[];
   unavailablePeriods: UnavailablePeriod[];
   externalCalendarSources: ExternalCalendarSource[];
+  externalCalendarEvents: ExternalCalendarBackupEvent[];
   contactPatterns: ContactPattern[];
   auditLog: AuditLogEntry[];
   monthClosures: MonthlyClosure[];

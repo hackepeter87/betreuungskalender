@@ -1,4 +1,5 @@
 import { expect, type APIRequestContext, type Page } from "@playwright/test";
+import { resolve } from "node:path";
 
 export type AppPage =
   | "dashboard"
@@ -136,4 +137,23 @@ export async function createHoliday(page: Page, childName: string) {
 
   await expect(form).toBeHidden();
   await expect(page.getByText("Fiktiver Ferienblock", { exact: true })).toBeVisible();
+}
+
+export const externalCalendarFixture = resolve(
+  "e2e/fixtures/external-calendar.ics"
+);
+export const externalCalendarReplacementFixture = resolve(
+  "e2e/fixtures/external-calendar-replacement.ics"
+);
+export const invalidCalendarFixture = resolve("e2e/fixtures/invalid-calendar.txt");
+
+export async function importExternalCalendar(page: Page, name: string) {
+  await navigate(page, "settings");
+  const manager = page.getByTestId("external-calendar-manager");
+  await manager.getByTestId("external-calendar-name").fill(name);
+  await manager.getByTestId("external-calendar-color").fill("#2563eb");
+  await manager.getByTestId("external-calendar-file").setInputFiles(externalCalendarFixture);
+  await manager.getByTestId("external-calendar-import").click();
+  await expect(manager.getByTestId("external-calendar-message")).toContainText("1");
+  await expect(manager.getByText(name, { exact: true })).toBeVisible();
 }

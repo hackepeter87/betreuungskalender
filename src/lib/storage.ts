@@ -213,6 +213,34 @@ export function normalizeBackupData(value: unknown): AppData {
               typeof period.deletedAt === "string" ? period.deletedAt : undefined
           }))
       : [],
+    externalCalendarSources: Array.isArray(value.externalCalendarSources)
+      ? value.externalCalendarSources.filter(isObject).map((source) => ({
+          id: String(source.id ?? ""),
+          name: String(source.name ?? ""),
+          color: String(source.color ?? "#2563eb"),
+          visible: Boolean(source.visible),
+          lastImportedAt: String(source.lastImportedAt ?? nowIso()),
+          createdAt: String(source.createdAt ?? nowIso()),
+          updatedAt: String(source.updatedAt ?? nowIso())
+        }))
+      : [],
+    externalCalendarEvents: Array.isArray(value.externalCalendarEvents)
+      ? value.externalCalendarEvents.filter(isObject).map((event) => ({
+          id: String(event.id ?? ""),
+          sourceId: String(event.sourceId ?? ""),
+          icalUid: String(event.icalUid ?? ""),
+          recurrenceId: String(event.recurrenceId ?? ""),
+          title: String(event.title ?? ""),
+          description: typeof event.description === "string" ? event.description : undefined,
+          startDateTime: String(event.startDateTime ?? ""),
+          endDateTime: String(event.endDateTime ?? ""),
+          allDay: Boolean(event.allDay),
+          location: typeof event.location === "string" ? event.location : undefined,
+          rawHash: String(event.rawHash ?? ""),
+          createdAt: String(event.createdAt ?? nowIso()),
+          updatedAt: String(event.updatedAt ?? nowIso())
+        }))
+      : [],
     contactPatterns: Array.isArray(value.contactPatterns)
       ? value.contactPatterns
           .filter(isObject)

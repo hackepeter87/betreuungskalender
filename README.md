@@ -29,6 +29,7 @@ included in repository screenshots.
 [Container](#container-quick-start) · [systemd/LXC](#lxcsystemd-quick-start) ·
 [Configuration](docs/configuration.md) · [Security](docs/security.md) ·
 [Backup](docs/backup-restore.md) · [Legacy migration](docs/migration.md) ·
+[Testing](docs/testing.md) ·
 [Internationalization](docs/internationalization.md)
 
 ## Features

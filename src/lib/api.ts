@@ -5,6 +5,7 @@ import type {
   ApiMonthlyClosing,
   ApiUnavailablePeriod,
   ApiExternalCalendarEvent,
+  ApiExternalCalendarBackupEvent,
   ApiExternalCalendarSource,
   CareScope
 } from "../../shared/api";
@@ -470,6 +471,9 @@ export const api = {
   }
   ,listExternalCalendarEvents(from: string, to: string) {
     return request<ApiExternalCalendarEvent[]>(`/api/external-calendar-events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);
+  },
+  listExternalCalendarBackupEvents() {
+    return request<ApiExternalCalendarBackupEvent[]>("/api/external-calendar-events/export");
   },
   importExternalCalendar(input: { name: string; color: string; content: string }) {
     return request<{ source: ExternalCalendarSource; importedEvents: number }>("/api/external-calendars/import", { method: "POST", body: JSON.stringify(input) });

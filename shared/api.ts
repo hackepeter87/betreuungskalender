@@ -154,6 +154,22 @@ export interface ApiExternalCalendarEvent {
   location?: string;
 }
 
+export interface ApiExternalCalendarBackupEvent {
+  id: string;
+  sourceId: string;
+  icalUid: string;
+  recurrenceId: string;
+  title: string;
+  description?: string;
+  startDateTime: string;
+  endDateTime: string;
+  allDay: boolean;
+  location?: string;
+  rawHash: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export type ExternalCalendarErrorCode =
   | "external_calendar_invalid"
   | "external_calendar_limit"

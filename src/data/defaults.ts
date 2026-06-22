@@ -12,6 +12,7 @@ export function createEmptyData(): AppData {
     holidayPeriods: [],
     unavailablePeriods: [],
     externalCalendarSources: [],
+    externalCalendarEvents: [],
     contactPatterns: [],
     auditLog: [],
     monthClosures: [],
