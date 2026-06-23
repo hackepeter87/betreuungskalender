@@ -33,6 +33,9 @@ Do not send them unencrypted or upload them to public issue trackers.
 - Set `TRUST_PROXY_AUTH=true` only behind a trusted authentication proxy.
 - Block all direct access that could bypass oauth2-proxy.
 - Restrict `ALLOWED_ORIGIN` to the exact public origin.
+- Keep API rate limits enabled and tune their documented environment variables
+  only after reviewing expected client traffic. Imports, migrations, exports,
+  and writes intentionally have stricter limits than normal API reads.
 - Keep the host, Node.js, proxy, Keycloak, and container images updated.
 
 ## Application hardening

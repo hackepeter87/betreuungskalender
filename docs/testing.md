@@ -41,8 +41,9 @@ npm run test:security-runtime
 
 The test starts the Fastify runtime with a temporary SQLite path and verifies
 the documented health response, Helmet headers, allowed and disallowed origins,
-preflight behavior, and non-sensitive error responses. Temporary directories
-and the runtime process are removed automatically.
+preflight behavior, non-sensitive error responses, and central rate limits for
+ordinary API reads, writes, migration/import routes, and exports. Temporary
+directories and the runtime process are removed automatically.
 
 ## Update and rollback workflow
 

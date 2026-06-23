@@ -175,6 +175,7 @@ Key variables:
 | `TRUST_PROXY_AUTH` | `true` behind a trusted proxy only |
 | `ALLOWED_ORIGIN` | `https://betreuung.example.net` |
 | `LOG_LEVEL` | `info` |
+| `RATE_LIMIT_MAX` | `120` requests per client per minute |
 
 Every variable, default, and security implication is documented in
 [docs/configuration.md](docs/configuration.md).

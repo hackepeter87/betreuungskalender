@@ -14,6 +14,11 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `TRUST_PROXY_AUTH` | Trust supported identity headers and proxy addresses | `true` | Required with external auth | `false` | Never enable when clients can directly reach the app |
 | `ALLOWED_ORIGIN` | Single permitted browser origin for CORS | `https://betreuung.example.net` | Recommended | `http://localhost:5173` | Prevents cross-origin browser API use |
 | `LOG_LEVEL` | Fastify/Pino log level | `info` | Optional | `info` in production, `debug` otherwise | Avoid `debug` in production unless investigating |
+| `RATE_LIMIT_MAX` | Maximum API requests per client and time window | `120` | Optional | `120` | Baseline protection for every API route, including health and readiness |
+| `RATE_LIMIT_WRITE_MAX` | Maximum write requests per client and time window | `20` | Optional | `20` | Restricts POST, PUT, PATCH, and DELETE operations |
+| `RATE_LIMIT_SENSITIVE_MAX` | Maximum import and migration requests per client and time window | `5` | Optional | `5` | Protects expensive or state-replacing operations |
+| `RATE_LIMIT_EXPORT_MAX` | Maximum export requests per client and time window | `15` | Optional | `15` | Restricts potentially expensive export generation |
+| `RATE_LIMIT_WINDOW_MS` | Shared rate-limit window in milliseconds | `60000` | Optional | `60000` | Keep a bounded window; values must be positive integers |
 | `BACKUP_RETENTION_DAYS` | Remove generated SQLite backups older than this | `14` | Optional | `14` | Set `0` to disable automatic age pruning |
 | `HEALTHCHECK_URL` | URL used by `npm run healthcheck` | `http://127.0.0.1:3000/api/health` | Optional | Same | Use an internal URL; no credentials are required |
 
@@ -51,3 +56,15 @@ or firewall policy.
 Production should normally serve frontend and API from the same origin.
 `ALLOWED_ORIGIN` must exactly match the public scheme, host, and optional port.
 Requests without an `Origin` header, such as internal healthchecks, are allowed.
+
+## Rate limiting
+
+The Fastify runtime applies an in-memory rate limit to every `/api/` route by
+client IP address. The proxy setting controls whether Fastify derives that IP
+from trusted forwarding headers. Import, migration, and export routes have
+stricter limits than ordinary API reads, while every write route has a lower
+limit than the default. Exceeding a limit returns HTTP `429` with standard
+rate-limit and retry headers plus a non-sensitive JSON error.
+
+The default store is process-local. For a horizontally scaled deployment, use
+a shared rate-limit store as part of a separately reviewed deployment change.
