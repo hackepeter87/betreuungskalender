@@ -44,6 +44,18 @@ the documented health response, Helmet headers, allowed and disallowed origins,
 preflight behavior, and non-sensitive error responses. Temporary directories
 and the runtime process are removed automatically.
 
+## Update and rollback workflow
+
+The update tests use a fully synthetic Compose command double and temporary
+directories. They cover a previous-release upgrade, archive verification,
+pre-update backup validation, failed startup and health verification, paired
+runtime/database rollback, dry run behavior, and concurrent-update locks. They
+never contact a release server, start Docker, or use real SQLite data.
+
+```bash
+npx tsx --test scripts/update.test.js
+```
+
 ## Container smoke test
 
 Docker is required for the container smoke test:
@@ -67,4 +79,5 @@ Pull requests run these relevant jobs:
 - `Validation`: dependency audit, release check, lint, build, and unit tests.
 - `End-to-end tests`: desktop, iPhone, and iPad Playwright coverage.
 - `Runtime security and CORS`: isolated HTTP assertions.
+- `Update and rollback workflow`: synthetic verified-update and rollback scenarios.
 - `Container / validate`: Docker startup, restart, persistence, and cleanup.

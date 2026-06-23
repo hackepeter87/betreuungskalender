@@ -1,11 +1,10 @@
 # Backup and restore
 
-Betreuungskalender has two independent storage surfaces:
-
-1. Browser local storage, backed up through the application's JSON export.
-2. SQLite API data, backed up with `npm run backup`.
-
-Back up both if both are in use.
+Betreuungskalender keeps all current domain data in SQLite. The authoritative
+operational backup is therefore `npm run backup`. The in-app JSON export is a
+portable application-data export and an additional user-facing safeguard; it
+does not replace a verified SQLite backup. Browser local storage contains only
+UI preferences and is not an operational data store.
 
 ## SQLite backup
 
@@ -20,7 +19,8 @@ npm run backup
 
 The destination directory is set to mode `0700` and new backup files to `0600`.
 Files older than `BACKUP_RETENTION_DAYS` are removed; the default is 14 days.
-Use additional weekly/monthly external retention if required.
+This also removes the private `.env` snapshots and metadata created by managed
+updates. Use additional weekly/monthly external retention if required.
 
 Verify the latest backup:
 
@@ -36,6 +36,10 @@ npm run restore:check -- /var/backups/betreuungskalender/example.sqlite
 
 The check runs SQLite `integrity_check` and verifies required tables. It does
 not print family data.
+
+The managed Compose update workflow runs both commands before switching a
+release and writes non-sensitive metadata next to the resulting backup. See
+[update.md](update.md) for the complete update and rollback procedure.
 
 ## Restore procedure
 

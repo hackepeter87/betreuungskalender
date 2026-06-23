@@ -15,8 +15,9 @@ Depending on use, the application may store:
 - Audit identities and change history
 - Monthly closure summaries
 
-The React UI stores its working data in browser local storage. API clients may
-also store data in SQLite. There is no automatic synchronization between them.
+The React UI reads and writes domain data only through the Fastify API and its
+SQLite database. Browser local storage is limited to non-sensitive UI
+preferences; it is not a domain-data store or backup surface.
 
 ## Exports and backups
 

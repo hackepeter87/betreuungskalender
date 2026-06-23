@@ -26,7 +26,7 @@ Example dashboard using fictional demonstration data. No real personal data is
 included in repository screenshots.
 
 [Features](#features) · [Development](#development-quick-start) ·
-[Container](#container-quick-start) · [systemd/LXC](#lxcsystemd-quick-start) ·
+[Container](#container-quick-start) · [Updates](docs/update.md) · [systemd/LXC](#lxcsystemd-quick-start) ·
 [Configuration](docs/configuration.md) · [Security](docs/security.md) ·
 [Backup](docs/backup-restore.md) · [Legacy migration](docs/migration.md) ·
 [Testing](docs/testing.md) ·
@@ -238,16 +238,16 @@ Restore procedure and testing:
 
 ## Updates
 
-Before every update:
+The supported self-hosted production path uses a checksummed release archive
+and a Compose-first update tool. It checks preconditions, creates and verifies
+a SQLite backup, switches only to a versioned release directory, verifies
+health/readiness, version, migrations, and database integrity, and restores
+both the prior runtime and matching backup when validation fails.
 
-1. Export JSON from the application.
-2. Create and verify an SQLite backup.
-3. Read `CHANGELOG.md`.
-4. Install exact dependencies with `npm ci`.
-5. Run build and tests.
-6. Restart, check health, and perform a UI smoke test.
-
-Rollback details: [docs/update.md](docs/update.md)
+Run the documented `--dry-run` before every update and retain prior releases
+and verified backups. Full bootstrap, lock handling, exit codes, manual
+recovery, and direct Node.js fallback guidance:
+[docs/update.md](docs/update.md).
 
 ## Mobile, iPhone, iPad, and PWA
 

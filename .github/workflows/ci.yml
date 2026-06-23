@@ -61,3 +61,15 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:security-runtime
+
+  update-workflow:
+    name: Update and rollback workflow
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+      - run: npm ci
+      - run: npx tsx --test scripts/update.test.js

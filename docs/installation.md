@@ -54,7 +54,8 @@ Migrations run automatically before the listener starts.
 
 ## Important storage distinction
 
-The current React UI stores its working data in browser local storage. The
-SQLite API is a separate persistence surface and is not automatically
-synchronized with that browser data. Back up browser data with the JSON export,
-and back up API data with `npm run backup`.
+The SQLite API is the single persistence surface for current domain data. The
+React UI uses the API for every domain read and write; browser local storage is
+limited to UI preferences. Use the JSON export as a portable additional export,
+and `npm run backup` plus `npm run restore:check` for the authoritative
+operational backup.

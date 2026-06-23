@@ -17,17 +17,20 @@ function timestampForFilename(date) {
   return date.toISOString().replaceAll(":", "-").replace(/\.\d{3}Z$/, "Z");
 }
 
+function isManagedBackupFile(name) {
+  return (
+    (name.startsWith("betreuungskalender-sqlite-") && name.endsWith(".sqlite")) ||
+    (name.startsWith("update-") && (name.endsWith(".json") || name.endsWith(".env")))
+  );
+}
+
 async function pruneOldBackups(now) {
   if (!Number.isFinite(retentionDays) || retentionDays <= 0) return 0;
   const cutoff = now.getTime() - retentionDays * 86_400_000;
   let removed = 0;
 
   for (const entry of await readdir(backupDir, { withFileTypes: true })) {
-    if (
-      !entry.isFile() ||
-      !entry.name.startsWith("betreuungskalender-sqlite-") ||
-      !entry.name.endsWith(".sqlite")
-    ) {
+    if (!entry.isFile() || !isManagedBackupFile(entry.name)) {
       continue;
     }
     const path = resolve(backupDir, entry.name);
