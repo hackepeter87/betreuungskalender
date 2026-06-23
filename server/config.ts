@@ -12,6 +12,11 @@ function numberEnv(value: string | undefined, fallback: number): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+function positiveNumberEnv(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
 function packageVersion(): string {
   try {
     const packageJson = JSON.parse(
@@ -35,5 +40,10 @@ export const config = {
   logLevel: process.env.LOG_LEVEL ?? (
     process.env.NODE_ENV === "production" ? "info" : "debug"
   ),
+  rateLimitMax: positiveNumberEnv(process.env.RATE_LIMIT_MAX, 120),
+  rateLimitWriteMax: positiveNumberEnv(process.env.RATE_LIMIT_WRITE_MAX, 20),
+  rateLimitSensitiveMax: positiveNumberEnv(process.env.RATE_LIMIT_SENSITIVE_MAX, 5),
+  rateLimitExportMax: positiveNumberEnv(process.env.RATE_LIMIT_EXPORT_MAX, 15),
+  rateLimitWindowMs: positiveNumberEnv(process.env.RATE_LIMIT_WINDOW_MS, 60_000),
   version: packageVersion()
 } as const;

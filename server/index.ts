@@ -17,6 +17,7 @@ import { contactPatternRoutes } from "./routes/contactPatterns.js";
 import { holidayRoutes } from "./routes/holidays.js";
 import { monthClosingRoutes } from "./routes/monthClosings.js";
 import { migrationRoutes } from "./routes/migration.js";
+import { installRateLimitPolicy } from "./rateLimitPolicy.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { unavailablePeriodRoutes } from "./routes/unavailablePeriods.js";
 import { externalCalendarRoutes } from "./routes/externalCalendars.js";
@@ -80,7 +81,23 @@ await app.register(cors, {
   ]
 });
 
-await app.register(rateLimit, { global: false });
+installRateLimitPolicy(app, {
+  defaultMax: config.rateLimitMax,
+  writeMax: config.rateLimitWriteMax,
+  sensitiveMax: config.rateLimitSensitiveMax,
+  exportMax: config.rateLimitExportMax,
+  timeWindowMs: config.rateLimitWindowMs
+});
+
+await app.register(rateLimit, {
+  global: true,
+  max: config.rateLimitMax,
+  timeWindow: config.rateLimitWindowMs,
+  errorResponseBuilder: (_request, context) => Object.assign(
+    new Error("Zu viele Anfragen. Bitte später erneut versuchen."),
+    { code: "rate_limit_exceeded", statusCode: context.statusCode }
+  )
+});
 
 app.decorateRequest("userEmail", "local-dev");
 
@@ -126,6 +143,12 @@ app.setErrorHandler((error, request, reply) => {
     );
   }
   const code = normalized.code ?? "";
+  if (code === "rate_limit_exceeded") {
+    return reply.code(429).send({
+      error: "rate_limit_exceeded",
+      message: "Zu viele Anfragen. Bitte später erneut versuchen."
+    });
+  }
   if (code.startsWith("SQLITE_CONSTRAINT")) {
     return reply.code(400).send({
       error: "constraint_violation",

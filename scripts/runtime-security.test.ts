@@ -129,3 +129,83 @@ test("production runtime sends documented security headers and restrictive CORS"
   assert.doesNotMatch(missingBody, /stack|sqlite|node_modules|server\//i);
   assert.equal(missingApi.headers.get("access-control-allow-origin"), "https://allowed.example.test");
 });
+
+test("production runtime applies central and stricter API rate limits", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "betreuungskalender-rate-limit-"));
+  const port = await freePort();
+  let logs = "";
+  const runtime = spawn(
+    process.execPath,
+    [resolve(projectRoot, "node_modules/tsx/dist/cli.mjs"), "server/index.ts"],
+    {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        NODE_ENV: "production",
+        HOST: "127.0.0.1",
+        PORT: String(port),
+        DATABASE_PATH: join(root, "app.sqlite"),
+        BACKUP_DIR: join(root, "backups"),
+        REQUIRE_AUTH: "false",
+        TRUST_PROXY_AUTH: "true",
+        ALLOWED_ORIGIN: "https://allowed.example.test",
+        LOG_LEVEL: "warn",
+        RATE_LIMIT_MAX: "2",
+        RATE_LIMIT_WRITE_MAX: "1",
+        RATE_LIMIT_SENSITIVE_MAX: "1",
+        RATE_LIMIT_EXPORT_MAX: "1",
+        RATE_LIMIT_WINDOW_MS: "60000"
+      }
+    }
+  );
+  runtime.stdout.on("data", (chunk) => { logs += chunk; });
+  runtime.stderr.on("data", (chunk) => { logs += chunk; });
+
+  t.after(async () => {
+    await stop(runtime);
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const baseUrl = `http://127.0.0.1:${port}`;
+  await waitForHealth(`${baseUrl}/api/health`, () => logs);
+  const request = (path: string, ip: string, init?: RequestInit) =>
+    fetch(`${baseUrl}${path}`, {
+      ...init,
+      headers: { "x-forwarded-for": ip, ...init?.headers }
+    });
+
+  assert.equal((await request("/api/children", "198.51.100.1")).status, 200);
+  assert.equal((await request("/api/children", "198.51.100.1")).status, 200);
+  const defaultExceeded = await request("/api/children", "198.51.100.1");
+  assert.equal(defaultExceeded.status, 429);
+  assert.equal(defaultExceeded.headers.get("x-ratelimit-limit"), "2");
+  assert.deepEqual(await defaultExceeded.json(), {
+    error: "rate_limit_exceeded",
+    message: "Zu viele Anfragen. Bitte später erneut versuchen."
+  });
+
+  const childInput = {
+    name: "Rate Limit Child",
+    birthMonth: 1,
+    birthYear: 2016,
+    color: "#2563eb"
+  };
+  assert.equal((await request("/api/children", "198.51.100.2", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(childInput)
+  })).status, 201);
+  const writeExceeded = await request("/api/children", "198.51.100.2", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(childInput)
+  });
+  assert.equal(writeExceeded.status, 429);
+  assert.equal(writeExceeded.headers.get("x-ratelimit-limit"), "1");
+
+  assert.equal((await request("/api/migration/legacy-summary", "198.51.100.3")).status, 200);
+  assert.equal((await request("/api/migration/legacy-summary", "198.51.100.3")).status, 429);
+
+  assert.equal((await request("/api/external-calendar-events/export", "198.51.100.4")).status, 200);
+  assert.equal((await request("/api/external-calendar-events/export", "198.51.100.4")).status, 429);
+});

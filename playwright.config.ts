@@ -32,7 +32,12 @@ export default defineConfig({
       BACKUP_DIR: "./test-results/backups",
       NODE_ENV: "test",
       LOG_LEVEL: "warn",
-      ALLOWED_ORIGIN: baseURL
+      ALLOWED_ORIGIN: baseURL,
+      // E2E scenarios intentionally issue many synthetic API calls from one IP.
+      RATE_LIMIT_MAX: "10000",
+      RATE_LIMIT_WRITE_MAX: "10000",
+      RATE_LIMIT_SENSITIVE_MAX: "10000",
+      RATE_LIMIT_EXPORT_MAX: "10000"
     }
   },
   projects: [
