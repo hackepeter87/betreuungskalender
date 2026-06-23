@@ -22,6 +22,12 @@ The default Compose file binds only to `127.0.0.1:3000` and uses named volumes
 for `/data` and `/backups`. Its authentication is disabled for a local
 single-user start. Change these values before exposing the service.
 
+For a persistent production installation, use the separate stable bind-mount
+layout in [update.md](update.md), which installs `deploy/compose.yml` as
+`/opt/betreuungskalender/compose.yml`. It keeps `data/`, `backups/`, `.env`, and
+the active versioned release outside the runtime image and is the only layout
+managed by `npm run update`.
+
 ## Podman
 
 ```bash
@@ -52,15 +58,11 @@ volume procedures. Browser-local JSON exports remain a separate backup.
 
 ## Update
 
-1. Export browser JSON and create an SQLite backup.
-2. Pull or check out the intended version.
-3. Run `docker compose build --pull`.
-4. Run `docker compose up -d`.
-5. Check container health and perform a UI smoke test.
-
-For tagged versions, verify the release workflow and archive checksum described
-in [release.md](release.md) before rebuilding or replacing a running container.
-Keep the prior image or source checkout available until the smoke test passes.
+For the production bind-mount layout, use the checksummed archive and managed
+update procedure in [update.md](update.md). It validates a pre-update backup,
+runtime version, readiness, migrations, and SQLite integrity before accepting a
+new release, and restores both runtime and database on failure. Keep the prior
+release directory until the new runtime has been verified.
 
 ## Rollback
 

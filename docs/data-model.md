@@ -6,13 +6,10 @@
 
 ## Persistence surfaces
 
-The application currently has two separate data models:
-
-- The React UI uses a versioned JSON structure in browser local storage.
-- The Fastify API uses SQLite tables described below.
-
-They are not automatically synchronized. This distinction is important for
-backup, restore, and operational expectations.
+The Fastify API and SQLite tables below are the single source of truth for
+current domain data. The React UI uses the API for domain reads and writes.
+Browser local storage is limited to UI preferences and an optional legacy-data
+discovery source; it is not synchronized or treated as current persistence.
 
 ## SQLite tables
 

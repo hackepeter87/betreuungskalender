@@ -5,6 +5,7 @@ suffix="${GITHUB_RUN_ID:-local}-$$-$RANDOM"
 image="betreuungskalender:smoke-${suffix}"
 container="betreuungskalender-smoke-${suffix}"
 volume="betreuungskalender-smoke-data-${suffix}"
+dockerfile="${DOCKERFILE:-Dockerfile}"
 
 cleanup() {
   docker rm --force "$container" >/dev/null 2>&1 || true
@@ -24,7 +25,7 @@ wait_for_health() {
   return 1
 }
 
-docker build --tag "$image" .
+docker build --file "$dockerfile" --tag "$image" .
 docker volume create "$volume" >/dev/null
 docker run --detach --name "$container" \
   --volume "$volume:/data" \
