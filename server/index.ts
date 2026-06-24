@@ -176,7 +176,11 @@ function databaseReachable(): boolean {
   }
 }
 
-app.get("/api/health", async (_request, reply) => {
+const readLimit = {
+  config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
+};
+
+app.get("/api/health", readLimit, async (_request, reply) => {
   const reachable = databaseReachable();
   return reply.code(reachable ? 200 : 503).send({
     status: reachable ? "ok" : "error",
@@ -186,7 +190,7 @@ app.get("/api/health", async (_request, reply) => {
   });
 });
 
-app.get("/api/ready", async (_request, reply) => {
+app.get("/api/ready", readLimit, async (_request, reply) => {
   const reachable = databaseReachable();
   const migrationCount = reachable
     ? (db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get() as {

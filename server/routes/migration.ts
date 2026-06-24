@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { config } from "../config.js";
 import {
   executeLegacyMigration,
   getLegacyDatabaseSummary,
@@ -8,6 +9,10 @@ import {
   recordLegacyMigrationEvent
 } from "../services/legacyMigration.js";
 import { appDataImportSchema } from "../validation/schemas.js";
+
+const sensitiveLimit = {
+  config: { rateLimit: { max: config.rateLimitSensitiveMax, timeWindow: config.rateLimitWindowMs } }
+};
 
 const metadataSchema = z.object({
   fingerprint: z.string().min(1).max(200),
@@ -28,12 +33,12 @@ const importSchema = previewSchema.extend({
 });
 
 export async function migrationRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/migration/legacy-summary", async () => ({
+  app.get("/api/migration/legacy-summary", sensitiveLimit, async () => ({
     database: getLegacyDatabaseSummary(),
     reports: listLegacyMigrationReports()
   }));
 
-  app.post("/api/migration/legacy-detected", async (request, reply) => {
+  app.post("/api/migration/legacy-detected", sensitiveLimit, async (request, reply) => {
     const parsed = metadataSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
@@ -46,7 +51,7 @@ export async function migrationRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(204).send();
   });
 
-  app.post("/api/migration/legacy-skip", async (request, reply) => {
+  app.post("/api/migration/legacy-skip", sensitiveLimit, async (request, reply) => {
     const parsed = metadataSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
@@ -59,7 +64,7 @@ export async function migrationRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(204).send();
   });
 
-  app.post("/api/migration/legacy-preview", async (request, reply) => {
+  app.post("/api/migration/legacy-preview", sensitiveLimit, async (request, reply) => {
     const parsed = previewSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
@@ -73,7 +78,7 @@ export async function migrationRoutes(app: FastifyInstance): Promise<void> {
     );
   });
 
-  app.post("/api/migration/legacy-import", async (request, reply) => {
+  app.post("/api/migration/legacy-import", sensitiveLimit, async (request, reply) => {
     const parsed = importSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });

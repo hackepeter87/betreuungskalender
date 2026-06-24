@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { config } from "../config.js";
 import { db } from "../db/connection.js";
 import {
   markAllClosedMonthsChanged,
@@ -7,6 +8,13 @@ import {
 } from "../services/audit.js";
 import { makeId, nowIso } from "../services/common.js";
 import { childInputSchema } from "../validation/schemas.js";
+
+const readLimit = {
+  config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
+};
+const writeLimit = {
+  config: { rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
+};
 
 interface ChildRow {
   id: string;
@@ -40,7 +48,7 @@ function getChild(id: string) {
 }
 
 export async function childrenRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/children", async () => {
+  app.get("/api/children", readLimit, async () => {
     const rows = db.prepare(`
       SELECT id, name, birth_month, birth_year, color, created_at, updated_at
       FROM children
@@ -50,7 +58,7 @@ export async function childrenRoutes(app: FastifyInstance): Promise<void> {
     return rows.map(mapChild);
   });
 
-  app.post("/api/children", async (request, reply) => {
+  app.post("/api/children", writeLimit, async (request, reply) => {
     const parsed = childInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
 
@@ -82,7 +90,7 @@ export async function childrenRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(201).send(getChild(id));
   });
 
-  app.put<{ Params: { id: string } }>("/api/children/:id", async (request, reply) => {
+  app.put<{ Params: { id: string } }>("/api/children/:id", writeLimit, async (request, reply) => {
     const before = getChild(request.params.id);
     if (!before) return reply.code(404).send({ error: "not_found" });
     const parsed = childInputSchema.safeParse(request.body);
@@ -121,7 +129,7 @@ export async function childrenRoutes(app: FastifyInstance): Promise<void> {
     return getChild(request.params.id);
   });
 
-  app.delete<{ Params: { id: string } }>("/api/children/:id", async (request, reply) => {
+  app.delete<{ Params: { id: string } }>("/api/children/:id", writeLimit, async (request, reply) => {
     const before = getChild(request.params.id);
     if (!before) return reply.code(404).send({ error: "not_found" });
     const timestamp = nowIso();

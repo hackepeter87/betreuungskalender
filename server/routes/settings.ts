@@ -1,8 +1,16 @@
 import type { FastifyInstance } from "fastify";
+import { config } from "../config.js";
 import { db } from "../db/connection.js";
 import { recordFieldChanges } from "../services/audit.js";
 import { nowIso } from "../services/common.js";
 import { settingsInputSchema } from "../validation/schemas.js";
+
+const readLimit = {
+  config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
+};
+const writeLimit = {
+  config: { rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
+};
 
 const defaults: Record<string, unknown> = {
   kilometerRate: 0.3,
@@ -22,9 +30,9 @@ function getSettings(): Record<string, unknown> {
 }
 
 export async function settingsRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/settings", async () => getSettings());
+  app.get("/api/settings", readLimit, async () => getSettings());
 
-  app.put("/api/settings", async (request, reply) => {
+  app.put("/api/settings", writeLimit, async (request, reply) => {
     const parsed = settingsInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     const before = getSettings();

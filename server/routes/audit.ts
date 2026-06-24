@@ -1,5 +1,10 @@
 import type { FastifyInstance } from "fastify";
+import { config } from "../config.js";
 import { db } from "../db/connection.js";
+
+const readLimit = {
+  config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
+};
 
 interface AuditQuery {
   entityType?: string;
@@ -10,7 +15,7 @@ interface AuditQuery {
 }
 
 export async function auditRoutes(app: FastifyInstance): Promise<void> {
-  app.get<{ Querystring: AuditQuery }>("/api/audit-log", async (request) => {
+  app.get<{ Querystring: AuditQuery }>("/api/audit-log", readLimit, async (request) => {
     const conditions = ["deleted_at IS NULL"];
     const values: Array<string | number> = [];
     if (request.query.entityType) {

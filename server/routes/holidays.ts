@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { config } from "../config.js";
 import { db } from "../db/connection.js";
 import {
   markClosedMonthsChanged,
@@ -7,6 +8,13 @@ import {
 } from "../services/audit.js";
 import { assertActiveChildren, makeId, nowIso, syncJunction } from "../services/common.js";
 import { holidayInputSchema } from "../validation/schemas.js";
+
+const readLimit = {
+  config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
+};
+const writeLimit = {
+  config: { rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
+};
 
 interface HolidayRow {
   id: string;
@@ -50,7 +58,7 @@ function getHoliday(id: string) {
 }
 
 export async function holidayRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/holiday-periods", async () => {
+  app.get("/api/holiday-periods", readLimit, async () => {
     const rows = db.prepare(`
       SELECT * FROM holiday_periods
       WHERE deleted_at IS NULL
@@ -59,7 +67,7 @@ export async function holidayRoutes(app: FastifyInstance): Promise<void> {
     return rows.map(mapHoliday);
   });
 
-  app.post("/api/holiday-periods", async (request, reply) => {
+  app.post("/api/holiday-periods", writeLimit, async (request, reply) => {
     const parsed = holidayInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     const id = makeId("holiday");
@@ -98,7 +106,7 @@ export async function holidayRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(201).send(getHoliday(id));
   });
 
-  app.put<{ Params: { id: string } }>("/api/holiday-periods/:id", async (request, reply) => {
+  app.put<{ Params: { id: string } }>("/api/holiday-periods/:id", writeLimit, async (request, reply) => {
     const before = getHoliday(request.params.id);
     if (!before) return reply.code(404).send({ error: "not_found" });
     const parsed = holidayInputSchema.safeParse(request.body);
@@ -146,7 +154,7 @@ export async function holidayRoutes(app: FastifyInstance): Promise<void> {
     return getHoliday(request.params.id);
   });
 
-  app.delete<{ Params: { id: string } }>("/api/holiday-periods/:id", async (request, reply) => {
+  app.delete<{ Params: { id: string } }>("/api/holiday-periods/:id", writeLimit, async (request, reply) => {
     const before = getHoliday(request.params.id);
     if (!before) return reply.code(404).send({ error: "not_found" });
     const timestamp = nowIso();

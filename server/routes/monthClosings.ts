@@ -1,9 +1,17 @@
 import type { FastifyInstance } from "fastify";
 import type { ApiMonthlyClosing } from "../../shared/api.js";
+import { config } from "../config.js";
 import { db } from "../db/connection.js";
 import { recordAudit } from "../services/audit.js";
 import { makeId, nowIso } from "../services/common.js";
 import { monthlyClosingInputSchema } from "../validation/schemas.js";
+
+const readLimit = {
+  config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
+};
+const writeLimit = {
+  config: { rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
+};
 
 interface ClosingRow {
   month_key: string;
@@ -36,7 +44,7 @@ function getClosing(monthKey: string): ApiMonthlyClosing | undefined {
 }
 
 export async function monthClosingRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/month-closings", async () => {
+  app.get("/api/month-closings", readLimit, async () => {
     const rows = db.prepare(`
       SELECT month_key, summary_json, changed_after_close_at, created_at
       FROM monthly_closings
@@ -46,7 +54,7 @@ export async function monthClosingRoutes(app: FastifyInstance): Promise<void> {
     return rows.map(mapClosing);
   });
 
-  app.post("/api/month-closings", async (request, reply) => {
+  app.post("/api/month-closings", writeLimit, async (request, reply) => {
     const parsed = monthlyClosingInputSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
