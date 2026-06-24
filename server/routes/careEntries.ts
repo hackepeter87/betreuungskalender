@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { ApiCareEntry, ApiCost, ApiTrip } from "../../shared/api.js";
+import { config } from "../config.js";
 import { db } from "../db/connection.js";
 import {
   markClosedMonthsChanged,
@@ -8,6 +9,13 @@ import {
 } from "../services/audit.js";
 import { assertActiveChildren, bool, makeId, nowIso, syncJunction } from "../services/common.js";
 import { careEntryInputSchema } from "../validation/schemas.js";
+
+const readLimit = {
+  config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
+};
+const writeLimit = {
+  config: { rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
+};
 
 interface EntryRow {
   id: string;
@@ -369,6 +377,7 @@ function persistEntry(
 export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: { startDate?: string; endDate?: string } }>(
     "/api/care-entries",
+    readLimit,
     async (request) => {
       const conditions = ["deleted_at IS NULL"];
       const values: string[] = [];
@@ -389,12 +398,12 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
     }
   );
 
-  app.get<{ Params: { id: string } }>("/api/care-entries/:id", async (request, reply) => {
+  app.get<{ Params: { id: string } }>("/api/care-entries/:id", readLimit, async (request, reply) => {
     const entry = getEntry(request.params.id);
     return entry ?? reply.code(404).send({ error: "not_found" });
   });
 
-  app.post("/api/care-entries", async (request, reply) => {
+  app.post("/api/care-entries", writeLimit, async (request, reply) => {
     const parsed = careEntryInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     const id = makeId("entry");
@@ -406,7 +415,7 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(201).send(getEntry(id));
   });
 
-  app.put<{ Params: { id: string } }>("/api/care-entries/:id", async (request, reply) => {
+  app.put<{ Params: { id: string } }>("/api/care-entries/:id", writeLimit, async (request, reply) => {
     const existing = getEntry(request.params.id);
     if (!existing) return reply.code(404).send({ error: "not_found" });
     const parsed = careEntryInputSchema.safeParse(request.body);
@@ -419,7 +428,7 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
     return getEntry(request.params.id);
   });
 
-  app.delete<{ Params: { id: string } }>("/api/care-entries/:id", async (request, reply) => {
+  app.delete<{ Params: { id: string } }>("/api/care-entries/:id", writeLimit, async (request, reply) => {
     const existing = getEntry(request.params.id);
     if (!existing) return reply.code(404).send({ error: "not_found" });
     const timestamp = nowIso();

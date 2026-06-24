@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { ApiUnavailablePeriod } from "../../shared/api.js";
+import { config } from "../config.js";
 import { db } from "../db/connection.js";
 import {
   markClosedMonthsChanged,
@@ -11,6 +12,13 @@ import {
   unavailablePeriodInputSchema,
   unavailablePeriodWarnings
 } from "../validation/schemas.js";
+
+const readLimit = {
+  config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
+};
+const writeLimit = {
+  config: { rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
+};
 
 interface UnavailableRow {
   id: string;
@@ -65,6 +73,7 @@ function getPeriod(id: string): ApiUnavailablePeriod | undefined {
 export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: { startDate?: string; endDate?: string } }>(
     "/api/unavailable-periods",
+    readLimit,
     async (request) => {
       const conditions = ["deleted_at IS NULL"];
       const values: string[] = [];
@@ -85,7 +94,7 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
     }
   );
 
-  app.post("/api/unavailable-periods", async (request, reply) => {
+  app.post("/api/unavailable-periods", writeLimit, async (request, reply) => {
     const parsed = unavailablePeriodInputSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -140,6 +149,7 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
 
   app.put<{ Params: { id: string } }>(
     "/api/unavailable-periods/:id",
+    writeLimit,
     async (request, reply) => {
       const before = getPeriod(request.params.id);
       if (!before) return reply.code(404).send({ error: "not_found" });
@@ -206,6 +216,7 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
 
   app.delete<{ Params: { id: string } }>(
     "/api/unavailable-periods/:id",
+    writeLimit,
     async (request, reply) => {
       const before = getPeriod(request.params.id);
       if (!before) return reply.code(404).send({ error: "not_found" });
