@@ -25,7 +25,7 @@ Use the intended SemVer version before the strict check so that the expected
 tag can be verified:
 
 ```bash
-npm version 0.1.0 --no-git-tag-version
+npm version X.Y.Z --no-git-tag-version
 ```
 
 ## 4. Update the changelog
@@ -51,24 +51,24 @@ point to `HEAD`. The command also runs the build, lint, and test scripts.
 
 ```bash
 git add package.json package-lock.json CHANGELOG.md
-git commit -m "chore: prepare v0.1.0 release"
+git commit -m "chore(release): prepare vX.Y.Z"
 ```
 
-Include `docs/release-notes/v0.1.0.md` in the commit. Run
+Include `docs/release-notes/vX.Y.Z.md` in the commit. Run
 `npm run release:check:strict` once more after the commit. The working tree must
 be clean.
 
 ## 7. Create an annotated tag
 
 ```bash
-git tag -a v0.1.0 -m "Release v0.1.0"
+git tag -a vX.Y.Z -m "Release vX.Y.Z"
 ```
 
 ## 8. Push the commit and tag
 
 ```bash
 git push
-git push origin v0.1.0
+git push origin vX.Y.Z
 ```
 
 Pushing a `v*` tag starts `.github/workflows/release.yml`. The workflow:
@@ -93,10 +93,10 @@ archive validation, and artifact upload succeeded. Download the archive and
 verify its checksum before using it:
 
 ```bash
-sha256sum --check betreuungskalender-v0.1.0.tar.gz.sha256
+sha256sum --check betreuungskalender-vX.Y.Z.tar.gz.sha256
 ```
 
-On macOS, compare `shasum -a 256 betreuungskalender-v0.1.0.tar.gz` with the
+On macOS, compare `shasum -a 256 betreuungskalender-vX.Y.Z.tar.gz` with the
 recorded checksum.
 
 ## 10. Create the GitHub release

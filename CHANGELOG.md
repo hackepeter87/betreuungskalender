@@ -6,6 +6,30 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-06-24
+
+### Added
+
+- A Compose-first, verified update workflow with a dry run, update lock,
+  SHA-256 archive verification, backup verification, readiness checks, and
+  paired runtime/database rollback.
+- A minimal release-runtime image, release archive validation, and automated
+  runtime, container, update, rollback, backup, and responsive E2E coverage.
+
+### Changed
+
+- GitHub Actions now use Node 24-runtime action versions while application
+  validation continues to run on Node.js 22.
+- Release documentation now uses reusable version placeholders for the
+  maintained preparation, tag, archive, and publish steps.
+
+### Security
+
+- API routes now enforce central Fastify rate limits with stricter limits for
+  writes, imports, migrations, and exports.
+- Route-level policy metadata makes rate-limit coverage verifiable by CodeQL;
+  no alerts were suppressed or dismissed.
+
 ## [0.4.0] - 2026-06-21
 
 ### Added
