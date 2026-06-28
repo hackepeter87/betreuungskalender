@@ -108,6 +108,16 @@ recorded checksum.
   personal data.
 - Publish only after the tag workflow and checksum verification pass.
 
+## 11. Record the published-artifact smoke test
+
+After publication, test the released archive outside the normal CI context and
+record the result under `docs/release-smoke-tests/vX.Y.Z.md`. At minimum,
+download the published archive and checksum, verify the SHA-256 value, inspect
+the archive for prohibited data artifacts, start a clean runtime from the
+archive, verify health and version reporting, create and validate a synthetic
+SQLite backup, restore that backup in an isolated runtime, and run the update
+tool in `--dry-run` mode where Docker Compose is available.
+
 ## Optional GHCR publication
 
 Container publication is intentionally not enabled by default. If maintainers
