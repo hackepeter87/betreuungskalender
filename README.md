@@ -11,7 +11,7 @@ travel, costs, holidays, and unavailable periods.
 
 ## Project status
 
-- Latest release: [v0.4.0 language packs and external calendars](docs/release-notes/v0.4.0.md)
+- Latest release: [v0.5.0](docs/release-notes/v0.5.0.md)
 - Current `main`: SQLite/API domain persistence, language packs, external
   read-only calendar overlays, responsive mobile support, backup/restore
   tooling, and deployment guidance
