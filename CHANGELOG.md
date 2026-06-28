@@ -6,6 +6,23 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.0.0-rc.1] - 2026-06-28
+
+### Changed
+
+- Promoted the validated `v0.5.0` operational and product baseline to the first
+  `1.0.0` release candidate.
+- Updated project status and release documentation for the `v1.0.0-rc.1`
+  candidate cut.
+
+### Validation
+
+- The release candidate keeps the existing SQLite/API persistence model,
+  responsive frontend, reporting/export flows, backup/restore scripts, update
+  and rollback workflow, runtime security checks, and E2E coverage intact.
+- No database schema migration, API contract change, or production deployment is
+  introduced by this release candidate.
+
 ## [0.5.0] - 2026-06-24
 
 ### Added
