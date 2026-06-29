@@ -7,6 +7,7 @@ export const REQUIRED_GITIGNORE_RULES = [
   ".env",
   ".env.*",
   "!.env.example",
+  "!deploy/.env.oidc.example",
   "/data/",
   "/backups/",
   "/exports/",
@@ -23,6 +24,7 @@ export const REQUIRED_GITIGNORE_RULES = [
 
 const ALLOWED_PATHS = new Set([
   ".env.example",
+  "deploy/.env.oidc.example",
   "scripts/backup.js",
   "scripts/release-check.js",
   "src/lib/export.ts",

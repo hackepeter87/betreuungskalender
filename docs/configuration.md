@@ -10,6 +10,8 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `PORT` | HTTP port | `3000` | Optional | `3000` | Expose only through the intended firewall/proxy |
 | `APP_RELEASE_VERSION` | Release Compose image tag | `1.0.0-rc.1` | Required for `deploy/compose.yml` | None | Must match the extracted release package version |
 | `APP_RELEASE_DIR` | Release Compose build context | `/opt/svc_betreuung/betreuungskalender/releases/v1.0.0-rc.1` | Required for `deploy/compose.yml` | None | Must point at the verified extracted release directory |
+| `APP_COMPOSE_FILE` | Compose file managed by the update tool | `compose.oidc.yml` | Required only when not using `compose.yml` | `compose.yml` | Must be `compose.yml` or `compose.oidc.yml` |
+| `OAUTH2_PROXY_IMAGE` | oauth2-proxy image used by `deploy/compose.oidc.yml` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.3` | Optional for OIDC Compose | Same | Pin and review oauth2-proxy updates like other runtime dependencies |
 | `HOST_BIND_ADDRESS` | Host address published by release Compose | `127.0.0.1` | Recommended for `deploy/compose.yml` | `127.0.0.1` | Use loopback only when the reverse proxy is on the same host |
 | `HOST_PORT` | Host port published by release Compose | `3000` | Recommended for `deploy/compose.yml` | `3000` | Expose only through the intended firewall/proxy |
 | `DATABASE_PATH` | SQLite database file | `/var/lib/betreuungskalender/app.sqlite` | Recommended | `./data/app.sqlite` | Contains sensitive API data; protect permissions and disk |
@@ -31,6 +33,10 @@ systemd deployments. The release `deploy/compose.yml` intentionally fixes those
 paths inside the container as `/data/app.sqlite` and `/backups`; configure the
 host-side persistence with the `./data:/data` and `./backups:/backups` bind
 mounts instead.
+
+`deploy/compose.oidc.yml` uses the same fixed container paths. In that mode,
+`HOST_BIND_ADDRESS` and `HOST_PORT` publish oauth2-proxy only; the app service
+uses `expose: 3000` and does not publish a host port.
 
 ## Authentication modes
 
@@ -60,6 +66,9 @@ The app accepts the first non-empty value from:
 These headers are authentication assertions, not user input. Direct client
 access to the app must be blocked by binding to loopback, container networking,
 or firewall policy.
+
+The release OIDC Compose mode enforces the intended boundary by publishing only
+oauth2-proxy. Do not add an app `ports:` mapping while `TRUST_PROXY_AUTH=true`.
 
 ## CORS and same-origin operation
 

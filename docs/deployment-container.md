@@ -6,6 +6,8 @@ The repository contains two container entry points:
   container checks from a checkout.
 - `Dockerfile.release` plus `deploy/compose.yml` for the supported release
   archive runtime and managed update layout.
+- `Dockerfile.release` plus `deploy/compose.oidc.yml` for the release archive
+  runtime behind oauth2-proxy on one exposed host port.
 
 Both runtime images use Node.js 22 LTS, install production dependencies only,
 run as the unprivileged `node` user, and include a healthcheck.
@@ -46,6 +48,80 @@ release `.env`. The release Compose file intentionally fixes those values inside
 the container as `/data/app.sqlite` and `/backups`; persist them through the
 host-side `./data:/data` and `./backups:/backups` bind mounts.
 
+## Release archive with oauth2-proxy
+
+For an internet-facing OIDC deployment, prefer `deploy/compose.oidc.yml` over
+publishing the app container directly. Install it as `compose.oidc.yml` next to
+the private `.env`, `oauth2-proxy.cfg`, persistent `data/`, persistent
+`backups/`, and extracted releases:
+
+```text
+/opt/svc_betreuung/betreuungskalender/
+  compose.oidc.yml
+  .env
+  oauth2-proxy.cfg
+  data/
+  backups/
+  releases/
+    v1.0.0-rc.1/
+      Dockerfile.release
+      dist/
+      dist-server/
+      scripts/
+      package.json
+      package-lock.json
+```
+
+Use `deploy/.env.oidc.example` as the starting point for `.env` and
+`deploy/oauth2-proxy.cfg.example` as the starting point for
+`oauth2-proxy.cfg`. Keep both private and out of Git after editing. The OIDC
+Compose file exposes only oauth2-proxy:
+
+```dotenv
+HOST_BIND_ADDRESS=0.0.0.0
+HOST_PORT=8080
+ALLOWED_ORIGIN=https://bk.example.net
+REQUIRE_AUTH=true
+TRUST_PROXY_AUTH=true
+```
+
+The app service uses `expose: 3000` for Compose networking and has no host
+`ports:` entry in this mode. oauth2-proxy forwards authenticated traffic to
+`http://betreuungskalender:3000` over the private Compose network. This is the
+safe shape when `TRUST_PROXY_AUTH=true`, because direct client access to the app
+would allow forged identity headers.
+
+For OPNsense HAProxy or another external TLS reverse proxy, point the backend at
+the container host and oauth2-proxy port, for example `ct28:8080`. If the proxy
+runs on the same host, loopback may be sufficient. With rootless Podman behind
+an external proxy or VM boundary, bind to the VM IP or all interfaces and
+restrict access at the firewall or proxy layer:
+
+```dotenv
+HOST_BIND_ADDRESS=0.0.0.0
+HOST_PORT=8080
+ALLOWED_ORIGIN=https://bk.example.net
+```
+
+For the `https://bk.huneck.net` deployment, use the same shape with
+`ALLOWED_ORIGIN=https://bk.huneck.net` and an OPNsense HAProxy backend target of
+`ct28:8080`.
+
+Start the OIDC stack with Docker Compose or a compatible Podman Compose
+installation:
+
+```bash
+sudo docker compose \
+  --project-directory /opt/svc_betreuung/betreuungskalender \
+  --env-file /opt/svc_betreuung/betreuungskalender/.env \
+  -f /opt/svc_betreuung/betreuungskalender/compose.oidc.yml up -d --build
+```
+
+Validate that only oauth2-proxy has a host port, the app is healthy, and the
+public URL redirects to `/oauth2/start` before authenticating back to the app.
+Keep `./data:/data` and `./backups:/backups` as the persistence boundary; do not
+replace them with host paths in `DATABASE_PATH` or `BACKUP_DIR`.
+
 ## Podman
 
 ```bash
@@ -75,6 +151,10 @@ HOST_BIND_ADDRESS=0.0.0.0
 HOST_PORT=8080
 ALLOWED_ORIGIN=https://betreuungskalender.example.net
 ```
+
+The same host binding rule applies to `deploy/compose.oidc.yml`. In OIDC mode,
+the exposed host port belongs to oauth2-proxy, while the app remains reachable
+only on the Compose network.
 
 ## Backup
 

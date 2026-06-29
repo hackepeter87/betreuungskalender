@@ -15,6 +15,7 @@ import {
 test("allows source and documentation files whose names mention backup or export", () => {
   const allowed = [
     ".env.example",
+    "deploy/.env.oidc.example",
     "docs/backup-restore.md",
     "docs/systemd/betreuungskalender-backup.service",
     "docs/systemd/betreuungskalender-backup.timer",
@@ -34,6 +35,8 @@ test("detects real databases, exports, backups, and environment files", () => {
   const blocked = [
     ".env",
     ".env.local",
+    "deploy/.env",
+    "deploy/.env.production",
     ".env.production",
     "data/app.sqlite",
     "data/app.sqlite-wal",

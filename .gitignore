@@ -9,6 +9,7 @@ dist-server/
 .env
 .env.*
 !.env.example
+!deploy/.env.oidc.example
 /data/
 /backups/
 /exports/
