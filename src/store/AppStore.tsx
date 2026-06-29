@@ -14,8 +14,10 @@ import {
   ApiError,
   checkServer,
   loadAppData,
+  loadSession,
   SERVER_UNAVAILABLE_MESSAGE
 } from "../lib/api";
+import type { ApiSession } from "../../shared/api";
 import { generatePatternEntries } from "../lib/contact";
 import { buildMonthlyClosureSummary, monthKeysForRange } from "../lib/monthClosure";
 import type {
@@ -50,6 +52,7 @@ export type ServerStatus = "checking" | "online" | "offline";
 
 interface AppStoreValue {
   data: AppData;
+  session: ApiSession;
   serverStatus: ServerStatus;
   isLoading: boolean;
   isSaving: boolean;
@@ -87,8 +90,14 @@ interface AppStoreValue {
 
 const AppStoreContext = createContext<AppStoreValue | null>(null);
 
+const defaultSession: ApiSession = {
+  authRequired: false,
+  authenticated: false
+};
+
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData>(createEmptyData);
+  const [session, setSession] = useState<ApiSession>(defaultSession);
   const [serverStatus, setServerStatus] = useState<ServerStatus>("checking");
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -116,9 +125,13 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     async (silent = false): Promise<boolean> => {
       if (!silent) setIsLoading(true);
       try {
-        const next = await loadAppData();
+        const [next, nextSession] = await Promise.all([
+          loadAppData(),
+          loadSession()
+        ]);
         dataRef.current = next;
         setData(next);
+        setSession(nextSession);
         setServerStatus("online");
         setError(null);
         return true;
@@ -500,6 +513,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppStoreValue>(
     () => ({
       data,
+      session,
       serverStatus,
       isLoading,
       isSaving,
@@ -548,6 +562,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       saveEntry,
       saveHolidayPeriod,
       saveUnavailablePeriod,
+      session,
       serverStatus,
       updateEntryStatus,
       updateSettings

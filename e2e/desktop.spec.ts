@@ -97,6 +97,47 @@ test("switches to read-only mode when the API is unavailable", async ({
   await context.setOffline(false);
 });
 
+test("shows authenticated user and logout action when session metadata is available", async ({
+  page
+}) => {
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      if (new URL(url, window.location.href).pathname === "/api/session") {
+        return Promise.resolve(new Response(JSON.stringify({
+          authRequired: true,
+          authenticated: true,
+          user: { displayName: "parent" },
+          logoutUrl: "/oauth2/sign_out"
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }));
+      }
+      return originalFetch(input, init);
+    };
+  });
+
+  await openApp(page);
+  await expect(page.getByTestId("auth-session")).toContainText("parent");
+  await expect(page.getByTestId("auth-logout")).toHaveAttribute(
+    "href",
+    "/oauth2/sign_out"
+  );
+});
+
+test("keeps the shell quiet in local development without authentication", async ({
+  page
+}) => {
+  await openApp(page);
+  await expect(page.getByTestId("auth-session")).toHaveCount(0);
+});
+
 test("persists the selected language and localizes the report surface", async ({
   page
 }) => {

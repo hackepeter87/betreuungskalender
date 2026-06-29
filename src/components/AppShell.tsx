@@ -56,6 +56,7 @@ export function AppShell({
   const [showMore, setShowMore] = useState(false);
   const {
     serverStatus,
+    session,
     isLoading,
     isSaving,
     error,
@@ -99,6 +100,25 @@ export function AppShell({
           <Icon name="info" size={18} />
           <p>{t("app.storageNotice")}</p>
         </div>
+
+        {session.authenticated && session.user ? (
+          <div className="session-card" data-testid="auth-session">
+            <Icon name="lock" size={17} />
+            <span>
+              <small>{t("auth.signedInAs")}</small>
+              <strong>{session.user.displayName}</strong>
+            </span>
+            {session.logoutUrl ? (
+              <a
+                className="session-card__logout"
+                data-testid="auth-logout"
+                href={session.logoutUrl}
+              >
+                {t("auth.logout")}
+              </a>
+            ) : null}
+          </div>
+        ) : null}
 
         <button
           className={`sidebar__settings ${activePage === "settings" ? "is-active" : ""}`}
@@ -193,6 +213,24 @@ export function AppShell({
                 <Icon name="close" size={19} />
               </button>
             </div>
+            {session.authenticated && session.user ? (
+              <div className="session-card session-card--mobile" data-testid="mobile-auth-session">
+                <Icon name="lock" size={17} />
+                <span>
+                  <small>{t("auth.signedInAs")}</small>
+                  <strong>{session.user.displayName}</strong>
+                </span>
+                {session.logoutUrl ? (
+                  <a
+                    className="session-card__logout"
+                    data-testid="mobile-auth-logout"
+                    href={session.logoutUrl}
+                  >
+                    {t("auth.logout")}
+                  </a>
+                ) : null}
+              </div>
+            ) : null}
             <div className="mobile-more-sheet__grid">
               {navItems
                 .filter((item) => !mobileNavItems.some((mobileItem) => mobileItem.id === item.id))

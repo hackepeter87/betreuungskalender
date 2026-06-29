@@ -112,6 +112,15 @@ export interface ApiAuditEntry {
   metadataJson?: string;
 }
 
+export interface ApiSession {
+  authRequired: boolean;
+  authenticated: boolean;
+  user?: {
+    displayName: string;
+  };
+  logoutUrl?: string;
+}
+
 export interface ApiUnavailablePeriod {
   id: string;
   startDateTime: string;

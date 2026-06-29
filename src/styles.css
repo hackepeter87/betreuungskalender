@@ -228,6 +228,61 @@ h3 {
   line-height: 1.45;
 }
 
+.session-card {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 10px;
+  padding: 11px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+  color: var(--ink);
+}
+
+.session-card svg {
+  flex: 0 0 auto;
+  color: var(--teal);
+}
+
+.session-card span {
+  min-width: 0;
+  flex: 1;
+}
+
+.session-card small,
+.session-card strong {
+  display: block;
+}
+
+.session-card small {
+  color: var(--muted);
+  font-size: 0.64rem;
+  line-height: 1.25;
+}
+
+.session-card strong {
+  overflow: hidden;
+  margin-top: 2px;
+  font-size: 0.78rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.session-card__logout {
+  flex: 0 0 auto;
+  color: var(--teal-strong);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.session-card__logout:focus-visible,
+.session-card__logout:hover {
+  text-decoration: underline;
+}
+
 .sidebar__settings {
   width: 100%;
   margin-top: 10px;
@@ -3450,6 +3505,12 @@ h3 {
     padding: 10px;
   }
 
+  .session-card {
+    flex: 0 0 auto;
+    margin-top: 8px;
+    padding: 10px;
+  }
+
   .sidebar__settings {
     flex: 0 0 auto;
     margin-top: 8px;
@@ -3605,6 +3666,10 @@ h3 {
   .offline-banner .button {
     width: 100%;
     min-height: 44px;
+  }
+
+  .session-card--mobile {
+    margin: 0 0 14px;
   }
 
   .mobile-header {

@@ -94,12 +94,24 @@ Betreuungskalender accepts these headers when `TRUST_PROXY_AUTH=true`:
 
 Prefer email only if it is stable and required for your audit policy. The
 application stores the asserted identity in API audit records.
+The browser UI also reads `/api/session` and displays a compact signed-in name
+derived from the same trusted identity. It does not expose additional OIDC token
+content.
+
+## Logout
+
+Betreuungskalender does not manage the oauth2-proxy browser session itself. Set
+`AUTH_LOGOUT_URL=/oauth2/sign_out` so the app shell can show a logout action
+that hands control back to oauth2-proxy. If your deployment uses a custom
+sign-out path or post-logout redirect, configure that reviewed same-origin path
+privately in `.env`.
 
 ## Required app settings
 
 ```dotenv
 REQUIRE_AUTH=true
 TRUST_PROXY_AUTH=true
+AUTH_LOGOUT_URL=/oauth2/sign_out
 ALLOWED_ORIGIN=https://app.example.net
 ```
 

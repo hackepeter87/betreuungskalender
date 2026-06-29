@@ -130,6 +130,56 @@ test("production runtime sends documented security headers and restrictive CORS"
   assert.equal(missingApi.headers.get("access-control-allow-origin"), "https://allowed.example.test");
 });
 
+test("runtime exposes compact session metadata for trusted proxy auth", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "betreuungskalender-session-"));
+  const port = await freePort();
+  let logs = "";
+  const runtime = spawn(
+    process.execPath,
+    [resolve(projectRoot, "node_modules/tsx/dist/cli.mjs"), "server/index.ts"],
+    {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        NODE_ENV: "production",
+        HOST: "127.0.0.1",
+        PORT: String(port),
+        DATABASE_PATH: join(root, "app.sqlite"),
+        BACKUP_DIR: join(root, "backups"),
+        REQUIRE_AUTH: "true",
+        TRUST_PROXY_AUTH: "true",
+        AUTH_LOGOUT_URL: "/oauth2/sign_out",
+        ALLOWED_ORIGIN: "https://allowed.example.test",
+        LOG_LEVEL: "warn"
+      }
+    }
+  );
+  runtime.stdout.on("data", (chunk) => { logs += chunk; });
+  runtime.stderr.on("data", (chunk) => { logs += chunk; });
+
+  t.after(async () => {
+    await stop(runtime);
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const baseUrl = `http://127.0.0.1:${port}`;
+  await waitForHealth(`${baseUrl}/api/health`, () => logs);
+
+  const missingIdentity = await fetch(`${baseUrl}/api/session`);
+  assert.equal(missingIdentity.status, 401);
+
+  const session = await fetch(`${baseUrl}/api/session`, {
+    headers: { "x-auth-request-email": "parent@example.net" }
+  });
+  assert.equal(session.status, 200);
+  assert.deepEqual(await session.json(), {
+    authRequired: true,
+    authenticated: true,
+    user: { displayName: "parent" },
+    logoutUrl: "/oauth2/sign_out"
+  });
+});
+
 test("production runtime applies central and stricter API rate limits", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "betreuungskalender-rate-limit-"));
   const port = await freePort();

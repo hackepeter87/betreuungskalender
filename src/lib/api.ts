@@ -2,6 +2,7 @@ import type {
   ApiAuditEntry,
   ApiCareEntry,
   ApiChild,
+  ApiSession,
   ApiMonthlyClosing,
   ApiUnavailablePeriod,
   ApiExternalCalendarEvent,
@@ -99,6 +100,10 @@ export async function checkServer(): Promise<boolean> {
   } finally {
     window.clearTimeout(timeout);
   }
+}
+
+export async function loadSession(): Promise<ApiSession> {
+  return request<ApiSession>("/api/session");
 }
 
 interface ApiHolidayPeriod extends HolidayPeriod {
@@ -298,6 +303,9 @@ export async function loadAppData(): Promise<AppData> {
 }
 
 export const api = {
+  getSession() {
+    return loadSession();
+  },
   createChild(input: Omit<Child, "id" | "createdAt" | "updatedAt">) {
     return request<ApiChild>("/api/children", {
       method: "POST",
