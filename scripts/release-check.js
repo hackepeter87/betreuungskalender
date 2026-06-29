@@ -50,6 +50,7 @@ const CRITICAL_PROJECT_PATHS = [
 const SEMVER_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|[a-zA-Z-][0-9a-zA-Z-]*))*)?(?:\+[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*)?$/;
 const SCREENSHOT_DIRECTORY = "docs/assets/screenshots/";
+const PUBLIC_ICON_DIRECTORY = "public/icons/";
 const IMAGE_PATTERN = /\.(?:png|jpe?g|webp)$/i;
 
 function normalizePath(filePath) {
@@ -107,7 +108,8 @@ export function isImageOutsideScreenshotDirectory(filePath) {
   const normalized = normalizePath(filePath);
   return (
     IMAGE_PATTERN.test(normalized) &&
-    !normalized.toLowerCase().startsWith(SCREENSHOT_DIRECTORY)
+    !normalized.toLowerCase().startsWith(SCREENSHOT_DIRECTORY) &&
+    !normalized.toLowerCase().startsWith(PUBLIC_ICON_DIRECTORY)
   );
 }
 
