@@ -27,7 +27,7 @@ Use a dedicated directory owned by the deployment operator. Configuration and
 data remain outside every versioned release:
 
 ```text
-/opt/betreuungskalender/
+/opt/svc_betreuung/betreuungskalender/
   compose.yml
   .env
   data/
@@ -42,29 +42,53 @@ the active release path and version, in addition to the normal application
 configuration. Keep `.env` private and out of Git.
 
 ```dotenv
-APP_RELEASE_DIR=/opt/betreuungskalender/releases/vX.Y.Z
-APP_RELEASE_VERSION=vX.Y.Z
+APP_RELEASE_VERSION=X.Y.Z
+APP_RELEASE_DIR=/opt/svc_betreuung/betreuungskalender/releases/vX.Y.Z
 HOST_BIND_ADDRESS=127.0.0.1
 HOST_PORT=3000
 REQUIRE_AUTH=true
 TRUST_PROXY_AUTH=true
 ALLOWED_ORIGIN=https://betreuung.example.net
+LOG_LEVEL=info
+RATE_LIMIT_MAX=120
+RATE_LIMIT_WRITE_MAX=20
+RATE_LIMIT_SENSITIVE_MAX=5
+RATE_LIMIT_EXPORT_MAX=15
+RATE_LIMIT_WINDOW_MS=60000
+BACKUP_RETENTION_DAYS=14
 ```
 
 For the first Compose installation, verify and extract the release archive,
-copy `deploy/compose.yml` to `/opt/betreuungskalender/compose.yml`, create the
-private `.env`, then create `data/`, `backups/`, and `releases/`. The container
-runs as the `node` user, so bind-mounted `data/` and `backups/` must be writable
-by that container user. Start it with:
+copy `deploy/compose.yml` to
+`/opt/svc_betreuung/betreuungskalender/compose.yml`, create the private `.env`,
+then create `data/`, `backups/`, and `releases/`. The release Compose file
+keeps the SQLite and backup paths fixed inside the container as
+`/data/app.sqlite` and `/backups`. Operators should persist those paths through
+the host-side bind mounts `./data:/data` and `./backups:/backups`, not by
+setting `DATABASE_PATH` or `BACKUP_DIR` in `.env`. The container runs as the
+`node` user, so bind-mounted `data/` and `backups/` must be writable by that
+container user. Start it with:
 
 ```bash
-sudo docker compose --project-directory /opt/betreuungskalender \
-  --env-file /opt/betreuungskalender/.env \
-  -f /opt/betreuungskalender/compose.yml up -d --build
+sudo docker compose \
+  --project-directory /opt/svc_betreuung/betreuungskalender \
+  --env-file /opt/svc_betreuung/betreuungskalender/.env \
+  -f /opt/svc_betreuung/betreuungskalender/compose.yml up -d --build
 ```
 
-Replace `vX.Y.Z` with the exact release tag, for example `v1.0.0-rc.1` for the
-first release candidate.
+Replace `X.Y.Z` with the package version, for example `1.0.0-rc.1`, and
+`vX.Y.Z` with the matching release tag, for example `v1.0.0-rc.1`.
+
+If a rootless Podman or Docker host is behind a reverse proxy running on a
+different host or VM, `HOST_BIND_ADDRESS=127.0.0.1` may not be reachable by that
+proxy. Bind to the VM IP or all interfaces and restrict access at the firewall
+or proxy layer, for example:
+
+```dotenv
+HOST_BIND_ADDRESS=0.0.0.0
+HOST_PORT=8080
+ALLOWED_ORIGIN=https://betreuungskalender.example.net
+```
 
 ## Obtain and verify a release artifact
 
@@ -92,8 +116,8 @@ delete that temporary file after the run.
 First run a non-writing preflight with local archive files:
 
 ```bash
-sudo node /opt/betreuungskalender/releases/vCURRENT/scripts/update.js \
-  --root /opt/betreuungskalender \
+sudo node /opt/svc_betreuung/betreuungskalender/releases/vCURRENT/scripts/update.js \
+  --root /opt/svc_betreuung/betreuungskalender \
   --version X.Y.Z \
   --artifact /srv/releases/betreuungskalender-vX.Y.Z.tar.gz \
   --checksum /srv/releases/betreuungskalender-vX.Y.Z.tar.gz.sha256 \

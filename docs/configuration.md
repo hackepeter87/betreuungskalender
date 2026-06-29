@@ -8,6 +8,10 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `NODE_ENV` | Runtime mode and production error handling | `production` | Recommended | `development` | Production hides internal error details |
 | `HOST` | Listener address | `127.0.0.1` | Optional | `127.0.0.1` | Use loopback when a local proxy is in front |
 | `PORT` | HTTP port | `3000` | Optional | `3000` | Expose only through the intended firewall/proxy |
+| `APP_RELEASE_VERSION` | Release Compose image tag | `1.0.0-rc.1` | Required for `deploy/compose.yml` | None | Must match the extracted release package version |
+| `APP_RELEASE_DIR` | Release Compose build context | `/opt/svc_betreuung/betreuungskalender/releases/v1.0.0-rc.1` | Required for `deploy/compose.yml` | None | Must point at the verified extracted release directory |
+| `HOST_BIND_ADDRESS` | Host address published by release Compose | `127.0.0.1` | Recommended for `deploy/compose.yml` | `127.0.0.1` | Use loopback only when the reverse proxy is on the same host |
+| `HOST_PORT` | Host port published by release Compose | `3000` | Recommended for `deploy/compose.yml` | `3000` | Expose only through the intended firewall/proxy |
 | `DATABASE_PATH` | SQLite database file | `/var/lib/betreuungskalender/app.sqlite` | Recommended | `./data/app.sqlite` | Contains sensitive API data; protect permissions and disk |
 | `BACKUP_DIR` | Destination for SQLite backups | `/var/backups/betreuungskalender` | Recommended | `./backups` | Contains sensitive copies; use mode `0700` |
 | `REQUIRE_AUTH` | Require a trusted identity for API routes | `true` | Recommended in production | `false` | Must be `true` for protected reverse-proxy operation |
@@ -21,6 +25,12 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `RATE_LIMIT_WINDOW_MS` | Shared rate-limit window in milliseconds | `60000` | Optional | `60000` | Keep a bounded window; values must be positive integers |
 | `BACKUP_RETENTION_DAYS` | Remove generated SQLite backups older than this | `14` | Optional | `14` | Set `0` to disable automatic age pruning |
 | `HEALTHCHECK_URL` | URL used by `npm run healthcheck` | `http://127.0.0.1:3000/api/health` | Optional | Same | Use an internal URL; no credentials are required |
+
+`DATABASE_PATH` and `BACKUP_DIR` are operator-editable for direct Node.js or
+systemd deployments. The release `deploy/compose.yml` intentionally fixes those
+paths inside the container as `/data/app.sqlite` and `/backups`; configure the
+host-side persistence with the `./data:/data` and `./backups:/backups` bind
+mounts instead.
 
 ## Authentication modes
 
