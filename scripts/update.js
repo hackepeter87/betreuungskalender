@@ -30,11 +30,18 @@ const EXIT = {
 const REQUIRED_ARCHIVE_PATHS = [
   "package.json",
   "Dockerfile.release",
+  ".env.example",
+  "deploy/.env.oidc.example",
+  "deploy/compose.yml",
+  "deploy/compose.oidc.yml",
+  "deploy/oauth2-proxy.cfg.example",
   "dist/",
   "dist-server/",
   "scripts/update.js",
   "scripts/runtime-verify.js"
 ];
+
+const SUPPORTED_COMPOSE_FILES = new Set(["compose.yml", "compose.oidc.yml"]);
 
 class UpdateError extends Error {
   constructor(code, message) {
@@ -137,7 +144,7 @@ function composeArguments(options, args) {
     "compose",
     "--project-directory", options.root,
     "--env-file", resolve(options.root, ".env"),
-    "-f", resolve(options.root, "compose.yml"),
+    "-f", resolve(options.root, options.composeFile ?? "compose.yml"),
     ...args
   ];
 }
@@ -157,6 +164,14 @@ function parseEnv(content) {
     if (match) values.set(match[1], match[2]);
   }
   return values;
+}
+
+function composeFileFromEnv(content) {
+  const composeFile = parseEnv(content).get("APP_COMPOSE_FILE") ?? "compose.yml";
+  if (!SUPPORTED_COMPOSE_FILES.has(composeFile)) {
+    fail(EXIT.PREFLIGHT, "APP_COMPOSE_FILE must be compose.yml or compose.oidc.yml.");
+  }
+  return composeFile;
 }
 
 export function updateEnv(content, values) {
@@ -290,16 +305,17 @@ async function activeRelease(options) {
   if (!existsSync(envPath)) fail(EXIT.PREFLIGHT, `${envPath} is missing.`);
   const envContent = await readFile(envPath, "utf8");
   const releasePath = parseEnv(envContent).get("APP_RELEASE_DIR");
+  const composeFile = composeFileFromEnv(envContent);
   if (!releasePath) fail(EXIT.PREFLIGHT, "APP_RELEASE_DIR is not set in .env.");
   const resolvedRelease = resolve(releasePath);
   const packagePath = resolve(resolvedRelease, "package.json");
   if (!existsSync(packagePath)) fail(EXIT.PREFLIGHT, `The active release at ${resolvedRelease} is incomplete.`);
   const packageJson = JSON.parse(await readFile(packagePath, "utf8"));
-  return { envContent, envPath, path: resolvedRelease, version: packageJson.version ?? "unknown" };
+  return { composeFile, envContent, envPath, path: resolvedRelease, version: packageJson.version ?? "unknown" };
 }
 
 async function preflight(options, previous) {
-  const composePath = resolve(options.root, "compose.yml");
+  const composePath = resolve(options.root, previous.composeFile);
   const dataPath = resolve(options.root, "data", "app.sqlite");
   const backupsPath = resolve(options.root, "backups");
   if (!existsSync(composePath)) fail(EXIT.PREFLIGHT, `${composePath} is missing.`);
@@ -456,6 +472,7 @@ async function writeState(options, releasePath, backup) {
 export async function runUpdate(options) {
   options.root = resolve(options.root);
   const previous = await activeRelease(options);
+  options.composeFile = previous.composeFile;
   let materialized = { temporaryPaths: [] };
   let lockPath;
   let switched = false;

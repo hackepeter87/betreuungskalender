@@ -37,9 +37,12 @@ data remain outside every versioned release:
     vX.Y.Z/
 ```
 
-`compose.yml` is installed once from `deploy/compose.yml`. `.env` must include
-the active release path and version, in addition to the normal application
-configuration. Keep `.env` private and out of Git.
+`compose.yml` is installed once from `deploy/compose.yml`. For the OIDC
+single-port deployment, install `deploy/compose.oidc.yml` as
+`compose.oidc.yml` and add `oauth2-proxy.cfg` next to `.env`. `.env` must
+include the active release path and version, in addition to the normal
+application configuration. Keep `.env` and `oauth2-proxy.cfg` private and out
+of Git.
 
 ```dotenv
 APP_RELEASE_VERSION=X.Y.Z
@@ -56,6 +59,12 @@ RATE_LIMIT_SENSITIVE_MAX=5
 RATE_LIMIT_EXPORT_MAX=15
 RATE_LIMIT_WINDOW_MS=60000
 BACKUP_RETENTION_DAYS=14
+```
+
+When using `compose.oidc.yml`, also set:
+
+```dotenv
+APP_COMPOSE_FILE=compose.oidc.yml
 ```
 
 For the first Compose installation, verify and extract the release archive,
@@ -75,6 +84,22 @@ sudo docker compose \
   --env-file /opt/svc_betreuung/betreuungskalender/.env \
   -f /opt/svc_betreuung/betreuungskalender/compose.yml up -d --build
 ```
+
+For the OIDC deployment, copy `deploy/compose.oidc.yml` to
+`/opt/svc_betreuung/betreuungskalender/compose.oidc.yml`, copy
+`deploy/.env.oidc.example` to `.env`, copy `deploy/oauth2-proxy.cfg.example` to
+`oauth2-proxy.cfg`, replace every placeholder and secret, and start:
+
+```bash
+sudo docker compose \
+  --project-directory /opt/svc_betreuung/betreuungskalender \
+  --env-file /opt/svc_betreuung/betreuungskalender/.env \
+  -f /opt/svc_betreuung/betreuungskalender/compose.oidc.yml up -d --build
+```
+
+In OIDC mode, `HOST_PORT` is the oauth2-proxy host port, not the app port. The
+app service has no host port and is reachable only through
+`http://betreuungskalender:3000` on the Compose network.
 
 Replace `X.Y.Z` with the package version, for example `1.0.0-rc.1`, and
 `vX.Y.Z` with the matching release tag, for example `v1.0.0-rc.1`.

@@ -1,0 +1,48 @@
+services:
+  betreuungskalender:
+    image: betreuungskalender:${APP_RELEASE_VERSION:?Set APP_RELEASE_VERSION in .env}
+    build:
+      context: ${APP_RELEASE_DIR:?Set APP_RELEASE_DIR in .env}
+      dockerfile: Dockerfile.release
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3000"
+      DATABASE_PATH: /data/app.sqlite
+      BACKUP_DIR: /backups
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    expose:
+      - "3000"
+    volumes:
+      - ./data:/data
+      - ./backups:/backups
+    healthcheck:
+      test: ["CMD", "node", "scripts/healthcheck.js"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    networks:
+      - oidc-private
+
+  oauth2-proxy:
+    image: ${OAUTH2_PROXY_IMAGE:-quay.io/oauth2-proxy/oauth2-proxy:v7.15.3}
+    restart: unless-stopped
+    command:
+      - --config=/etc/oauth2-proxy/oauth2-proxy.cfg
+    ports:
+      - "${HOST_BIND_ADDRESS:-0.0.0.0}:${HOST_PORT:-8080}:4180"
+    volumes:
+      - ./oauth2-proxy.cfg:/etc/oauth2-proxy/oauth2-proxy.cfg:ro
+    depends_on:
+      betreuungskalender:
+        condition: service_healthy
+    networks:
+      - oidc-private
+
+networks:
+  oidc-private:
+    driver: bridge
