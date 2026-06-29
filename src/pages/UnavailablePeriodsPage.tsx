@@ -43,7 +43,7 @@ export function UnavailablePeriodsPage() {
   };
 
   return (
-    <div className="page">
+    <div className="page" data-testid="page-unavailable">
       <div className="page-header">
         <div>
           <p className="page-header__context">{copy(locale, "unavailable", "context")}</p>
@@ -52,6 +52,7 @@ export function UnavailablePeriodsPage() {
         <button
           className="button button--primary"
           type="button"
+          data-testid="unavailable-add"
           onClick={() => setEditing("new")}
           disabled={!canWrite}
         >

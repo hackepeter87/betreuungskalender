@@ -558,19 +558,19 @@ export const fieldHelpById = {
   }),
   "unavailable.affectsContact": help("unavailable.affectsContact", {
     label: "Betrifft Umgang",
-    shortHelp: "Zeigt, ob die Nichtverfügbarkeit zeitlich für Umgangsmöglichkeiten relevant war.",
-    whyRelevant: "So können Überschneidungen gesondert ausgewiesen werden.",
+    shortHelp: "Markiert die Abwesenheit für Soll-Ist-Hinweise, wenn sie mit geplanten Umgangsterminen zusammenhängt.",
+    whyRelevant: "Die App kann Überschneidungen finden und diese getrennt ausweisen, ohne daraus eine Bewertung abzuleiten.",
     usedFor: "Soll-Ist-Hinweise und Bericht.",
-    inputGuidance: "Aktiviere das Feld nur bei einem sachlichen zeitlichen Zusammenhang.",
+    inputGuidance: "Prüfe die abgeleiteten Überschneidungshinweise im Formular und aktiviere das Feld nur bei sachlichem Bezug.",
     commonMistakes: "Keinen Umgangsausfall ableiten, wenn gar kein Soll-Termin bestand.",
     requirementLevel: required
   }),
   "unavailable.affectsHolidays": help("unavailable.affectsHolidays", {
     label: "Betrifft Ferienplanung",
-    shortHelp: "Zeigt, ob die Abwesenheit für einen Ferienzeitraum relevant war.",
+    shortHelp: "Markiert die Abwesenheit für Ferienhinweise, wenn sie mit dokumentierten Ferienblöcken zusammenhängt.",
     whyRelevant: "Der Ferienbericht kann dokumentierte Nichtverfügbarkeiten gesondert erwähnen.",
     usedFor: "Ferienauswertung und PDF.",
-    inputGuidance: "Aktiviere das Feld bei tatsächlichem Bezug zur Ferienplanung.",
+    inputGuidance: "Prüfe die abgeleiteten Überschneidungshinweise im Formular und aktiviere das Feld nur bei tatsächlichem Bezug zur Ferienplanung.",
     commonMistakes: "Die tatsächliche Ferienquote wird dadurch nicht automatisch verändert.",
     requirementLevel: required
   }),

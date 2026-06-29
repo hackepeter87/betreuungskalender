@@ -1,8 +1,9 @@
 import { useMemo, useState, type FormEvent } from "react";
+import { dateTimeRangesOverlap } from "../lib/analytics";
 import { unavailableCategoryLabel } from "../lib/labels";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
-import { toDateKey } from "../lib/date";
+import { rangesOverlap, toDateKey } from "../lib/date";
 import { useAppStore } from "../store/AppStore";
 import type { UnavailableCategory, UnavailablePeriod } from "../types";
 import { FieldHelpLabel } from "./FieldHelp";
@@ -33,7 +34,7 @@ export function UnavailablePeriodForm({
   onDone: () => void;
 }) {
   const { locale } = useI18n();
-  const { saveUnavailablePeriod, canWrite, isSaving } = useAppStore();
+  const { data, saveUnavailablePeriod, canWrite, isSaving } = useAppStore();
   const today = toDateKey(new Date());
   const initialStart = localParts(period?.startDateTime);
   const initialEnd = localParts(period?.endDateTime);
@@ -61,6 +62,42 @@ export function UnavailablePeriodForm({
   );
   const [error, setError] = useState("");
 
+  const derivedImpact = useMemo(() => {
+    if (!startDate || !startTime || !endDate || !endTime) {
+      return { plannedContactCount: 0, holidayCount: 0 };
+    }
+    const startDateTime = fromInputValue(startDate, startTime);
+    const endDateTime = fromInputValue(endDate, endTime);
+    if (new Date(endDateTime) <= new Date(startDateTime)) {
+      return { plannedContactCount: 0, holidayCount: 0 };
+    }
+    return {
+      plannedContactCount: data.entries.filter(
+        (entry) =>
+          !entry.deletedAt &&
+          Boolean(entry.generatedByPatternId) &&
+          dateTimeRangesOverlap(
+            entry.startDateTime,
+            entry.endDateTime,
+            startDateTime,
+            endDateTime
+          )
+      ).length,
+      holidayCount: data.holidayPeriods.filter(
+        (holiday) =>
+          !holiday.deletedAt &&
+          rangesOverlap(startDate, endDate, holiday.startDate, holiday.endDate)
+      ).length
+    };
+  }, [
+    data.entries,
+    data.holidayPeriods,
+    endDate,
+    endTime,
+    startDate,
+    startTime
+  ]);
+
   const recommendations = useMemo(() => {
     const messages: string[] = [];
     if (category === "other" && !notes.trim()) {
@@ -71,8 +108,32 @@ export function UnavailablePeriodForm({
         copy(locale, "unavailable", "dutyEvidenceRecommendation")
       );
     }
+    if (derivedImpact.plannedContactCount > 0 && !affectsContact) {
+      messages.push(
+        copy(locale, "unavailable", "contactImpactRecommendation", {
+          count: derivedImpact.plannedContactCount
+        })
+      );
+    }
+    if (derivedImpact.holidayCount > 0 && !affectsHolidays) {
+      messages.push(
+        copy(locale, "unavailable", "holidayImpactRecommendation", {
+          count: derivedImpact.holidayCount
+        })
+      );
+    }
     return messages;
-  }, [category, dutyRelated, evidenceReference, locale, notes]);
+  }, [
+    affectsContact,
+    affectsHolidays,
+    category,
+    derivedImpact.holidayCount,
+    derivedImpact.plannedContactCount,
+    dutyRelated,
+    evidenceReference,
+    locale,
+    notes
+  ]);
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();
@@ -104,7 +165,7 @@ export function UnavailablePeriodForm({
   };
 
   return (
-    <form className="child-form unavailable-form" onSubmit={submit}>
+    <form className="child-form unavailable-form" data-testid="unavailable-form" onSubmit={submit}>
       <section className="form-section">
         <h3>{copy(locale, "unavailable", "periodCategory")}</h3>
         <div className="datetime-grid">
@@ -113,6 +174,7 @@ export function UnavailablePeriodForm({
             <input
               autoFocus
               required
+              data-testid="unavailable-start-date"
               type="date"
               value={startDate}
               onChange={(event) => setStartDate(event.target.value)}
@@ -122,6 +184,7 @@ export function UnavailablePeriodForm({
             <FieldHelpLabel fieldId="unavailable.startDateTime">{copy(locale, "entryForm", "startTime")}</FieldHelpLabel>
             <input
               required
+              data-testid="unavailable-start-time"
               type="time"
               value={startTime}
               onChange={(event) => setStartTime(event.target.value)}
@@ -131,6 +194,7 @@ export function UnavailablePeriodForm({
             <FieldHelpLabel fieldId="unavailable.endDateTime">{copy(locale, "entryForm", "endDate")}</FieldHelpLabel>
             <input
               required
+              data-testid="unavailable-end-date"
               type="date"
               value={endDate}
               onChange={(event) => setEndDate(event.target.value)}
@@ -140,6 +204,7 @@ export function UnavailablePeriodForm({
             <FieldHelpLabel fieldId="unavailable.endDateTime">{copy(locale, "entryForm", "endTime")}</FieldHelpLabel>
             <input
               required
+              data-testid="unavailable-end-time"
               type="time"
               value={endTime}
               onChange={(event) => setEndTime(event.target.value)}
@@ -150,6 +215,7 @@ export function UnavailablePeriodForm({
           <FieldHelpLabel fieldId="unavailable.category" />
           <select
             required
+            data-testid="unavailable-category"
             value={category}
             onChange={(event) =>
               setCategory(event.target.value as UnavailableCategory)
@@ -164,10 +230,40 @@ export function UnavailablePeriodForm({
 
       <section className="form-section">
         <h3>{copy(locale, "unavailable", "effects")}</h3>
+        <p className="section-copy">{copy(locale, "unavailable", "effectsDescription")}</p>
+        <div className="derived-impact" data-testid="unavailable-derived-impact">
+          <strong>{copy(locale, "unavailable", "derivedImpactTitle")}</strong>
+          {derivedImpact.plannedContactCount > 0 ? (
+            <p>
+              {affectsContact
+                ? copy(locale, "unavailable", "contactImpactConfirmed", {
+                    count: derivedImpact.plannedContactCount
+                  })
+                : copy(locale, "unavailable", "contactImpactFound", {
+                    count: derivedImpact.plannedContactCount
+                  })}
+            </p>
+          ) : null}
+          {derivedImpact.holidayCount > 0 ? (
+            <p>
+              {affectsHolidays
+                ? copy(locale, "unavailable", "holidayImpactConfirmed", {
+                    count: derivedImpact.holidayCount
+                  })
+                : copy(locale, "unavailable", "holidayImpactFound", {
+                    count: derivedImpact.holidayCount
+                  })}
+            </p>
+          ) : null}
+          {derivedImpact.plannedContactCount === 0 && derivedImpact.holidayCount === 0 ? (
+            <p>{copy(locale, "unavailable", "noDerivedImpact")}</p>
+          ) : null}
+        </div>
         <div className="unavailable-toggle-list">
           <label className="toggle">
             <input
               type="checkbox"
+              data-testid="unavailable-duty-related"
               checked={dutyRelated}
               onChange={(event) => setDutyRelated(event.target.checked)}
             />
@@ -177,6 +273,7 @@ export function UnavailablePeriodForm({
           <label className="toggle">
             <input
               type="checkbox"
+              data-testid="unavailable-affects-contact"
               checked={affectsContact}
               onChange={(event) => setAffectsContact(event.target.checked)}
             />
@@ -186,6 +283,7 @@ export function UnavailablePeriodForm({
           <label className="toggle">
             <input
               type="checkbox"
+              data-testid="unavailable-affects-holidays"
               checked={affectsHolidays}
               onChange={(event) => setAffectsHolidays(event.target.checked)}
             />
@@ -249,7 +347,7 @@ export function UnavailablePeriodForm({
           <button className="button button--secondary" type="button" onClick={onDone}>
             {copy(locale, "common", "cancel")}
           </button>
-          <button className="button button--primary" type="submit" disabled={!canWrite || isSaving}>
+          <button className="button button--primary" type="submit" data-testid="unavailable-submit" disabled={!canWrite || isSaving}>
             {copy(locale, "unavailable", "save")}
           </button>
         </div>
