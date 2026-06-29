@@ -8,8 +8,8 @@ Create an OpenID Connect confidential client:
 - Standard Flow: enabled
 - Direct Access Grants: disabled
 - Valid redirect URI:
-  `https://bk.example.net/oauth2/callback`
-- Web origin: `https://bk.example.net`
+  `https://app.example.net/oauth2/callback`
+- Web origin: `https://app.example.net`
 - Client authentication: enabled
 - MFA: recommended for all users
 
@@ -24,13 +24,15 @@ two services on one private Compose network:
 - `betreuungskalender` exposes port `3000` only to Compose services and does
   not publish a host port.
 
-For an OPNsense HAProxy frontend with TLS, point the backend to the Compose host
-and oauth2-proxy port, for example `ct28:8080`. The public URL must match
-`ALLOWED_ORIGIN` and the Keycloak redirect URI.
+For an external TLS reverse proxy, point the backend to the Compose host and
+oauth2-proxy port, for example `app-host.example.net:8080` or
+`192.0.2.10:8080`. The public URL must match `ALLOWED_ORIGIN` and the Keycloak
+redirect URI.
 
-For the `https://bk.huneck.net` deployment, configure the Keycloak redirect URI
-as `https://bk.huneck.net/oauth2/callback`, set the web origin to
-`https://bk.huneck.net`, and forward OPNsense HAProxy to `ct28:8080`.
+For example, with a public URL of `https://app.example.net`, configure the
+Keycloak redirect URI as `https://app.example.net/oauth2/callback`, set the web
+origin to `https://app.example.net`, and forward the external reverse proxy to
+the Compose host on `HOST_PORT`, for example `192.0.2.10:8080`.
 
 Use `deploy/.env.oidc.example` as the starting point for the release `.env` and
 `deploy/oauth2-proxy.cfg.example` as the starting point for
@@ -47,7 +49,7 @@ provider = "keycloak-oidc"
 oidc_issuer_url = "https://idp.example.net/realms/example"
 client_id = "betreuungskalender"
 client_secret = "CHANGE_ME"
-redirect_url = "https://bk.example.net/oauth2/callback"
+redirect_url = "https://app.example.net/oauth2/callback"
 
 email_domains = [ "*" ]
 http_address = "0.0.0.0:4180"
@@ -84,7 +86,7 @@ application stores the asserted identity in API audit records.
 ```dotenv
 REQUIRE_AUTH=true
 TRUST_PROXY_AUTH=true
-ALLOWED_ORIGIN=https://bk.example.net
+ALLOWED_ORIGIN=https://app.example.net
 ```
 
 If the app runs in a container, bind it only to a private container network
