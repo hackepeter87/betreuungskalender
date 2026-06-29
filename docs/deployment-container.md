@@ -87,7 +87,7 @@ Compose file exposes only oauth2-proxy:
 ```dotenv
 HOST_BIND_ADDRESS=0.0.0.0
 HOST_PORT=8080
-ALLOWED_ORIGIN=https://bk.example.net
+ALLOWED_ORIGIN=https://app.example.net
 REQUIRE_AUTH=true
 TRUST_PROXY_AUTH=true
 ```
@@ -98,18 +98,23 @@ The app service uses `expose: 3000` for Compose networking and has no host
 safe shape when `TRUST_PROXY_AUTH=true`, because direct client access to the app
 would allow forged identity headers.
 
-For OPNsense HAProxy or another external TLS reverse proxy, point the backend at
-the container host and oauth2-proxy port, for example
-`container-host.example.net:8080`. If the proxy runs on the same host, loopback
-may be sufficient. With rootless Podman behind an external proxy or VM boundary,
-bind to the VM IP or all interfaces and restrict access at the firewall or
-proxy layer:
+For an external TLS reverse proxy, point the backend to the Compose host and
+oauth2-proxy port, for example `app-host.example.net:8080` or
+`192.0.2.10:8080`. The public URL must match `ALLOWED_ORIGIN` and the Keycloak
+redirect URI. If the proxy runs on the same host, loopback may be sufficient.
+With rootless Podman behind an external proxy or VM boundary, bind to the VM IP
+or all interfaces and restrict access at the firewall or proxy layer:
 
 ```dotenv
 HOST_BIND_ADDRESS=0.0.0.0
 HOST_PORT=8080
-ALLOWED_ORIGIN=https://bk.example.net
+ALLOWED_ORIGIN=https://app.example.net
 ```
+
+For example, with a public URL of `https://app.example.net`, configure the
+Keycloak redirect URI as `https://app.example.net/oauth2/callback`, set the web
+origin to `https://app.example.net`, and forward the external reverse proxy to
+the Compose host on `HOST_PORT`, for example `192.0.2.10:8080`.
 
 Start the OIDC stack with Docker Compose or a compatible Podman Compose
 installation:
@@ -217,7 +222,7 @@ Container names can differ by Compose implementation. Use
 - Keycloak discovery errors: confirm `oidc_issuer_url` is reachable from the
   container host and points at the exact realm issuer.
 - Redirect URI mismatch: confirm Keycloak allows the exact public callback URL,
-  for example `https://bk.example.net/oauth2/callback`.
+  for example `https://app.example.net/oauth2/callback`.
 - Local listener: run `curl -fsSI http://127.0.0.1:<hostport>/oauth2/start`
   on the container host.
 - External proxy reachability: verify the TLS reverse proxy backend points to
