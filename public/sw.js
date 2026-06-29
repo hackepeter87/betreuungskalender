@@ -1,5 +1,13 @@
-const CACHE_NAME = "betreuungskalender-v3";
-const APP_SHELL = ["/", "/manifest.webmanifest", "/icons/app-icon.svg"];
+const CACHE_NAME = "betreuungskalender-v4";
+const APP_SHELL = [
+  "/",
+  "/manifest.webmanifest",
+  "/icons/app-icon.svg",
+  "/icons/app-icon-192.png",
+  "/icons/app-icon-512.png",
+  "/icons/apple-touch-icon.png",
+  "/icons/favicon-32.png"
+];
 
 self.addEventListener("install", (event) => {
   event.waitUntil(

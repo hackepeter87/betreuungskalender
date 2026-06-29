@@ -87,6 +87,13 @@ test("allows documentation screenshots and warns about images elsewhere", () => 
     "docs/assets/screenshots/entry-mobile.jpeg",
     "docs/assets/screenshots/report.webp"
   ];
+  const icons = [
+    "public/icons/app-icon.svg",
+    "public/icons/app-icon-192.png",
+    "public/icons/app-icon-512.png",
+    "public/icons/apple-touch-icon.png",
+    "public/icons/favicon-32.png"
+  ];
   const suspicious = [
     "dashboard.png",
     "public/private-calendar.jpg",
@@ -97,10 +104,12 @@ test("allows documentation screenshots and warns about images elsewhere", () => 
   for (const path of allowed) {
     assert.equal(isImageOutsideScreenshotDirectory(path), false, path);
   }
+  for (const path of icons) {
+    assert.equal(isImageOutsideScreenshotDirectory(path), false, path);
+  }
   for (const path of suspicious) {
     assert.equal(isImageOutsideScreenshotDirectory(path), true, path);
   }
-  assert.equal(isImageOutsideScreenshotDirectory("public/icons/app-icon.svg"), false);
 });
 
 test("reports exact missing gitignore safety rules", () => {
