@@ -4,20 +4,20 @@ Betreuungskalender is a self-hosted React/TypeScript application for neutral,
 traceable documentation of planned and actual childcare periods, related
 travel, costs, holidays, and unavailable periods.
 
-> **Status:** Initial public preview. The application is intended for private,
-> self-hosted documentation. It does not provide legal advice, create an
-> official record, or guarantee that generated material will be accepted by a
-> court, authority, lawyer, or other recipient.
+> **Status:** Stable self-hosted release. The application is intended for
+> private documentation. It does not provide legal advice, create an official
+> record, or guarantee that generated material will be accepted by a court,
+> authority, lawyer, or other recipient.
 
 ## Project status
 
-- Latest release candidate: [v1.0.0-rc.2](docs/release-notes/v1.0.0-rc.2.md)
-- Latest non-RC release: [v0.5.0](docs/release-notes/v0.5.0.md)
+- Latest release: [v1.0.0](docs/release-notes/v1.0.0.md)
 - Current `main`: SQLite/API domain persistence, language packs, external
   read-only calendar overlays, responsive mobile support, backup/restore
   tooling, and deployment guidance
 - Roadmap and work tracking: [GitHub milestones and issues](https://github.com/hackepeter87/betreuungskalender/milestones)
-- Stability target: `v1.0.0`, with `v1.0.0-rc.2` as the current release candidate
+- Stability target: stable `v1.0.0` with post-`1.0.0` work tracked in GitHub
+  milestones
 
 ## Screenshot
 

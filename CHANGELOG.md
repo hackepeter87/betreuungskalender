@@ -6,6 +6,36 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-06-29
+
+### Added
+
+- Added a complete PWA icon set, browser favicon, Apple touch icon, and
+  installable manifest icons using repo-owned assets.
+- Added regression coverage for PWA metadata, installable icon references, and
+  release-check handling of public app icons.
+
+### Changed
+
+- Promoted the validated `v1.0.0-rc.2` release candidate line to the first
+  stable `1.0.0` release.
+- Updated release examples, environment templates, README project status, and
+  deployment documentation for the stable `v1.0.0` artifact path.
+- Kept the supported single-port OIDC Compose deployment as the recommended
+  internet-facing auth topology for the stable release.
+
+### Fixed
+
+- Fixed the installable app title by using `Betreuungskalender` consistently in
+  the web app manifest, browser metadata, and iOS home-screen metadata.
+- Fixed release validation so generated public app icons are allowed while the
+  sensitive-artifact guard continues to block unexpected images elsewhere.
+
+### Validation
+
+- No database schema migration, API contract change, or production deployment is
+  introduced by the stable release cut.
+
 ## [1.0.0-rc.2] - 2026-06-29
 
 ### Added
