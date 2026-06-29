@@ -3,6 +3,7 @@ import {
   createChild,
   createEntry,
   createHoliday,
+  dateInCurrentMonth,
   importExternalCalendar,
   navigate,
   openApp,
@@ -116,6 +117,18 @@ test("persists the selected language and localizes the report surface", async ({
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await navigate(page, "settings");
   await expect(page.getByTestId("settings-language")).toHaveValue("en");
+});
+
+test("uses compact required-field markers in forms", async ({ page }) => {
+  const childName = "Pflichtfeld Kind";
+  await openApp(page);
+  await createChild(page, childName);
+
+  await navigate(page, "calendar");
+  await page.getByTestId(`calendar-day-${dateInCurrentMonth(8)}`).click();
+  const form = page.getByTestId("entry-form");
+  await expect(form.locator(".requirement-badge")).toHaveCount(0);
+  await expect(form.locator(".required-mark")).not.toHaveCount(0);
 });
 
 test("shows calendar overlays in the dashboard overview", async ({

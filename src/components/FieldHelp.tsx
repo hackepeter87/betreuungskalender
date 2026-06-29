@@ -22,7 +22,7 @@ function stopLabelToggle(event: MouseEvent) {
 
 export function FieldHelpButton({
   fieldId,
-  showRequirement = true
+  showRequirement = false
 }: {
   fieldId: FieldHelpId;
   showRequirement?: boolean;
@@ -167,7 +167,10 @@ export function FieldHelpLabel({
       <span>
         {children ?? help.label}
         {help.requirementLevel === "required" ? (
-          <span className="required-mark" aria-hidden="true"> *</span>
+          <>
+            <span className="required-mark" aria-hidden="true"> *</span>
+            <span className="sr-only"> {requirementLevelLabels.required}</span>
+          </>
         ) : null}
       </span>
       <FieldHelpButton fieldId={fieldId} />
