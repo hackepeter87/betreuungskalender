@@ -97,6 +97,14 @@ sudo docker compose \
   -f /opt/svc_betreuung/betreuungskalender/compose.oidc.yml up -d --build
 ```
 
+For rootless Podman with `podman-compose` 1.0.x, run from the deployment root:
+
+```bash
+cd /opt/svc_betreuung/betreuungskalender
+podman-compose --env-file .env -f compose.oidc.yml config
+podman-compose --env-file .env -f compose.oidc.yml up -d --build
+```
+
 In OIDC mode, `HOST_PORT` is the oauth2-proxy host port, not the app port. The
 app service has no host port and is reachable only through
 `http://betreuungskalender:3000` on the Compose network.
@@ -130,6 +138,18 @@ On macOS, compare `shasum -a 256 betreuungskalender-vX.Y.Z.tar.gz` with the
 recorded checksum. The archive contains the built frontend/backend, a minimal
 runtime `Dockerfile.release`, and the operational scripts. It does not contain
 `.env`, SQLite data, backups, exports, or secrets.
+
+The single-port OIDC Compose mode is supported only by release artifacts that
+contain all three OIDC deployment files:
+
+- `deploy/compose.oidc.yml`
+- `deploy/.env.oidc.example`
+- `deploy/oauth2-proxy.cfg.example`
+
+The published `v1.0.0-rc.1` archive was created before these files existed.
+Use a newer verified release artifact for normal production OIDC deployment
+instead of mixing an older published runtime with deployment files copied from
+`main`.
 
 ## Managed Compose update
 

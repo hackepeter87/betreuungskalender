@@ -32,6 +32,8 @@ Do not send them unencrypted or upload them to public issue trackers.
 - Set `REQUIRE_AUTH=true` in production.
 - Set `TRUST_PROXY_AUTH=true` only behind a trusted authentication proxy.
 - Block all direct access that could bypass oauth2-proxy.
+- In oauth2-proxy, set `trusted_ips` only to the actual upstream reverse proxy
+  IP/CIDR. Never trust all client networks.
 - Restrict `ALLOWED_ORIGIN` to the exact public origin.
 - Keep API rate limits enabled and tune their documented environment variables
   only after reviewing expected client traffic. Imports, migrations, exports,

@@ -25,12 +25,8 @@ two services on one private Compose network:
   not publish a host port.
 
 For an OPNsense HAProxy frontend with TLS, point the backend to the Compose host
-and oauth2-proxy port, for example `ct28:8080`. The public URL must match
-`ALLOWED_ORIGIN` and the Keycloak redirect URI.
-
-For the `https://bk.huneck.net` deployment, configure the Keycloak redirect URI
-as `https://bk.huneck.net/oauth2/callback`, set the web origin to
-`https://bk.huneck.net`, and forward OPNsense HAProxy to `ct28:8080`.
+and oauth2-proxy port, for example `container-host.example.net:8080`. The
+public URL must match `ALLOWED_ORIGIN` and the Keycloak redirect URI.
 
 Use `deploy/.env.oidc.example` as the starting point for the release `.env` and
 `deploy/oauth2-proxy.cfg.example` as the starting point for
@@ -52,6 +48,7 @@ redirect_url = "https://bk.example.net/oauth2/callback"
 email_domains = [ "*" ]
 http_address = "0.0.0.0:4180"
 upstreams = [ "http://betreuungskalender:3000" ]
+trusted_ips = [ "127.0.0.1/32", "192.0.2.10/32" ]
 
 cookie_secret = "CHANGE_ME_32_BYTE_BASE64"
 cookie_secure = true
@@ -64,8 +61,21 @@ pass_access_token = false
 pass_authorization_header = false
 ```
 
-Generate `client_secret` in Keycloak. Generate `cookie_secret` using the
-oauth2-proxy documentation. Never reuse the example strings.
+Generate `client_secret` in Keycloak. Generate a 32-character cookie secret
+that oauth2-proxy accepts, then paste it into `oauth2-proxy.cfg`:
+
+```bash
+COOKIE_SECRET="$(openssl rand -hex 16)"
+printf '%s\n' "$COOKIE_SECRET"
+test "${#COOKIE_SECRET}" -eq 32
+```
+
+Never reuse the example strings.
+
+`reverse_proxy = true` must be paired with a narrow `trusted_ips` list. Replace
+the placeholder `192.0.2.10/32` with the actual IP address or CIDR of the
+trusted upstream TLS reverse proxy. Do not use `0.0.0.0/0`; clients must not be
+allowed to inject or spoof forwarded headers.
 
 ## Identity headers
 
