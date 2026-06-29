@@ -18,6 +18,7 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `BACKUP_DIR` | Destination for SQLite backups | `/var/backups/betreuungskalender` | Recommended | `./backups` | Contains sensitive copies; use mode `0700` |
 | `REQUIRE_AUTH` | Require a trusted identity for API routes | `true` | Recommended in production | `false` | Must be `true` for protected reverse-proxy operation |
 | `TRUST_PROXY_AUTH` | Trust supported identity headers and proxy addresses | `true` | Required with external auth | `false` | Never enable when clients can directly reach the app |
+| `AUTH_LOGOUT_URL` | Optional browser logout path shown in the app shell | `/oauth2/sign_out` | Optional with external auth | None | Keep same-origin or reviewed by the operator |
 | `ALLOWED_ORIGIN` | Single permitted browser origin for CORS | `https://betreuung.example.net` | Recommended | `http://localhost:5173` | Prevents cross-origin browser API use |
 | `LOG_LEVEL` | Fastify/Pino log level | `info` | Optional | `info` in production, `debug` otherwise | Avoid `debug` in production unless investigating |
 | `RATE_LIMIT_MAX` | Maximum API requests per client and time window | `120` | Optional | `120` | Baseline protection for every API route, including health and readiness |
@@ -66,6 +67,11 @@ The app accepts the first non-empty value from:
 These headers are authentication assertions, not user input. Direct client
 access to the app must be blocked by binding to loopback, container networking,
 or firewall policy.
+
+When trusted identity headers are available, `/api/session` returns only compact
+session metadata for the app shell. The UI shows a short display name and, when
+`AUTH_LOGOUT_URL` is configured, a logout link. With oauth2-proxy this is
+usually `/oauth2/sign_out`.
 
 The release OIDC Compose mode enforces the intended boundary by publishing only
 oauth2-proxy. Do not add an app `ports:` mapping while `TRUST_PROXY_AUTH=true`.

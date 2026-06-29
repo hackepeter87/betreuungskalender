@@ -36,6 +36,7 @@ export const config = {
   backupDir: resolve(process.cwd(), process.env.BACKUP_DIR ?? "./backups"),
   requireAuth: booleanEnv(process.env.REQUIRE_AUTH),
   trustProxyAuth: booleanEnv(process.env.TRUST_PROXY_AUTH),
+  authLogoutUrl: process.env.AUTH_LOGOUT_URL?.trim() || undefined,
   allowedOrigin: process.env.ALLOWED_ORIGIN ?? "http://localhost:5173",
   logLevel: process.env.LOG_LEVEL ?? (
     process.env.NODE_ENV === "production" ? "info" : "debug"

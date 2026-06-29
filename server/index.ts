@@ -5,7 +5,7 @@ import rateLimit from "@fastify/rate-limit";
 import Fastify from "fastify";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { resolveRequestIdentity } from "./auth.js";
+import { resolveRequestIdentity, sessionInfo } from "./auth.js";
 import { config } from "./config.js";
 import { db } from "./db/connection.js";
 import { runMigrations } from "./db/migrate.js";
@@ -204,6 +204,10 @@ app.get("/api/ready", readLimit, async (_request, reply) => {
     timestamp: new Date().toISOString()
   });
 });
+
+app.get("/api/session", readLimit, async (request) =>
+  sessionInfo(request.headers, config)
+);
 
 await app.register(childrenRoutes);
 await app.register(careEntryRoutes);

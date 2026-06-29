@@ -195,11 +195,14 @@ Protected mode behind oauth2-proxy:
 ```dotenv
 REQUIRE_AUTH=true
 TRUST_PROXY_AUTH=true
+AUTH_LOGOUT_URL=/oauth2/sign_out
 ```
 
 The API then requires one of the supported trusted identity headers. These
 headers can be forged if users can reach the app directly, so the app port must
-be private or bound to loopback.
+be private or bound to loopback. When trusted identity is available, the app
+shell shows a compact signed-in user indicator and a logout link if
+`AUTH_LOGOUT_URL` is configured.
 
 - HAProxy, nginx, Caddy, and Traefik:
   [docs/reverse-proxy.md](docs/reverse-proxy.md)
