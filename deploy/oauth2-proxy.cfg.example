@@ -2,7 +2,7 @@ provider = "keycloak-oidc"
 oidc_issuer_url = "https://idp.example.net/realms/example"
 client_id = "betreuungskalender"
 client_secret = "CHANGE_ME"
-redirect_url = "https://bk.example.net/oauth2/callback"
+redirect_url = "https://app.example.net/oauth2/callback"
 
 email_domains = [ "*" ]
 http_address = "0.0.0.0:4180"
