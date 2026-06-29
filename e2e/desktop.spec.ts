@@ -184,6 +184,56 @@ test("explains empty entries caused by the selected month", async ({ page }) => 
   await expect(emptyState).toContainText("Keine Einträge im ausgewählten Monat");
 });
 
+test("generates recurring weekend contact dates and shows them in the calendar", async ({
+  page,
+  request
+}) => {
+  const childName = "Rhythmus Kind";
+  await openApp(page);
+  await createChild(page, childName);
+
+  await navigate(page, "contact");
+  await expect(page.getByTestId("page-contact")).toBeVisible();
+  await page.getByTestId("contact-pattern-start-date").fill("2026-07-03");
+  await page.getByTestId("contact-pattern-friday-start-time").fill("16:00");
+  await page.getByTestId("contact-pattern-sunday-end-time").fill("18:00");
+  await page.getByTestId("contact-generation-start").fill("2026-07-01");
+  await page.getByTestId("contact-generation-end").fill("2026-07-31");
+  await expect(page.getByTestId("contact-generation-preview")).toContainText(
+    "3 neue geplante Termine"
+  );
+
+  await page.getByTestId("contact-pattern-save").click();
+  await expect(page.getByTestId("contact-message")).toContainText(
+    "Umgangsregel gespeichert"
+  );
+  await page.getByTestId("contact-generate").click();
+  await expect(page.getByTestId("contact-message")).toContainText(
+    "3 geplante Umgangstermine"
+  );
+  await expect(page.getByTestId("contact-generated-entry")).toHaveCount(3);
+
+  const entriesResponse = await request.get("/api/care-entries");
+  expect(entriesResponse.ok()).toBeTruthy();
+  const generatedEntries = (await entriesResponse.json() as Array<{
+    id: string;
+    generatedByPatternId?: string;
+    status: string;
+  }>).filter((entry) => entry.generatedByPatternId);
+  expect(generatedEntries).toHaveLength(3);
+  expect(generatedEntries.every((entry) => entry.status === "planned")).toBe(
+    true
+  );
+
+  await navigate(page, "calendar");
+  await page.getByTestId("month-picker").fill("2026-07");
+  if (await page.getByTestId("calendar-view-month").isVisible()) {
+    await page.getByTestId("calendar-view-month").click();
+  }
+  await expect(page.getByTestId(`calendar-entry-${generatedEntries[0]?.id}`))
+    .toHaveCount(3);
+});
+
 test("downloads a complete JSON backup without raw calendar payloads", async ({
   page
 }) => {

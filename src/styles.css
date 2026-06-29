@@ -2553,6 +2553,31 @@ h3 {
   font-weight: 700;
 }
 
+.contact-flow-note {
+  margin-top: 0;
+}
+
+.contact-generation-preview {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fbfcfd;
+}
+
+.contact-generation-preview strong,
+.contact-generation-preview span {
+  font-size: 0.72rem;
+}
+
+.contact-generation-preview span {
+  color: var(--muted);
+  font-weight: 700;
+}
+
 .summary-strip--five {
   grid-template-columns: repeat(5, 1fr);
 }

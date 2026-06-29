@@ -125,6 +125,7 @@ export function CalendarGrid({
                     className={`calendar-event calendar-event--${entry.status} ${hasOverlap ? "calendar-event--overlap" : ""}`}
                     type="button"
                     key={entry.id}
+                    data-testid={`calendar-entry-${entry.id}`}
                     onClick={() => onSelectEntry(entry)}
                     title={hasOverlap
                       ? copy(locale, "agenda", "overlap")
