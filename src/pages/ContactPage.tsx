@@ -7,12 +7,13 @@ import {
   entriesForRange,
   unavailableForEntry
 } from "../lib/analytics";
+import { generatePatternEntries } from "../lib/contact";
 import { formatDate, formatTime, rangeForYear, toDateKey } from "../lib/date";
 import { statusLabels } from "../lib/labels";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
 import { useAppStore } from "../store/AppStore";
-import type { CareEntry } from "../types";
+import type { CareEntry, ContactPattern } from "../types";
 
 function nextFriday(): string {
   const date = new Date();
@@ -58,6 +59,38 @@ export function ContactPage({
   const [message, setMessage] = useState("");
   const [cancelEntry, setCancelEntry] = useState<CareEntry | null>(null);
   const [cancelReason, setCancelReason] = useState("");
+  const previewPattern = useMemo<ContactPattern>(
+    () => ({
+      id: patternId ?? "__contact_preview__",
+      name: name.trim() || copy(locale, "contact", "defaultName"),
+      startDate,
+      frequency: "biweekly",
+      fridayStartTime,
+      sundayEndTime,
+      childIds,
+      active
+    }),
+    [
+      active,
+      childIds,
+      fridayStartTime,
+      locale,
+      name,
+      patternId,
+      startDate,
+      sundayEndTime
+    ]
+  );
+  const previewEntries = useMemo(
+    () =>
+      generatePatternEntries(
+        data,
+        previewPattern,
+        generationStart,
+        generationEnd
+      ),
+    [data, generationEnd, generationStart, previewPattern]
+  );
 
   const stats = useMemo(
     () =>
@@ -123,8 +156,12 @@ export function ContactPage({
       count === -1
         ? copy(locale, "contact", "generationCancelled")
         : count
-        ? copy(locale, "contact", "generated", { count })
-        : copy(locale, "contact", "noNewDates")
+          ? copy(locale, "contact", "generated", {
+              count,
+              from: formatDate(generationStart, intlLocale),
+              to: formatDate(generationEnd, intlLocale)
+            })
+          : copy(locale, "contact", "noNewDates")
     );
   };
 
@@ -138,7 +175,7 @@ export function ContactPage({
   };
 
   return (
-    <div className="page">
+    <div className="page" data-testid="page-contact">
       <div className="page-header">
         <div>
           <p className="page-header__context">{copy(locale, "contact", "context")}</p>
@@ -168,22 +205,22 @@ export function ContactPage({
           <div className="panel-form">
             <label className="field">
               <FieldHelpLabel fieldId="contactPattern.name">{copy(locale, "contact", "name")}</FieldHelpLabel>
-              <input value={name} onChange={(event) => setName(event.target.value)} />
+              <input data-testid="contact-pattern-name" value={name} onChange={(event) => setName(event.target.value)} />
             </label>
             <div className="form-grid">
               <label className="field">
                 <FieldHelpLabel fieldId="contactPattern.startDate">
                   Startdatum (Freitag)
                 </FieldHelpLabel>
-                <input type="date" required value={startDate} onChange={(event) => setStartDate(event.target.value)} />
+                <input data-testid="contact-pattern-start-date" type="date" required value={startDate} onChange={(event) => setStartDate(event.target.value)} />
               </label>
               <label className="field">
                 <FieldHelpLabel fieldId="contactPattern.fridayStartTime" />
-                <input type="time" required value={fridayStartTime} onChange={(event) => setFridayStartTime(event.target.value)} />
+                <input data-testid="contact-pattern-friday-start-time" type="time" required value={fridayStartTime} onChange={(event) => setFridayStartTime(event.target.value)} />
               </label>
               <label className="field">
                 <FieldHelpLabel fieldId="contactPattern.sundayEndTime" />
-                <input type="time" required value={sundayEndTime} onChange={(event) => setSundayEndTime(event.target.value)} />
+                <input data-testid="contact-pattern-sunday-end-time" type="time" required value={sundayEndTime} onChange={(event) => setSundayEndTime(event.target.value)} />
               </label>
             </div>
             <fieldset className="inline-fieldset">
@@ -219,7 +256,7 @@ export function ContactPage({
               <span />
               <FieldHelpLabel fieldId="contactPattern.active" />
             </label>
-            <button className="button button--primary" type="submit" disabled={!data.children.length || !canWrite || isSaving}>
+            <button className="button button--primary" type="submit" data-testid="contact-pattern-save" disabled={!data.children.length || !canWrite || isSaving}>
               <Icon name="check" size={17} />
               {copy(locale, "contact", "save")}
             </button>
@@ -234,22 +271,37 @@ export function ContactPage({
             </div>
           </div>
           <div className="panel-form">
+            <div className="notice notice--info contact-flow-note">
+              <Icon name="repeat" />
+              <div>
+                <strong>{copy(locale, "contact", "flowTitle")}</strong>
+                <p>{copy(locale, "contact", "flowDescription")}</p>
+              </div>
+            </div>
             <div className="form-grid form-grid--two">
               <label className="field">
                 <FieldHelpLabel fieldId="contactPattern.generationRange">{copy(locale, "common", "from")}</FieldHelpLabel>
-                <input type="date" value={generationStart} onChange={(event) => setGenerationStart(event.target.value)} />
+                <input data-testid="contact-generation-start" type="date" value={generationStart} onChange={(event) => setGenerationStart(event.target.value)} />
               </label>
               <label className="field">
                 <FieldHelpLabel fieldId="contactPattern.generationRange">{copy(locale, "common", "to")}</FieldHelpLabel>
-                <input type="date" value={generationEnd} onChange={(event) => setGenerationEnd(event.target.value)} />
+                <input data-testid="contact-generation-end" type="date" value={generationEnd} onChange={(event) => setGenerationEnd(event.target.value)} />
               </label>
             </div>
-            <button className="button button--primary" type="button" onClick={() => void generate()} disabled={!patternId || !canWrite || isSaving}>
+            <div className="contact-generation-preview" data-testid="contact-generation-preview">
+              <strong>{copy(locale, "contact", "previewTitle")}</strong>
+              <span>
+                {previewEntries.length
+                  ? copy(locale, "contact", "previewCount", { count: previewEntries.length })
+                  : copy(locale, "contact", "previewEmpty")}
+              </span>
+            </div>
+            <button className="button button--primary" type="button" data-testid="contact-generate" onClick={() => void generate()} disabled={!patternId || !canWrite || isSaving}>
               <Icon name="repeat" size={17} />
               {copy(locale, "contact", "generate")}
             </button>
             <FieldHelpButton fieldId="contactPattern.duplicatePrevention" showRequirement={false} />
-            {message ? <p className="inline-message" role="status">{message}</p> : null}
+            {message ? <p className="inline-message" role="status" data-testid="contact-message">{message}</p> : null}
           </div>
         </section>
       </div>
@@ -280,7 +332,7 @@ export function ContactPage({
             <p>{formatDate(generationStart, intlLocale)} {copy(locale, "contact", "through")} {formatDate(generationEnd, intlLocale)}</p>
           </div>
         </div>
-        <div className="rule-entry-list">
+        <div className="rule-entry-list" data-testid="contact-generated-list">
           {relevantEntries.map((entry) => {
             const overlaps = entry.generatedByPatternId
               ? unavailableForEntry(entry, data.unavailablePeriods, {
@@ -288,7 +340,7 @@ export function ContactPage({
                 })
               : [];
             return (
-            <article className="rule-entry" key={entry.id}>
+            <article className="rule-entry" key={entry.id} data-testid={entry.generatedByPatternId ? "contact-generated-entry" : "contact-additional-entry"}>
               <button className="rule-entry__main" type="button" onClick={() => onEditEntry(entry)}>
                 <span>
                   <strong>{formatDate(entry.startDateTime, intlLocale)}</strong>
