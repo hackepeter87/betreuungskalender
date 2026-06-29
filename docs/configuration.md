@@ -8,8 +8,8 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `NODE_ENV` | Runtime mode and production error handling | `production` | Recommended | `development` | Production hides internal error details |
 | `HOST` | Listener address | `127.0.0.1` | Optional | `127.0.0.1` | Use loopback when a local proxy is in front |
 | `PORT` | HTTP port | `3000` | Optional | `3000` | Expose only through the intended firewall/proxy |
-| `APP_RELEASE_VERSION` | Release Compose image tag | `1.0.0-rc.2` | Required for `deploy/compose.yml` | None | Must match the extracted release package version |
-| `APP_RELEASE_DIR` | Release Compose build context | `/opt/svc_betreuung/betreuungskalender/releases/v1.0.0-rc.2` | Required for `deploy/compose.yml` | None | Must point at the verified extracted release directory |
+| `APP_RELEASE_VERSION` | Release Compose image tag | `1.0.0` | Required for `deploy/compose.yml` | None | Must match the extracted release package version |
+| `APP_RELEASE_DIR` | Release Compose build context | `/opt/svc_betreuung/betreuungskalender/releases/v1.0.0` | Required for `deploy/compose.yml` | None | Must point at the verified extracted release directory |
 | `APP_COMPOSE_FILE` | Compose file managed by the update tool | `compose.oidc.yml` | Required only when not using `compose.yml` | `compose.yml` | Must be `compose.yml` or `compose.oidc.yml` |
 | `OAUTH2_PROXY_IMAGE` | oauth2-proxy image used by `deploy/compose.oidc.yml` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.3` | Optional for OIDC Compose | Same | Pin and review oauth2-proxy updates like other runtime dependencies |
 | `HOST_BIND_ADDRESS` | Host address published by release Compose | `127.0.0.1` | Recommended for `deploy/compose.yml` | `127.0.0.1` | Use loopback only when the reverse proxy is on the same host |
