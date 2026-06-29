@@ -27,8 +27,12 @@ export function EntriesPage({
   const [status, setStatus] = useState<EntryStatus | "all">("all");
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query.toLocaleLowerCase(intlLocale));
+  const monthEntries = useMemo(
+    () => entriesForMonth(data.entries, monthKey),
+    [data.entries, monthKey]
+  );
   const entries = useMemo(() => {
-    return entriesForMonth(data.entries, monthKey)
+    return monthEntries
       .filter((entry) => status === "all" || entry.status === status)
       .filter((entry) => {
         if (!deferredQuery) return true;
@@ -41,7 +45,21 @@ export function EntriesPage({
       })
       .slice()
       .sort((a, b) => b.startDateTime.localeCompare(a.startDateTime));
-  }, [data.children, data.entries, deferredQuery, intlLocale, monthKey, status]);
+  }, [data.children, deferredQuery, intlLocale, monthEntries, status]);
+  const activeEntriesCount = data.entries.filter((entry) => !entry.deletedAt).length;
+  const hasActiveFilters = status !== "all" || Boolean(deferredQuery);
+  const emptyTitle =
+    monthEntries.length === 0 && activeEntriesCount > 0
+      ? copy(locale, "entries", "emptyMonthTitle")
+      : hasActiveFilters
+        ? copy(locale, "entries", "emptyFilteredTitle")
+        : copy(locale, "entries", "emptyTitle");
+  const emptyDescription =
+    monthEntries.length === 0 && activeEntriesCount > 0
+      ? copy(locale, "entries", "emptyMonthDescription")
+      : hasActiveFilters
+        ? copy(locale, "entries", "emptyFilteredDescription")
+        : copy(locale, "entries", "emptyDescription");
 
   return (
     <div className="page" data-testid="page-entries">
@@ -87,10 +105,23 @@ export function EntriesPage({
             <EntryRow key={entry.id} entry={entry} children={data.children} onClick={() => onEditEntry(entry)} />
           ))}
           {entries.length === 0 ? (
-            <div className="empty-state">
+            <div className="empty-state" data-testid="entries-empty-state">
               <span><Icon name="list" size={25} /></span>
-              <h2>{copy(locale, "entries", "emptyTitle")}</h2>
-              <p>{copy(locale, "entries", "emptyDescription")}</p>
+              <h2>{emptyTitle}</h2>
+              <p>{emptyDescription}</p>
+              {hasActiveFilters ? (
+                <button
+                  className="button button--secondary"
+                  type="button"
+                  data-testid="entries-reset-filters"
+                  onClick={() => {
+                    setStatus("all");
+                    setQuery("");
+                  }}
+                >
+                  {copy(locale, "entries", "resetFilters")}
+                </button>
+              ) : null}
               <button className="button button--primary" type="button" onClick={onNewEntry} disabled={!canWrite}>
                 <Icon name="plus" size={17} />
                 {copy(locale, "entries", "createEntry")}

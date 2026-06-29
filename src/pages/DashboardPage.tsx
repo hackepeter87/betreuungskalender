@@ -1,12 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   calculateDataQuality,
   calculateMonthlyStats,
-  entriesForMonth
+  entriesForMonth,
+  unavailablePeriodsForRange
 } from "../lib/analytics";
 import { formatDate, formatDateTime, formatMonth, rangeForMonth } from "../lib/date";
 import { buildMonthlyClosureSummary } from "../lib/monthClosure";
-import type { CareEntry } from "../types";
+import type { CareEntry, ExternalCalendarEvent } from "../types";
 import { useAppStore } from "../store/AppStore";
 import { CalendarGrid } from "../components/CalendarGrid";
 import { FieldHelpButton, FieldHelpLabel } from "../components/FieldHelp";
@@ -15,6 +16,7 @@ import { Modal } from "../components/Modal";
 import { MonthToolbar } from "../components/MonthToolbar";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
+import { api } from "../lib/api";
 
 export function DashboardPage({
   monthKey,
@@ -35,6 +37,7 @@ export function DashboardPage({
   const { data, closeMonth, canWrite, isSaving } = useAppStore();
   const [showClosure, setShowClosure] = useState(false);
   const [closureConfirmed, setClosureConfirmed] = useState(false);
+  const [externalEvents, setExternalEvents] = useState<ExternalCalendarEvent[]>([]);
   const stats = useMemo(() => calculateMonthlyStats(data, monthKey), [data, monthKey]);
   const monthEntries = useMemo(
     () => entriesForMonth(data.entries, monthKey),
@@ -50,6 +53,15 @@ export function DashboardPage({
     [data.entries]
   );
   const range = useMemo(() => rangeForMonth(monthKey), [monthKey]);
+  const unavailablePeriods = useMemo(
+    () =>
+      unavailablePeriodsForRange(
+        data.unavailablePeriods,
+        range.startDate,
+        range.endDate
+      ),
+    [data.unavailablePeriods, range.endDate, range.startDate]
+  );
   const dataQuality = useMemo(
     () => calculateDataQuality(data.entries, range.startDate, range.endDate),
     [data.entries, range.endDate, range.startDate]
@@ -65,6 +77,24 @@ export function DashboardPage({
       )
     : null;
   const backupIsCurrent = backupAgeDays !== null && backupAgeDays <= 7;
+
+  useEffect(() => {
+    let ignore = false;
+    void api
+      .listExternalCalendarEvents(
+        `${range.startDate}T00:00:00.000Z`,
+        `${range.endDate}T23:59:59.999Z`
+      )
+      .then((events) => {
+        if (!ignore) setExternalEvents(events);
+      })
+      .catch(() => {
+        if (!ignore) setExternalEvents([]);
+      });
+    return () => {
+      ignore = true;
+    };
+  }, [range.endDate, range.startDate]);
 
   const metrics: Array<{ label: string; value: string; detail: string; icon: IconName; tone: string }> = [
     { label: copy(locale, "dashboard", "careDays"), value: String(stats.careDays), detail: copy(locale, "dashboard", "actualDays"), icon: "calendar", tone: "teal" },
@@ -183,9 +213,12 @@ export function DashboardPage({
           <CalendarGrid
             monthKey={monthKey}
             entries={monthEntries}
+            unavailablePeriods={unavailablePeriods}
+            externalEvents={externalEvents}
             children={data.children}
             onSelectDate={onNewEntry}
             onSelectEntry={onEditEntry}
+            onSelectUnavailable={() => onOpenCalendar()}
             allowCreate={canWrite}
           />
           <div className="calendar-legend">
@@ -195,6 +228,8 @@ export function DashboardPage({
             <span><Icon name="moon" size={14} />{copy(locale, "agenda", "overnight")}</span>
             <span><span className="legend-line legend-line--planned" />{copy(locale, "dashboard", "planned")}</span>
             <span><span className="legend-line legend-line--cancelled" />{copy(locale, "dashboard", "cancelled")}</span>
+            <span><span className="legend-line legend-line--external" />{copy(locale, "dashboard", "externalCalendar")}</span>
+            <span><span className="legend-line legend-line--unavailable" />{copy(locale, "dashboard", "unavailability")}</span>
           </div>
         </section>
 

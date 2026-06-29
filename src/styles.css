@@ -952,6 +952,14 @@ h3 {
   border-top-color: var(--coral);
 }
 
+.legend-line--external {
+  border-top-color: var(--blue);
+}
+
+.legend-line--unavailable {
+  border-top-color: #8175bb;
+}
+
 .child-stat-list {
   padding: 4px 16px 10px;
 }

@@ -118,6 +118,72 @@ test("persists the selected language and localizes the report surface", async ({
   await expect(page.getByTestId("settings-language")).toHaveValue("en");
 });
 
+test("shows calendar overlays in the dashboard overview", async ({
+  page,
+  request
+}) => {
+  await openApp(page);
+  await importExternalCalendar(page, "Synthetic Dashboard Calendar");
+
+  const unavailableResponse = await request.post("/api/unavailable-periods", {
+    data: {
+      startDateTime: "2026-07-02T08:00:00.000Z",
+      endDateTime: "2026-07-02T18:00:00.000Z",
+      category: "duty",
+      dutyRelated: true,
+      affectsContact: true,
+      affectsHolidays: false,
+      location: "Synthetic service location",
+      notes: "Synthetic documented unavailability",
+      hasEvidence: false
+    }
+  });
+  expect(unavailableResponse.ok()).toBeTruthy();
+  const unavailable = await unavailableResponse.json() as { id: string };
+
+  const eventsResponse = await request.get(
+    "/api/external-calendar-events?from=2026-07-01T00%3A00%3A00.000Z&to=2026-08-01T00%3A00%3A00.000Z"
+  );
+  expect(eventsResponse.ok()).toBeTruthy();
+  const [event] = await eventsResponse.json() as Array<{ id: string }>;
+
+  await page.reload();
+  await expect(page.getByTestId("app-loading")).toBeHidden();
+  await navigate(page, "dashboard");
+  await page.getByTestId("month-picker").fill("2026-07");
+  const dashboardCalendar = page.locator(".calendar-panel");
+  await expect(dashboardCalendar.getByTestId(`external-calendar-event-${event?.id}`))
+    .toHaveCount(3);
+  await expect(dashboardCalendar.getByTestId(`calendar-unavailable-${unavailable.id}`))
+    .toBeVisible();
+});
+
+test("explains empty entries caused by the selected month", async ({ page }) => {
+  const childName = "Monatsliste Kind";
+  const nextMonth = new Date();
+  nextMonth.setMonth(nextMonth.getMonth() + 1);
+  const emptyMonth = [
+    nextMonth.getFullYear(),
+    String(nextMonth.getMonth() + 1).padStart(2, "0")
+  ].join("-");
+  await openApp(page);
+  await createChild(page, childName);
+  await createEntry(page, {
+    childName,
+    startDay: 8,
+    startTime: "09:00",
+    endDay: 8,
+    endTime: "15:00",
+    note: "Fiktiver Eintrag für die Monatsliste"
+  });
+
+  await navigate(page, "entries");
+  await page.getByTestId("month-picker").fill(emptyMonth);
+  const emptyState = page.getByTestId("entries-empty-state");
+  await expect(emptyState).toBeVisible();
+  await expect(emptyState).toContainText("Keine Einträge im ausgewählten Monat");
+});
+
 test("downloads a complete JSON backup without raw calendar payloads", async ({
   page
 }) => {

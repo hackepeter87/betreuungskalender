@@ -103,6 +103,7 @@ export function CalendarGrid({
                     className={`calendar-event calendar-event--unavailable ${period.dutyRelated ? "is-duty" : ""}`}
                     type="button"
                     key={`unavailable-${period.id}`}
+                    data-testid={`calendar-unavailable-${period.id}`}
                     onClick={() => onSelectUnavailable?.(period)}
                     title={`${unavailableCategoryLabels[period.category]} · ${formatTime(period.startDateTime, intlLocale)}`}
                   >
