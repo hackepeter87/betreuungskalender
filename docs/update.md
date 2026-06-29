@@ -109,8 +109,8 @@ In OIDC mode, `HOST_PORT` is the oauth2-proxy host port, not the app port. The
 app service has no host port and is reachable only through
 `http://betreuungskalender:3000` on the Compose network.
 
-Replace `X.Y.Z` with the package version, for example `1.0.0-rc.1`, and
-`vX.Y.Z` with the matching release tag, for example `v1.0.0-rc.1`.
+Replace `X.Y.Z` with the package version, for example `1.0.0-rc.2`, and
+`vX.Y.Z` with the matching release tag, for example `v1.0.0-rc.2`.
 
 If a rootless Podman or Docker host is behind a reverse proxy running on a
 different host or VM, `HOST_BIND_ADDRESS=127.0.0.1` may not be reachable by that
@@ -147,9 +147,9 @@ contain all three OIDC deployment files:
 - `deploy/oauth2-proxy.cfg.example`
 
 The published `v1.0.0-rc.1` archive was created before these files existed.
-Use a newer verified release artifact for normal production OIDC deployment
-instead of mixing an older published runtime with deployment files copied from
-`main`.
+Use `v1.0.0-rc.2` or a newer verified release artifact for normal production
+OIDC deployment instead of mixing an older published runtime with deployment
+files copied from `main`.
 
 ## Managed Compose update
 
@@ -176,8 +176,8 @@ anything.
 
 `vCURRENT` is the already installed release that provides the updater.
 `X.Y.Z` is the target version without the leading `v`; for the first release
-candidate, use `1.0.0-rc.1` with
-`betreuungskalender-v1.0.0-rc.1.tar.gz`. The target directory
+candidate with OIDC deployment files, use `1.0.0-rc.2` with
+`betreuungskalender-v1.0.0-rc.2.tar.gz`. The target directory
 `releases/vX.Y.Z/` must not already exist. If it does, stop and decide whether
 it is a previous failed extraction, a manually installed release, or an active
 runtime before retrying.

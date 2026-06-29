@@ -39,9 +39,9 @@ and is the only layout managed by `npm run update`.
 The release Compose file requires `APP_RELEASE_VERSION`, `APP_RELEASE_DIR`,
 `HOST_BIND_ADDRESS`, and `HOST_PORT` in `.env`; these values are included in
 `.env.example`. `APP_RELEASE_VERSION` is the package version without the leading
-`v`, for example `1.0.0-rc.1`. `APP_RELEASE_DIR` points at the extracted release
+`v`, for example `1.0.0-rc.2`. `APP_RELEASE_DIR` points at the extracted release
 directory, for example
-`/opt/svc_betreuung/betreuungskalender/releases/v1.0.0-rc.1`.
+`/opt/svc_betreuung/betreuungskalender/releases/v1.0.0-rc.2`.
 
 Do not set host filesystem paths for `DATABASE_PATH` or `BACKUP_DIR` in the
 release `.env`. The release Compose file intentionally fixes those values inside
@@ -63,7 +63,7 @@ the private `.env`, `oauth2-proxy.cfg`, persistent `data/`, persistent
   data/
   backups/
   releases/
-    v1.0.0-rc.1/
+    v1.0.0-rc.2/
       Dockerfile.release
       dist/
       dist-server/
@@ -76,8 +76,8 @@ This deployment mode requires a release artifact that actually contains
 `deploy/compose.oidc.yml`, `deploy/.env.oidc.example`, and
 `deploy/oauth2-proxy.cfg.example`. The published `v1.0.0-rc.1` archive was cut
 before these files existed. Do not treat copying deployment files from `main`
-into an older release archive as the normal production path; use a newer
-verified release artifact that includes the files.
+into an older release archive as the normal production path; use `v1.0.0-rc.2`
+or a newer verified release artifact that includes the files.
 
 Use `deploy/.env.oidc.example` as the starting point for `.env` and
 `deploy/oauth2-proxy.cfg.example` as the starting point for
