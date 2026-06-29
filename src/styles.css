@@ -2543,6 +2543,33 @@ h3 {
   font-weight: 700;
 }
 
+.section-copy {
+  margin: -4px 0 0;
+  color: var(--muted);
+  font-size: 0.68rem;
+  line-height: 1.5;
+}
+
+.derived-impact {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid #d8d1ee;
+  border-radius: 8px;
+  background: #f7f5fd;
+  color: #554b8c;
+}
+
+.derived-impact strong {
+  font-size: 0.72rem;
+}
+
+.derived-impact p {
+  margin: 0;
+  font-size: 0.68rem;
+  line-height: 1.45;
+}
+
 .inline-message {
   margin: 0;
   padding: 10px 11px;

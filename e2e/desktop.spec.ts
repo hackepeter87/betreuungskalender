@@ -234,6 +234,81 @@ test("generates recurring weekend contact dates and shows them in the calendar",
     .toHaveCount(3);
 });
 
+test("derives unavailability impact hints from planned contact and holidays", async ({
+  page,
+  request
+}) => {
+  const childName = "Abwesenheit Kind";
+  await openApp(page);
+  await createChild(page, childName);
+
+  const childrenResponse = await request.get("/api/children");
+  expect(childrenResponse.ok()).toBeTruthy();
+  const [child] = await childrenResponse.json() as Array<{ id: string }>;
+  expect(child?.id).toBeTruthy();
+
+  const entryResponse = await request.post("/api/care-entries", {
+    data: {
+      startDateTime: "2026-07-03T16:00:00.000Z",
+      endDateTime: "2026-07-05T18:00:00.000Z",
+      childIds: [child.id],
+      generatedByPatternId: "pattern_synthetic_e2e",
+      ruleOccurrenceDate: "2026-07-03",
+      status: "planned",
+      overnight: true,
+      schoolHandover: false,
+      holiday: false,
+      weekend: true,
+      additionalCare: false,
+      location: "main_residence",
+      hasEvidence: false,
+      trips: [],
+      costs: []
+    }
+  });
+  expect(entryResponse.ok()).toBeTruthy();
+
+  const holidayResponse = await request.post("/api/holiday-periods", {
+    data: {
+      name: "Fiktiver Ferienblock",
+      startDate: "2026-07-01",
+      endDate: "2026-07-10",
+      childIds: [child.id],
+      assignedTo: "father"
+    }
+  });
+  expect(holidayResponse.ok()).toBeTruthy();
+
+  await page.reload();
+  await expect(page.getByTestId("app-loading")).toBeHidden();
+  await navigate(page, "unavailable");
+  await expect(page.getByTestId("page-unavailable")).toBeVisible();
+  await page.getByTestId("unavailable-add").click();
+  const form = page.getByTestId("unavailable-form");
+  await form.getByTestId("unavailable-start-date").fill("2026-07-03");
+  await form.getByTestId("unavailable-start-time").fill("15:00");
+  await form.getByTestId("unavailable-end-date").fill("2026-07-03");
+  await form.getByTestId("unavailable-end-time").fill("20:00");
+
+  await expect(form.getByTestId("unavailable-derived-impact")).toContainText(
+    "geplanten Umgangstermin"
+  );
+  await expect(form.getByTestId("unavailable-derived-impact")).toContainText(
+    "Ferienblock"
+  );
+  await expect(form).toContainText("Prüfe, ob „Betrifft Umgang“ markiert");
+  await expect(form).toContainText("Prüfe, ob „Betrifft Ferien“ markiert");
+
+  await form.getByTestId("unavailable-affects-contact").check({ force: true });
+  await form.getByTestId("unavailable-affects-holidays").check({ force: true });
+  await expect(form.getByTestId("unavailable-derived-impact")).toContainText(
+    "wird im Soll-Ist-Hinweis berücksichtigt"
+  );
+  await expect(form.getByTestId("unavailable-derived-impact")).toContainText(
+    "wird in Ferienhinweisen berücksichtigt"
+  );
+});
+
 test("downloads a complete JSON backup without raw calendar payloads", async ({
   page
 }) => {
