@@ -6,6 +6,37 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.0.0-rc.2] - 2026-06-29
+
+### Added
+
+- Added a supported single-port OIDC release Compose deployment where only
+  oauth2-proxy publishes a host port and the app stays private on the Compose
+  network.
+- Added OIDC release environment and oauth2-proxy configuration examples for
+  the archive deployment layout.
+- Added a post-`1.0.0` authentication architecture decision record for native
+  OIDC, multi-parent collaboration, and protected calendar feed work.
+- Added release/update validation coverage for OIDC topology, archive paths,
+  and example configuration files.
+
+### Changed
+
+- Hardened rootless Podman OIDC deployment guidance, including config-file
+  permissions, cookie secret generation, health validation, and troubleshooting.
+- Clarified that `v1.0.0-rc.1` does not contain the OIDC deployment files and
+  that a newer verified release artifact is required for the normal OIDC
+  deployment path.
+- Removed deployment-specific real examples from generic deployment
+  documentation.
+
+### Validation
+
+- No product feature scope, database schema migration, or API contract change is
+  introduced by this release candidate.
+- The release candidate is intended to create a verified artifact containing the
+  OIDC deployment files added after `v1.0.0-rc.1`.
+
 ## [1.0.0-rc.1] - 2026-06-28
 
 ### Changed
