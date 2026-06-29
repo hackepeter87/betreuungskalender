@@ -1,15 +1,21 @@
 # Container deployment
 
-The repository contains a multi-stage `Dockerfile` and `compose.yaml`. The
-runtime image uses Node.js 22 LTS, installs production dependencies only, runs
-as the unprivileged `node` user, and includes a healthcheck.
+The repository contains two container entry points:
+
+- `Dockerfile` plus root-level `compose.yaml` for local evaluation and CI-style
+  container checks from a checkout.
+- `Dockerfile.release` plus `deploy/compose.yml` for the supported release
+  archive runtime and managed update layout.
+
+Both runtime images use Node.js 22 LTS, install production dependencies only,
+run as the unprivileged `node` user, and include a healthcheck.
 
 GitHub Actions builds the image and starts a disposable container on relevant
 pull requests and pushes. Validation succeeds only after the container's
 `/api/health` endpoint confirms that SQLite is reachable. CI does not push the
 image to a registry and does not require deployment secrets.
 
-## Docker Compose
+## Local checkout Docker Compose
 
 ```bash
 docker compose build
@@ -18,8 +24,8 @@ docker compose ps
 curl --fail http://127.0.0.1:3000/api/health
 ```
 
-The default Compose file binds only to `127.0.0.1:3000` and uses named volumes
-for `/data` and `/backups`. Its authentication is disabled for a local
+The root-level `compose.yaml` binds only to `127.0.0.1:3000` and uses named
+volumes for `/data` and `/backups`. Its authentication is disabled for a local
 single-user start. Change these values before exposing the service.
 
 For a persistent production installation, use the separate stable bind-mount
