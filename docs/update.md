@@ -34,7 +34,7 @@ data remain outside every versioned release:
     app.sqlite
   backups/
   releases/
-    v0.5.0/
+    vX.Y.Z/
 ```
 
 `compose.yml` is installed once from `deploy/compose.yml`. `.env` must include
@@ -42,8 +42,8 @@ the active release path and version, in addition to the normal application
 configuration. Keep `.env` private and out of Git.
 
 ```dotenv
-APP_RELEASE_DIR=/opt/betreuungskalender/releases/v0.5.0
-APP_RELEASE_VERSION=v0.5.0
+APP_RELEASE_DIR=/opt/betreuungskalender/releases/vX.Y.Z
+APP_RELEASE_VERSION=vX.Y.Z
 HOST_BIND_ADDRESS=127.0.0.1
 HOST_PORT=3000
 REQUIRE_AUTH=true
@@ -63,6 +63,9 @@ sudo docker compose --project-directory /opt/betreuungskalender \
   -f /opt/betreuungskalender/compose.yml up -d --build
 ```
 
+Replace `vX.Y.Z` with the exact release tag, for example `v1.0.0-rc.1` for the
+first release candidate.
+
 ## Obtain and verify a release artifact
 
 Download a versioned archive and its `.sha256` sidecar only from the matching
@@ -70,11 +73,11 @@ release workflow or trusted release location. Do not use an archive from an
 unverified mirror. Verify it before extracting or executing its helper:
 
 ```bash
-sha256sum --check betreuungskalender-v0.5.0.tar.gz.sha256
-tar -tzf betreuungskalender-v0.5.0.tar.gz | less
+sha256sum --check betreuungskalender-vX.Y.Z.tar.gz.sha256
+tar -tzf betreuungskalender-vX.Y.Z.tar.gz | less
 ```
 
-On macOS, compare `shasum -a 256 betreuungskalender-v0.5.0.tar.gz` with the
+On macOS, compare `shasum -a 256 betreuungskalender-vX.Y.Z.tar.gz` with the
 recorded checksum. The archive contains the built frontend/backend, a minimal
 runtime `Dockerfile.release`, and the operational scripts. It does not contain
 `.env`, SQLite data, backups, exports, or secrets.
@@ -89,11 +92,11 @@ delete that temporary file after the run.
 First run a non-writing preflight with local archive files:
 
 ```bash
-sudo node /opt/betreuungskalender/releases/v0.5.0/scripts/update.js \
+sudo node /opt/betreuungskalender/releases/vCURRENT/scripts/update.js \
   --root /opt/betreuungskalender \
-  --version 0.6.0 \
-  --artifact /srv/releases/betreuungskalender-v0.6.0.tar.gz \
-  --checksum /srv/releases/betreuungskalender-v0.6.0.tar.gz.sha256 \
+  --version X.Y.Z \
+  --artifact /srv/releases/betreuungskalender-vX.Y.Z.tar.gz \
+  --checksum /srv/releases/betreuungskalender-vX.Y.Z.tar.gz.sha256 \
   --dry-run
 ```
 
@@ -101,6 +104,14 @@ Run the same command without `--dry-run` after reviewing release notes. HTTPS
 downloads can be supplied with `--artifact-url` and `--checksum-url`; a dry run
 with remote URLs reports the planned download but does not retrieve or modify
 anything.
+
+`vCURRENT` is the already installed release that provides the updater.
+`X.Y.Z` is the target version without the leading `v`; for the first release
+candidate, use `1.0.0-rc.1` with
+`betreuungskalender-v1.0.0-rc.1.tar.gz`. The target directory
+`releases/vX.Y.Z/` must not already exist. If it does, stop and decide whether
+it is a previous failed extraction, a manually installed release, or an active
+runtime before retrying.
 
 The tool performs these ordered steps:
 
