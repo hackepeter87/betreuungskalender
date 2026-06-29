@@ -24,7 +24,10 @@ ALLOWED_ORIGIN=https://betreuung.example.net
 
 The proxy should set `X-Forwarded-Proto`, `X-Forwarded-Host`,
 `X-Forwarded-Port`, and `X-Forwarded-For`. Strip incoming authentication
-headers from clients before setting trusted values.
+headers from clients before setting trusted values. In oauth2-proxy, pair
+`reverse_proxy = true` with a narrow `trusted_ips` list for the upstream proxy,
+for example `trusted_ips = [ "127.0.0.1/32", "192.0.2.10/32" ]`, and replace
+the documentation CIDR with the actual proxy address.
 
 ## HAProxy in front of oauth2-proxy
 

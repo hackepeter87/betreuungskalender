@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import test from "node:test";
 import {
   REQUIRED_GITIGNORE_RULES,
@@ -11,6 +13,14 @@ import {
   releaseNotesPathForVersion,
   releaseTagForVersion
 } from "./release-check.js";
+
+function serviceBlock(composeContent, serviceName) {
+  const lines = composeContent.split(/\r?\n/);
+  const start = lines.findIndex((line) => line === `  ${serviceName}:`);
+  assert.notEqual(start, -1, `${serviceName} service is missing`);
+  const end = lines.findIndex((line, index) => index > start && /^  [A-Za-z0-9_-]+:$/.test(line));
+  return lines.slice(start, end === -1 ? undefined : end).join("\n");
+}
 
 test("allows source and documentation files whose names mention backup or export", () => {
   const allowed = [
@@ -141,4 +151,27 @@ test("requires release notes to identify the matching tag", () => {
     hasReleaseNotesHeading("# Release notes\n", "0.3.0"),
     false
   );
+});
+
+test("OIDC Compose mode keeps the app private behind oauth2-proxy", () => {
+  const compose = readFileSync(resolve("deploy", "compose.oidc.yml"), "utf8");
+  const proxyConfig = readFileSync(resolve("deploy", "oauth2-proxy.cfg.example"), "utf8");
+  const app = serviceBlock(compose, "betreuungskalender");
+  const proxy = serviceBlock(compose, "oauth2-proxy");
+
+  assert.doesNotMatch(app, /\n    ports:\n/);
+  assert.match(app, /\n    expose:\n      - "3000"/);
+  assert.match(app, /\n      - \.\/data:\/data/);
+  assert.match(app, /\n      - \.\/backups:\/backups/);
+  assert.match(app, /\n      - oidc-private/);
+
+  assert.match(proxy, /\n    ports:\n      - "\$\{HOST_BIND_ADDRESS:-0\.0\.0\.0\}:\$\{HOST_PORT:-8080\}:4180"/);
+  assert.match(proxy, /\n      - \.\/oauth2-proxy\.cfg:\/etc\/oauth2-proxy\/oauth2-proxy\.cfg:ro/);
+  assert.match(proxy, /\n      - oidc-private/);
+
+  assert.match(proxyConfig, /upstreams = \[ "http:\/\/betreuungskalender:3000" \]/);
+  assert.match(proxyConfig, /trusted_ips = \[ "127\.0\.0\.1\/32", "192\.0\.2\.10\/32" \]/);
+  assert.doesNotMatch(proxyConfig, /0\.0\.0\.0\/0/);
+  assert.match(proxyConfig, /client_secret = "CHANGE_ME"/);
+  assert.match(proxyConfig, /cookie_secret = "CHANGE_ME_32_BYTE_BASE64"/);
 });

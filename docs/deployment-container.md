@@ -72,6 +72,13 @@ the private `.env`, `oauth2-proxy.cfg`, persistent `data/`, persistent
       package-lock.json
 ```
 
+This deployment mode requires a release artifact that actually contains
+`deploy/compose.oidc.yml`, `deploy/.env.oidc.example`, and
+`deploy/oauth2-proxy.cfg.example`. The published `v1.0.0-rc.1` archive was cut
+before these files existed. Do not treat copying deployment files from `main`
+into an older release archive as the normal production path; use a newer
+verified release artifact that includes the files.
+
 Use `deploy/.env.oidc.example` as the starting point for `.env` and
 `deploy/oauth2-proxy.cfg.example` as the starting point for
 `oauth2-proxy.cfg`. Keep both private and out of Git after editing. The OIDC
@@ -119,10 +126,111 @@ sudo docker compose \
   -f /opt/svc_betreuung/betreuungskalender/compose.oidc.yml up -d --build
 ```
 
+For rootless Podman with `podman-compose` 1.0.x, run the commands from the
+deployment directory and avoid Docker-specific `--project-directory` flags:
+
+```bash
+cd /opt/svc_betreuung/betreuungskalender
+podman-compose --env-file .env -f compose.oidc.yml config
+podman-compose --env-file .env -f compose.oidc.yml up -d --build
+podman-compose --env-file .env -f compose.oidc.yml ps
+```
+
 Validate that only oauth2-proxy has a host port, the app is healthy, and the
 public URL redirects to `/oauth2/start` before authenticating back to the app.
 Keep `./data:/data` and `./backups:/backups` as the persistence boundary; do not
 replace them with host paths in `DATABASE_PATH` or `BACKUP_DIR`.
+
+### Rootless Podman config-file permissions
+
+`oauth2-proxy.cfg` contains client and cookie secrets, so it should not be
+world-readable. At the same time, the oauth2-proxy container runs as a nonroot
+user. With rootless Podman, a host-owned `0600` bind-mounted file can be
+unreadable inside the user namespace even though the path exists. The container
+then exits with a config-read or parse error.
+
+Use this reproducible ownership handoff after editing the config. Read the
+container user from the configured image; if your image inspect output is empty,
+check the image documentation before choosing a fallback UID/GID.
+
+```bash
+cd /opt/svc_betreuung/betreuungskalender
+OAUTH2_PROXY_IMAGE="${OAUTH2_PROXY_IMAGE:-quay.io/oauth2-proxy/oauth2-proxy:v7.15.3}"
+OAUTH2_PROXY_USER="$(podman image inspect "$OAUTH2_PROXY_IMAGE" --format '{{.Config.User}}')"
+test -n "$OAUTH2_PROXY_USER" || OAUTH2_PROXY_USER="2000:2000"
+
+# Edit as the deployment operator.
+podman unshare chown "$(id -u):$(id -g)" oauth2-proxy.cfg
+chmod 0600 oauth2-proxy.cfg
+${EDITOR:-vi} oauth2-proxy.cfg
+
+# Hand read access back to the container user without making secrets public.
+podman unshare chown "$OAUTH2_PROXY_USER" oauth2-proxy.cfg
+chmod 0400 oauth2-proxy.cfg
+podman unshare ls -ln oauth2-proxy.cfg
+```
+
+To edit it later, repeat the first three commands, then restore ownership and
+mode before starting oauth2-proxy. Do not use `chmod 0644` as a shortcut for
+secret-bearing config files.
+
+Generate a valid oauth2-proxy cookie secret with exactly 32 ASCII characters:
+
+```bash
+COOKIE_SECRET="$(openssl rand -hex 16)"
+printf '%s\n' "$COOKIE_SECRET"
+test "${#COOKIE_SECRET}" -eq 32
+```
+
+Paste that value into `cookie_secret`. Generate `client_secret` in Keycloak.
+Never commit either value.
+
+### Rootless Podman health and validation
+
+Podman/Buildah can warn that a Dockerfile `HEALTHCHECK` is ignored for OCI
+image format, and Podman Compose health-state handling can differ from Docker
+Compose. Do not rely only on `podman ps` health output. Validate each layer:
+
+```bash
+cd /opt/svc_betreuung/betreuungskalender
+podman-compose --env-file .env -f compose.oidc.yml ps
+
+# App health from inside the private network/container.
+podman exec betreuungskalender_betreuungskalender_1 node scripts/healthcheck.js
+
+# oauth2-proxy listener on the single exposed local host port.
+curl -fsSI http://127.0.0.1:8080/oauth2/start
+
+# The app entrypoint should redirect unauthenticated traffic toward OIDC.
+curl -fsSI http://127.0.0.1:8080/
+```
+
+Container names can differ by Compose implementation. Use
+`podman ps --format '{{.Names}}'` if the generated names are different.
+
+### OIDC troubleshooting checklist
+
+- App container health: run `podman exec APP_CONTAINER node scripts/healthcheck.js`
+  and inspect `podman inspect APP_CONTAINER`.
+- oauth2-proxy config parse errors: run `podman start -a OAUTH2_CONTAINER` to
+  see the foreground startup error, then fix `oauth2-proxy.cfg`.
+- Cookie secret length errors: regenerate with `openssl rand -hex 16` and
+  confirm `test "${#COOKIE_SECRET}" -eq 32`.
+- Config file permission errors: check `podman unshare ls -ln
+  oauth2-proxy.cfg`, then restore ownership to the image `Config.User` value
+  and mode `0400`.
+- Keycloak discovery errors: confirm `oidc_issuer_url` is reachable from the
+  container host and points at the exact realm issuer.
+- Redirect URI mismatch: confirm Keycloak allows the exact public callback URL,
+  for example `https://app.example.net/oauth2/callback`.
+- Local listener: run `curl -fsSI http://127.0.0.1:<hostport>/oauth2/start`
+  on the container host.
+- External proxy reachability: verify the TLS reverse proxy backend points to
+  the container host and `HOST_PORT`, and that firewall rules allow that path.
+
+`podman logs` is useful, but it is not the only diagnostic path. `podman
+start -a CONTAINER` shows immediate foreground startup failures, and
+`podman inspect CONTAINER` shows mounts, network attachments, and exit codes.
 
 ## Podman
 

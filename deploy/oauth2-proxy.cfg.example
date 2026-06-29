@@ -7,6 +7,7 @@ redirect_url = "https://app.example.net/oauth2/callback"
 email_domains = [ "*" ]
 http_address = "0.0.0.0:4180"
 upstreams = [ "http://betreuungskalender:3000" ]
+trusted_ips = [ "127.0.0.1/32", "192.0.2.10/32" ]
 
 cookie_secret = "CHANGE_ME_32_BYTE_BASE64"
 cookie_secure = true

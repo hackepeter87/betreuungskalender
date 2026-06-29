@@ -54,6 +54,7 @@ redirect_url = "https://app.example.net/oauth2/callback"
 email_domains = [ "*" ]
 http_address = "0.0.0.0:4180"
 upstreams = [ "http://betreuungskalender:3000" ]
+trusted_ips = [ "127.0.0.1/32", "192.0.2.10/32" ]
 
 cookie_secret = "CHANGE_ME_32_BYTE_BASE64"
 cookie_secure = true
@@ -66,8 +67,21 @@ pass_access_token = false
 pass_authorization_header = false
 ```
 
-Generate `client_secret` in Keycloak. Generate `cookie_secret` using the
-oauth2-proxy documentation. Never reuse the example strings.
+Generate `client_secret` in Keycloak. Generate a 32-character cookie secret
+that oauth2-proxy accepts, then paste it into `oauth2-proxy.cfg`:
+
+```bash
+COOKIE_SECRET="$(openssl rand -hex 16)"
+printf '%s\n' "$COOKIE_SECRET"
+test "${#COOKIE_SECRET}" -eq 32
+```
+
+Never reuse the example strings.
+
+`reverse_proxy = true` must be paired with a narrow `trusted_ips` list. Replace
+the placeholder `192.0.2.10/32` with the actual IP address or CIDR of the
+trusted upstream TLS reverse proxy. Do not use `0.0.0.0/0`; clients must not be
+allowed to inject or spoof forwarded headers.
 
 ## Identity headers
 
