@@ -64,7 +64,7 @@ const env = readFileSync(resolve(root, ".env"), "utf8");
 appendFileSync(resolve(root, "fake-docker.log"), args.join(" ") + "\\n");
 if (command === "config" || command === "down") process.exit(0);
 if (command === "up") {
-  const target = env.includes("APP_RELEASE_VERSION=v0.5.0");
+  const target = env.includes("APP_RELEASE_VERSION=0.5.0");
   if (target && process.env.UPDATE_TEST_FAIL_START === "true") process.exit(1);
   process.exit(0);
 }
@@ -78,7 +78,7 @@ if (args.includes("restore:check")) {
   process.exit(0);
 }
 if (args.includes("verify:runtime")) {
-  const target = env.includes("APP_RELEASE_VERSION=v0.5.0");
+  const target = env.includes("APP_RELEASE_VERSION=0.5.0");
   if (target && process.env.UPDATE_TEST_FAIL_TARGET === "true") process.exit(1);
   process.exit(0);
 }
@@ -96,7 +96,7 @@ async function createInstallation(directory) {
   await writeFile(resolve(root, "compose.yml"), "services: {}\n");
   await writeFile(resolve(root, "data", "app.sqlite"), "before-update");
   await writeFile(resolve(current, "package.json"), JSON.stringify({ version: "0.4.0" }));
-  await writeFile(resolve(root, ".env"), `APP_RELEASE_DIR=${current}\nAPP_RELEASE_VERSION=v0.4.0\nREQUIRE_AUTH=true\n`);
+  await writeFile(resolve(root, ".env"), `APP_RELEASE_DIR=${current}\nAPP_RELEASE_VERSION=0.4.0\nREQUIRE_AUTH=true\n`);
   return root;
 }
 
@@ -130,7 +130,7 @@ async function withFakeDocker(directory, callback) {
 
 test("parses checksum files and preserves unrelated environment settings", () => {
   assert.equal(parseChecksum("a".repeat(64) + "  release.tar.gz"), "a".repeat(64));
-  assert.match(updateEnv("REQUIRE_AUTH=true\n", { APP_RELEASE_VERSION: "v0.5.0" }), /REQUIRE_AUTH=true/);
+  assert.match(updateEnv("REQUIRE_AUTH=true\n", { APP_RELEASE_VERSION: "0.5.0" }), /REQUIRE_AUTH=true/);
   assert.match("# v0.5.0+build.1", new RegExp(`^# v${escapeRegExp("0.5.0+build.1")}(?:\\s|$)`));
   assert.throws(() => parseArguments(["--version", "0.5.0", "--artifact", "release.tar.gz"]), /checksum/);
 });
@@ -151,7 +151,7 @@ test("synthetic Compose upgrade verifies backup and records the active release",
     });
     const env = await readFile(resolve(root, ".env"), "utf8");
     const state = JSON.parse(await readFile(resolve(root, ".update-state.json"), "utf8"));
-    assert.match(env, /APP_RELEASE_VERSION=v0.5.0/);
+    assert.match(env, /APP_RELEASE_VERSION=0.5.0/);
     assert.match(env, /REQUIRE_AUTH=true/);
     assert.equal(state.activeVersion, "0.5.0");
     assert.equal(state.rollbackBackup, "betreuungskalender-sqlite-2026-01-01T00-00-00Z.sqlite");
@@ -170,7 +170,7 @@ test("synthetic failed verification restores the prior runtime and matching SQLi
       await assert.rejects(runUpdate(updateOptions(root, archive, checksumPath)));
     });
     const env = await readFile(resolve(root, ".env"), "utf8");
-    assert.match(env, /APP_RELEASE_VERSION=v0.4.0/);
+    assert.match(env, /APP_RELEASE_VERSION=0.4.0/);
     assert.equal(await readFile(resolve(root, "data", "app.sqlite"), "utf8"), "synthetic-backup");
   });
 });
@@ -188,10 +188,10 @@ test("synthetic startup and backup failures never leave an unverified release ac
       process.env.UPDATE_TEST_FAIL_BACKUP = "true";
       await assert.rejects(runUpdate(updateOptions(backupFailureRoot, archive, checksumPath)));
       assert.equal(await readFile(resolve(backupFailureRoot, "data", "app.sqlite"), "utf8"), "before-update");
-      assert.match(await readFile(resolve(backupFailureRoot, ".env"), "utf8"), /APP_RELEASE_VERSION=v0.4.0/);
+      assert.match(await readFile(resolve(backupFailureRoot, ".env"), "utf8"), /APP_RELEASE_VERSION=0.4.0/);
     });
     const env = await readFile(resolve(root, ".env"), "utf8");
-    assert.match(env, /APP_RELEASE_VERSION=v0.4.0/);
+    assert.match(env, /APP_RELEASE_VERSION=0.4.0/);
     assert.equal(await readFile(resolve(root, "data", "app.sqlite"), "utf8"), "synthetic-backup");
   });
 });
@@ -207,6 +207,6 @@ test("dry runs and update locks leave the installation unchanged", async () => {
       await assert.rejects(runUpdate(updateOptions(root, archive, checksumPath)), (error) => error.code === 11);
     });
     assert.equal(await readFile(resolve(root, "data", "app.sqlite"), "utf8"), "before-update");
-    assert.equal(await readFile(resolve(root, ".env"), "utf8"), `APP_RELEASE_DIR=${resolve(root, "releases", "v0.4.0")}\nAPP_RELEASE_VERSION=v0.4.0\nREQUIRE_AUTH=true\n`);
+    assert.equal(await readFile(resolve(root, ".env"), "utf8"), `APP_RELEASE_DIR=${resolve(root, "releases", "v0.4.0")}\nAPP_RELEASE_VERSION=0.4.0\nREQUIRE_AUTH=true\n`);
   });
 });

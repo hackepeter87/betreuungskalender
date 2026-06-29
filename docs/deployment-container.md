@@ -30,9 +30,21 @@ single-user start. Change these values before exposing the service.
 
 For a persistent production installation, use the separate stable bind-mount
 layout in [update.md](update.md), which installs `deploy/compose.yml` as
-`/opt/betreuungskalender/compose.yml`. It keeps `data/`, `backups/`, `.env`, and
-the active versioned release outside the runtime image and is the only layout
-managed by `npm run update`.
+`/opt/svc_betreuung/betreuungskalender/compose.yml`. It keeps `data/`,
+`backups/`, `.env`, and the active versioned release outside the runtime image
+and is the only layout managed by `npm run update`.
+
+The release Compose file requires `APP_RELEASE_VERSION`, `APP_RELEASE_DIR`,
+`HOST_BIND_ADDRESS`, and `HOST_PORT` in `.env`; these values are included in
+`.env.example`. `APP_RELEASE_VERSION` is the package version without the leading
+`v`, for example `1.0.0-rc.1`. `APP_RELEASE_DIR` points at the extracted release
+directory, for example
+`/opt/svc_betreuung/betreuungskalender/releases/v1.0.0-rc.1`.
+
+Do not set host filesystem paths for `DATABASE_PATH` or `BACKUP_DIR` in the
+release `.env`. The release Compose file intentionally fixes those values inside
+the container as `/data/app.sqlite` and `/backups`; persist them through the
+host-side `./data:/data` and `./backups:/backups` bind mounts.
 
 ## Podman
 
@@ -51,6 +63,18 @@ podman run --rm -d --name betreuungskalender \
 Named volumes work well with rootless Podman. For bind mounts, ensure the
 container's `node` user can write them. With SELinux, add `:Z` where required.
 Do not solve permission problems by running the application as root.
+
+The release `deploy/compose.yml` can also be used with Docker Compose or Podman
+Compose when the host supports the Compose features used by the file. For
+rootless Podman behind a reverse proxy on another host or VM,
+`HOST_BIND_ADDRESS=127.0.0.1` may only bind inside the Podman host namespace.
+Use the VM IP or all interfaces and restrict access externally, for example:
+
+```dotenv
+HOST_BIND_ADDRESS=0.0.0.0
+HOST_PORT=8080
+ALLOWED_ORIGIN=https://betreuungskalender.example.net
+```
 
 ## Backup
 

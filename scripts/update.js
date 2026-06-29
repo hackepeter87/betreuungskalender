@@ -386,7 +386,7 @@ async function extractRelease(options, archivePath) {
 async function switchRelease(options, previous, releasePath) {
   const nextEnv = updateEnv(previous.envContent, {
     APP_RELEASE_DIR: releasePath,
-    APP_RELEASE_VERSION: `v${options.version}`
+    APP_RELEASE_VERSION: options.version
   });
   await writeFile(previous.envPath, nextEnv, { mode: 0o600 });
   await chmod(previous.envPath, 0o600);
