@@ -31,6 +31,7 @@ included in repository screenshots.
 [Container](#container-quick-start) · [Updates](docs/update.md) · [systemd/LXC](#lxcsystemd-quick-start) ·
 [Configuration](docs/configuration.md) · [Security](docs/security.md) ·
 [Backup](docs/backup-restore.md) · [Legacy migration](docs/migration.md) ·
+[Calendar feed](docs/personal-calendar-feed.md) ·
 [Testing](docs/testing.md) ·
 [Internationalization](docs/internationalization.md)
 
@@ -49,6 +50,8 @@ included in repository screenshots.
 - JSON backup/import, separate CSV exports, neutral PDF report, and A4 print view
 - Local `.ics` holiday calendar import with source visibility and read-only
   overlays; imported events do not affect care statistics or reports
+- Revocable personal iCalendar subscription feed for care entries created by
+  the signed-in user
 - Fastify API with SQLite, migrations, validation, auth-proxy support, health
   endpoints, and production security headers
 

@@ -133,6 +133,13 @@ export interface ApiSession {
   logoutUrl?: string;
 }
 
+export interface ApiCalendarFeedStatus {
+  active: boolean;
+  createdAt?: string;
+  lastUsedAt?: string;
+  feedUrl?: string;
+}
+
 export interface ApiUnavailablePeriod {
   id: string;
   startDateTime: string;

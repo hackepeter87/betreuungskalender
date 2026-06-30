@@ -14,6 +14,7 @@ Depending on use, the application may store:
 - Trips, costs, holiday periods, and unavailable periods
 - Audit identities and change history
 - Monthly closure summaries
+- Personal calendar feed token hashes
 
 The React UI reads and writes domain data only through the Fastify API and its
 SQLite database. Browser local storage is limited to non-sensitive UI
@@ -25,6 +26,11 @@ SQLite databases, JSON backups, CSV exports, and PDF reports may contain highly
 sensitive family data. Protect them with disk encryption, restrictive file
 permissions, access-controlled backup storage, and a tested deletion policy.
 Do not send them unencrypted or upload them to public issue trackers.
+
+Personal iCalendar feed URLs are bearer secrets. The application stores only a
+hash of the token, but anyone with the generated URL can read that feed until
+it is revoked. Rotate or revoke the URL from settings if it may have been
+shared unintentionally.
 
 ## Network and authentication
 
@@ -47,6 +53,10 @@ proxy identity headers, production-safe error responses, prepared SQLite
 statements, validation, and an unprivileged container user. It does not use
 external analytics, tracking services, or CDN runtime dependencies.
 
+Calendar feed tokens grant access only to the read-only `.ics` endpoint. They
+are not accepted for `/api/*` routes. Feed output excludes notes, evidence
+references, trips, costs, deleted entries, and cancelled entries.
+
 The UI references external evidence by name only; it does not upload or store
 evidence files.
 
@@ -56,6 +66,10 @@ Set `LOG_LEVEL=info` or `warn` in production. Request bodies are not logged by
 default. Authentication and cookie headers are redacted. Do not add names,
 notes, evidence references, exported data, or full request bodies to routine
 logs.
+
+Calendar feed request paths redact the token segment before application
+request metadata is logged. Reverse proxies may still log the full URL unless
+configured otherwise.
 
 ## Operator responsibility
 

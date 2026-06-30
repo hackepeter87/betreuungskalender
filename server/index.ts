@@ -22,12 +22,27 @@ import { installRateLimitPolicy } from "./rateLimitPolicy.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { unavailablePeriodRoutes } from "./routes/unavailablePeriods.js";
 import { externalCalendarRoutes } from "./routes/externalCalendars.js";
+import { calendarFeedRoutes } from "./routes/calendarFeeds.js";
 
 runMigrations();
+
+function sanitizeRequestUrl(url?: string): string | undefined {
+  return url?.replace(/\/calendar\/[^/?#]+(?:\.ics)?/g, "/calendar/[redacted].ics");
+}
 
 const app = Fastify({
   logger: {
     level: config.logLevel,
+    serializers: {
+      req(request) {
+        return {
+          method: request.method,
+          url: sanitizeRequestUrl(request.url),
+          hostname: request.hostname,
+          remoteAddress: request.ip
+        };
+      }
+    },
     redact: {
       paths: [
         "req.headers.authorization",
@@ -216,6 +231,7 @@ await app.register(contactPatternRoutes);
 await app.register(settingsRoutes);
 await app.register(unavailablePeriodRoutes);
 await app.register(externalCalendarRoutes);
+await app.register(calendarFeedRoutes);
 await app.register(monthClosingRoutes);
 await app.register(migrationRoutes);
 await app.register(auditRoutes);

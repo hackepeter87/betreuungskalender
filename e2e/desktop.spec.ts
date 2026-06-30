@@ -143,6 +143,27 @@ test("keeps the shell quiet in local development without authentication", async 
   await expect(page.getByTestId("auth-session")).toHaveCount(0);
 });
 
+test("creates a personal calendar feed URL from settings", async ({
+  page,
+  request
+}) => {
+  await openApp(page);
+  await navigate(page, "settings");
+
+  const manager = page.getByTestId("calendar-feed-manager");
+  await expect(manager).toContainText("Noch kein persönlicher Feed aktiv");
+  await manager.getByTestId("calendar-feed-rotate").click();
+  await expect(manager).toContainText("Neue Feed-URL erzeugt");
+  await expect(manager).toContainText("Feed aktiv seit");
+
+  const feedUrl = await manager.getByTestId("calendar-feed-url").inputValue();
+  expect(feedUrl).toMatch(/^http:\/\/127\.0\.0\.1:3100\/calendar\/[A-Za-z0-9_-]+\.ics$/);
+  const feed = await request.get(new URL(feedUrl).pathname);
+  expect(feed.ok()).toBeTruthy();
+  expect(feed.headers()["content-type"]).toContain("text/calendar");
+  await expect(manager.getByTestId("calendar-feed-revoke")).toBeEnabled();
+});
+
 test("persists the selected language and localizes the report surface", async ({
   page
 }) => {
