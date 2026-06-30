@@ -3,6 +3,8 @@ oidc_issuer_url = "https://idp.example.net/realms/example"
 client_id = "betreuungskalender"
 client_secret = "CHANGE_ME"
 redirect_url = "https://app.example.net/oauth2/callback"
+scope = "openid email profile"
+oidc_groups_claim = "groups"
 
 email_domains = [ "*" ]
 http_address = "0.0.0.0:4180"
@@ -16,5 +18,6 @@ cookie_samesite = "lax"
 
 reverse_proxy = true
 set_xauthrequest = true
+pass_user_headers = true
 pass_access_token = false
 pass_authorization_header = false
