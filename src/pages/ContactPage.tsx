@@ -9,10 +9,20 @@ import {
 } from "../lib/analytics";
 import { actorDisplayName } from "../lib/actors";
 import { generatePatternEntries } from "../lib/contact";
-import { formatDate, formatDateTime, formatTime, rangeForYear, toDateKey } from "../lib/date";
+import {
+  addDays,
+  enumerateDateKeys,
+  formatDate,
+  formatDateTime,
+  formatShortDate,
+  formatTime,
+  localDate,
+  rangeForYear,
+  toDateKey
+} from "../lib/date";
 import { statusLabels } from "../lib/labels";
 import { useI18n } from "../i18n/I18nProvider";
-import { copy } from "../i18n/catalog";
+import { copy, copyList } from "../i18n/catalog";
 import { useAppStore } from "../store/AppStore";
 import type { CareEntry, ContactPattern } from "../types";
 
@@ -21,6 +31,39 @@ function nextFriday(): string {
   const distance = (5 - date.getDay() + 7) % 7;
   date.setDate(date.getDate() + distance);
   return toDateKey(date);
+}
+
+function weekDatesFor(dateKey: string): string[] {
+  const start = localDate(dateKey);
+  const mondayOffset = (start.getDay() + 6) % 7;
+  start.setDate(start.getDate() - mondayOffset);
+  const monday = toDateKey(start);
+  return Array.from({ length: 7 }, (_, index) => addDays(monday, index));
+}
+
+type ContactPreviewItem = {
+  id: string;
+  kind: "new" | "existing";
+  startDate: string;
+  endDate: string;
+  dateKeys: string[];
+  weekDateKeys: string[];
+};
+
+function previewItemFromEntry(
+  entry: CareEntry,
+  kind: ContactPreviewItem["kind"]
+): ContactPreviewItem {
+  const startDate = entry.startDateTime.slice(0, 10);
+  const endDate = entry.endDateTime.slice(0, 10);
+  return {
+    id: `${kind}-${entry.ruleOccurrenceDate ?? entry.id}`,
+    kind,
+    startDate,
+    endDate,
+    dateKeys: enumerateDateKeys(startDate, endDate),
+    weekDateKeys: weekDatesFor(startDate)
+  };
 }
 
 export function ContactPage({
@@ -103,6 +146,28 @@ export function ContactPage({
       ),
     [data, generationEnd, generationStart, previewPattern]
   );
+  const existingPreviewEntries = useMemo(
+    () =>
+      patternId
+        ? entriesForRange(data.entries, generationStart, generationEnd)
+            .filter((entry) => entry.generatedByPatternId === patternId)
+            .sort((a, b) => a.startDateTime.localeCompare(b.startDateTime))
+        : [],
+    [data.entries, generationEnd, generationStart, patternId]
+  );
+  const previewCalendarItems = useMemo(
+    () =>
+      [
+        ...previewEntries.map((entry) => previewItemFromEntry(entry, "new")),
+        ...existingPreviewEntries.map((entry) =>
+          previewItemFromEntry(entry, "existing")
+        )
+      ].sort((a, b) => a.startDate.localeCompare(b.startDate)),
+    [existingPreviewEntries, previewEntries]
+  );
+  const visiblePreviewItems = previewCalendarItems.slice(0, 6);
+  const hiddenPreviewItems = previewCalendarItems.length - visiblePreviewItems.length;
+  const weekdayLabels = copyList(locale, "calendar", "weekdays");
 
   const stats = useMemo(
     () =>
@@ -301,12 +366,60 @@ export function ContactPage({
               </label>
             </div>
             <div className="contact-generation-preview" data-testid="contact-generation-preview">
-              <strong>{copy(locale, "contact", "previewTitle")}</strong>
-              <span>
-                {previewEntries.length
-                  ? copy(locale, "contact", "previewCount", { count: previewEntries.length })
-                  : copy(locale, "contact", "previewEmpty")}
-              </span>
+              <div className="contact-generation-preview__summary">
+                <strong>{copy(locale, "contact", "previewTitle")}</strong>
+                <span>
+                  {previewEntries.length
+                    ? copy(locale, "contact", "previewCount", { count: previewEntries.length })
+                    : copy(locale, "contact", "previewEmpty")}
+                </span>
+              </div>
+              <div className="contact-preview-calendar" data-testid="contact-preview-calendar">
+                {visiblePreviewItems.map((item) => (
+                  <article
+                    className={`contact-preview-occurrence contact-preview-occurrence--${item.kind}`}
+                    data-testid={`contact-preview-${item.kind}-occurrence`}
+                    key={item.id}
+                  >
+                    <div className="contact-preview-occurrence__meta">
+                      <strong>
+                        {formatShortDate(item.startDate, intlLocale)} {copy(locale, "contact", "through")} {formatShortDate(item.endDate, intlLocale)}
+                      </strong>
+                      <span>
+                        {item.kind === "new"
+                          ? copy(locale, "contact", "previewNew")
+                          : copy(locale, "contact", "previewExisting")}
+                      </span>
+                    </div>
+                    <div className="contact-preview-week" aria-label={`${item.startDate} ${copy(locale, "contact", "through")} ${item.endDate}`}>
+                      {item.weekDateKeys.map((dateKey, index) => {
+                        const activeDay = item.dateKeys.includes(dateKey);
+                        return (
+                          <span
+                            className={[
+                              "contact-preview-day",
+                              activeDay ? "contact-preview-day--active" : ""
+                            ].filter(Boolean).join(" ")}
+                            data-testid={`contact-preview-day-${dateKey}`}
+                            key={dateKey}
+                          >
+                            <small>{weekdayLabels[index]}</small>
+                            <strong>{Number(dateKey.slice(8, 10))}</strong>
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </article>
+                ))}
+                {previewCalendarItems.length === 0 ? (
+                  <p className="empty-copy">{copy(locale, "contact", "previewEmpty")}</p>
+                ) : null}
+                {hiddenPreviewItems > 0 ? (
+                  <p className="contact-preview-more">
+                    {copy(locale, "contact", "previewMore", { count: hiddenPreviewItems })}
+                  </p>
+                ) : null}
+              </div>
             </div>
             <button className="button button--primary" type="button" data-testid="contact-generate" onClick={() => void generate()} disabled={!patternId || !canWrite || isSaving}>
               <Icon name="repeat" size={17} />
