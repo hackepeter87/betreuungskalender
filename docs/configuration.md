@@ -47,6 +47,10 @@ mounts instead.
 `HOST_BIND_ADDRESS` and `HOST_PORT` publish oauth2-proxy only; the app service
 uses `expose: 3000` and does not publish a host port.
 
+The root `.env.example` is intentionally direct-compose safe and keeps
+`TRUST_PROXY_AUTH=false`. Use `deploy/.env.oidc.example` for the OIDC Compose
+topology where oauth2-proxy is the only service with a host port.
+
 ## Authentication modes
 
 ### Local development

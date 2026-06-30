@@ -5,10 +5,12 @@ import test from "node:test";
 import {
   REQUIRED_GITIGNORE_RULES,
   classifySensitiveArtifact,
+  composePublishesAppPort,
   findMissingGitignoreRules,
   hasChangelogRelease,
   hasReleaseNotesHeading,
   isImageOutsideScreenshotDirectory,
+  parseEnvValue,
   isValidSemver,
   releaseNotesPathForVersion,
   releaseTagForVersion
@@ -160,6 +162,30 @@ test("requires release notes to identify the matching tag", () => {
     hasReleaseNotesHeading("# Release notes\n", "0.3.0"),
     false
   );
+});
+
+test("reads environment values from release examples", () => {
+  assert.equal(parseEnvValue("TRUST_PROXY_AUTH=false\n", "TRUST_PROXY_AUTH"), "false");
+  assert.equal(parseEnvValue("  TRUST_PROXY_AUTH=true\n", "TRUST_PROXY_AUTH"), "true");
+  assert.equal(parseEnvValue("OTHER=value\n", "TRUST_PROXY_AUTH"), undefined);
+});
+
+test("detects whether direct Compose publishes the app port", () => {
+  const directCompose = readFileSync(resolve("deploy", "compose.yml"), "utf8");
+  const oidcCompose = readFileSync(resolve("deploy", "compose.oidc.yml"), "utf8");
+
+  assert.equal(composePublishesAppPort(directCompose), true);
+  assert.equal(composePublishesAppPort(oidcCompose), false);
+});
+
+test("direct Compose example does not trust proxy identity headers", () => {
+  const envExample = readFileSync(resolve(".env.example"), "utf8");
+  const directCompose = readFileSync(resolve("deploy", "compose.yml"), "utf8");
+  const oidcEnvExample = readFileSync(resolve("deploy", ".env.oidc.example"), "utf8");
+
+  assert.equal(composePublishesAppPort(directCompose), true);
+  assert.equal(parseEnvValue(envExample, "TRUST_PROXY_AUTH"), "false");
+  assert.equal(parseEnvValue(oidcEnvExample, "TRUST_PROXY_AUTH"), "true");
 });
 
 test("OIDC Compose mode keeps the app private behind oauth2-proxy", () => {
