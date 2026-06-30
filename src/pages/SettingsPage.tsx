@@ -7,6 +7,8 @@ import { ExternalCalendarManager } from "../components/ExternalCalendarManager";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
 import { localeMetadata, supportedLocales } from "../i18n/resources";
+import { actorDisplayName } from "../lib/actors";
+import { formatDateTime } from "../lib/date";
 import { handoverLabel, locationLabel } from "../lib/labels";
 import { useAppStore } from "../store/AppStore";
 import type { CareLocation, Child, HandoverParty } from "../types";
@@ -71,7 +73,7 @@ function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
 }
 
 export function SettingsPage() {
-  const { locale, setLocale, t } = useI18n();
+  const { locale, intlLocale, setLocale, t } = useI18n();
   const {
     data,
     removeChild,
@@ -161,6 +163,12 @@ export function SettingsPage() {
               <span>
                 <strong>{child.name}</strong>
                 <small>{copy(locale, "settings", "born", { month: String(child.birthMonth).padStart(2, "0"), year: child.birthYear })}</small>
+                <small>
+                  {copy(locale, "common", "updatedBy", {
+                    actor: actorDisplayName(data, child.updatedBy),
+                    date: formatDateTime(child.updatedAt, intlLocale)
+                  })}
+                </small>
               </span>
               <span className="child-settings-row__actions">
                 <button className="icon-button icon-button--bordered" type="button" onClick={() => setEditingChild(child)} aria-label={copy(locale, "settings", "editChildAria", { name: child.name })}><Icon name="edit" size={17} /></button>

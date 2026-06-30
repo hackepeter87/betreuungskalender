@@ -8,7 +8,8 @@ import {
   type PeriodSelection
 } from "../components/PeriodSelector";
 import { calculateHolidayStats } from "../lib/analytics";
-import { formatDate, toMonthKey } from "../lib/date";
+import { actorDisplayName } from "../lib/actors";
+import { formatDate, formatDateTime, toMonthKey } from "../lib/date";
 import { holidayAssignmentLabel } from "../lib/labels";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
@@ -212,6 +213,12 @@ export function HolidaysPage() {
               <span>
                 <strong>{period.name}</strong>
                 <small>{formatDate(period.startDate, intlLocale)} {copy(locale, "common", "to")} {formatDate(period.endDate, intlLocale)}</small>
+                <small>
+                  {copy(locale, "common", "updatedBy", {
+                    actor: actorDisplayName(data, period.updatedBy),
+                    date: formatDateTime(period.updatedAt, intlLocale)
+                  })}
+                </small>
               </span>
               <span>
                 <strong>{period.childIds.map((id) => data.children.find((child) => child.id === id)?.name).filter(Boolean).join(", ") || copy(locale, "holiday", "allChildren")}</strong>
