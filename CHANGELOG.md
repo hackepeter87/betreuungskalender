@@ -6,6 +6,29 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-06-30
+
+### Added
+
+- Added actor metadata for children, trips, costs, holiday periods, contact
+  rules, and monthly closures through migration `007_actor_metadata`.
+- Added multi-user audit attribution coverage for trusted OIDC/proxy users.
+- Added UI change metadata in domain lists so care entries, children, holidays,
+  unavailable periods, and contact dates show who last changed them.
+
+### Changed
+
+- Audit log views now resolve internal user IDs to display names when the
+  corresponding `app_users` record is available.
+- Domain records preserve stable `createdBy` and `updatedBy` user IDs for
+  follow-up collaboration features instead of relying only on audit rows.
+
+### Security
+
+- Existing role authorization remains enforced through the v1.1.0 trusted OIDC
+  claim model.
+- No tokens, secrets, or real deployment values are introduced by this release.
+
 ## [1.1.0] - 2026-06-30
 
 ### Added
