@@ -22,6 +22,22 @@ function textEnv(value: string | undefined, fallback: string): string {
   return normalized ? normalized : fallback;
 }
 
+function authModeEnv(
+  value: string | undefined,
+  fallback: "local" | "trusted-proxy"
+): "local" | "trusted-proxy" | "native-oidc" {
+  const normalized = value?.trim();
+  if (!normalized) return fallback;
+  if (
+    normalized === "local" ||
+    normalized === "trusted-proxy" ||
+    normalized === "native-oidc"
+  ) {
+    return normalized;
+  }
+  throw new Error("AUTH_MODE must be one of local, trusted-proxy, native-oidc.");
+}
+
 function packageVersion(): string {
   try {
     const packageJson = JSON.parse(
@@ -33,6 +49,8 @@ function packageVersion(): string {
   }
 }
 
+const trustProxyAuth = booleanEnv(process.env.TRUST_PROXY_AUTH);
+
 export const config = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   host: process.env.HOST ?? "127.0.0.1",
@@ -40,8 +58,18 @@ export const config = {
   databasePath: resolve(process.cwd(), process.env.DATABASE_PATH ?? "./data/app.sqlite"),
   backupDir: resolve(process.cwd(), process.env.BACKUP_DIR ?? "./backups"),
   requireAuth: booleanEnv(process.env.REQUIRE_AUTH),
-  trustProxyAuth: booleanEnv(process.env.TRUST_PROXY_AUTH),
+  trustProxyAuth,
+  authMode: authModeEnv(
+    process.env.AUTH_MODE,
+    trustProxyAuth ? "trusted-proxy" : "local"
+  ),
   authLogoutUrl: process.env.AUTH_LOGOUT_URL?.trim() || undefined,
+  oidcIssuerUrl: process.env.OIDC_ISSUER_URL?.trim() || undefined,
+  oidcClientId: process.env.OIDC_CLIENT_ID?.trim() || undefined,
+  oidcClientSecret: process.env.OIDC_CLIENT_SECRET?.trim() || undefined,
+  oidcRedirectUri: process.env.OIDC_REDIRECT_URI?.trim() || undefined,
+  oidcScopes: textEnv(process.env.OIDC_SCOPES, "openid email profile"),
+  oidcLoginStateTtlSeconds: positiveNumberEnv(process.env.OIDC_LOGIN_STATE_TTL_SECONDS, 600),
   oidcUserIdHeader: textEnv(process.env.OIDC_USER_ID_HEADER, "x-auth-request-user"),
   oidcEmailHeader: textEnv(process.env.OIDC_EMAIL_HEADER, "x-auth-request-email"),
   oidcDisplayNameHeader: textEnv(process.env.OIDC_DISPLAY_NAME_HEADER, "x-auth-request-preferred-username"),

@@ -16,9 +16,16 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `HOST_PORT` | Host port published by release Compose | `3000` | Recommended for `deploy/compose.yml` | `3000` | Expose only through the intended firewall/proxy |
 | `DATABASE_PATH` | SQLite database file | `/var/lib/betreuungskalender/app.sqlite` | Recommended | `./data/app.sqlite` | Contains sensitive API data; protect permissions and disk |
 | `BACKUP_DIR` | Destination for SQLite backups | `/var/backups/betreuungskalender` | Recommended | `./backups` | Contains sensitive copies; use mode `0700` |
+| `AUTH_MODE` | Authentication implementation mode | `trusted-proxy` | Optional | Derived from `TRUST_PROXY_AUTH` | `native-oidc` is introduced incrementally and is not complete until server-side sessions are enabled |
 | `REQUIRE_AUTH` | Require a trusted identity for API routes | `true` | Recommended in production | `false` | Must be `true` for protected reverse-proxy operation |
 | `TRUST_PROXY_AUTH` | Trust supported identity headers and proxy addresses | `true` | Required with external auth | `false` | Never enable when clients can directly reach the app |
 | `AUTH_LOGOUT_URL` | Optional browser logout path shown in the app shell | `/oauth2/sign_out` | Optional with external auth | None | Keep same-origin or reviewed by the operator |
+| `OIDC_ISSUER_URL` | Native OIDC issuer URL | `https://idp.example.net/realms/family` | Required for `AUTH_MODE=native-oidc` | None | Must match the provider issuer exactly |
+| `OIDC_CLIENT_ID` | Native OIDC client ID | `betreuungskalender` | Required for `AUTH_MODE=native-oidc` | None | Register the exact redirect URI with this client |
+| `OIDC_CLIENT_SECRET` | Native OIDC client secret | Secret value | Required for confidential native OIDC clients | None | Secret; keep only in private environment files |
+| `OIDC_REDIRECT_URI` | Native OIDC callback URI | `https://betreuung.example.net/auth/callback` | Required for `AUTH_MODE=native-oidc` | None | Must be same-origin and pre-registered at the provider |
+| `OIDC_SCOPES` | Native OIDC scopes requested at login | `openid email profile` | Optional for `AUTH_MODE=native-oidc` | `openid email profile` | Keep minimal; group claims are configured in later native authorization work |
+| `OIDC_LOGIN_STATE_TTL_SECONDS` | Native OIDC login transaction lifetime | `600` | Optional for `AUTH_MODE=native-oidc` | `600` | Short-lived state, nonce, and PKCE verifier records limit replay windows |
 | `OIDC_USER_ID_HEADER` | Trusted header containing the stable OIDC subject or user ID | `x-auth-request-user` | Recommended with OIDC | `x-auth-request-user` | Must be stable across email/name changes |
 | `OIDC_EMAIL_HEADER` | Trusted header containing the OIDC email claim | `x-auth-request-email` | Optional with OIDC | `x-auth-request-email` | Stored on the internal user record when present |
 | `OIDC_DISPLAY_NAME_HEADER` | Trusted header containing the OIDC display-name claim | `x-auth-request-preferred-username` | Optional with OIDC | `x-auth-request-preferred-username` | Shown compactly in the app shell |
@@ -57,6 +64,11 @@ app upstream as `X-Forwarded-Groups`; set
 expected role before enabling `OIDC_REQUIRE_ROLE_CLAIM=true`.
 
 ## Authentication modes
+
+`AUTH_MODE` accepts `local`, `trusted-proxy`, or `native-oidc`. When it is not
+set, the app preserves the existing behavior and derives the mode from
+`TRUST_PROXY_AUTH`: `trusted-proxy` when trusted proxy auth is enabled,
+otherwise `local`.
 
 ### Local development
 
@@ -107,6 +119,18 @@ With oauth2-proxy this is usually `/oauth2/sign_out`.
 
 The release OIDC Compose mode enforces the intended boundary by publishing only
 oauth2-proxy. Do not add an app `ports:` mapping while `TRUST_PROXY_AUTH=true`.
+
+### Native OIDC
+
+`AUTH_MODE=native-oidc` is the target architecture for the v1.4 workstream. The
+first implementation slice validates Authorization Code + PKCE callbacks with
+`openid-client` and stores only short-lived server-side login state. It does
+not yet create persistent application sessions; that follows in the dedicated
+server-side session work package.
+
+Native OIDC callback handling must not expose ID tokens, access tokens,
+refresh tokens, authorization codes, state, nonce, PKCE verifiers, raw claims,
+client secrets, or session identifiers to frontend JavaScript or logs.
 
 ## CORS and same-origin operation
 
