@@ -1,6 +1,6 @@
 # Container deployment
 
-The repository contains two container entry points:
+The repository supports three container paths:
 
 - `Dockerfile` plus root-level `compose.yaml` for local evaluation and CI-style
   container checks from a checkout.
@@ -8,6 +8,8 @@ The repository contains two container entry points:
   archive runtime and managed update layout.
 - `Dockerfile.release` plus `deploy/compose.oidc.yml` for the release archive
   runtime behind oauth2-proxy on one exposed host port.
+- Published GHCR release images for operators that want to pull an immutable
+  image instead of building the release runtime from an extracted archive.
 
 Both runtime images use Node.js 22 LTS, install production dependencies only,
 run as the unprivileged `node` user, and include a healthcheck.
@@ -16,6 +18,13 @@ GitHub Actions builds the image and starts a disposable container on relevant
 pull requests and pushes. Validation succeeds only after the container's
 `/api/health` endpoint confirms that SQLite is reachable. CI does not push the
 image to a registry and does not require deployment secrets.
+
+Published GitHub releases from `v1.2.0` onward may also include a GHCR image
+digest asset. The archive-based update path remains the primary documented
+production path because it validates the release archive, backup, migration,
+runtime version, and rollback as one operation. GHCR image deployment is useful
+when image distribution is preferred, but operators must still keep the same
+configuration, persistence, backup, and auth-boundary checks.
 
 ## Local checkout Docker Compose
 
@@ -39,9 +48,9 @@ and is the only layout managed by `npm run update`.
 The release Compose file requires `APP_RELEASE_VERSION`, `APP_RELEASE_DIR`,
 `HOST_BIND_ADDRESS`, and `HOST_PORT` in `.env`; these values are included in
 `.env.example`. `APP_RELEASE_VERSION` is the package version without the leading
-`v`, for example `1.0.0`. `APP_RELEASE_DIR` points at the extracted release
+`v`, for example `1.2.0`. `APP_RELEASE_DIR` points at the extracted release
 directory, for example
-`/opt/svc_betreuung/betreuungskalender/releases/v1.0.0`.
+`/opt/svc_betreuung/betreuungskalender/releases/v1.2.0`.
 
 The generic `.env.example` is safe for the direct `deploy/compose.yml` path and
 therefore sets `TRUST_PROXY_AUTH=false`. Do not enable trusted proxy auth while
@@ -69,7 +78,7 @@ the private `.env`, `oauth2-proxy.cfg`, persistent `data/`, persistent
   data/
   backups/
   releases/
-    v1.0.0/
+    v1.2.0/
       Dockerfile.release
       dist/
       dist-server/
@@ -315,9 +324,59 @@ ghcr.io/hackepeter87/betreuungskalender:latest
 digest reference recorded in the release asset
 `betreuungskalender-vX.Y.Z.image-digest.txt` when deploying from GHCR.
 
+For `v1.2.0`, the digest was backfilled manually and recorded in
+`betreuungskalender-v1.2.0.image-digest.txt` on the GitHub release. The
+published tags are:
+
+```text
+ghcr.io/hackepeter87/betreuungskalender:v1.2.0
+ghcr.io/hackepeter87/betreuungskalender:1.2.0
+```
+
+Because `v1.2.0` was backfilled through a manual workflow dispatch, `latest`
+was not updated for that release. Future non-prerelease releases published
+through the normal release event update `latest` automatically.
+
 The archive-based update flow remains the primary documented production update
 path because it validates the checksum, migration readiness, backup, rollback,
 and runtime version together. Keep registry credentials outside the repository.
+
+With Podman, pull by digest and keep the same runtime environment and bind
+mounts as the release archive container:
+
+```bash
+podman pull ghcr.io/hackepeter87/betreuungskalender@sha256:<digest>
+podman run --rm -d --name betreuungskalender \
+  -p 127.0.0.1:3000:3000 \
+  -e NODE_ENV=production \
+  -e HOST=0.0.0.0 \
+  -e PORT=3000 \
+  -e DATABASE_PATH=/data/app.sqlite \
+  -e BACKUP_DIR=/backups \
+  -e REQUIRE_AUTH=true \
+  -e TRUST_PROXY_AUTH=false \
+  -e ALLOWED_ORIGIN=https://betreuungskalender.example.net \
+  -v ./data:/data \
+  -v ./backups:/backups \
+  ghcr.io/hackepeter87/betreuungskalender@sha256:<digest>
+```
+
+For the trusted-header OIDC topology, keep the app container private and expose
+only oauth2-proxy, just as in `deploy/compose.oidc.yml`. If using Compose with
+the GHCR image, create a private deployment-specific Compose file by copying
+`deploy/compose.yml` or `deploy/compose.oidc.yml`, replacing the local image
+name with the immutable GHCR reference, and deleting the `build:` block. Keep
+that file outside the repository when it contains local deployment values.
+
+After starting an image-based deployment, run the same runtime verification as
+for archive deployments:
+
+```bash
+podman exec betreuungskalender npm run verify:runtime -- --expected-version X.Y.Z
+```
+
+The image does not remove the need for a verified SQLite backup, restore test,
+auth-boundary check, and rollback plan before production updates.
 
 For reverse-proxy authentication, remove the public port mapping where possible
 and attach the app only to a private proxy network.
