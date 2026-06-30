@@ -261,6 +261,11 @@ test("generates recurring weekend contact dates and shows them in the calendar",
   await expect(page.getByTestId("contact-generation-preview")).toContainText(
     "3 neue geplante Termine"
   );
+  await expect(page.getByTestId("contact-preview-new-occurrence")).toHaveCount(3);
+  await expect(page.getByTestId("contact-preview-day-2026-07-03").first())
+    .toHaveClass(/contact-preview-day--active/);
+  await expect(page.getByTestId("contact-preview-day-2026-07-02").first())
+    .not.toHaveClass(/contact-preview-day--active/);
 
   await page.getByTestId("contact-pattern-save").click();
   await expect(page.getByTestId("contact-message")).toContainText(
@@ -271,6 +276,11 @@ test("generates recurring weekend contact dates and shows them in the calendar",
     "3 geplante Umgangstermine"
   );
   await expect(page.getByTestId("contact-generated-entry")).toHaveCount(3);
+  await expect(page.getByTestId("contact-preview-new-occurrence")).toHaveCount(0);
+  await expect(page.getByTestId("contact-preview-existing-occurrence")).toHaveCount(3);
+  await expect(page.getByTestId("contact-generation-preview")).toContainText(
+    "bereits erzeugt"
+  );
 
   const entriesResponse = await request.get("/api/care-entries");
   expect(entriesResponse.ok()).toBeTruthy();

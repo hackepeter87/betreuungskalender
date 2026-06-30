@@ -2640,9 +2640,7 @@ h3 {
 }
 
 .contact-generation-preview {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
   gap: 12px;
   padding: 12px;
   border: 1px solid var(--line);
@@ -2650,13 +2648,115 @@ h3 {
   background: #fbfcfd;
 }
 
-.contact-generation-preview strong,
-.contact-generation-preview span {
+.contact-generation-preview__summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.contact-generation-preview__summary strong,
+.contact-generation-preview__summary span {
   font-size: 0.72rem;
 }
 
-.contact-generation-preview span {
+.contact-generation-preview__summary span {
   color: var(--muted);
+  font-weight: 700;
+}
+
+.contact-preview-calendar {
+  display: grid;
+  gap: 10px;
+}
+
+.contact-preview-occurrence {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.contact-preview-occurrence--new {
+  border-color: #a9d8d5;
+}
+
+.contact-preview-occurrence--existing {
+  border-color: #c8c1e8;
+  background: #fbfbff;
+}
+
+.contact-preview-occurrence__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.contact-preview-occurrence__meta strong {
+  font-size: 0.72rem;
+}
+
+.contact-preview-occurrence__meta span {
+  flex: 0 0 auto;
+  padding: 3px 7px;
+  border-radius: 999px;
+  background: var(--teal-soft);
+  color: var(--teal-strong);
+  font-size: 0.62rem;
+  font-weight: 800;
+}
+
+.contact-preview-occurrence--existing .contact-preview-occurrence__meta span {
+  background: var(--violet-soft);
+  color: #554b8c;
+}
+
+.contact-preview-week {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+}
+
+.contact-preview-day {
+  min-height: 46px;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 2px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  background: var(--surface-soft);
+}
+
+.contact-preview-day small {
+  font-size: 0.58rem;
+  font-weight: 800;
+}
+
+.contact-preview-day strong {
+  font-size: 0.76rem;
+}
+
+.contact-preview-day--active {
+  border-color: var(--teal);
+  background: var(--teal-soft);
+  color: var(--teal-strong);
+}
+
+.contact-preview-occurrence--existing .contact-preview-day--active {
+  border-color: var(--violet);
+  background: var(--violet-soft);
+  color: #554b8c;
+}
+
+.contact-preview-more {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.68rem;
   font-weight: 700;
 }
 
