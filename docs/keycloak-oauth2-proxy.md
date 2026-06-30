@@ -98,7 +98,7 @@ OIDC_GROUPS_HEADER=x-auth-request-groups
 OIDC_ADMIN_GROUP=/betreuungskalender/admins
 OIDC_PARENT_GROUP=/betreuungskalender/parents
 OIDC_READONLY_GROUP=/betreuungskalender/readers
-OIDC_REQUIRE_ROLE_CLAIM=true
+OIDC_REQUIRE_ROLE_CLAIM=false
 ```
 
 The user ID header must contain a stable subject value that does not change
@@ -145,12 +145,14 @@ OIDC_GROUPS_HEADER=x-auth-request-groups
 OIDC_ADMIN_GROUP=/betreuungskalender/admins
 OIDC_PARENT_GROUP=/betreuungskalender/parents
 OIDC_READONLY_GROUP=/betreuungskalender/readers
-OIDC_REQUIRE_ROLE_CLAIM=true
+OIDC_REQUIRE_ROLE_CLAIM=false
 ```
 
 If the app runs in a container, bind it only to a private container network
 reachable by oauth2-proxy. `deploy/compose.oidc.yml` does this by using
 `expose: 3000` on the app service and `ports:` only on oauth2-proxy.
+Switch `OIDC_REQUIRE_ROLE_CLAIM=true` only after Keycloak/oauth2-proxy group
+headers have been confirmed against the configured group values.
 
 ## Critical warning
 

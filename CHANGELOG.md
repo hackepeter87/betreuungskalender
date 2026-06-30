@@ -6,6 +6,32 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-06-30
+
+### Added
+
+- Added internal OIDC-backed `app_users` records with migration
+  `006_oidc_users`.
+- Added server-side authorization derived from trusted OIDC group claims.
+- Added configurable OIDC identity, display-name, email, and group header
+  names.
+- Added admin, parent, and readonly permission levels for API access.
+
+### Changed
+
+- API audit identity now uses stable internal user IDs derived from the trusted
+  OIDC subject instead of mutable display names or email addresses.
+- Existing trusted-proxy deployments can keep working during the first rollout
+  with `OIDC_REQUIRE_ROLE_CLAIM=false` until Keycloak/oauth2-proxy group headers
+  are confirmed.
+
+### Security
+
+- Administrative import, destructive app-data operations, and legacy migration
+  endpoints now require an admin role when OIDC claim authorization is active.
+- Direct app access must remain private when `TRUST_PROXY_AUTH=true` because
+  trusted identity and group headers are accepted only from the proxy boundary.
+
 ## [1.0.0] - 2026-06-29
 
 ### Added
