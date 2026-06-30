@@ -15,7 +15,7 @@
     "verify:runtime": "node scripts/runtime-verify.js",
     "update": "node scripts/update.js",
     "lint": "npm run typecheck",
-    "test": "tsx --test server/auth.test.ts server/backupRestore.test.ts server/externalCalendars.test.ts server/legacyMigration.test.ts scripts/i18n.test.ts scripts/legacy-local-storage.test.ts scripts/pwa-service-worker.test.js scripts/release-check.test.js scripts/update.test.js",
+    "test": "tsx --test server/auth.test.ts server/backupRestore.test.ts server/externalCalendars.test.ts server/legacyMigration.test.ts server/multiUserAudit.test.ts scripts/i18n.test.ts scripts/legacy-local-storage.test.ts scripts/pwa-service-worker.test.js scripts/release-check.test.js scripts/update.test.js",
     "test:e2e": "playwright test",
     "test:security-runtime": "tsx --test scripts/runtime-security.test.ts",
     "test:container-smoke": "bash scripts/container-smoke.sh",
