@@ -25,12 +25,8 @@ function httpError(code: string, statusCode: number, message: string): Error & {
   return Object.assign(new Error(message), { code, statusCode });
 }
 
-export function createApiAuthHook(
-  config: AuthConfig,
-  rateLimitFirst?: preHandlerAsyncHookHandler
-): preHandlerAsyncHookHandler {
+export function createApiAuthHook(config: AuthConfig): preHandlerAsyncHookHandler {
   return async (request, reply) => {
-    if (rateLimitFirst) await rateLimitFirst.call(reply.server, request, reply);
     if (
       !request.url.startsWith("/api/") ||
       request.url === "/api/health" ||

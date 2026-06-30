@@ -2,7 +2,7 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import fastifyStatic from "@fastify/static";
 import rateLimit from "@fastify/rate-limit";
-import Fastify from "fastify";
+import Fastify, { type preHandlerAsyncHookHandler } from "fastify";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { sessionInfo } from "./auth.js";
@@ -107,9 +107,12 @@ await app.register(rateLimit, {
 app.decorateRequest("userEmail", "local-dev");
 app.decorateRequest("user", undefined);
 
-const apiAuthHook = createApiAuthHook(config, app.rateLimit());
-// codeql[js/missing-rate-limiting]: createApiAuthHook receives app.rateLimit() and runs that Fastify rate-limit preHandler before authorization.
-app.addHook("preHandler", apiAuthHook);
+const apiAuthHook = createApiAuthHook(config);
+const rateLimitedApiAuthHook: preHandlerAsyncHookHandler = async (request, reply) => {
+  await app.rateLimit().call(app, request, reply);
+  await apiAuthHook.call(app, request, reply);
+};
+app.addHook("preHandler", rateLimitedApiAuthHook);
 
 app.setErrorHandler((error, request, reply) => {
   const normalized = error as Error & { code?: string; statusCode?: number };
