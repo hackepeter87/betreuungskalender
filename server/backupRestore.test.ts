@@ -13,7 +13,8 @@ const expectedMigrations = [
   "002_unavailable_periods",
   "003_api_source_of_truth",
   "004_legacy_migration"
-  ,"005_external_calendars"
+  ,"005_external_calendars",
+  "006_oidc_users"
 ];
 
 async function withTemporaryDirectory(
@@ -138,6 +139,10 @@ test("empty database startup applies every migration", async () => {
         childCount.count,
         0
       );
+      const localUser = database.prepare(
+        "SELECT role FROM app_users WHERE external_subject = ?"
+      ).get("local-dev") as { role: string };
+      assert.equal(localUser.role, "admin");
     } finally {
       database.close();
     }

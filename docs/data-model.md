@@ -29,6 +29,7 @@ discovery source; it is not synchronized or treated as current persistence.
 | `settings` | JSON-encoded server-side settings |
 | `monthly_closings` | Monthly summary and post-close change marker |
 | `audit_log` | Field changes, creates, deletes, and post-close changes |
+| `app_users` | Stable users derived from trusted OIDC/proxy-auth headers |
 
 ## Soft delete
 
@@ -38,7 +39,12 @@ trips, and costs follow the same principle. Audit records retain the change.
 
 ## Audit log
 
-`audit_log` stores timestamp, asserted API identity, entity type and ID, action,
+`app_users` maps trusted OIDC/proxy subjects to stable internal user IDs. It
+stores the latest display name, email, derived role, group list, timestamps,
+and soft-delete metadata. The stable internal ID is used in API audit fields so
+name or email changes do not rewrite historical actors.
+
+`audit_log` stores timestamp, API identity, entity type and ID, action,
 field name, old/new serialized values, and optional metadata. It improves
 traceability but is not an immutable external timestamp or cryptographic proof.
 

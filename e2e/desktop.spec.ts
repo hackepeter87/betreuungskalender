@@ -112,7 +112,12 @@ test("shows authenticated user and logout action when session metadata is availa
         return Promise.resolve(new Response(JSON.stringify({
           authRequired: true,
           authenticated: true,
-          user: { displayName: "parent" },
+          user: {
+            id: "user_e2e_parent",
+            displayName: "parent",
+            role: "parent",
+            email: "parent@example.test"
+          },
           logoutUrl: "/oauth2/sign_out"
         }), {
           status: 200,

@@ -63,6 +63,7 @@ cookie_samesite = "lax"
 
 reverse_proxy = true
 set_xauthrequest = true
+set_authorization_header = false
 pass_access_token = false
 pass_authorization_header = false
 ```
@@ -83,20 +84,44 @@ the placeholder `192.0.2.10/32` with the actual IP address or CIDR of the
 trusted upstream TLS reverse proxy. Do not use `0.0.0.0/0`; clients must not be
 allowed to inject or spoof forwarded headers.
 
-## Identity headers
+## Identity and authorization headers
 
-Betreuungskalender accepts these headers when `TRUST_PROXY_AUTH=true`:
+Betreuungskalender accepts trusted claim-derived headers when
+`TRUST_PROXY_AUTH=true`. Configure the app to read the same headers that
+oauth2-proxy sends:
 
-- `X-Auth-Request-Email`
-- `X-Forwarded-Email`
-- `X-Auth-Request-User`
-- `X-Forwarded-User`
+```dotenv
+OIDC_USER_ID_HEADER=x-auth-request-user
+OIDC_EMAIL_HEADER=x-auth-request-email
+OIDC_DISPLAY_NAME_HEADER=x-auth-request-preferred-username
+OIDC_GROUPS_HEADER=x-auth-request-groups
+OIDC_ADMIN_GROUP=/betreuungskalender/admins
+OIDC_PARENT_GROUP=/betreuungskalender/parents
+OIDC_READONLY_GROUP=/betreuungskalender/readers
+OIDC_REQUIRE_ROLE_CLAIM=true
+```
 
-Prefer email only if it is stable and required for your audit policy. The
-application stores the asserted identity in API audit records.
-The browser UI also reads `/api/session` and displays a compact signed-in name
-derived from the same trusted identity. It does not expose additional OIDC token
-content.
+The user ID header must contain a stable subject value that does not change
+when an email address or display name changes. The app maps that subject to an
+internal `app_users` row and refreshes display name, email, and group data on
+each request.
+
+Permissions are derived from the configured group values and enforced by the
+Fastify API:
+
+- `OIDC_ADMIN_GROUP`: full read/write access plus import, clear-data, and
+  legacy-migration endpoints
+- `OIDC_PARENT_GROUP`: ordinary read/write access
+- `OIDC_READONLY_GROUP`: read-only access
+
+For a compatibility rollout from the pre-v1.1.0 single-user proxy mode, keep
+`OIDC_REQUIRE_ROLE_CLAIM=false` temporarily. In that mode, authenticated users
+without a recognized group receive parent-level permissions. Switch it to
+`true` once the Keycloak mapper emits the expected groups header.
+
+The browser UI reads `/api/session` and displays a compact signed-in name
+derived from the trusted display-name or email header. It does not expose raw
+token content.
 
 ## Logout
 
@@ -113,6 +138,14 @@ REQUIRE_AUTH=true
 TRUST_PROXY_AUTH=true
 AUTH_LOGOUT_URL=/oauth2/sign_out
 ALLOWED_ORIGIN=https://app.example.net
+OIDC_USER_ID_HEADER=x-auth-request-user
+OIDC_EMAIL_HEADER=x-auth-request-email
+OIDC_DISPLAY_NAME_HEADER=x-auth-request-preferred-username
+OIDC_GROUPS_HEADER=x-auth-request-groups
+OIDC_ADMIN_GROUP=/betreuungskalender/admins
+OIDC_PARENT_GROUP=/betreuungskalender/parents
+OIDC_READONLY_GROUP=/betreuungskalender/readers
+OIDC_REQUIRE_ROLE_CLAIM=true
 ```
 
 If the app runs in a container, bind it only to a private container network
@@ -135,7 +168,8 @@ After starting the OIDC Compose stack:
 3. Open the public URL and confirm unauthenticated access redirects through
    `/oauth2/start`.
 4. Confirm Keycloak returns to `/oauth2/callback`.
-5. Create or update a harmless test record and confirm the audit identity is
-   the expected proxy-authenticated user.
+5. Create or update a harmless test record and confirm the audit identity is a
+   stable internal user ID.
 6. Confirm direct access to the app container port is not reachable from the
    client network.
+7. Test a read-only user: reads should work, writes should return `403`.

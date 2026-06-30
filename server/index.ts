@@ -5,7 +5,8 @@ import rateLimit from "@fastify/rate-limit";
 import Fastify from "fastify";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { resolveRequestIdentity, sessionInfo } from "./auth.js";
+import { sessionInfo } from "./auth.js";
+import { createApiAuthHook } from "./authHook.js";
 import { config } from "./config.js";
 import { db } from "./db/connection.js";
 import { runMigrations } from "./db/migrate.js";
@@ -77,7 +78,11 @@ await app.register(cors, {
     "x-auth-request-email",
     "x-forwarded-email",
     "x-auth-request-user",
-    "x-forwarded-user"
+    "x-forwarded-user",
+    "x-auth-request-preferred-username",
+    "x-forwarded-preferred-username",
+    "x-auth-request-groups",
+    "x-forwarded-groups"
   ]
 });
 
@@ -100,22 +105,11 @@ await app.register(rateLimit, {
 });
 
 app.decorateRequest("userEmail", "local-dev");
+app.decorateRequest("user", undefined);
 
-app.addHook("onRequest", async (request, reply) => {
-  if (
-    !request.url.startsWith("/api/") ||
-    request.url === "/api/health" ||
-    request.url === "/api/ready"
-  ) return;
-  const auth = resolveRequestIdentity(request.headers, config);
-  if (!auth.authenticated) {
-    return reply.code(401).send({
-      error: "authentication_required",
-      message: "Authentifizierung erforderlich."
-    });
-  }
-  request.userEmail = auth.identity;
-});
+const apiAuthHook = createApiAuthHook(config, app.rateLimit());
+// codeql[js/missing-rate-limiting]: createApiAuthHook receives app.rateLimit() and runs that Fastify rate-limit preHandler before authorization.
+app.addHook("preHandler", apiAuthHook);
 
 app.setErrorHandler((error, request, reply) => {
   const normalized = error as Error & { code?: string; statusCode?: number };
@@ -159,6 +153,12 @@ app.setErrorHandler((error, request, reply) => {
     return reply.code(403).send({
       error: "origin_not_allowed",
       message: "Diese Herkunft ist nicht zugelassen."
+    });
+  }
+  if (["authentication_required", "authorization_required", "forbidden"].includes(code)) {
+    return reply.code(statusCode).send({
+      error: code,
+      message: normalized.message
     });
   }
   return reply.code(statusCode).send({

@@ -196,13 +196,23 @@ Protected mode behind oauth2-proxy:
 REQUIRE_AUTH=true
 TRUST_PROXY_AUTH=true
 AUTH_LOGOUT_URL=/oauth2/sign_out
+OIDC_USER_ID_HEADER=x-auth-request-user
+OIDC_EMAIL_HEADER=x-auth-request-email
+OIDC_DISPLAY_NAME_HEADER=x-auth-request-preferred-username
+OIDC_GROUPS_HEADER=x-auth-request-groups
+OIDC_ADMIN_GROUP=/betreuungskalender/admins
+OIDC_PARENT_GROUP=/betreuungskalender/parents
+OIDC_READONLY_GROUP=/betreuungskalender/readers
+OIDC_REQUIRE_ROLE_CLAIM=true
 ```
 
-The API then requires one of the supported trusted identity headers. These
-headers can be forged if users can reach the app directly, so the app port must
-be private or bound to loopback. When trusted identity is available, the app
-shell shows a compact signed-in user indicator and a logout link if
-`AUTH_LOGOUT_URL` is configured.
+The API maps the trusted OIDC subject header to an internal user and derives
+server-side permissions from configured group claims. Admin users may use
+import, migration, and clear-data endpoints; parent users may read and write
+ordinary app data; readonly users can only read. These headers can be forged if
+users can reach the app directly, so the app port must be private or bound to
+loopback. When trusted identity is available, the app shell shows a compact
+signed-in user indicator and a logout link if `AUTH_LOGOUT_URL` is configured.
 
 - HAProxy, nginx, Caddy, and Traefik:
   [docs/reverse-proxy.md](docs/reverse-proxy.md)
