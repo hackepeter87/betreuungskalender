@@ -1,5 +1,6 @@
 import type {
   ApiAuditEntry,
+  ApiCalendarFeedStatus,
   ApiCareEntry,
   ApiChild,
   ApiSession,
@@ -485,6 +486,15 @@ export const api = {
       method: "POST",
       body: JSON.stringify(input)
     });
+  },
+  getCalendarFeed() {
+    return request<ApiCalendarFeedStatus>("/api/calendar-feed");
+  },
+  rotateCalendarFeed() {
+    return request<ApiCalendarFeedStatus>("/api/calendar-feed", { method: "POST" });
+  },
+  revokeCalendarFeed() {
+    return request<void>("/api/calendar-feed", { method: "DELETE" });
   }
   ,listExternalCalendarEvents(from: string, to: string) {
     return request<ApiExternalCalendarEvent[]>(`/api/external-calendar-events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);

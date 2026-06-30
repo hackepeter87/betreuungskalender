@@ -15,7 +15,8 @@ const expectedMigrations = [
   "004_legacy_migration"
   ,"005_external_calendars",
   "006_oidc_users",
-  "007_actor_metadata"
+  "007_actor_metadata",
+  "008_calendar_feed_tokens"
 ];
 
 async function withTemporaryDirectory(

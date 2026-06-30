@@ -63,6 +63,7 @@ export function clearDomainData(): void {
     "unavailable_periods",
     "external_calendar_events",
     "external_calendar_sources",
+    "calendar_feed_tokens",
     "monthly_closings",
     "settings",
     "children",

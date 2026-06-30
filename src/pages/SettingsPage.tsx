@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { CHILD_COLORS } from "../data/defaults";
 import { Icon } from "../components/Icon";
 import { FieldHelpButton, FieldHelpLabel } from "../components/FieldHelp";
@@ -8,9 +8,11 @@ import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
 import { localeMetadata, supportedLocales } from "../i18n/resources";
 import { actorDisplayName } from "../lib/actors";
+import { api } from "../lib/api";
 import { formatDateTime } from "../lib/date";
 import { handoverLabel, locationLabel } from "../lib/labels";
 import { useAppStore } from "../store/AppStore";
+import type { ApiCalendarFeedStatus } from "../../shared/api";
 import type { CareLocation, Child, HandoverParty } from "../types";
 
 function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
@@ -69,6 +71,115 @@ function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
         </div>
       </footer>
     </form>
+  );
+}
+
+function CalendarFeedManager() {
+  const { locale, intlLocale } = useI18n();
+  const { canWrite } = useAppStore();
+  const [status, setStatus] = useState<ApiCalendarFeedStatus>({ active: false });
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadStatus = async () => {
+    try {
+      setStatus(await api.getCalendarFeed());
+      setError(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
+  useEffect(() => {
+    void loadStatus();
+  }, []);
+
+  const rotate = async () => {
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const next = await api.rotateCalendarFeed();
+      setStatus(next);
+      setMessage(copy(locale, "calendarFeed", "generated"));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revoke = async () => {
+    if (!window.confirm(copy(locale, "calendarFeed", "revokeConfirm"))) return;
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      await api.revokeCalendarFeed();
+      setStatus({ active: false });
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copyUrl = async () => {
+    if (!status.feedUrl) return;
+    await navigator.clipboard.writeText(status.feedUrl);
+    setMessage(copy(locale, "calendarFeed", "copied"));
+  };
+
+  return (
+    <section className="panel settings-section" data-testid="calendar-feed-manager">
+      <div className="panel__header panel__header--compact">
+        <div>
+          <h2>{copy(locale, "calendarFeed", "title")}</h2>
+          <p>{copy(locale, "calendarFeed", "description")}</p>
+        </div>
+      </div>
+      <div className="calendar-feed-status">
+        <span className={`status-pill ${status.active ? "status-pill--ok" : ""}`}>
+          {status.active && status.createdAt
+            ? copy(locale, "calendarFeed", "active", {
+                date: formatDateTime(status.createdAt, intlLocale)
+              })
+            : copy(locale, "calendarFeed", "inactive")}
+        </span>
+        <small>
+          {status.lastUsedAt
+            ? copy(locale, "calendarFeed", "lastUsed", {
+                date: formatDateTime(status.lastUsedAt, intlLocale)
+              })
+            : copy(locale, "calendarFeed", "neverUsed")}
+        </small>
+      </div>
+      {status.feedUrl ? (
+        <div className="calendar-feed-url">
+          <input readOnly value={status.feedUrl} data-testid="calendar-feed-url" />
+          <button className="button button--secondary" type="button" onClick={() => void copyUrl()}>
+            <Icon name="copy" size={17} />
+            {copy(locale, "calendarFeed", "copy")}
+          </button>
+        </div>
+      ) : status.active ? (
+        <p className="empty-copy">{copy(locale, "calendarFeed", "notAvailable")}</p>
+      ) : null}
+      <p className="settings-note">{copy(locale, "calendarFeed", "scope")}</p>
+      <div className="data-actions">
+        <button className="button button--primary" type="button" data-testid="calendar-feed-rotate" disabled={!canWrite || busy} onClick={() => void rotate()}>
+          <Icon name="calendar" size={17} />
+          {status.active ? copy(locale, "calendarFeed", "rotate") : copy(locale, "calendarFeed", "generate")}
+        </button>
+        <button className="button button--danger-quiet" type="button" data-testid="calendar-feed-revoke" disabled={!canWrite || busy || !status.active} onClick={() => void revoke()}>
+          <Icon name="trash" size={17} />
+          {copy(locale, "calendarFeed", "revoke")}
+        </button>
+      </div>
+      {message ? <p className="inline-message" role="status">{message}</p> : null}
+      {error ? <p className="form-error" role="alert">{error}</p> : null}
+    </section>
   );
 }
 
@@ -240,6 +351,8 @@ export function SettingsPage() {
       </section>
 
       <ExternalCalendarManager />
+
+      <CalendarFeedManager />
 
       {editingChild ? (
         <Modal title={editingChild === "new" ? copy(locale, "settings", "addChild") : copy(locale, "settings", "editChild")} onClose={() => setEditingChild(null)}>

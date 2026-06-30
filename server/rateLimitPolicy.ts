@@ -47,6 +47,14 @@ export function installRateLimitPolicy(
   config: RateLimitPolicyConfig
 ): void {
   app.addHook("onRoute", (routeOptions) => {
+    if (routeOptions.url.startsWith("/calendar/")) {
+      routeOptions.config = {
+        ...routeOptions.config,
+        rateLimit: { max: config.exportMax, timeWindow: config.timeWindowMs }
+      };
+      return;
+    }
+
     if (!routeOptions.url.startsWith("/api/")) {
       routeOptions.config = { ...routeOptions.config, rateLimit: false };
       return;

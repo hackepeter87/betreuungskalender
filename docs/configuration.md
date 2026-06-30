@@ -118,10 +118,11 @@ Requests without an `Origin` header, such as internal healthchecks, are allowed.
 
 The Fastify runtime applies an in-memory rate limit to every `/api/` route by
 client IP address. The proxy setting controls whether Fastify derives that IP
-from trusted forwarding headers. Import, migration, and export routes have
-stricter limits than ordinary API reads, while every write route has a lower
-limit than the default. Exceeding a limit returns HTTP `429` with standard
-rate-limit and retry headers plus a non-sensitive JSON error.
+from trusted forwarding headers. Import, migration, export routes, and
+personal calendar feed reads have stricter limits than ordinary API reads,
+while every write route has a lower limit than the default. Exceeding a limit
+returns HTTP `429` with standard rate-limit and retry headers plus a
+non-sensitive JSON error.
 
 The default store is process-local. For a horizontally scaled deployment, use
 a shared rate-limit store as part of a separately reviewed deployment change.

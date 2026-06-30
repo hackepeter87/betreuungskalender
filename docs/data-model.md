@@ -30,6 +30,7 @@ discovery source; it is not synchronized or treated as current persistence.
 | `monthly_closings` | Monthly summary and post-close change marker |
 | `audit_log` | Field changes, creates, deletes, and post-close changes |
 | `app_users` | Stable users derived from trusted OIDC/proxy-auth headers |
+| `calendar_feed_tokens` | Revocable per-user iCalendar feed token hashes |
 
 ## Soft delete
 
@@ -63,6 +64,18 @@ as changed.
 `updated_by`. These actor fields store stable `app_users.id` values. They are
 for attribution and audit display; authorization still comes from the current
 request user and role.
+
+## Personal calendar feeds
+
+`calendar_feed_tokens` stores revocable per-user feed credentials. The raw
+token is shown only when generated; SQLite stores `token_hash`, the owning
+`app_users.id`, creation time, optional last-use time, and optional revocation
+time. The token authorizes only the read-only `.ics` feed endpoint and never
+grants API access.
+
+Feed contents are derived from active `care_entries` where `created_by` equals
+the feed owner and `status` is not `cancelled`. Notes, evidence references,
+trips, costs, and audit data are not exported.
 
 ## Care entries
 

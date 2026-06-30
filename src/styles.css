@@ -1678,6 +1678,59 @@ h3 {
   padding: 18px;
 }
 
+.calendar-feed-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 0 18px 12px;
+}
+
+.calendar-feed-status small,
+.settings-note {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  background: var(--surface-soft);
+  font-size: 0.68rem;
+  font-weight: 800;
+}
+
+.status-pill--ok {
+  border-color: var(--teal);
+  color: var(--teal-strong);
+  background: var(--teal-soft);
+}
+
+.calendar-feed-url {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 0 18px 12px;
+}
+
+.calendar-feed-url input {
+  min-width: 0;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+  font-size: 0.68rem;
+}
+
+.settings-note {
+  margin: 0;
+  padding: 0 18px;
+}
+
 .modal-backdrop {
   position: fixed;
   inset: 0;
@@ -2370,6 +2423,10 @@ h3 {
   .data-actions {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .calendar-feed-url {
+    grid-template-columns: 1fr;
   }
 
   .modal-backdrop {

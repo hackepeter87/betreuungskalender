@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import test from "node:test";
+import ICAL from "ical.js";
 
 const projectRoot = resolve(import.meta.dirname, "..");
 
@@ -450,6 +451,154 @@ test("runtime rejects users without matching OIDC groups when strict role claims
     })
   });
   assert.equal(write.status, 403);
+});
+
+test("runtime serves revocable personal iCalendar feeds without broader token access", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "betreuungskalender-calendar-feed-"));
+  const port = await freePort();
+  let logs = "";
+  const runtime = spawn(
+    process.execPath,
+    [resolve(projectRoot, "node_modules/tsx/dist/cli.mjs"), "server/index.ts"],
+    {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        NODE_ENV: "production",
+        HOST: "127.0.0.1",
+        PORT: String(port),
+        DATABASE_PATH: join(root, "app.sqlite"),
+        BACKUP_DIR: join(root, "backups"),
+        REQUIRE_AUTH: "true",
+        TRUST_PROXY_AUTH: "true",
+        OIDC_REQUIRE_ROLE_CLAIM: "true",
+        ALLOWED_ORIGIN: "https://allowed.example.test",
+        LOG_LEVEL: "info",
+        RATE_LIMIT_MAX: "200",
+        RATE_LIMIT_WRITE_MAX: "200",
+        RATE_LIMIT_EXPORT_MAX: "200"
+      }
+    }
+  );
+  runtime.stdout.on("data", (chunk) => { logs += chunk; });
+  runtime.stderr.on("data", (chunk) => { logs += chunk; });
+
+  t.after(async () => {
+    await stop(runtime);
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const baseUrl = `http://127.0.0.1:${port}`;
+  await waitForHealth(`${baseUrl}/api/health`, () => logs);
+  const alphaHeaders = {
+    "x-auth-request-user": "subject-alpha-feed",
+    "x-auth-request-email": "alpha-feed@example.invalid",
+    "x-auth-request-preferred-username": "Alpha Parent",
+    "x-auth-request-groups": "/betreuungskalender/parents"
+  };
+  const betaHeaders = {
+    "x-auth-request-user": "subject-beta-feed",
+    "x-auth-request-email": "beta-feed@example.invalid",
+    "x-auth-request-preferred-username": "Beta Parent",
+    "x-auth-request-groups": "/betreuungskalender/parents"
+  };
+  const jsonHeaders = { "content-type": "application/json" };
+
+  const child = await fetch(`${baseUrl}/api/children`, {
+    method: "POST",
+    headers: { ...jsonHeaders, ...alphaHeaders },
+    body: JSON.stringify({
+      name: "Feed Test Child",
+      birthMonth: 4,
+      birthYear: 2018,
+      color: "#087f7b"
+    })
+  });
+  assert.equal(child.status, 201);
+  const childBody = await child.json() as { id: string };
+
+  const entry = (start: string, end: string, status = "planned") => ({
+    startDateTime: start,
+    endDateTime: end,
+    childIds: [childBody.id],
+    status,
+    careScope: "overnight",
+    overnight: true,
+    schoolHandover: false,
+    holiday: false,
+    weekend: true,
+    additionalCare: false,
+    location: "commuterApartment",
+    handoverFrom: "mother",
+    handoverTo: "mother",
+    notes: "secret note must not appear in feed",
+    evidenceReference: "secret-evidence.pdf",
+    hasEvidence: true,
+    trips: [],
+    costs: [],
+    ...(status === "cancelled" ? { cancellationReason: "cancelled secret" } : {})
+  });
+
+  assert.equal((await fetch(`${baseUrl}/api/care-entries`, {
+    method: "POST",
+    headers: { ...jsonHeaders, ...alphaHeaders },
+    body: JSON.stringify(entry("2026-08-07T16:00:00.000Z", "2026-08-09T18:00:00.000Z"))
+  })).status, 201);
+  assert.equal((await fetch(`${baseUrl}/api/care-entries`, {
+    method: "POST",
+    headers: { ...jsonHeaders, ...betaHeaders },
+    body: JSON.stringify(entry("2026-08-14T16:00:00.000Z", "2026-08-16T18:00:00.000Z"))
+  })).status, 201);
+  assert.equal((await fetch(`${baseUrl}/api/care-entries`, {
+    method: "POST",
+    headers: { ...jsonHeaders, ...alphaHeaders },
+    body: JSON.stringify(entry("2026-08-21T16:00:00.000Z", "2026-08-23T18:00:00.000Z", "cancelled"))
+  })).status, 201);
+
+  const feedResponse = await fetch(`${baseUrl}/api/calendar-feed`, {
+    method: "POST",
+    headers: alphaHeaders
+  });
+  assert.equal(feedResponse.status, 201);
+  const feedStatus = await feedResponse.json() as { active: boolean; feedUrl: string };
+  assert.equal(feedStatus.active, true);
+  assert.match(feedStatus.feedUrl, /\/calendar\/[A-Za-z0-9_-]+\.ics$/);
+  const feedUrl = new URL(feedStatus.feedUrl);
+  const token = feedUrl.pathname.split("/").at(-1)?.replace(/\.ics$/, "");
+  assert(token);
+
+  const apiWithTokenOnly = await fetch(`${baseUrl}/api/session`, {
+    headers: { authorization: `Bearer ${token}` }
+  });
+  assert.equal(apiWithTokenOnly.status, 401);
+
+  assert.equal((await fetch(`${baseUrl}/calendar/not-a-real-token.ics`)).status, 404);
+  const calendarResponse = await fetch(`${baseUrl}${feedUrl.pathname}`);
+  assert.equal(calendarResponse.status, 200);
+  assert.match(calendarResponse.headers.get("content-type") ?? "", /text\/calendar/);
+  const calendarText = await calendarResponse.text();
+  new ICAL.Component(ICAL.parse(calendarText));
+  assert.match(calendarText, /SUMMARY:Kinder bei Alpha Parent/);
+  assert.match(calendarText, /DTSTART:20260807T160000/);
+  assert.doesNotMatch(calendarText, /20260814T160000/);
+  assert.doesNotMatch(calendarText, /20260821T160000/);
+  assert.doesNotMatch(calendarText, /secret|evidence|Beta Parent/i);
+  assert.doesNotMatch(logs, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+
+  const afterUse = await fetch(`${baseUrl}/api/calendar-feed`, {
+    headers: alphaHeaders
+  });
+  assert.equal(afterUse.status, 200);
+  const afterUseBody = await afterUse.json() as { active: boolean; lastUsedAt?: string; feedUrl?: string };
+  assert.equal(afterUseBody.active, true);
+  assert.equal(typeof afterUseBody.lastUsedAt, "string");
+  assert.equal(afterUseBody.feedUrl, undefined);
+
+  assert.equal((await fetch(`${baseUrl}/api/calendar-feed`, {
+    method: "DELETE",
+    headers: alphaHeaders
+  })).status, 204);
+  assert.equal((await fetch(`${baseUrl}${feedUrl.pathname}`)).status, 404);
 });
 
 test("production runtime applies central and stricter API rate limits", async (t) => {
