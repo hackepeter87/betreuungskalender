@@ -11,11 +11,11 @@ travel, costs, holidays, and unavailable periods.
 
 ## Project status
 
-- Latest release: [v1.2.0](docs/release-notes/v1.2.0.md)
+- Latest release: [v1.3.0](docs/release-notes/v1.3.0.md)
 - Current `main`: SQLite/API domain persistence, language packs, external
   read-only calendar overlays, trusted OIDC claim authorization,
-  multi-parent audit metadata, responsive mobile support, backup/restore
-  tooling, release archives, and GHCR release images
+  multi-parent audit metadata, personal calendar feeds, responsive mobile
+  support, backup/restore tooling, release archives, and GHCR release images
 - Roadmap and work tracking: [GitHub milestones and issues](https://github.com/hackepeter87/betreuungskalender/milestones)
 - Stability target: stable self-hosted release line with roadmap work tracked in
   GitHub milestones
