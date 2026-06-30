@@ -4,6 +4,7 @@ import { Icon } from "../components/Icon";
 import { FieldHelpButton } from "../components/FieldHelp";
 import { MonthToolbar } from "../components/MonthToolbar";
 import { entriesForMonth } from "../lib/analytics";
+import { actorDisplayName } from "../lib/actors";
 import { formatMonth } from "../lib/date";
 import { useAppStore } from "../store/AppStore";
 import { useI18n } from "../i18n/I18nProvider";
@@ -102,7 +103,13 @@ export function EntriesPage({
         </div>
         <div className="entry-list">
           {entries.map((entry) => (
-            <EntryRow key={entry.id} entry={entry} children={data.children} onClick={() => onEditEntry(entry)} />
+            <EntryRow
+              key={entry.id}
+              entry={entry}
+              children={data.children}
+              updatedByLabel={actorDisplayName(data, entry.updatedBy)}
+              onClick={() => onEditEntry(entry)}
+            />
           ))}
           {entries.length === 0 ? (
             <div className="empty-state" data-testid="entries-empty-state">

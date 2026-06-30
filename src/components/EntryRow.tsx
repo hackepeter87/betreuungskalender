@@ -1,4 +1,4 @@
-import { formatDate, formatTime } from "../lib/date";
+import { formatDate, formatDateTime, formatTime } from "../lib/date";
 import { locationLabels, statusLabels } from "../lib/labels";
 import type { CareEntry, Child } from "../types";
 import { Icon } from "./Icon";
@@ -8,10 +8,12 @@ import { copy } from "../i18n/catalog";
 export function EntryRow({
   entry,
   children,
+  updatedByLabel,
   onClick
 }: {
   entry: CareEntry;
   children: Child[];
+  updatedByLabel: string;
   onClick: () => void;
 }) {
   const { locale, intlLocale } = useI18n();
@@ -37,6 +39,12 @@ export function EntryRow({
         <span>
           <strong>{selectedChildren.map((child) => child.name).join(locale === "en" ? " and " : " und ") || copy(locale, "common", "unknownChild")}</strong>
           <small>{locationLabels[entry.location]}</small>
+          <small>
+            {copy(locale, "common", "updatedBy", {
+              actor: updatedByLabel,
+              date: formatDateTime(entry.updatedAt, intlLocale)
+            })}
+          </small>
         </span>
       </span>
       <span className="entry-row__flags">

@@ -8,7 +8,8 @@ import {
 } from "../components/PeriodSelector";
 import { UnavailablePeriodForm } from "../components/UnavailablePeriodForm";
 import { unavailablePeriodsForRange } from "../lib/analytics";
-import { formatDate, formatTime, toMonthKey } from "../lib/date";
+import { actorDisplayName } from "../lib/actors";
+import { formatDate, formatDateTime, formatTime, toMonthKey } from "../lib/date";
 import { unavailableCategoryLabels } from "../lib/labels";
 import { useAppStore } from "../store/AppStore";
 import type { UnavailablePeriod } from "../types";
@@ -98,6 +99,12 @@ export function UnavailablePeriodsPage() {
                   {formatDate(period.startDateTime, intlLocale)} {formatTime(period.startDateTime, intlLocale)}
                   {` ${copy(locale, "common", "to")} `}
                   {formatDate(period.endDateTime, intlLocale)} {formatTime(period.endDateTime, intlLocale)}
+                </small>
+                <small>
+                  {copy(locale, "common", "updatedBy", {
+                    actor: actorDisplayName(data, period.updatedBy),
+                    date: formatDateTime(period.updatedAt, intlLocale)
+                  })}
                 </small>
               </span>
               <span>

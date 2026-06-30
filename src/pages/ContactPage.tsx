@@ -7,8 +7,9 @@ import {
   entriesForRange,
   unavailableForEntry
 } from "../lib/analytics";
+import { actorDisplayName } from "../lib/actors";
 import { generatePatternEntries } from "../lib/contact";
-import { formatDate, formatTime, rangeForYear, toDateKey } from "../lib/date";
+import { formatDate, formatDateTime, formatTime, rangeForYear, toDateKey } from "../lib/date";
 import { statusLabels } from "../lib/labels";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
@@ -360,6 +361,12 @@ export function ContactPage({
                 <span>
                   <strong>{entry.childIds.map((id) => data.children.find((child) => child.id === id)?.name).filter(Boolean).join(copy(locale, "contact", "and"))}</strong>
                   <small>{entry.additionalCare ? copy(locale, "contact", "additionalCare") : copy(locale, "contact", "defaultName")}</small>
+                  <small>
+                    {copy(locale, "common", "updatedBy", {
+                      actor: actorDisplayName(data, entry.updatedBy),
+                      date: formatDateTime(entry.updatedAt, intlLocale)
+                    })}
+                  </small>
                 </span>
                 <span className={`status-label status-label--${entry.status}`}>
                   {entry.additionalCare ? copy(locale, "contact", "additional") : statusLabels[entry.status]}

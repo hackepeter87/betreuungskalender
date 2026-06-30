@@ -20,7 +20,8 @@ const de = {
     noChild: "Ohne Kind",
     noNote: "Keine Notiz",
     noAdditionalInformation: "Keine ergänzende Angabe",
-    notAvailable: "Nicht verfügbar"
+    notAvailable: "Nicht verfügbar",
+    updatedBy: "Geändert von {actor} · {date}"
   },
   labels: {
     completed: "Durchgeführt", planned: "Geplant", cancelled: "Ausgefallen",
@@ -226,7 +227,7 @@ const de = {
 
 const en = {
   ...de,
-  common: { ...de.common, cancel: "Cancel", save: "Save", delete: "Delete", edit: "Edit", add: "Add", yes: "Yes", no: "No", from: "From", to: "To", today: "Today", all: "All", none: "None", unknownChild: "Unknown child", noChild: "No child", noNote: "No note", noAdditionalInformation: "No additional information", notAvailable: "Unavailable" },
+  common: { ...de.common, cancel: "Cancel", save: "Save", delete: "Delete", edit: "Edit", add: "Add", yes: "Yes", no: "No", from: "From", to: "To", today: "Today", all: "All", none: "None", unknownChild: "Unknown child", noChild: "No child", noNote: "No note", noAdditionalInformation: "No additional information", notAvailable: "Unavailable", updatedBy: "Updated by {actor} · {date}" },
   labels: { ...de.labels, completed: "Completed", planned: "Planned", cancelled: "Cancelled", commuterApartment: "Commuter apartment", mainResidence: "Main residence", mother: "Mother", father: "Father", school: "School", other: "Other", thirdParty: "Third party", locationMother: "With mother", otherLocation: "Other location", pickup: "Pick-up", return: "Return journey", doctor: "Doctor", leisure: "Leisure", workplace: "Workplace", food: "Food", clothing: "Clothing", travel: "Travel costs", both: "Both", shared: "Shared / split", duty: "Duty", trainingCourse: "Training course", exercise: "Exercise", guardDuty: "Guard duty", standby: "Standby", deployment: "Deployment", businessTrip: "Business trip", illness: "Illness", privateUnavailability: "Private unavailability", vacationWithoutChildren: "Holiday without children" },
   fieldHelp: { helpFor: "Help for {label}", close: "Close help", why: "Why this matters", usage: "Used for", guidance: "Input guidance", mistakes: "Avoid common mistakes", example: "Example", reportLink: "Report reference", notice: "The help supports factual documentation. It does not provide legal advice or a legal assessment." },
   mobileExport: { notice: "On iPhone and iPad, Safari may initially open files in a preview depending on the format. Then use “Share” and “Save to Files”." },
