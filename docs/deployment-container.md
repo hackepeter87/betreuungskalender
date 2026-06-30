@@ -43,6 +43,12 @@ The release Compose file requires `APP_RELEASE_VERSION`, `APP_RELEASE_DIR`,
 directory, for example
 `/opt/svc_betreuung/betreuungskalender/releases/v1.0.0`.
 
+The generic `.env.example` is safe for the direct `deploy/compose.yml` path and
+therefore sets `TRUST_PROXY_AUTH=false`. Do not enable trusted proxy auth while
+the app service itself publishes a host port unless another reviewed boundary
+prevents all direct client access. For oauth2-proxy/OIDC deployments, use
+`deploy/.env.oidc.example` and `deploy/compose.oidc.yml` instead.
+
 Do not set host filesystem paths for `DATABASE_PATH` or `BACKUP_DIR` in the
 release `.env`. The release Compose file intentionally fixes those values inside
 the container as `/data/app.sqlite` and `/backups`; persist them through the

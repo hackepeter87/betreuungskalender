@@ -148,6 +148,23 @@ export function hasReleaseNotesHeading(content, version) {
   return new RegExp(`^# v${escapedVersion}(?:\\s|$)`, "m").test(content);
 }
 
+export function parseEnvValue(content, key) {
+  const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const match = content.match(new RegExp(`^\\s*${escapedKey}=(.*)$`, "m"));
+  return match ? match[1].trim() : undefined;
+}
+
+export function composePublishesAppPort(composeContent) {
+  const lines = composeContent.split(/\r?\n/);
+  const serviceStart = lines.findIndex((line) => line === "  betreuungskalender:");
+  if (serviceStart === -1) return false;
+  const serviceEnd = lines.findIndex((line, index) =>
+    index > serviceStart && /^  [A-Za-z0-9_-]+:$/.test(line)
+  );
+  const service = lines.slice(serviceStart, serviceEnd === -1 ? undefined : serviceEnd);
+  return service.some((line) => line === "    ports:");
+}
+
 function parseArguments(argv) {
   const supported = new Set(["--strict", "--build", "--lint", "--test", "--all", "--tag"]);
   const unknown = argv.filter((argument) => argument.startsWith("-") && !supported.has(argument));
@@ -282,6 +299,32 @@ function checkReleaseMetadata(cwd, packageJson, version, report) {
   } catch {
     report.fail(`${notesPath} could not be read`);
   }
+}
+
+function checkDeploymentExamples(cwd, report) {
+  let envExample;
+  let compose;
+  try {
+    envExample = readFileSync(resolve(cwd, ".env.example"), "utf8");
+    compose = readFileSync(resolve(cwd, "deploy", "compose.yml"), "utf8");
+  } catch {
+    report.fail("release deployment examples could not be read");
+    return;
+  }
+
+  const trustProxyAuth = parseEnvValue(envExample, "TRUST_PROXY_AUTH");
+  if (composePublishesAppPort(compose) && trustProxyAuth === "true") {
+    report.fail(
+      ".env.example must not enable trusted proxy auth for directly published compose.yml",
+      [
+        "  - deploy/compose.yml publishes the app service with ports:",
+        "  - TRUST_PROXY_AUTH=true may only be used when direct app access is blocked by a trusted proxy topology.",
+        "  - Keep TRUST_PROXY_AUTH=true in deploy/.env.oidc.example, where only oauth2-proxy publishes a host port."
+      ]
+    );
+    return;
+  }
+  report.pass("direct Compose example does not trust proxy identity headers");
 }
 
 function checkGitRepository(cwd, options, report) {
@@ -462,6 +505,7 @@ export function main(argv = process.argv.slice(2), cwd = process.cwd()) {
 
   options.version = checkPackageVersion(packageJson, report);
   checkReleaseMetadata(cwd, packageJson, options.version, report);
+  checkDeploymentExamples(cwd, report);
   const hasGitRepository = checkGitRepository(cwd, options, report);
   checkGitignore(cwd, hasGitRepository, report);
 

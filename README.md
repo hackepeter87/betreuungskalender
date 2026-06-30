@@ -164,7 +164,8 @@ Complete guide: [docs/deployment-lxc.md](docs/deployment-lxc.md)
 ## Configuration
 
 All settings are environment based. `.env.example` contains production-shaped
-example values using `example.net` only.
+example values for the direct Compose/systemd path using `example.net` only. Use
+`deploy/.env.oidc.example` instead for the oauth2-proxy/OIDC Compose topology.
 
 Key variables:
 
@@ -173,7 +174,7 @@ Key variables:
 | `DATABASE_PATH` | `/var/lib/betreuungskalender/app.sqlite` |
 | `BACKUP_DIR` | `/var/backups/betreuungskalender` |
 | `REQUIRE_AUTH` | `true` |
-| `TRUST_PROXY_AUTH` | `true` behind a trusted proxy only |
+| `TRUST_PROXY_AUTH` | `false` for direct app exposure, `true` behind a trusted private proxy only |
 | `ALLOWED_ORIGIN` | `https://betreuung.example.net` |
 | `LOG_LEVEL` | `info` |
 | `RATE_LIMIT_MAX` | `120` requests per client per minute |
@@ -215,6 +216,8 @@ loopback. For the first live rollout, keep `OIDC_REQUIRE_ROLE_CLAIM=false` and
 switch it to `true` only after Keycloak/oauth2-proxy group headers are
 confirmed. When trusted identity is available, the app shell shows a compact
 signed-in user indicator and a logout link if `AUTH_LOGOUT_URL` is configured.
+Do not use `TRUST_PROXY_AUTH=true` with the direct `deploy/compose.yml` app
+port unless another reviewed proxy boundary prevents all direct client access.
 
 - HAProxy, nginx, Caddy, and Traefik:
   [docs/reverse-proxy.md](docs/reverse-proxy.md)
