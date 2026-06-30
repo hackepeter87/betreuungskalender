@@ -11,13 +11,14 @@ travel, costs, holidays, and unavailable periods.
 
 ## Project status
 
-- Latest release: [v1.0.0](docs/release-notes/v1.0.0.md)
+- Latest release: [v1.2.0](docs/release-notes/v1.2.0.md)
 - Current `main`: SQLite/API domain persistence, language packs, external
-  read-only calendar overlays, responsive mobile support, backup/restore
-  tooling, and deployment guidance
+  read-only calendar overlays, trusted OIDC claim authorization,
+  multi-parent audit metadata, responsive mobile support, backup/restore
+  tooling, release archives, and GHCR release images
 - Roadmap and work tracking: [GitHub milestones and issues](https://github.com/hackepeter87/betreuungskalender/milestones)
-- Stability target: stable `v1.0.0` with post-`1.0.0` work tracked in GitHub
-  milestones
+- Stability target: stable self-hosted release line with roadmap work tracked in
+  GitHub milestones
 
 ## Screenshot
 
@@ -137,6 +138,8 @@ curl --fail http://127.0.0.1:3000/api/health
 The included Compose configuration binds only to loopback, uses persistent
 named volumes for `/data` and `/backups`, and starts without authentication for
 local evaluation. Enable external authentication before any network exposure.
+Published releases also provide a GHCR runtime image; use the release digest
+asset when deploying by image instead of rebuilding from the release archive.
 
 Docker and rootless Podman instructions:
 [docs/deployment-container.md](docs/deployment-container.md)

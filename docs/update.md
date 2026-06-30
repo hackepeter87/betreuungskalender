@@ -16,6 +16,7 @@ It never attempts reverse database migrations.
 | Docker without Compose | Supported runtime | Follow the same archive, backup, and rollback checks manually |
 | systemd/direct Node.js | Fallback and development path | Stop service, retain prior release, backup, install, validate, and restore manually |
 | Podman Compose | Tested compatibility only | Validate the equivalent commands in a non-production environment first |
+| GHCR image | Supported runtime artifact | Pull the immutable release digest and perform backup, migration, verification, and rollback checks manually |
 
 The automated tool only manages the Compose layout below. Do not point it at a
 development checkout, a named-volume evaluation setup, or a live systemd
@@ -109,8 +110,8 @@ In OIDC mode, `HOST_PORT` is the oauth2-proxy host port, not the app port. The
 app service has no host port and is reachable only through
 `http://betreuungskalender:3000` on the Compose network.
 
-Replace `X.Y.Z` with the package version, for example `1.0.0`, and `vX.Y.Z`
-with the matching release tag, for example `v1.0.0`.
+Replace `X.Y.Z` with the package version, for example `1.2.0`, and `vX.Y.Z`
+with the matching release tag, for example `v1.2.0`.
 
 If a rootless Podman or Docker host is behind a reverse proxy running on a
 different host or VM, `HOST_BIND_ADDRESS=127.0.0.1` may not be reachable by that
@@ -151,6 +152,31 @@ Use `v1.0.0` or a newer verified release artifact for normal production OIDC
 deployment instead of mixing an older published runtime with deployment files
 copied from `main`.
 
+## GHCR image artifact
+
+Published releases from `v1.2.0` onward may include a prebuilt runtime image in
+GitHub Container Registry. Prefer the immutable digest recorded in
+`betreuungskalender-vX.Y.Z.image-digest.txt` on the matching GitHub release:
+
+```text
+ghcr.io/hackepeter87/betreuungskalender@sha256:<digest>
+```
+
+The managed update tool does not currently switch a deployment to a GHCR image.
+It manages the archive-based Compose layout where `deploy/compose.yml` or
+`deploy/compose.oidc.yml` builds `Dockerfile.release` from the verified
+extracted release directory. If an operator chooses GHCR, they must keep an
+explicit deployment-specific Compose file or Podman run configuration, retain
+the same `./data:/data` and `./backups:/backups` persistence boundary, and run
+the same backup, restore, runtime-version, readiness, and auth-boundary checks
+manually.
+
+For `v1.2.0`, the GHCR image was backfilled manually. It published
+`ghcr.io/hackepeter87/betreuungskalender:v1.2.0` and
+`ghcr.io/hackepeter87/betreuungskalender:1.2.0`; it did not update `latest`.
+Future normal non-prerelease release-publication events update `latest`
+automatically.
+
 ## Managed Compose update
 
 Use the updater from a previously installed release. During first adoption,
@@ -175,9 +201,8 @@ with remote URLs reports the planned download but does not retrieve or modify
 anything.
 
 `vCURRENT` is the already installed release that provides the updater.
-`X.Y.Z` is the target version without the leading `v`; for the first stable
-release with OIDC deployment files, use `1.0.0` with
-`betreuungskalender-v1.0.0.tar.gz`. The target directory
+`X.Y.Z` is the target version without the leading `v`; for example, use
+`1.2.0` with `betreuungskalender-v1.2.0.tar.gz`. The target directory
 `releases/vX.Y.Z/` must not already exist. If it does, stop and decide whether
 it is a previous failed extraction, a manually installed release, or an active
 runtime before retrying.
