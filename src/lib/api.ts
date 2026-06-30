@@ -148,12 +148,19 @@ function mapEntry(entry: ApiCareEntry): CareEntry {
       category: cost.category as CareEntry["costs"][number]["category"],
       paidBy: cost.paidBy as CareEntry["costs"][number]["paidBy"]
     })),
+    createdBy: entry.createdBy,
+    updatedBy: entry.updatedBy,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt
   };
 }
 
-function careScopeFor(entry: Omit<CareEntry, "id" | "createdAt" | "updatedAt">): CareScope {
+type CareEntryWriteInput = Omit<CareEntry, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt">;
+type ChildWriteInput = Omit<Child, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt">;
+type HolidayWriteInput = Omit<HolidayPeriod, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt" | "deletedAt">;
+type ContactPatternWriteInput = Omit<ContactPattern, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt">;
+
+function careScopeFor(entry: CareEntryWriteInput): CareScope {
   if (entry.overnight) return "overnight";
   const duration =
     (Date.parse(entry.endDateTime) - Date.parse(entry.startDateTime)) / 60000;
@@ -162,7 +169,7 @@ function careScopeFor(entry: Omit<CareEntry, "id" | "createdAt" | "updatedAt">):
   return "hourly";
 }
 
-function entryPayload(entry: Omit<CareEntry, "id" | "createdAt" | "updatedAt">) {
+function entryPayload(entry: CareEntryWriteInput) {
   return {
     generatedByPatternId: entry.generatedByPatternId,
     ruleOccurrenceDate: entry.ruleOccurrenceDate,
@@ -186,10 +193,10 @@ function entryPayload(entry: Omit<CareEntry, "id" | "createdAt" | "updatedAt">) 
     hasEvidence: entry.hasEvidence,
     trips: entry.trips
       .filter((trip) => !trip.deletedAt)
-      .map(({ deletedAt: _deletedAt, ...trip }) => trip),
+      .map(({ createdBy: _createdBy, updatedBy: _updatedBy, deletedAt: _deletedAt, ...trip }) => trip),
     costs: entry.costs
       .filter((cost) => !cost.deletedAt)
-      .map(({ deletedAt: _deletedAt, ...cost }) => cost)
+      .map(({ createdBy: _createdBy, updatedBy: _updatedBy, deletedAt: _deletedAt, ...cost }) => cost)
   };
 }
 
@@ -228,6 +235,8 @@ function mapAudit(entry: ApiAuditEntry): AppData["auditLog"][number] {
   return {
     id: String(entry.id),
     timestamp: entry.timestamp,
+    userId: entry.userEmail,
+    userDisplayName: entry.userDisplayName,
     objectType: objectTypeMap[entry.entityType] ?? "appData",
     objectId: entry.entityId,
     objectLabel: `${entry.entityType} ${entry.entityId}`,
@@ -306,13 +315,13 @@ export const api = {
   getSession() {
     return loadSession();
   },
-  createChild(input: Omit<Child, "id" | "createdAt" | "updatedAt">) {
+  createChild(input: ChildWriteInput) {
     return request<ApiChild>("/api/children", {
       method: "POST",
       body: JSON.stringify(input)
     });
   },
-  updateChild(id: string, input: Omit<Child, "id" | "createdAt" | "updatedAt">) {
+  updateChild(id: string, input: ChildWriteInput) {
     return request<ApiChild>(`/api/children/${encodeURIComponent(id)}`, {
       method: "PUT",
       body: JSON.stringify(input)
@@ -323,7 +332,7 @@ export const api = {
       method: "DELETE"
     });
   },
-  createEntry(input: Omit<CareEntry, "id" | "createdAt" | "updatedAt">) {
+  createEntry(input: CareEntryWriteInput) {
     return request<ApiCareEntry>("/api/care-entries", {
       method: "POST",
       body: JSON.stringify(entryPayload(input))
@@ -331,7 +340,7 @@ export const api = {
   },
   updateEntry(
     id: string,
-    input: Omit<CareEntry, "id" | "createdAt" | "updatedAt">
+    input: CareEntryWriteInput
   ) {
     return request<ApiCareEntry>(`/api/care-entries/${encodeURIComponent(id)}`, {
       method: "PUT",
@@ -343,13 +352,13 @@ export const api = {
       method: "DELETE"
     });
   },
-  createHoliday(input: Omit<HolidayPeriod, "id">) {
+  createHoliday(input: HolidayWriteInput) {
     return request<HolidayPeriod>("/api/holiday-periods", {
       method: "POST",
       body: JSON.stringify(input)
     });
   },
-  updateHoliday(id: string, input: Omit<HolidayPeriod, "id">) {
+  updateHoliday(id: string, input: HolidayWriteInput) {
     return request<HolidayPeriod>(
       `/api/holiday-periods/${encodeURIComponent(id)}`,
       { method: "PUT", body: JSON.stringify(input) }
@@ -386,13 +395,13 @@ export const api = {
       method: "DELETE"
     });
   },
-  createPattern(input: Omit<ContactPattern, "id">) {
+  createPattern(input: ContactPatternWriteInput) {
     return request<ApiContactPattern>("/api/contact-patterns", {
       method: "POST",
       body: JSON.stringify(input)
     });
   },
-  updatePattern(id: string, input: Omit<ContactPattern, "id">) {
+  updatePattern(id: string, input: ContactPatternWriteInput) {
     return request<ApiContactPattern>(
       `/api/contact-patterns/${encodeURIComponent(id)}`,
       { method: "PUT", body: JSON.stringify(input) }

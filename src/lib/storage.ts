@@ -92,6 +92,7 @@ export function normalizeBackupData(value: unknown): AppData {
     (value.schemaVersion !== 1 &&
       value.schemaVersion !== 2 &&
       value.schemaVersion !== 3 &&
+      value.schemaVersion !== 4 &&
       value.schemaVersion !== SCHEMA_VERSION)
   ) {
     throw new Error("Die Sicherung verwendet eine nicht unterstützte Datenversion.");
@@ -108,9 +109,15 @@ export function normalizeBackupData(value: unknown): AppData {
     ...empty,
     ...value,
     schemaVersion: SCHEMA_VERSION,
-    children: value.children,
+    children: value.children.map((child) => ({
+      ...child,
+      createdBy: typeof child.createdBy === "string" ? child.createdBy : "local-dev",
+      updatedBy: typeof child.updatedBy === "string" ? child.updatedBy : "local-dev"
+    })),
     entries: value.entries.map((entry) => ({
       ...entry,
+      createdBy: typeof entry.createdBy === "string" ? entry.createdBy : "local-dev",
+      updatedBy: typeof entry.updatedBy === "string" ? entry.updatedBy : "local-dev",
       additionalCare: Boolean(entry.additionalCare),
       generatedByPatternId:
         typeof entry.generatedByPatternId === "string"
@@ -124,6 +131,10 @@ export function normalizeBackupData(value: unknown): AppData {
               ? {
                   ...trip,
                   ownCar: typeof trip.ownCar === "boolean" ? trip.ownCar : true,
+                  createdBy:
+                    typeof trip.createdBy === "string" ? trip.createdBy : "local-dev",
+                  updatedBy:
+                    typeof trip.updatedBy === "string" ? trip.updatedBy : "local-dev",
                   deletedAt:
                     typeof trip.deletedAt === "string" ? trip.deletedAt : undefined
                 }
@@ -135,6 +146,10 @@ export function normalizeBackupData(value: unknown): AppData {
             isObject(cost)
               ? {
                   ...cost,
+                  createdBy:
+                    typeof cost.createdBy === "string" ? cost.createdBy : "local-dev",
+                  updatedBy:
+                    typeof cost.updatedBy === "string" ? cost.updatedBy : "local-dev",
                   deletedAt:
                     typeof cost.deletedAt === "string" ? cost.deletedAt : undefined
                 }
@@ -165,6 +180,14 @@ export function normalizeBackupData(value: unknown): AppData {
                 ? period.assignedTo
                 : "father",
             notes: typeof period.notes === "string" ? period.notes : undefined,
+            createdBy:
+              typeof period.createdBy === "string" ? period.createdBy : "local-dev",
+            updatedBy:
+              typeof period.updatedBy === "string" ? period.updatedBy : "local-dev",
+            createdAt:
+              typeof period.createdAt === "string" ? period.createdAt : nowIso(),
+            updatedAt:
+              typeof period.updatedAt === "string" ? period.updatedAt : nowIso(),
             deletedAt:
               typeof period.deletedAt === "string" ? period.deletedAt : undefined
           }))
@@ -264,13 +287,26 @@ export function normalizeBackupData(value: unknown): AppData {
             childIds: Array.isArray(pattern.childIds)
               ? pattern.childIds.filter((id): id is string => typeof id === "string")
               : [],
-            active: typeof pattern.active === "boolean" ? pattern.active : true
+            active: typeof pattern.active === "boolean" ? pattern.active : true,
+            createdBy:
+              typeof pattern.createdBy === "string" ? pattern.createdBy : "local-dev",
+            updatedBy:
+              typeof pattern.updatedBy === "string" ? pattern.updatedBy : "local-dev",
+            createdAt:
+              typeof pattern.createdAt === "string" ? pattern.createdAt : nowIso(),
+            updatedAt:
+              typeof pattern.updatedAt === "string" ? pattern.updatedAt : nowIso()
           }))
       : [],
     auditLog: Array.isArray(value.auditLog)
       ? value.auditLog.filter(isObject).map((entry) => ({
           id: String(entry.id ?? ""),
           timestamp: String(entry.timestamp ?? ""),
+          userId: String(entry.userId ?? "local-dev"),
+          userDisplayName:
+            typeof entry.userDisplayName === "string"
+              ? entry.userDisplayName
+              : undefined,
           objectType:
             entry.objectType === "trip" ||
             entry.objectType === "cost" ||
@@ -299,12 +335,14 @@ export function normalizeBackupData(value: unknown): AppData {
           .map((closure) => ({
             monthKey: String(closure.monthKey ?? ""),
             closedAt: String(closure.closedAt ?? ""),
+            closedBy: String(closure.closedBy ?? "local-dev"),
             dataUpdatedAt: String(closure.dataUpdatedAt ?? ""),
             summary: normalizeClosureSummary(closure.summary),
             changedAfterCloseAt:
               typeof closure.changedAfterCloseAt === "string"
                 ? closure.changedAfterCloseAt
-                : undefined
+                : undefined,
+            updatedBy: String(closure.updatedBy ?? closure.closedBy ?? "local-dev")
           }))
       : [],
     lastJsonBackupAt:

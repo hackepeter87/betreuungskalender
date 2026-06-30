@@ -1,4 +1,4 @@
-export const SCHEMA_VERSION = 4 as const;
+export const SCHEMA_VERSION = 5 as const;
 
 export type EntryStatus = "planned" | "completed" | "cancelled";
 export type CareLocation =
@@ -47,6 +47,8 @@ export interface Child {
   birthMonth: number;
   birthYear: number;
   color: string;
+  createdBy: string;
+  updatedBy: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -59,6 +61,8 @@ export interface Trip {
   reimbursed: boolean;
   reimbursementAmount?: number;
   notes?: string;
+  createdBy?: string;
+  updatedBy?: string;
   deletedAt?: string;
 }
 
@@ -68,6 +72,8 @@ export interface Cost {
   amount: number;
   paidBy: PaidBy;
   notes?: string;
+  createdBy?: string;
+  updatedBy?: string;
   deletedAt?: string;
 }
 
@@ -95,6 +101,8 @@ export interface CareEntry {
   evidenceReference?: string;
   trips: Trip[];
   costs: Cost[];
+  createdBy: string;
+  updatedBy: string;
   createdAt: string;
   updatedAt: string;
   deletedAt?: string;
@@ -108,6 +116,10 @@ export interface HolidayPeriod {
   childIds: string[];
   assignedTo: "father" | "mother" | "shared";
   notes?: string;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: string;
+  updatedAt: string;
   deletedAt?: string;
 }
 
@@ -120,6 +132,10 @@ export interface ContactPattern {
   sundayEndTime: string;
   childIds: string[];
   active: boolean;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type UnavailableCategory =
@@ -218,6 +234,8 @@ export type AuditAction = "created" | "updated" | "deleted" | "postCloseChange";
 export interface AuditLogEntry {
   id: string;
   timestamp: string;
+  userId: string;
+  userDisplayName?: string;
   objectType: AuditObjectType;
   objectId: string;
   objectLabel: string;
@@ -253,9 +271,11 @@ export interface MonthlyClosureSummary {
 export interface MonthlyClosure {
   monthKey: string;
   closedAt: string;
+  closedBy: string;
   dataUpdatedAt: string;
   summary: MonthlyClosureSummary;
   changedAfterCloseAt?: string;
+  updatedBy: string;
 }
 
 export interface AppData {

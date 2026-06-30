@@ -22,6 +22,8 @@ interface ChildRow {
   birth_month: number;
   birth_year: number;
   color: string;
+  created_by: string;
+  updated_by: string;
   created_at: string;
   updated_at: string;
 }
@@ -33,6 +35,8 @@ function mapChild(row: ChildRow) {
     birthMonth: row.birth_month,
     birthYear: row.birth_year,
     color: row.color,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -40,7 +44,7 @@ function mapChild(row: ChildRow) {
 
 function getChild(id: string) {
   const row = db.prepare(`
-    SELECT id, name, birth_month, birth_year, color, created_at, updated_at
+    SELECT id, name, birth_month, birth_year, color, created_by, updated_by, created_at, updated_at
     FROM children
     WHERE id = ? AND deleted_at IS NULL
   `).get(id) as ChildRow | undefined;
@@ -50,7 +54,7 @@ function getChild(id: string) {
 export async function childrenRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/children", readLimit, async () => {
     const rows = db.prepare(`
-      SELECT id, name, birth_month, birth_year, color, created_at, updated_at
+      SELECT id, name, birth_month, birth_year, color, created_by, updated_by, created_at, updated_at
       FROM children
       WHERE deleted_at IS NULL
       ORDER BY name COLLATE NOCASE
@@ -67,14 +71,16 @@ export async function childrenRoutes(app: FastifyInstance): Promise<void> {
     db.transaction(() => {
       db.prepare(`
         INSERT INTO children (
-          id, name, birth_month, birth_year, color, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          id, name, birth_month, birth_year, color, created_by, updated_by, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         parsed.data.name,
         parsed.data.birthMonth,
         parsed.data.birthYear,
         parsed.data.color,
+        request.userEmail,
+        request.userEmail,
         timestamp,
         timestamp
       );
@@ -100,13 +106,14 @@ export async function childrenRoutes(app: FastifyInstance): Promise<void> {
     db.transaction(() => {
       db.prepare(`
         UPDATE children
-        SET name = ?, birth_month = ?, birth_year = ?, color = ?, updated_at = ?
+        SET name = ?, birth_month = ?, birth_year = ?, color = ?, updated_by = ?, updated_at = ?
         WHERE id = ? AND deleted_at IS NULL
       `).run(
         parsed.data.name,
         parsed.data.birthMonth,
         parsed.data.birthYear,
         parsed.data.color,
+        request.userEmail,
         timestamp,
         request.params.id
       );
@@ -115,8 +122,8 @@ export async function childrenRoutes(app: FastifyInstance): Promise<void> {
         "child",
         request.params.id,
         before,
-        { ...before, ...parsed.data, updatedAt: timestamp },
-        ["updatedAt"]
+        { ...before, ...parsed.data, updatedBy: request.userEmail, updatedAt: timestamp },
+        ["updatedAt", "updatedBy"]
       );
       markAllClosedMonthsChanged(
         request.userEmail,
@@ -135,8 +142,8 @@ export async function childrenRoutes(app: FastifyInstance): Promise<void> {
     const timestamp = nowIso();
 
     db.transaction(() => {
-      db.prepare("UPDATE children SET deleted_at = ?, updated_at = ? WHERE id = ?")
-        .run(timestamp, timestamp, request.params.id);
+      db.prepare("UPDATE children SET deleted_at = ?, updated_by = ?, updated_at = ? WHERE id = ?")
+        .run(timestamp, request.userEmail, timestamp, request.params.id);
       for (const table of [
         ["care_entry_children", "care_entry_id", "care_entries"],
         ["holiday_period_children", "holiday_period_id", "holiday_periods"],

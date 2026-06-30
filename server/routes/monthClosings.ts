@@ -16,6 +16,8 @@ const writeLimit = {
 interface ClosingRow {
   month_key: string;
   summary_json: string;
+  closed_by: string;
+  updated_by: string;
   changed_after_close_at: string | null;
   created_at: string;
 }
@@ -28,15 +30,17 @@ function mapClosing(row: ClosingRow): ApiMonthlyClosing {
   return {
     monthKey: row.month_key,
     closedAt: row.created_at,
+    closedBy: row.closed_by,
     dataUpdatedAt: stored.dataUpdatedAt ?? row.created_at,
     summary: stored.summary ?? stored,
-    changedAfterCloseAt: row.changed_after_close_at ?? undefined
+    changedAfterCloseAt: row.changed_after_close_at ?? undefined,
+    updatedBy: row.updated_by
   };
 }
 
 function getClosing(monthKey: string): ApiMonthlyClosing | undefined {
   const row = db.prepare(`
-    SELECT month_key, summary_json, changed_after_close_at, created_at
+    SELECT month_key, summary_json, closed_by, updated_by, changed_after_close_at, created_at
     FROM monthly_closings
     WHERE month_key = ? AND deleted_at IS NULL
   `).get(monthKey) as ClosingRow | undefined;
@@ -46,7 +50,7 @@ function getClosing(monthKey: string): ApiMonthlyClosing | undefined {
 export async function monthClosingRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/month-closings", readLimit, async () => {
     const rows = db.prepare(`
-      SELECT month_key, summary_json, changed_after_close_at, created_at
+      SELECT month_key, summary_json, closed_by, updated_by, changed_after_close_at, created_at
       FROM monthly_closings
       WHERE deleted_at IS NULL
       ORDER BY month_key
@@ -70,8 +74,8 @@ export async function monthClosingRoutes(app: FastifyInstance): Promise<void> {
     db.transaction(() => {
       db.prepare(`
         INSERT INTO monthly_closings (
-          id, month_key, summary_json, closed_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?)
+          id, month_key, summary_json, closed_by, updated_by, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         parsed.data.monthKey,
@@ -79,6 +83,7 @@ export async function monthClosingRoutes(app: FastifyInstance): Promise<void> {
           dataUpdatedAt: parsed.data.dataUpdatedAt,
           summary: parsed.data.summary
         }),
+        request.userEmail,
         request.userEmail,
         timestamp,
         timestamp

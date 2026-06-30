@@ -96,7 +96,7 @@ function resetDatabase(): void {
 
 function insertExisting(status = "completed"): void {
   const data = fixture();
-  insertChild(data.children[0]!, data.updatedAt);
+  insertChild(data.children[0]!, data.updatedAt, "test@example.invalid");
   insertEntry({ ...data.entries[0]!, status }, data.updatedAt, "test@example.invalid");
 }
 

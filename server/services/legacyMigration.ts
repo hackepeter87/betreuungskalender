@@ -453,7 +453,7 @@ function additiveImport(
       continue;
     }
     const id = uniqueId("children", oldId, "child");
-    insertChild({ ...child, id }, timestamp);
+    insertChild({ ...child, id }, timestamp, userEmail);
     childMap.set(oldId, id);
     imported.children += 1;
   }
@@ -465,7 +465,7 @@ function additiveImport(
       ...pattern,
       id,
       childIds: strings(pattern, "childIds").map((childId) => childMap.get(childId) ?? childId)
-    }, timestamp);
+    }, timestamp, userEmail);
     patternMap.set(text(pattern, "id"), id);
     imported.contactPatterns += 1;
   }
@@ -511,7 +511,7 @@ function additiveImport(
       ...holiday,
       id: uniqueId("holiday_periods", text(holiday, "id"), "holiday"),
       childIds: strings(holiday, "childIds").map((childId) => childMap.get(childId) ?? childId)
-    }, timestamp);
+    }, timestamp, userEmail);
     imported.holidays += 1;
   }
   for (const period of data.unavailablePeriods.filter((item) => !item.deletedAt)) {
@@ -523,20 +523,20 @@ function additiveImport(
   }
 
   const insertSetting = db.prepare(`
-    INSERT INTO settings (key, value_json, created_at, updated_at)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO settings (key, value_json, created_by, updated_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
   for (const [key, value] of Object.entries(data.settings)) {
     if (!db.prepare("SELECT 1 FROM settings WHERE key = ? AND deleted_at IS NULL").get(key)) {
-      insertSetting.run(key, JSON.stringify(value), timestamp, timestamp);
+      insertSetting.run(key, JSON.stringify(value), userEmail, userEmail, timestamp, timestamp);
       imported.settings += 1;
     }
   }
   const insertClosing = db.prepare(`
     INSERT INTO monthly_closings (
-      id, month_key, summary_json, closed_by, changed_after_close_at,
+      id, month_key, summary_json, closed_by, updated_by, changed_after_close_at,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const closure of data.monthClosures) {
     const monthKey = text(closure, "monthKey");
@@ -551,6 +551,7 @@ function additiveImport(
         dataUpdatedAt: text(closure, "dataUpdatedAt", data.updatedAt),
         summary: closure.summary ?? {}
       }),
+      userEmail,
       userEmail,
       typeof closure.changedAfterCloseAt === "string" ? closure.changedAfterCloseAt : null,
       closedAt,

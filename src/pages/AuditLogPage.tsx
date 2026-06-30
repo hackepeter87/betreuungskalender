@@ -84,6 +84,7 @@ export function AuditLogPage() {
             <thead>
               <tr>
                 <th>{copy(locale, "audit", "timestamp")}</th>
+                <th>{copy(locale, "audit", "actor")}</th>
                 <th>{copy(locale, "audit", "object")}</th>
                 <th>{copy(locale, "audit", "action")}</th>
                 <th>{copy(locale, "audit", "field")}</th>
@@ -95,6 +96,7 @@ export function AuditLogPage() {
               {entries.map((entry) => (
                 <tr key={entry.id}>
                   <td data-label={copy(locale, "audit", "timestamp")}>{formatDateTime(entry.timestamp, intlLocale)}</td>
+                  <td data-label={copy(locale, "audit", "actor")}><strong>{entry.userDisplayName ?? entry.userId}</strong><small>{entry.userId}</small></td>
                   <td data-label={copy(locale, "audit", "object")}><strong>{objectLabels[entry.objectType]}</strong><small>{entry.objectLabel}</small></td>
                   <td data-label={copy(locale, "audit", "action")}><span className={`audit-action audit-action--${entry.action}`}>{actionLabels[entry.action]}</span></td>
                   <td data-label={copy(locale, "audit", "field")}>{entry.field}</td>

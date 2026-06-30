@@ -96,9 +96,9 @@ export function markClosedMonthsChanged(
   for (const monthKey of monthKeysForRange(startDate, endDate)) {
     const result = db.prepare(`
       UPDATE monthly_closings
-      SET changed_after_close_at = ?, updated_at = ?
+      SET changed_after_close_at = ?, updated_by = ?, updated_at = ?
       WHERE month_key = ? AND deleted_at IS NULL
-    `).run(timestamp, timestamp, monthKey);
+    `).run(timestamp, userEmail, timestamp, monthKey);
     if (result.changes > 0) {
       recordAudit({
         userEmail,
@@ -126,9 +126,9 @@ export function markAllClosedMonthsChanged(
   for (const row of rows) {
     db.prepare(`
       UPDATE monthly_closings
-      SET changed_after_close_at = ?, updated_at = ?
+      SET changed_after_close_at = ?, updated_by = ?, updated_at = ?
       WHERE month_key = ?
-    `).run(timestamp, timestamp, row.monthKey);
+    `).run(timestamp, userEmail, timestamp, row.monthKey);
     recordAudit({
       userEmail,
       entityType,

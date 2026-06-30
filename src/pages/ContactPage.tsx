@@ -60,19 +60,30 @@ export function ContactPage({
   const [cancelEntry, setCancelEntry] = useState<CareEntry | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const previewPattern = useMemo<ContactPattern>(
-    () => ({
-      id: patternId ?? "__contact_preview__",
-      name: name.trim() || copy(locale, "contact", "defaultName"),
-      startDate,
-      frequency: "biweekly",
-      fridayStartTime,
-      sundayEndTime,
-      childIds,
-      active
-    }),
+    () => {
+      const timestamp = existingPattern?.updatedAt ?? new Date().toISOString();
+      return {
+        id: patternId ?? "__contact_preview__",
+        name: name.trim() || copy(locale, "contact", "defaultName"),
+        startDate,
+        frequency: "biweekly",
+        fridayStartTime,
+        sundayEndTime,
+        childIds,
+        active,
+        createdBy: existingPattern?.createdBy ?? "local-dev",
+        updatedBy: existingPattern?.updatedBy ?? "local-dev",
+        createdAt: existingPattern?.createdAt ?? timestamp,
+        updatedAt: timestamp
+      };
+    },
     [
       active,
       childIds,
+      existingPattern?.createdAt,
+      existingPattern?.createdBy,
+      existingPattern?.updatedAt,
+      existingPattern?.updatedBy,
       fridayStartTime,
       locale,
       name,

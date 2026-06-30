@@ -37,6 +37,8 @@ export interface ApiChild {
   birthMonth: number;
   birthYear: number;
   color: string;
+  createdBy: string;
+  updatedBy: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -49,6 +51,8 @@ export interface ApiTrip {
   reimbursed: boolean;
   reimbursementAmount?: number;
   notes?: string;
+  createdBy: string;
+  updatedBy: string;
 }
 
 export interface ApiCost {
@@ -57,6 +61,8 @@ export interface ApiCost {
   amount: number;
   paidBy: string;
   notes?: string;
+  createdBy: string;
+  updatedBy: string;
 }
 
 export interface ApiCareEntry {
@@ -94,15 +100,18 @@ export interface ApiCareEntry {
 export interface ApiMonthlyClosing {
   monthKey: string;
   closedAt: string;
+  closedBy: string;
   dataUpdatedAt: string;
   summary: unknown;
   changedAfterCloseAt?: string;
+  updatedBy: string;
 }
 
 export interface ApiAuditEntry {
   id: number;
   timestamp: string;
   userEmail: string;
+  userDisplayName?: string;
   entityType: string;
   entityId: string;
   action: "created" | "updated" | "deleted" | "post_close_change";

@@ -14,7 +14,8 @@ const expectedMigrations = [
   "003_api_source_of_truth",
   "004_legacy_migration"
   ,"005_external_calendars",
-  "006_oidc_users"
+  "006_oidc_users",
+  "007_actor_metadata"
 ];
 
 async function withTemporaryDirectory(
@@ -170,6 +171,101 @@ test("existing database startup preserves fictional data", async () => {
       );
     } finally {
       restarted.close();
+    }
+  });
+});
+
+test("actor metadata supports multi-user audit attribution", async () => {
+  await withTemporaryDirectory("actor-metadata", (directory) => {
+    const database = openDatabase(join(directory, "app.sqlite"));
+    try {
+      migrateDatabase(database, migrationsDirectory);
+      const timestamp = "2026-03-01T10:00:00.000Z";
+      database.prepare(`
+        INSERT INTO app_users (
+          id, external_subject, email, display_name, role, groups_json,
+          last_seen_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "user_alpha",
+        "subject-alpha",
+        "alpha@example.invalid",
+        "Alpha Parent",
+        "parent",
+        "[]",
+        timestamp,
+        timestamp,
+        timestamp
+      );
+      database.prepare(`
+        INSERT INTO app_users (
+          id, external_subject, email, display_name, role, groups_json,
+          last_seen_at, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "user_beta",
+        "subject-beta",
+        "beta@example.invalid",
+        "Beta Parent",
+        "parent",
+        "[]",
+        timestamp,
+        timestamp,
+        timestamp
+      );
+      database.prepare(`
+        INSERT INTO children (
+          id, name, birth_month, birth_year, color,
+          created_by, updated_by, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "fixture-child-actor",
+        "Alex Beispiel",
+        4,
+        2018,
+        "#087f7b",
+        "user_alpha",
+        "user_beta",
+        timestamp,
+        "2026-03-02T10:00:00.000Z"
+      );
+      database.prepare(`
+        INSERT INTO audit_log (
+          timestamp, user_email, entity_type, entity_id, action, field_name,
+          old_value, new_value, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        "2026-03-02T10:00:00.000Z",
+        "user_beta",
+        "child",
+        "fixture-child-actor",
+        "updated",
+        "name",
+        "Alex",
+        "Alex Beispiel",
+        "2026-03-02T10:00:00.000Z",
+        "2026-03-02T10:00:00.000Z"
+      );
+
+      assert.deepEqual(database.prepare(`
+        SELECT created_by AS createdBy, updated_by AS updatedBy
+        FROM children
+        WHERE id = ?
+      `).get("fixture-child-actor"), {
+        createdBy: "user_alpha",
+        updatedBy: "user_beta"
+      });
+      assert.deepEqual(database.prepare(`
+        SELECT audit_log.user_email AS userEmail, app_users.display_name AS userDisplayName
+        FROM audit_log
+        LEFT JOIN app_users ON app_users.id = audit_log.user_email
+        WHERE audit_log.entity_id = ?
+      `).get("fixture-child-actor"), {
+        userEmail: "user_beta",
+        userDisplayName: "Beta Parent"
+      });
+    } finally {
+      database.close();
     }
   });
 });
