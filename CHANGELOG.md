@@ -6,11 +6,35 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+- No unreleased changes.
+
+## [1.3.0] - 2026-06-30
+
 ### Added
 
+- Added a revocable personal iCalendar subscription feed for care entries
+  created by the signed-in user.
+- Added migration `008_calendar_feed_tokens` for per-user calendar feed token
+  hashes.
+- Added calendar-style preview cards for recurring contact-rule generation so
+  operators can see how generated Friday-to-Sunday care times repeat before
+  writing them to the calendar.
 - Added a GitHub release image publishing workflow for GHCR that validates the
   tagged runtime, pushes the release image, and records the immutable digest on
   the GitHub release.
+
+### Changed
+
+- Updated release-image deployment documentation for the GHCR image path and
+  digest-based runtime verification.
+
+### Security
+
+- Calendar feed URLs are bearer secrets; only SHA-256 token hashes are stored in
+  SQLite, feed tokens do not grant `/api/*` access, and request logs redact
+  `/calendar/<token>.ics` paths.
+- The feed excludes notes, evidence references, trips, costs, audit metadata,
+  deleted entries, and cancelled entries.
 
 ## [1.2.0] - 2026-06-30
 
