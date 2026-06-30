@@ -300,12 +300,24 @@ release directory until the new runtime has been verified.
 
 Never use a container rollback as a substitute for a tested database restore.
 
-## Optional registry publication
+## Registry publication
 
-The standard workflows intentionally build without pushing. GHCR publication
-may be added later as a separate reviewed job with `packages: write`; see
-[release.md](release.md). Deploy by immutable digest when a registry is used,
-and keep registry credentials outside the repository.
+Published GitHub releases also publish a release runtime image to GitHub
+Container Registry:
+
+```text
+ghcr.io/hackepeter87/betreuungskalender:vX.Y.Z
+ghcr.io/hackepeter87/betreuungskalender:X.Y.Z
+ghcr.io/hackepeter87/betreuungskalender:latest
+```
+
+`latest` is updated only for non-prerelease releases. Prefer the immutable
+digest reference recorded in the release asset
+`betreuungskalender-vX.Y.Z.image-digest.txt` when deploying from GHCR.
+
+The archive-based update flow remains the primary documented production update
+path because it validates the checksum, migration readiness, backup, rollback,
+and runtime version together. Keep registry credentials outside the repository.
 
 For reverse-proxy authentication, remove the public port mapping where possible
 and attach the app only to a private proxy network.

@@ -6,6 +6,12 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+### Added
+
+- Added a GitHub release image publishing workflow for GHCR that validates the
+  tagged runtime, pushes the release image, and records the immutable digest on
+  the GitHub release.
+
 ## [1.2.0] - 2026-06-30
 
 ### Added

@@ -108,6 +108,27 @@ recorded checksum.
   personal data.
 - Publish only after the tag workflow and checksum verification pass.
 
+Publishing a non-draft `v*` release starts
+`.github/workflows/publish-release-image.yml`. That workflow re-checks the
+tagged release, validates the release runtime image, publishes
+`Dockerfile.release` to GitHub Container Registry, and uploads
+`betreuungskalender-vX.Y.Z.image-digest.txt` to the release.
+
+The GHCR workflow uses `GITHUB_TOKEN` with `packages: write` only in the image
+publish job. It also needs `contents: write` in that job so it can attach the
+image digest file to the GitHub release. Keep the general release validation
+workflow read-only.
+
+Published image tags:
+
+- `ghcr.io/hackepeter87/betreuungskalender:vX.Y.Z`
+- `ghcr.io/hackepeter87/betreuungskalender:X.Y.Z`
+- `ghcr.io/hackepeter87/betreuungskalender:latest` for non-prerelease
+  published releases
+
+Prefer the immutable digest reference recorded in the release asset for
+deployments that use GHCR.
+
 ## 11. Record the published-artifact smoke test
 
 After publication, test the released archive outside the normal CI context and
@@ -116,19 +137,10 @@ download the published archive and checksum, verify the SHA-256 value, inspect
 the archive for prohibited data artifacts, start a clean runtime from the
 archive, verify health and version reporting, create and validate a synthetic
 SQLite backup, restore that backup in an isolated runtime, and run the update
-tool in `--dry-run` mode where Docker Compose is available.
-
-## Optional GHCR publication
-
-Container publication is intentionally not enabled by default. If maintainers
-later add GitHub Container Registry publishing, keep it in a separate,
-reviewed workflow that:
-
-- runs only after the same strict and container validation succeeds;
-- grants `packages: write` only to the publishing job;
-- uses `ghcr.io/<owner>/betreuungskalender:vX.Y.Z` and an immutable digest;
-- never embeds application secrets or production data in the image; and
-- records the image digest in the GitHub release.
+tool in `--dry-run` mode where Docker Compose is available. If the GHCR image
+is used, pull it by the recorded immutable digest and verify that
+`npm run verify:runtime -- --expected-version X.Y.Z` reports the expected
+version.
 
 If the tag already exists, investigate before changing or deleting it. Never
 silently replace a published release tag.
