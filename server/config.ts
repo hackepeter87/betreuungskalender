@@ -17,6 +17,11 @@ function positiveNumberEnv(value: string | undefined, fallback: number): number 
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }
 
+function textEnv(value: string | undefined, fallback: string): string {
+  const normalized = value?.trim();
+  return normalized ? normalized : fallback;
+}
+
 function packageVersion(): string {
   try {
     const packageJson = JSON.parse(
@@ -37,6 +42,14 @@ export const config = {
   requireAuth: booleanEnv(process.env.REQUIRE_AUTH),
   trustProxyAuth: booleanEnv(process.env.TRUST_PROXY_AUTH),
   authLogoutUrl: process.env.AUTH_LOGOUT_URL?.trim() || undefined,
+  oidcUserIdHeader: textEnv(process.env.OIDC_USER_ID_HEADER, "x-auth-request-user"),
+  oidcEmailHeader: textEnv(process.env.OIDC_EMAIL_HEADER, "x-auth-request-email"),
+  oidcDisplayNameHeader: textEnv(process.env.OIDC_DISPLAY_NAME_HEADER, "x-auth-request-preferred-username"),
+  oidcGroupsHeader: textEnv(process.env.OIDC_GROUPS_HEADER, "x-auth-request-groups"),
+  oidcAdminGroup: textEnv(process.env.OIDC_ADMIN_GROUP, "/betreuungskalender/admins"),
+  oidcParentGroup: textEnv(process.env.OIDC_PARENT_GROUP, "/betreuungskalender/parents"),
+  oidcReadonlyGroup: textEnv(process.env.OIDC_READONLY_GROUP, "/betreuungskalender/readers"),
+  oidcRequireRoleClaim: booleanEnv(process.env.OIDC_REQUIRE_ROLE_CLAIM),
   allowedOrigin: process.env.ALLOWED_ORIGIN ?? "http://localhost:5173",
   logLevel: process.env.LOG_LEVEL ?? (
     process.env.NODE_ENV === "production" ? "info" : "debug"

@@ -149,6 +149,7 @@ test("runtime exposes compact session metadata for trusted proxy auth", async (t
         REQUIRE_AUTH: "true",
         TRUST_PROXY_AUTH: "true",
         AUTH_LOGOUT_URL: "/oauth2/sign_out",
+        OIDC_REQUIRE_ROLE_CLAIM: "true",
         ALLOWED_ORIGIN: "https://allowed.example.test",
         LOG_LEVEL: "warn"
       }
@@ -169,14 +170,53 @@ test("runtime exposes compact session metadata for trusted proxy auth", async (t
   assert.equal(missingIdentity.status, 401);
 
   const session = await fetch(`${baseUrl}/api/session`, {
-    headers: { "x-auth-request-email": "parent@example.net" }
+    headers: {
+      "x-auth-request-user": "subject-parent",
+      "x-auth-request-email": "parent@example.net",
+      "x-auth-request-groups": "/betreuungskalender/parents"
+    }
   });
   assert.equal(session.status, 200);
   assert.deepEqual(await session.json(), {
     authRequired: true,
     authenticated: true,
-    user: { displayName: "parent" },
+    user: {
+      id: "user_6f4c7289801c623dbaf3e32b",
+      displayName: "parent",
+      role: "parent",
+      email: "parent@example.net"
+    },
     logoutUrl: "/oauth2/sign_out"
+  });
+
+  const readOnlyRead = await fetch(`${baseUrl}/api/children`, {
+    headers: {
+      "x-auth-request-user": "subject-reader",
+      "x-auth-request-email": "reader@example.net",
+      "x-auth-request-groups": "/betreuungskalender/readers"
+    }
+  });
+  assert.equal(readOnlyRead.status, 200);
+
+  const readOnlyWrite = await fetch(`${baseUrl}/api/children`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-auth-request-user": "subject-reader",
+      "x-auth-request-email": "reader@example.net",
+      "x-auth-request-groups": "/betreuungskalender/readers"
+    },
+    body: JSON.stringify({
+      name: "Readonly Child",
+      birthMonth: 1,
+      birthYear: 2016,
+      color: "#2563eb"
+    })
+  });
+  assert.equal(readOnlyWrite.status, 403);
+  assert.deepEqual(await readOnlyWrite.json(), {
+    error: "forbidden",
+    message: "Für diese Aktion fehlt die erforderliche Berechtigung."
   });
 });
 

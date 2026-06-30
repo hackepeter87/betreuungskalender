@@ -19,6 +19,14 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `REQUIRE_AUTH` | Require a trusted identity for API routes | `true` | Recommended in production | `false` | Must be `true` for protected reverse-proxy operation |
 | `TRUST_PROXY_AUTH` | Trust supported identity headers and proxy addresses | `true` | Required with external auth | `false` | Never enable when clients can directly reach the app |
 | `AUTH_LOGOUT_URL` | Optional browser logout path shown in the app shell | `/oauth2/sign_out` | Optional with external auth | None | Keep same-origin or reviewed by the operator |
+| `OIDC_USER_ID_HEADER` | Trusted header containing the stable OIDC subject or user ID | `x-auth-request-user` | Recommended with OIDC | `x-auth-request-user` | Must be stable across email/name changes |
+| `OIDC_EMAIL_HEADER` | Trusted header containing the OIDC email claim | `x-auth-request-email` | Optional with OIDC | `x-auth-request-email` | Stored on the internal user record when present |
+| `OIDC_DISPLAY_NAME_HEADER` | Trusted header containing the OIDC display-name claim | `x-auth-request-preferred-username` | Optional with OIDC | `x-auth-request-preferred-username` | Shown compactly in the app shell |
+| `OIDC_GROUPS_HEADER` | Trusted header containing group or role claims | `x-auth-request-groups` | Recommended with OIDC | `x-auth-request-groups` | Used for server-side authorization |
+| `OIDC_ADMIN_GROUP` | Group that grants read, write, and administrative permissions | `/betreuungskalender/admins` | Recommended with OIDC | Same | Required for imports, destructive app-data operations, and migration endpoints |
+| `OIDC_PARENT_GROUP` | Group that grants normal read and write permissions | `/betreuungskalender/parents` | Recommended with OIDC | Same | Allows ordinary app data editing |
+| `OIDC_READONLY_GROUP` | Group that grants read-only access | `/betreuungskalender/readers` | Optional with OIDC | Same | Allows viewing/export reads but blocks writes |
+| `OIDC_REQUIRE_ROLE_CLAIM` | Reject users without a matching configured group | `true` | Recommended after rollout | `false` | `false` preserves existing single-user proxy deployments during migration |
 | `ALLOWED_ORIGIN` | Single permitted browser origin for CORS | `https://betreuung.example.net` | Recommended | `http://localhost:5173` | Prevents cross-origin browser API use |
 | `LOG_LEVEL` | Fastify/Pino log level | `info` | Optional | `info` in production, `debug` otherwise | Avoid `debug` in production unless investigating |
 | `RATE_LIMIT_MAX` | Maximum API requests per client and time window | `120` | Optional | `120` | Baseline protection for every API route, including health and readiness |
@@ -68,10 +76,25 @@ These headers are authentication assertions, not user input. Direct client
 access to the app must be blocked by binding to loopback, container networking,
 or firewall policy.
 
-When trusted identity headers are available, `/api/session` returns only compact
-session metadata for the app shell. The UI shows a short display name and, when
-`AUTH_LOGOUT_URL` is configured, a logout link. With oauth2-proxy this is
-usually `/oauth2/sign_out`.
+When trusted identity headers are available, the app maps the stable subject
+from `OIDC_USER_ID_HEADER` to an internal `app_users` row. Display name, email,
+and groups are refreshed on every API request. API audit fields use the stable
+internal user ID rather than mutable names or email addresses.
+
+Authorization is enforced on the server:
+
+- admin: read, write, app-data restore/clear, and legacy migration endpoints
+- parent: read and ordinary write operations
+- readonly: read-only API access
+
+When `OIDC_REQUIRE_ROLE_CLAIM=false`, an authenticated proxy user without a
+matching configured group receives `parent` permissions for compatibility with
+existing single-user deployments. Set it to `true` after the identity provider
+emits the expected group claim.
+
+`/api/session` returns compact session metadata for the app shell. The UI shows
+a short display name and, when `AUTH_LOGOUT_URL` is configured, a logout link.
+With oauth2-proxy this is usually `/oauth2/sign_out`.
 
 The release OIDC Compose mode enforces the intended boundary by publishing only
 oauth2-proxy. Do not add an app `ports:` mapping while `TRUST_PROXY_AUTH=true`.

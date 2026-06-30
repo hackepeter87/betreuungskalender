@@ -116,7 +116,10 @@ export interface ApiSession {
   authRequired: boolean;
   authenticated: boolean;
   user?: {
+    id: string;
     displayName: string;
+    role: "admin" | "parent" | "readonly";
+    email?: string;
   };
   logoutUrl?: string;
 }
