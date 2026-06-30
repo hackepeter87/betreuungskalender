@@ -23,6 +23,8 @@ interface HolidayRow {
   end_date: string;
   assigned_to: "father" | "mother" | "shared";
   notes: string | null;
+  created_by: string;
+  updated_by: string;
   created_at: string;
   updated_at: string;
 }
@@ -45,6 +47,8 @@ function mapHoliday(row: HolidayRow) {
     childIds: getChildIds(row.id),
     assignedTo: row.assigned_to,
     notes: row.notes ?? undefined,
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -77,11 +81,13 @@ export async function holidayRoutes(app: FastifyInstance): Promise<void> {
         assertActiveChildren(parsed.data.childIds);
         db.prepare(`
           INSERT INTO holiday_periods (
-            id, name, start_date, end_date, assigned_to, notes, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            id, name, start_date, end_date, assigned_to, notes,
+            created_by, updated_by, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           id, parsed.data.name, parsed.data.startDate, parsed.data.endDate,
-          parsed.data.assignedTo, parsed.data.notes ?? null, timestamp, timestamp
+          parsed.data.assignedTo, parsed.data.notes ?? null,
+          request.userEmail, request.userEmail, timestamp, timestamp
         );
         syncJunction("holiday_period_children", "holiday_period_id", id, parsed.data.childIds, timestamp);
         recordAudit({
@@ -118,11 +124,12 @@ export async function holidayRoutes(app: FastifyInstance): Promise<void> {
         db.prepare(`
           UPDATE holiday_periods
           SET name = ?, start_date = ?, end_date = ?, assigned_to = ?,
-              notes = ?, updated_at = ?, deleted_at = NULL
+              notes = ?, updated_by = ?, updated_at = ?, deleted_at = NULL
           WHERE id = ?
         `).run(
           parsed.data.name, parsed.data.startDate, parsed.data.endDate,
-          parsed.data.assignedTo, parsed.data.notes ?? null, timestamp, request.params.id
+          parsed.data.assignedTo, parsed.data.notes ?? null,
+          request.userEmail, timestamp, request.params.id
         );
         syncJunction(
           "holiday_period_children",
@@ -132,7 +139,7 @@ export async function holidayRoutes(app: FastifyInstance): Promise<void> {
           timestamp
         );
         const after = getHoliday(request.params.id);
-        if (after) recordFieldChanges(request.userEmail, "holiday_period", request.params.id, before, after, ["updatedAt"]);
+        if (after) recordFieldChanges(request.userEmail, "holiday_period", request.params.id, before, after, ["updatedAt", "updatedBy"]);
         const dates = [
           before.startDate,
           before.endDate,
@@ -159,8 +166,8 @@ export async function holidayRoutes(app: FastifyInstance): Promise<void> {
     if (!before) return reply.code(404).send({ error: "not_found" });
     const timestamp = nowIso();
     db.transaction(() => {
-      db.prepare("UPDATE holiday_periods SET deleted_at = ?, updated_at = ? WHERE id = ?")
-        .run(timestamp, timestamp, request.params.id);
+      db.prepare("UPDATE holiday_periods SET deleted_at = ?, updated_by = ?, updated_at = ? WHERE id = ?")
+        .run(timestamp, request.userEmail, timestamp, request.params.id);
       db.prepare("UPDATE holiday_period_children SET deleted_at = ?, updated_at = ? WHERE holiday_period_id = ? AND deleted_at IS NULL")
         .run(timestamp, timestamp, request.params.id);
       recordAudit({

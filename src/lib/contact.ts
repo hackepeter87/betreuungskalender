@@ -51,6 +51,8 @@ export function generatePatternEntries(
         hasEvidence: false,
         trips: [],
         costs: [],
+        createdBy: "local-dev",
+        updatedBy: "local-dev",
         createdAt: timestamp,
         updatedAt: timestamp
       });

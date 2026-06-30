@@ -42,6 +42,8 @@ export function createDemoData(): AppData {
       birthMonth: 5,
       birthYear: 2015,
       color: CHILD_COLORS[0],
+      createdBy: "local-dev",
+      updatedBy: "local-dev",
       createdAt: timestamp,
       updatedAt: timestamp
     },
@@ -51,6 +53,8 @@ export function createDemoData(): AppData {
       birthMonth: 5,
       birthYear: 2017,
       color: CHILD_COLORS[1],
+      createdBy: "local-dev",
+      updatedBy: "local-dev",
       createdAt: timestamp,
       updatedAt: timestamp
     }
@@ -84,6 +88,8 @@ export function createDemoData(): AppData {
       hasEvidence: false,
       trips: [],
       costs: [],
+      createdBy: "local-dev",
+      updatedBy: "local-dev",
       createdAt: timestamp,
       updatedAt: timestamp
     };

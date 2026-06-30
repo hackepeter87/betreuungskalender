@@ -70,6 +70,7 @@ function makeAuditEntry(
   return {
     id: makeId("audit"),
     timestamp,
+    userId: "local-dev",
     objectType,
     objectId,
     objectLabel,

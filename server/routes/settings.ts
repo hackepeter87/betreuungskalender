@@ -39,15 +39,23 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
     const timestamp = nowIso();
     db.transaction(() => {
       const upsert = db.prepare(`
-        INSERT INTO settings (key, value_json, created_at, updated_at)
-        VALUES (?, ?, ?, ?)
+        INSERT INTO settings (key, value_json, created_by, updated_by, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(key) DO UPDATE SET
           value_json = excluded.value_json,
+          updated_by = excluded.updated_by,
           updated_at = excluded.updated_at,
           deleted_at = NULL
       `);
       for (const [key, value] of Object.entries(parsed.data)) {
-        upsert.run(key, JSON.stringify(value), timestamp, timestamp);
+        upsert.run(
+          key,
+          JSON.stringify(value),
+          request.userEmail,
+          request.userEmail,
+          timestamp,
+          timestamp
+        );
       }
       recordFieldChanges(
         request.userEmail,

@@ -16,22 +16,22 @@ interface AuditQuery {
 
 export async function auditRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: AuditQuery }>("/api/audit-log", readLimit, async (request) => {
-    const conditions = ["deleted_at IS NULL"];
+    const conditions = ["audit_log.deleted_at IS NULL"];
     const values: Array<string | number> = [];
     if (request.query.entityType) {
-      conditions.push("entity_type = ?");
+      conditions.push("audit_log.entity_type = ?");
       values.push(request.query.entityType);
     }
     if (request.query.entityId) {
-      conditions.push("entity_id = ?");
+      conditions.push("audit_log.entity_id = ?");
       values.push(request.query.entityId);
     }
     if (request.query.startDate) {
-      conditions.push("timestamp >= ?");
+      conditions.push("audit_log.timestamp >= ?");
       values.push(`${request.query.startDate}T00:00:00.000Z`);
     }
     if (request.query.endDate) {
-      conditions.push("timestamp <= ?");
+      conditions.push("audit_log.timestamp <= ?");
       values.push(`${request.query.endDate}T23:59:59.999Z`);
     }
     const requestedLimit = Number(request.query.limit ?? 500);
@@ -40,12 +40,21 @@ export async function auditRoutes(app: FastifyInstance): Promise<void> {
 
     return db.prepare(`
       SELECT
-        id, timestamp, user_email AS userEmail, entity_type AS entityType,
-        entity_id AS entityId, action, field_name AS fieldName,
-        old_value AS oldValue, new_value AS newValue, metadata_json AS metadataJson
+        audit_log.id,
+        audit_log.timestamp,
+        audit_log.user_email AS userEmail,
+        app_users.display_name AS userDisplayName,
+        audit_log.entity_type AS entityType,
+        audit_log.entity_id AS entityId,
+        audit_log.action,
+        audit_log.field_name AS fieldName,
+        audit_log.old_value AS oldValue,
+        audit_log.new_value AS newValue,
+        audit_log.metadata_json AS metadataJson
       FROM audit_log
+      LEFT JOIN app_users ON app_users.id = audit_log.user_email
       WHERE ${conditions.join(" AND ")}
-      ORDER BY timestamp DESC, id DESC
+      ORDER BY audit_log.timestamp DESC, audit_log.id DESC
       LIMIT ?
     `).all(...values);
   });

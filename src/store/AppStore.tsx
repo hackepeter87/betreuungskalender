@@ -39,11 +39,11 @@ interface ChildInput {
   color: string;
 }
 
-type EntryInput = Omit<CareEntry, "id" | "createdAt" | "updatedAt"> & {
+type EntryInput = Omit<CareEntry, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt"> & {
   id?: string;
 };
-type HolidayInput = Omit<HolidayPeriod, "id"> & { id?: string };
-type PatternInput = Omit<ContactPattern, "id"> & { id?: string };
+type HolidayInput = Omit<HolidayPeriod, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt" | "deletedAt"> & { id?: string };
+type PatternInput = Omit<ContactPattern, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt"> & { id?: string };
 type UnavailableInput = Omit<
   UnavailablePeriod,
   "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt" | "deletedAt"

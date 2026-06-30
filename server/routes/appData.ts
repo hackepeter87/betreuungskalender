@@ -72,7 +72,7 @@ export function clearDomainData(): void {
   }
 }
 
-export function insertChild(record: DataRecord, timestamp: string): void {
+export function insertChild(record: DataRecord, timestamp: string, userEmail: string): void {
   const input = childInputSchema.parse({
     name: record.name,
     birthMonth: record.birthMonth,
@@ -83,14 +83,17 @@ export function insertChild(record: DataRecord, timestamp: string): void {
   if (!id) throw new Error("Kind ohne ID kann nicht importiert werden.");
   db.prepare(`
     INSERT INTO children (
-      id, name, birth_month, birth_year, color, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      id, name, birth_month, birth_year, color, created_by, updated_by,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     input.name,
     input.birthMonth,
     input.birthYear,
     input.color,
+    text(record, "createdBy", userEmail),
+    text(record, "updatedBy", userEmail),
     text(record, "createdAt", timestamp),
     text(record, "updatedAt", timestamp)
   );
@@ -207,8 +210,8 @@ export function insertEntry(record: DataRecord, timestamp: string, userEmail: st
   const tripInsert = db.prepare(`
     INSERT INTO trips (
       id, care_entry_id, purpose, km, own_car, reimbursed,
-      reimbursement_amount, notes, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      reimbursement_amount, notes, created_by, updated_by, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const trip of input.trips) {
     tripInsert.run(
@@ -220,14 +223,17 @@ export function insertEntry(record: DataRecord, timestamp: string, userEmail: st
       Number(trip.reimbursed),
       trip.reimbursementAmount ?? null,
       trip.notes ?? null,
+      text(trip, "createdBy", userEmail),
+      text(trip, "updatedBy", userEmail),
       createdAt,
       updatedAt
     );
   }
   const costInsert = db.prepare(`
     INSERT INTO costs (
-      id, care_entry_id, category, amount, paid_by, notes, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      id, care_entry_id, category, amount, paid_by, notes,
+      created_by, updated_by, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const cost of input.costs) {
     costInsert.run(
@@ -237,13 +243,15 @@ export function insertEntry(record: DataRecord, timestamp: string, userEmail: st
       cost.amount,
       cost.paidBy,
       cost.notes ?? null,
+      text(cost, "createdBy", userEmail),
+      text(cost, "updatedBy", userEmail),
       createdAt,
       updatedAt
     );
   }
 }
 
-export function insertHoliday(record: DataRecord, timestamp: string): void {
+export function insertHoliday(record: DataRecord, timestamp: string, userEmail: string): void {
   if (record.deletedAt) return;
   const input = holidayInputSchema.parse({
     name: record.name,
@@ -257,8 +265,9 @@ export function insertHoliday(record: DataRecord, timestamp: string): void {
   if (!id) throw new Error("Ferienzeitraum ohne ID kann nicht importiert werden.");
   db.prepare(`
     INSERT INTO holiday_periods (
-      id, name, start_date, end_date, assigned_to, notes, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      id, name, start_date, end_date, assigned_to, notes, created_by, updated_by,
+      created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     input.name,
@@ -266,8 +275,10 @@ export function insertHoliday(record: DataRecord, timestamp: string): void {
     input.endDate,
     input.assignedTo,
     input.notes ?? null,
-    timestamp,
-    timestamp
+    text(record, "createdBy", userEmail),
+    text(record, "updatedBy", userEmail),
+    text(record, "createdAt", timestamp),
+    text(record, "updatedAt", timestamp)
   );
   const junction = db.prepare(`
     INSERT INTO holiday_period_children (
@@ -277,7 +288,7 @@ export function insertHoliday(record: DataRecord, timestamp: string): void {
   for (const childId of input.childIds) junction.run(id, childId, timestamp, timestamp);
 }
 
-export function insertPattern(record: DataRecord, timestamp: string): void {
+export function insertPattern(record: DataRecord, timestamp: string, userEmail: string): void {
   const input = contactPatternInputSchema.parse({
     name: record.name,
     startDate: record.startDate,
@@ -292,8 +303,8 @@ export function insertPattern(record: DataRecord, timestamp: string): void {
   db.prepare(`
     INSERT INTO contact_patterns (
       id, name, start_date, frequency, friday_start_time, sunday_end_time,
-      active, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      active, created_by, updated_by, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     input.name,
@@ -302,8 +313,10 @@ export function insertPattern(record: DataRecord, timestamp: string): void {
     input.fridayStartTime,
     input.sundayEndTime,
     Number(input.active),
-    timestamp,
-    timestamp
+    text(record, "createdBy", userEmail),
+    text(record, "updatedBy", userEmail),
+    text(record, "createdAt", timestamp),
+    text(record, "updatedAt", timestamp)
   );
   const junction = db.prepare(`
     INSERT INTO contact_pattern_children (
@@ -357,10 +370,10 @@ export function insertUnavailable(record: DataRecord, timestamp: string, userEma
 export function importData(data: ReturnType<typeof appDataImportSchema.parse>, userEmail: string): void {
   const timestamp = nowIso();
   clearDomainData();
-  for (const child of data.children) insertChild(child, timestamp);
+  for (const child of data.children) insertChild(child, timestamp, userEmail);
   for (const entry of data.entries) insertEntry(entry, timestamp, userEmail);
-  for (const holiday of data.holidayPeriods) insertHoliday(holiday, timestamp);
-  for (const pattern of data.contactPatterns) insertPattern(pattern, timestamp);
+  for (const holiday of data.holidayPeriods) insertHoliday(holiday, timestamp, userEmail);
+  for (const pattern of data.contactPatterns) insertPattern(pattern, timestamp, userEmail);
   for (const period of data.unavailablePeriods) insertUnavailable(period, timestamp, userEmail);
   const sourceInsert = db.prepare(`INSERT INTO external_calendar_sources (id, name, color, visible, last_imported_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`);
   for (const source of data.externalCalendarSources) {
@@ -376,23 +389,30 @@ export function importData(data: ReturnType<typeof appDataImportSchema.parse>, u
   }
 
   const settingInsert = db.prepare(`
-    INSERT INTO settings (key, value_json, created_at, updated_at)
-    VALUES (?, ?, ?, ?)
+    INSERT INTO settings (key, value_json, created_by, updated_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
   `);
   for (const [key, value] of Object.entries({
     ...data.settings,
     lastJsonBackupAt: data.lastJsonBackupAt
   })) {
     if (value !== undefined) {
-      settingInsert.run(key, JSON.stringify(value), timestamp, timestamp);
+      settingInsert.run(
+        key,
+        JSON.stringify(value),
+        userEmail,
+        userEmail,
+        timestamp,
+        timestamp
+      );
     }
   }
 
   const closingInsert = db.prepare(`
     INSERT INTO monthly_closings (
-      id, month_key, summary_json, closed_by, changed_after_close_at,
+      id, month_key, summary_json, closed_by, updated_by, changed_after_close_at,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `);
   for (const closure of data.monthClosures) {
     const monthKey = text(closure, "monthKey");
@@ -405,7 +425,8 @@ export function importData(data: ReturnType<typeof appDataImportSchema.parse>, u
         dataUpdatedAt: text(closure, "dataUpdatedAt", data.updatedAt),
         summary: closure.summary ?? {}
       }),
-      userEmail,
+      text(closure, "closedBy", userEmail),
+      text(closure, "updatedBy", userEmail),
       optionalText(closure, "changedAfterCloseAt"),
       closedAt,
       timestamp

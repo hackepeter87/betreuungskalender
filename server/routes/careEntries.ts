@@ -54,6 +54,8 @@ interface TripRow {
   reimbursed: number;
   reimbursement_amount: number | null;
   notes: string | null;
+  created_by: string;
+  updated_by: string;
 }
 
 interface CostRow {
@@ -62,6 +64,8 @@ interface CostRow {
   amount: number;
   paid_by: string;
   notes: string | null;
+  created_by: string;
+  updated_by: string;
 }
 
 function optional<T>(value: T | null): T | undefined {
@@ -79,7 +83,7 @@ function getChildIds(entryId: string): string[] {
 
 function getTrips(entryId: string): ApiTrip[] {
   const rows = db.prepare(`
-    SELECT id, purpose, km, own_car, reimbursed, reimbursement_amount, notes
+    SELECT id, purpose, km, own_car, reimbursed, reimbursement_amount, notes, created_by, updated_by
     FROM trips
     WHERE care_entry_id = ? AND deleted_at IS NULL
     ORDER BY created_at, id
@@ -91,13 +95,15 @@ function getTrips(entryId: string): ApiTrip[] {
     ownCar: bool(row.own_car),
     reimbursed: bool(row.reimbursed),
     reimbursementAmount: optional(row.reimbursement_amount),
-    notes: optional(row.notes)
+    notes: optional(row.notes),
+    createdBy: row.created_by,
+    updatedBy: row.updated_by
   }));
 }
 
 function getCosts(entryId: string): ApiCost[] {
   const rows = db.prepare(`
-    SELECT id, category, amount, paid_by, notes
+    SELECT id, category, amount, paid_by, notes, created_by, updated_by
     FROM costs
     WHERE care_entry_id = ? AND deleted_at IS NULL
     ORDER BY created_at, id
@@ -107,7 +113,9 @@ function getCosts(entryId: string): ApiCost[] {
     category: row.category,
     amount: row.amount,
     paidBy: row.paid_by,
-    notes: optional(row.notes)
+    notes: optional(row.notes),
+    createdBy: row.created_by,
+    updatedBy: row.updated_by
   }));
 }
 
@@ -179,23 +187,30 @@ function syncTrips(
       db.prepare(`
         UPDATE trips
         SET purpose = ?, km = ?, own_car = ?, reimbursed = ?,
-            reimbursement_amount = ?, notes = ?, updated_at = ?, deleted_at = NULL
+            reimbursement_amount = ?, notes = ?, updated_by = ?, updated_at = ?, deleted_at = NULL
         WHERE id = ? AND care_entry_id = ?
       `).run(
         trip.purpose, trip.km, Number(trip.ownCar), Number(trip.reimbursed),
-        trip.reimbursementAmount ?? null, trip.notes ?? null, timestamp, id, entryId
+        trip.reimbursementAmount ?? null, trip.notes ?? null, userEmail, timestamp, id, entryId
       );
-      recordFieldChanges(userEmail, "trip", id, before, { ...trip, id });
+      recordFieldChanges(
+        userEmail,
+        "trip",
+        id,
+        before,
+        { ...trip, id, createdBy: before.createdBy, updatedBy: userEmail },
+        ["createdBy", "updatedBy"]
+      );
     } else {
       db.prepare(`
         INSERT INTO trips (
           id, care_entry_id, purpose, km, own_car, reimbursed,
-          reimbursement_amount, notes, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          reimbursement_amount, notes, created_by, updated_by, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id, entryId, trip.purpose, trip.km, Number(trip.ownCar),
         Number(trip.reimbursed), trip.reimbursementAmount ?? null,
-        trip.notes ?? null, timestamp, timestamp
+        trip.notes ?? null, userEmail, userEmail, timestamp, timestamp
       );
       recordAudit({
         userEmail,
@@ -210,8 +225,8 @@ function syncTrips(
 
   for (const [id, trip] of existing) {
     if (retained.has(id)) continue;
-    db.prepare("UPDATE trips SET deleted_at = ?, updated_at = ? WHERE id = ?")
-      .run(timestamp, timestamp, id);
+    db.prepare("UPDATE trips SET deleted_at = ?, updated_by = ?, updated_at = ? WHERE id = ?")
+      .run(timestamp, userEmail, timestamp, id);
     recordAudit({
       userEmail,
       entityType: "trip",
@@ -246,16 +261,27 @@ function syncCosts(
       db.prepare(`
         UPDATE costs
         SET category = ?, amount = ?, paid_by = ?, notes = ?,
-            updated_at = ?, deleted_at = NULL
+            updated_by = ?, updated_at = ?, deleted_at = NULL
         WHERE id = ? AND care_entry_id = ?
-      `).run(cost.category, cost.amount, cost.paidBy, cost.notes ?? null, timestamp, id, entryId);
-      recordFieldChanges(userEmail, "cost", id, before, { ...cost, id });
+      `).run(cost.category, cost.amount, cost.paidBy, cost.notes ?? null, userEmail, timestamp, id, entryId);
+      recordFieldChanges(
+        userEmail,
+        "cost",
+        id,
+        before,
+        { ...cost, id, createdBy: before.createdBy, updatedBy: userEmail },
+        ["createdBy", "updatedBy"]
+      );
     } else {
       db.prepare(`
         INSERT INTO costs (
-          id, care_entry_id, category, amount, paid_by, notes, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(id, entryId, cost.category, cost.amount, cost.paidBy, cost.notes ?? null, timestamp, timestamp);
+          id, care_entry_id, category, amount, paid_by, notes,
+          created_by, updated_by, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id, entryId, cost.category, cost.amount, cost.paidBy,
+        cost.notes ?? null, userEmail, userEmail, timestamp, timestamp
+      );
       recordAudit({
         userEmail,
         entityType: "cost",
@@ -269,8 +295,8 @@ function syncCosts(
 
   for (const [id, cost] of existing) {
     if (retained.has(id)) continue;
-    db.prepare("UPDATE costs SET deleted_at = ?, updated_at = ? WHERE id = ?")
-      .run(timestamp, timestamp, id);
+    db.prepare("UPDATE costs SET deleted_at = ?, updated_by = ?, updated_at = ? WHERE id = ?")
+      .run(timestamp, userEmail, timestamp, id);
     recordAudit({
       userEmail,
       entityType: "cost",
@@ -437,10 +463,10 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
         .run(timestamp, timestamp, request.userEmail, request.params.id);
       db.prepare("UPDATE care_entry_children SET deleted_at = ?, updated_at = ? WHERE care_entry_id = ? AND deleted_at IS NULL")
         .run(timestamp, timestamp, request.params.id);
-      db.prepare("UPDATE trips SET deleted_at = ?, updated_at = ? WHERE care_entry_id = ? AND deleted_at IS NULL")
-        .run(timestamp, timestamp, request.params.id);
-      db.prepare("UPDATE costs SET deleted_at = ?, updated_at = ? WHERE care_entry_id = ? AND deleted_at IS NULL")
-        .run(timestamp, timestamp, request.params.id);
+      db.prepare("UPDATE trips SET deleted_at = ?, updated_by = ?, updated_at = ? WHERE care_entry_id = ? AND deleted_at IS NULL")
+        .run(timestamp, request.userEmail, timestamp, request.params.id);
+      db.prepare("UPDATE costs SET deleted_at = ?, updated_by = ?, updated_at = ? WHERE care_entry_id = ? AND deleted_at IS NULL")
+        .run(timestamp, request.userEmail, timestamp, request.params.id);
       recordAudit({
         userEmail: request.userEmail,
         entityType: "care_entry",

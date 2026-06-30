@@ -44,9 +44,25 @@ stores the latest display name, email, derived role, group list, timestamps,
 and soft-delete metadata. The stable internal ID is used in API audit fields so
 name or email changes do not rewrite historical actors.
 
-`audit_log` stores timestamp, API identity, entity type and ID, action,
-field name, old/new serialized values, and optional metadata. It improves
-traceability but is not an immutable external timestamp or cryptographic proof.
+`audit_log` stores timestamp, stable API user ID, entity type and ID, action,
+field name, old/new serialized values, and optional metadata. Audit API
+responses join the current `app_users.display_name` for readability while
+keeping the stable internal user ID as the historical actor reference. It
+improves traceability but is not an immutable external timestamp or
+cryptographic proof.
+
+## Actor metadata
+
+Migration `007_actor_metadata` adds `created_by` and `updated_by` actor columns
+to `children`, `trips`, `costs`, `holiday_periods`, `contact_patterns`, and
+`settings`. `monthly_closings` already stored `closed_by`; the migration adds
+`updated_by` so post-close changes can show the actor that marked the closing
+as changed.
+
+`care_entries` and `unavailable_periods` already store `created_by` and
+`updated_by`. These actor fields store stable `app_users.id` values. They are
+for attribution and audit display; authorization still comes from the current
+request user and role.
 
 ## Care entries
 
@@ -64,16 +80,19 @@ automatically changes actual care entries.
 
 ## Monthly closure
 
-The monthly closing stores a JSON summary and records changes after closing.
-It is an organizational control, not a write-once archive.
+The monthly closing stores a JSON summary, `closed_by`, and records changes
+after closing with `updated_by`. It is an organizational control, not a
+write-once archive.
 
 ## Browser JSON export
 
 The browser backup envelope contains an application identifier, export
 timestamp, schema version, children, care entries with trips and costs,
 holidays, contact patterns, unavailable periods, audit entries, monthly
-closures, settings, and backup metadata. Import normalizes older supported
-schema versions.
+closures, settings, actor metadata, and backup metadata. Import normalizes
+older supported schema versions and fills missing actor metadata with the
+importing user or the legacy `local-dev` actor where no authenticated actor is
+available.
 
 ## Migrations
 

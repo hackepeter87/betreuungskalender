@@ -20,6 +20,8 @@ interface PatternRow {
   friday_start_time: string;
   sunday_end_time: string;
   active: number;
+  created_by: string;
+  updated_by: string;
   created_at: string;
   updated_at: string;
 }
@@ -43,6 +45,8 @@ function mapPattern(row: PatternRow) {
     sundayEndTime: row.sunday_end_time,
     childIds: getChildIds(row.id),
     active: bool(row.active),
+    createdBy: row.created_by,
+    updatedBy: row.updated_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at
   };
@@ -76,12 +80,13 @@ export async function contactPatternRoutes(app: FastifyInstance): Promise<void> 
         db.prepare(`
           INSERT INTO contact_patterns (
             id, name, start_date, frequency, friday_start_time, sunday_end_time,
-            active, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            active, created_by, updated_by, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
           id, parsed.data.name, parsed.data.startDate, parsed.data.frequency,
           parsed.data.fridayStartTime, parsed.data.sundayEndTime,
-          Number(parsed.data.active), timestamp, timestamp
+          Number(parsed.data.active), request.userEmail, request.userEmail,
+          timestamp, timestamp
         );
         syncJunction("contact_pattern_children", "contact_pattern_id", id, parsed.data.childIds, timestamp);
         recordAudit({
@@ -110,12 +115,12 @@ export async function contactPatternRoutes(app: FastifyInstance): Promise<void> 
         db.prepare(`
           UPDATE contact_patterns
           SET name = ?, start_date = ?, frequency = ?, friday_start_time = ?,
-              sunday_end_time = ?, active = ?, updated_at = ?, deleted_at = NULL
+              sunday_end_time = ?, active = ?, updated_by = ?, updated_at = ?, deleted_at = NULL
           WHERE id = ?
         `).run(
           parsed.data.name, parsed.data.startDate, parsed.data.frequency,
           parsed.data.fridayStartTime, parsed.data.sundayEndTime,
-          Number(parsed.data.active), timestamp, request.params.id
+          Number(parsed.data.active), request.userEmail, timestamp, request.params.id
         );
         syncJunction(
           "contact_pattern_children",
@@ -125,7 +130,7 @@ export async function contactPatternRoutes(app: FastifyInstance): Promise<void> 
           timestamp
         );
         const after = getPattern(request.params.id);
-        if (after) recordFieldChanges(request.userEmail, "contact_pattern", request.params.id, before, after, ["updatedAt"]);
+        if (after) recordFieldChanges(request.userEmail, "contact_pattern", request.params.id, before, after, ["updatedAt", "updatedBy"]);
       })();
     } catch (error) {
       return reply.code(400).send({ error: "invalid_relation", message: error instanceof Error ? error.message : String(error) });
@@ -138,8 +143,8 @@ export async function contactPatternRoutes(app: FastifyInstance): Promise<void> 
     if (!before) return reply.code(404).send({ error: "not_found" });
     const timestamp = nowIso();
     db.transaction(() => {
-      db.prepare("UPDATE contact_patterns SET deleted_at = ?, updated_at = ? WHERE id = ?")
-        .run(timestamp, timestamp, request.params.id);
+      db.prepare("UPDATE contact_patterns SET deleted_at = ?, updated_by = ?, updated_at = ? WHERE id = ?")
+        .run(timestamp, request.userEmail, timestamp, request.params.id);
       db.prepare("UPDATE contact_pattern_children SET deleted_at = ?, updated_at = ? WHERE contact_pattern_id = ? AND deleted_at IS NULL")
         .run(timestamp, timestamp, request.params.id);
       recordAudit({
