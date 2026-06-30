@@ -50,6 +50,8 @@ oidc_issuer_url = "https://idp.example.net/realms/example"
 client_id = "betreuungskalender"
 client_secret = "CHANGE_ME"
 redirect_url = "https://app.example.net/oauth2/callback"
+scope = "openid email profile"
+oidc_groups_claim = "groups"
 
 email_domains = [ "*" ]
 http_address = "0.0.0.0:4180"
@@ -63,6 +65,7 @@ cookie_samesite = "lax"
 
 reverse_proxy = true
 set_xauthrequest = true
+pass_user_headers = true
 set_authorization_header = false
 pass_access_token = false
 pass_authorization_header = false
@@ -94,12 +97,20 @@ oauth2-proxy sends:
 OIDC_USER_ID_HEADER=x-auth-request-user
 OIDC_EMAIL_HEADER=x-auth-request-email
 OIDC_DISPLAY_NAME_HEADER=x-auth-request-preferred-username
-OIDC_GROUPS_HEADER=x-auth-request-groups
+OIDC_GROUPS_HEADER=x-forwarded-groups
 OIDC_ADMIN_GROUP=/betreuungskalender/admins
 OIDC_PARENT_GROUP=/betreuungskalender/parents
 OIDC_READONLY_GROUP=/betreuungskalender/readers
 OIDC_REQUIRE_ROLE_CLAIM=false
 ```
+
+When oauth2-proxy acts as the reverse proxy and forwards directly to the app
+upstream, group claims are sent to that upstream as `X-Forwarded-Groups`. The
+`X-Auth-Request-Groups` header can still appear in auth-request or
+browser-visible response-header flows, but the app must be configured for the
+header that reaches its request. Keep
+`OIDC_GROUPS_HEADER=x-forwarded-groups` for the release Compose OIDC topology
+unless your proxy has been verified to send a different request header.
 
 The user ID header must contain a stable subject value that does not change
 when an email address or display name changes. The app maps that subject to an
@@ -141,7 +152,7 @@ ALLOWED_ORIGIN=https://app.example.net
 OIDC_USER_ID_HEADER=x-auth-request-user
 OIDC_EMAIL_HEADER=x-auth-request-email
 OIDC_DISPLAY_NAME_HEADER=x-auth-request-preferred-username
-OIDC_GROUPS_HEADER=x-auth-request-groups
+OIDC_GROUPS_HEADER=x-forwarded-groups
 OIDC_ADMIN_GROUP=/betreuungskalender/admins
 OIDC_PARENT_GROUP=/betreuungskalender/parents
 OIDC_READONLY_GROUP=/betreuungskalender/readers

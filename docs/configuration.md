@@ -22,7 +22,7 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `OIDC_USER_ID_HEADER` | Trusted header containing the stable OIDC subject or user ID | `x-auth-request-user` | Recommended with OIDC | `x-auth-request-user` | Must be stable across email/name changes |
 | `OIDC_EMAIL_HEADER` | Trusted header containing the OIDC email claim | `x-auth-request-email` | Optional with OIDC | `x-auth-request-email` | Stored on the internal user record when present |
 | `OIDC_DISPLAY_NAME_HEADER` | Trusted header containing the OIDC display-name claim | `x-auth-request-preferred-username` | Optional with OIDC | `x-auth-request-preferred-username` | Shown compactly in the app shell |
-| `OIDC_GROUPS_HEADER` | Trusted header containing group or role claims | `x-auth-request-groups` | Recommended with OIDC | `x-auth-request-groups` | Used for server-side authorization |
+| `OIDC_GROUPS_HEADER` | Trusted header containing group or role claims | `x-forwarded-groups` | Recommended with OIDC | `x-auth-request-groups` | Used for server-side authorization |
 | `OIDC_ADMIN_GROUP` | Group that grants read, write, and administrative permissions | `/betreuungskalender/admins` | Recommended with OIDC | Same | Required for imports, destructive app-data operations, and migration endpoints |
 | `OIDC_PARENT_GROUP` | Group that grants normal read and write permissions | `/betreuungskalender/parents` | Recommended with OIDC | Same | Allows ordinary app data editing |
 | `OIDC_READONLY_GROUP` | Group that grants read-only access | `/betreuungskalender/readers` | Optional with OIDC | Same | Allows viewing/export reads but blocks writes |
@@ -50,6 +50,11 @@ uses `expose: 3000` and does not publish a host port.
 The root `.env.example` is intentionally direct-compose safe and keeps
 `TRUST_PROXY_AUTH=false`. Use `deploy/.env.oidc.example` for the OIDC Compose
 topology where oauth2-proxy is the only service with a host port.
+
+In the release OIDC Compose topology, oauth2-proxy forwards group claims to the
+app upstream as `X-Forwarded-Groups`; set
+`OIDC_GROUPS_HEADER=x-forwarded-groups` and verify `/api/session` reports the
+expected role before enabling `OIDC_REQUIRE_ROLE_CLAIM=true`.
 
 ## Authentication modes
 
