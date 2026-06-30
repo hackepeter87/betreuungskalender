@@ -12,11 +12,12 @@ const expectedMigrations = [
   "001_initial_schema",
   "002_unavailable_periods",
   "003_api_source_of_truth",
-  "004_legacy_migration"
-  ,"005_external_calendars",
+  "004_legacy_migration",
+  "005_external_calendars",
   "006_oidc_users",
   "007_actor_metadata",
-  "008_calendar_feed_tokens"
+  "008_calendar_feed_tokens",
+  "009_native_oidc_login_states"
 ];
 
 async function withTemporaryDirectory(

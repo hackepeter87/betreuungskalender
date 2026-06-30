@@ -18,6 +18,7 @@ import { contactPatternRoutes } from "./routes/contactPatterns.js";
 import { holidayRoutes } from "./routes/holidays.js";
 import { monthClosingRoutes } from "./routes/monthClosings.js";
 import { migrationRoutes } from "./routes/migration.js";
+import { nativeOidcRoutes } from "./routes/nativeOidc.js";
 import { installRateLimitPolicy } from "./rateLimitPolicy.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { unavailablePeriodRoutes } from "./routes/unavailablePeriods.js";
@@ -224,6 +225,7 @@ app.get("/api/session", readLimit, async (request) =>
   sessionInfo(request.headers, config)
 );
 
+await app.register(nativeOidcRoutes, { config });
 await app.register(childrenRoutes);
 await app.register(careEntryRoutes);
 await app.register(holidayRoutes);

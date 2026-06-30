@@ -46,6 +46,13 @@ shared unintentionally.
   and writes intentionally have stricter limits than normal API reads.
 - Keep the host, Node.js, proxy, Keycloak, and container images updated.
 
+Native OIDC is introduced as the v1.4 target architecture. The native callback
+path uses Authorization Code + PKCE, server-side state/nonce/PKCE verifier
+records, and the maintained `openid-client` library for protocol validation.
+Persistent native app sessions are a separate follow-up step; until that is
+complete, keep the current trusted-proxy/oauth2-proxy production path as the
+known-good rollout and rollback mode.
+
 ## Application hardening
 
 The server uses CSP and common security headers, restrictive CORS, redaction of
@@ -63,9 +70,10 @@ evidence files.
 ## Logging
 
 Set `LOG_LEVEL=info` or `warn` in production. Request bodies are not logged by
-default. Authentication and cookie headers are redacted. Do not add names,
-notes, evidence references, exported data, or full request bodies to routine
-logs.
+default. Authentication and cookie headers are redacted. Native OIDC tokens,
+authorization codes, state, nonce, PKCE verifiers, raw claims, and client
+secrets must not be logged. Do not add names, notes, evidence references,
+exported data, or full request bodies to routine logs.
 
 Calendar feed request paths redact the token segment before application
 request metadata is logged. Reverse proxies may still log the full URL unless

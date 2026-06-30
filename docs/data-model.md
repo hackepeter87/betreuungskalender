@@ -31,6 +31,7 @@ discovery source; it is not synchronized or treated as current persistence.
 | `audit_log` | Field changes, creates, deletes, and post-close changes |
 | `app_users` | Stable users derived from trusted OIDC/proxy-auth headers |
 | `calendar_feed_tokens` | Revocable per-user iCalendar feed token hashes |
+| `native_oidc_login_states` | Short-lived server-side OIDC state, nonce, and PKCE verifier records |
 
 ## Soft delete
 
@@ -76,6 +77,14 @@ grants API access.
 Feed contents are derived from active `care_entries` where `created_by` equals
 the feed owner and `status` is not `cancelled`. Notes, evidence references,
 trips, costs, and audit data are not exported.
+
+## Native OIDC login state
+
+`native_oidc_login_states` stores short-lived, single-use login transaction
+records for native OIDC. It contains the random `state`, matching `nonce`,
+server-side PKCE verifier, redirect URI, creation timestamp, expiry timestamp,
+and optional consumption timestamp. It never stores ID tokens, access tokens,
+refresh tokens, client secrets, or browser session identifiers.
 
 ## Care entries
 
