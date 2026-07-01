@@ -105,6 +105,11 @@ Do not copy production data to the demo machine. Demo data must be synthetic and
 persistent across updates so migrations and domain changes are exercised without
 personal data leaving production.
 
+The demo environment may set `DEMO_DATASETS_ENABLED=true`. Admin users then see
+an additional settings action that replaces the current domain data with a
+synthetic edge-case dataset. This is intended for demos and regression checks
+only; keep the variable unset or `false` in production.
+
 ## GitHub promotion workflow
 
 Release image publication still starts from a GitHub release for `vX.Y.Z`.

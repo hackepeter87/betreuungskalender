@@ -167,6 +167,54 @@ test("shows native OIDC login action when authentication is required", async ({
     .toHaveAttribute("href", "/auth/login");
 });
 
+test("shows admin-only edge-case demo dataset action when enabled", async ({
+  page
+}) => {
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      const path = new URL(url, window.location.href).pathname;
+      const method = init?.method?.toUpperCase() ?? "GET";
+      if (path === "/api/session") {
+        return Promise.resolve(new Response(JSON.stringify({
+          authRequired: true,
+          authenticated: true,
+          demoDatasetsEnabled: true,
+          user: {
+            id: "user_e2e_admin",
+            displayName: "admin",
+            role: "admin",
+            email: "admin.example.test"
+          },
+          logoutUrl: "/auth/logout"
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }));
+      }
+      if (path === "/api/demo-data/edge-cases" && method === "POST") {
+        return Promise.resolve(new Response(JSON.stringify({
+          dataset: "edge-cases"
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }));
+      }
+      return originalFetch(input, init);
+    };
+  });
+
+  await openApp(page);
+  await navigate(page, "settings");
+  await expect(page.getByTestId("settings-load-edge-case-demo"))
+    .toContainText("Grenzfall-Testdaten laden");
+});
+
 test("uses native OIDC POST logout and returns to unauthenticated state", async ({
   page
 }) => {

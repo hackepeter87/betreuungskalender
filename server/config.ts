@@ -152,6 +152,7 @@ export const config = {
   rateLimitSensitiveMax: positiveNumberEnv(process.env.RATE_LIMIT_SENSITIVE_MAX, 5),
   rateLimitExportMax: positiveNumberEnv(process.env.RATE_LIMIT_EXPORT_MAX, 15),
   rateLimitWindowMs: positiveNumberEnv(process.env.RATE_LIMIT_WINDOW_MS, 60_000),
+  demoDatasetsEnabled: booleanEnv(process.env.DEMO_DATASETS_ENABLED),
   version: packageVersion()
 } as const;
 

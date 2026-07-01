@@ -31,6 +31,21 @@ external events are present without raw ICS content or runtime secrets.
 Generated Playwright reports, databases, and downloads remain in ignored test
 output directories and must not be committed.
 
+## Demo edge-case dataset
+
+Demo and staging environments can opt in to synthetic edge-case data with:
+
+```bash
+DEMO_DATASETS_ENABLED=true
+```
+
+When enabled, admin users can load the edge-case dataset from settings. The
+dataset intentionally replaces the current domain data and contains only
+fictional records that exercise month boundaries, recurring contact rules,
+cancelled entries, additional care, costs, trips, external calendar overlays,
+unavailability warnings, month closures, and audit log display. Do not enable
+this option in production.
+
 ## Runtime security and CORS
 
 Run the production-style HTTP assertions locally with:

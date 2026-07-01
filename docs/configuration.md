@@ -45,6 +45,7 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `RATE_LIMIT_SENSITIVE_MAX` | Maximum import and migration requests per client and time window | `5` | Optional | `5` | Protects expensive or state-replacing operations |
 | `RATE_LIMIT_EXPORT_MAX` | Maximum export requests per client and time window | `15` | Optional | `15` | Restricts potentially expensive export generation |
 | `RATE_LIMIT_WINDOW_MS` | Shared rate-limit window in milliseconds | `60000` | Optional | `60000` | Keep a bounded window; values must be positive integers |
+| `DEMO_DATASETS_ENABLED` | Enable admin-only synthetic demo dataset loaders | `true` on demo only | Optional for demo/staging | `false` | Never enable on production; loading a dataset replaces domain data |
 | `BACKUP_RETENTION_DAYS` | Remove generated SQLite backups older than this | `14` | Optional | `14` | Set `0` to disable automatic age pruning |
 | `HEALTHCHECK_URL` | URL used by `npm run healthcheck` | `http://127.0.0.1:3000/api/health` | Optional | Same | Use an internal URL; no credentials are required |
 

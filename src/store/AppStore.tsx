@@ -85,6 +85,7 @@ interface AppStoreValue {
   closeMonth: (monthKey: string) => Promise<MonthlyClosure | null>;
   recordBackupExport: (timestamp: string) => Promise<boolean>;
   loadDemo: () => Promise<boolean>;
+  loadEdgeCaseDemo: () => Promise<boolean>;
   clearAll: () => Promise<boolean>;
 }
 
@@ -529,6 +530,15 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     [performWrite]
   );
 
+  const loadEdgeCaseDemo = useCallback(
+    async () =>
+      performWrite(async () => {
+        await api.loadEdgeCaseDemoData();
+        return true;
+      }, false),
+    [performWrite]
+  );
+
   const clearAll = useCallback(
     async () =>
       performWrite(async () => {
@@ -570,6 +580,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       closeMonth,
       recordBackupExport,
       loadDemo,
+      loadEdgeCaseDemo,
       clearAll
     }),
     [
@@ -581,6 +592,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       isLoading,
       isSaving,
       loadDemo,
+      loadEdgeCaseDemo,
       recordBackupExport,
       reload,
       removeChild,

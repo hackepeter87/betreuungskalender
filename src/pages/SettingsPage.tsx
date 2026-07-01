@@ -190,7 +190,9 @@ export function SettingsPage() {
     removeChild,
     updateSettings,
     loadDemo,
+    loadEdgeCaseDemo,
     clearAll,
+    session,
     canWrite,
     isSaving
   } = useAppStore();
@@ -209,6 +211,13 @@ export function SettingsPage() {
       if (!window.confirm(copy(locale, "settings", "demoReplaceConfirm"))) return;
     }
     await loadDemo();
+  };
+
+  const loadEdgeCases = async () => {
+    if (data.children.length || data.entries.some((entry) => !entry.deletedAt)) {
+      if (!window.confirm(copy(locale, "settings", "edgeCaseDemoReplaceConfirm"))) return;
+    }
+    await loadEdgeCaseDemo();
   };
 
   const clearData = async () => {
@@ -346,6 +355,9 @@ export function SettingsPage() {
         </div>
         <div className="data-actions">
           <button className="button button--secondary" type="button" onClick={() => void loadExamples()} disabled={!canWrite || isSaving}>{copy(locale, "settings", "loadDemo")}</button>
+          {session.demoDatasetsEnabled && session.user?.role === "admin" ? (
+            <button className="button button--secondary" data-testid="settings-load-edge-case-demo" type="button" onClick={() => void loadEdgeCases()} disabled={!canWrite || isSaving}>{copy(locale, "settings", "loadEdgeCaseDemo")}</button>
+          ) : null}
           <button className="button button--danger-quiet" type="button" onClick={() => void clearData()} disabled={!canWrite || isSaving}><Icon name="trash" size={17} />{copy(locale, "settings", "clearData")}</button>
         </div>
       </section>
