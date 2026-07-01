@@ -44,6 +44,7 @@ type EntryInput = Omit<CareEntry, "id" | "createdBy" | "updatedBy" | "createdAt"
 };
 type HolidayInput = Omit<HolidayPeriod, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt" | "deletedAt"> & { id?: string };
 type PatternInput = Omit<ContactPattern, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt"> & { id?: string };
+type PatternSaveResult = Pick<ContactPattern, "id" | "syncSummary">;
 type UnavailableInput = Omit<
   UnavailablePeriod,
   "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt" | "deletedAt"
@@ -73,7 +74,7 @@ interface AppStoreValue {
   removeHolidayPeriod: (id: string) => Promise<boolean>;
   saveUnavailablePeriod: (input: UnavailableInput) => Promise<boolean>;
   removeUnavailablePeriod: (id: string) => Promise<boolean>;
-  saveContactPattern: (input: PatternInput) => Promise<string | null>;
+  saveContactPattern: (input: PatternInput) => Promise<PatternSaveResult | null>;
   removeContactPattern: (id: string) => Promise<boolean>;
   generateContactEntries: (
     patternId: string,
@@ -441,7 +442,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         const saved = id
           ? await api.updatePattern(id, payload)
           : await api.createPattern(payload);
-        return saved.id;
+        return { id: saved.id, syncSummary: saved.syncSummary };
       }, null),
     [performWrite]
   );

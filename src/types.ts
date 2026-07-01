@@ -87,6 +87,11 @@ export interface CareEntry {
   additionalCare: boolean;
   generatedByPatternId?: string;
   ruleOccurrenceDate?: string;
+  contactRuleId?: string;
+  contactRuleSegmentId?: string;
+  contactRuleOccurrenceKey?: string;
+  responsiblePartyId?: string;
+  contactRuleSyncState?: "generated" | "manual_override";
   overnight: boolean;
   schoolHandover: boolean;
   holiday: boolean;
@@ -136,6 +141,14 @@ export interface ContactPattern {
   updatedBy: string;
   createdAt: string;
   updatedAt: string;
+  syncSummary?: {
+    startDate: string;
+    endDate: string;
+    created: number;
+    updated: number;
+    skipped: number;
+    preserved: number;
+  };
 }
 
 export type UnavailableCategory =

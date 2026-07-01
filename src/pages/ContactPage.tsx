@@ -199,7 +199,7 @@ export function ContactPage({
       setMessage(copy(locale, "contact", "fridayRequired"));
       return;
     }
-    const id = await saveContactPattern({
+    const saved = await saveContactPattern({
       id: patternId,
       name: name.trim() || copy(locale, "contact", "defaultName"),
       startDate,
@@ -209,9 +209,18 @@ export function ContactPage({
       childIds,
       active
     });
-    if (id) {
-      setPatternId(id);
-      setMessage(copy(locale, "contact", "saved"));
+    if (saved) {
+      setPatternId(saved.id);
+      const created = saved.syncSummary?.created ?? 0;
+      const updated = saved.syncSummary?.updated ?? 0;
+      setMessage(
+        created || updated
+          ? copy(locale, "contact", "savedWithSync", {
+              count: created + updated,
+              to: formatDate(saved.syncSummary?.endDate ?? startDate, intlLocale)
+            })
+          : copy(locale, "contact", "saved")
+      );
     }
   };
 

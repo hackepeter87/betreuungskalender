@@ -69,6 +69,11 @@ export interface ApiCareEntry {
   id: string;
   generatedByPatternId?: string;
   ruleOccurrenceDate?: string;
+  contactRuleId?: string;
+  contactRuleSegmentId?: string;
+  contactRuleOccurrenceKey?: string;
+  responsiblePartyId?: string;
+  contactRuleSyncState?: "generated" | "manual_override";
   startDateTime: string;
   endDateTime: string;
   childIds: string[];
@@ -146,6 +151,59 @@ export interface ApiCalendarFeedStatus {
   createdAt?: string;
   lastUsedAt?: string;
   feedUrl?: string;
+}
+
+export type ContactRuleWeekday = "MO" | "TU" | "WE" | "TH" | "FR" | "SA" | "SU";
+export type ContactRuleMonthlyOrdinal = 1 | 2 | 3 | 4 | 5 | -1;
+
+export type ContactRuleRecurrence =
+  | {
+      kind: "weekly";
+      intervalWeeks: number;
+      weekdays: ContactRuleWeekday[];
+    }
+  | {
+      kind: "monthlyByWeekday";
+      intervalMonths: number;
+      ordinals: ContactRuleMonthlyOrdinal[];
+      weekdays: ContactRuleWeekday[];
+    };
+
+export interface ApiContactRuleSegment {
+  id: string;
+  startDayOffset: number;
+  startTime: string;
+  endDayOffset: number;
+  endTime: string;
+}
+
+export interface ApiContactRuleSyncSummary {
+  startDate: string;
+  endDate: string;
+  created: number;
+  updated: number;
+  skipped: number;
+  preserved: number;
+}
+
+export interface ApiContactRule {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate?: string;
+  timezone: string;
+  recurrence: ContactRuleRecurrence;
+  segments: ApiContactRuleSegment[];
+  syncHorizonMonths: number;
+  responsiblePartyId?: string;
+  childIds: string[];
+  active: boolean;
+  sourceContactPatternId?: string;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: string;
+  updatedAt: string;
+  syncSummary?: ApiContactRuleSyncSummary;
 }
 
 export interface ApiUnavailablePeriod {
