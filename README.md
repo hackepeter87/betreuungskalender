@@ -231,6 +231,8 @@ port unless another reviewed proxy boundary prevents all direct client access.
   [docs/reverse-proxy.md](docs/reverse-proxy.md)
 - Native OIDC with Keycloak and Podman:
   [docs/native-oidc-keycloak-podman.md](docs/native-oidc-keycloak-podman.md)
+- Migration from oauth2-proxy to native OIDC:
+  [docs/native-oidc-migration-rollback.md](docs/native-oidc-migration-rollback.md)
 - Detailed Keycloak and oauth2-proxy setup:
   [docs/keycloak-oauth2-proxy.md](docs/keycloak-oauth2-proxy.md)
 

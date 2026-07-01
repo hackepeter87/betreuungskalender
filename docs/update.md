@@ -111,6 +111,13 @@ In OIDC mode, `HOST_PORT` is the oauth2-proxy host port, not the app port. The
 app service has no host port and is reachable only through
 `http://betreuungskalender:3000` on the Compose network.
 
+For native OIDC without oauth2-proxy, use the direct `compose.yml` layout with
+`AUTH_MODE=native-oidc` and `TRUST_PROXY_AUTH=false`. Existing
+`compose.oidc.yml` installations should follow
+[native-oidc-migration-rollback.md](native-oidc-migration-rollback.md) so the
+trusted-proxy rollback path remains available until native login, role mapping,
+logout, and runtime verification pass in production.
+
 Replace `X.Y.Z` with the package version, for example `1.2.0`, and `vX.Y.Z`
 with the matching release tag, for example `v1.2.0`.
 
