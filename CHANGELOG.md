@@ -6,7 +6,11 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
-- No unreleased changes.
+### Added
+
+- Added native OIDC release hardening checks, trusted-proxy transition
+  guidance, and draft `v1.4.0` release notes covering migration, rollback, and
+  security validation.
 
 ## [1.3.0] - 2026-06-30
 

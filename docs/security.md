@@ -60,6 +60,13 @@ rollback mode until native OIDC has been verified in the live environment.
 Native mode rejects conflicting `TRUST_PROXY_AUTH=true` configuration and does
 not accept proxy identity headers as an API authentication bypass.
 
+Trusted-proxy authentication is a transition and rollback mode once native OIDC
+is live. Do not remove it, delete oauth2-proxy configuration, or remove the old
+Keycloak redirect URI during the first native rollout. After native login,
+claim-based roles, logout, session expiry, runtime verification, and audit
+identity have been verified in production, make a separate release decision
+whether trusted-proxy remains supported or is removed in a later milestone.
+
 ## Application hardening
 
 The server uses CSP and common security headers, restrictive CORS, redaction of
