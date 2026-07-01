@@ -127,21 +127,23 @@ Published image tags:
 
 - `ghcr.io/hackepeter87/betreuungskalender:vX.Y.Z`
 - `ghcr.io/hackepeter87/betreuungskalender:X.Y.Z`
-- `ghcr.io/hackepeter87/betreuungskalender:latest` for non-prerelease
-  published releases
 
-`latest` is a convenience tag only. Do not use it in demo or production
-Compose files. Image-based deployments use explicit promotion channels:
+Release publication does not update `latest`. `latest` is reserved as an alias
+for the current production digest and is moved only by **Promote production
+image**. Do not use it in demo Compose files. Image-based deployments use
+explicit promotion channels:
 
 - `testing` for the `bk-demo.saas-lab.de` demo machine;
-- `production` for the production machine.
+- `production` for the production machine;
+- `latest` as a production convenience alias only.
 
 Run the **Promote testing image** workflow with the release tag after the GHCR
 release image exists. Deploy and validate the demo machine, including native
 OIDC login, `/api/health`, `/api/ready`, unauthenticated `401` API responses,
 and persistence of synthetic demo data across the update. Only then run
 **Promote production image** with the same release tag. The production promotion
-fails if `testing` does not point at the same digest as the release tag.
+fails if `testing` does not point at the same digest as the release tag and
+updates both `production` and `latest`.
 
 Prefer the immutable digest reference recorded in the release asset and workflow
 summaries when auditing what was promoted. See

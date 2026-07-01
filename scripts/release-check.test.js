@@ -192,6 +192,10 @@ test("direct Compose example does not trust proxy identity headers", () => {
     resolve(".github", "workflows", "promote-testing.yml"),
     "utf8"
   );
+  const publishReleaseImageWorkflow = readFileSync(
+    resolve(".github", "workflows", "publish-release-image.yml"),
+    "utf8"
+  );
   const promoteProductionWorkflow = readFileSync(
     resolve(".github", "workflows", "promote-production.yml"),
     "utf8"
@@ -235,7 +239,7 @@ test("direct Compose example does not trust proxy identity headers", () => {
   assert.doesNotMatch(`${testingCompose}\n${productionCompose}`, /APP_RELEASE_DIR|APP_RELEASE_VERSION|\n    build:/);
   assert.match(imagePromotionDocs, /deploy\/compose\.testing\.yml/);
   assert.match(imagePromotionDocs, /deploy\/compose\.production\.yml/);
-  assert.match(imagePromotionDocs, /latest.*not used by deployments/s);
+  assert.match(imagePromotionDocs, /latest.*production promotion workflow/s);
   assert.match(imagePromotionDocs, /bk-demo\.saas-lab\.de/);
   assert.match(promoteTestingWorkflow, /docker buildx imagetools create/);
   assert.match(promoteTestingWorkflow, /--prefer-index=false/);
@@ -243,6 +247,9 @@ test("direct Compose example does not trust proxy identity headers", () => {
   assert.match(promoteProductionWorkflow, /environment: production/);
   assert.match(promoteProductionWorkflow, /--prefer-index=false/);
   assert.match(promoteProductionWorkflow, /production_ref=.*:production/);
+  assert.match(promoteProductionWorkflow, /latest_ref=.*:latest/);
+  assert.match(promoteProductionWorkflow, /--tag "\$\{\{ steps\.release\.outputs\.latest_ref \}\}"/);
+  assert.doesNotMatch(publishReleaseImageWorkflow, /tags\+=.*:latest/);
 });
 
 test("OIDC Compose mode keeps the app private behind oauth2-proxy", () => {

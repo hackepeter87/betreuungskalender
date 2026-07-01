@@ -58,9 +58,6 @@ jobs:
           image="${REGISTRY}/${IMAGE_NAME,,}"
           version="${tag#v}"
           tags="${image}:${tag}"$'\n'"${image}:${version}"
-          if [[ "$EVENT_NAME" != "workflow_dispatch" && "$RELEASE_PRERELEASE" != "true" ]]; then
-            tags+=$'\n'"${image}:latest"
-          fi
 
           {
             echo "tag=$tag"

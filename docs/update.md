@@ -181,7 +181,7 @@ For image-based deployments, use `deploy/compose.testing.yml` or
 
 - `testing` for `bk-demo.saas-lab.de`;
 - `production` for production;
-- `latest` only as a convenience tag, never as a deployment target.
+- `latest` as a production convenience alias moved only with `production`.
 
 Production image updates must still run a backup and restore check before
 pulling the promoted image:
@@ -201,8 +201,7 @@ the matching verified SQLite backup if a failed migration changed the database.
 For `v1.2.0`, the GHCR image was backfilled manually. It published
 `ghcr.io/hackepeter87/betreuungskalender:v1.2.0` and
 `ghcr.io/hackepeter87/betreuungskalender:1.2.0`; it did not update `latest`.
-Future normal non-prerelease release-publication events update `latest`
-automatically.
+Release publication never updates `latest`; only production promotion moves it.
 
 ## Managed Compose update
 

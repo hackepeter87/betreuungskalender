@@ -44,6 +44,7 @@ jobs:
             echo "release_ref=${image}:${tag}"
             echo "testing_ref=${image}:testing"
             echo "production_ref=${image}:production"
+            echo "latest_ref=${image}:latest"
           } >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v7
@@ -92,11 +93,17 @@ jobs:
           docker buildx imagetools create \
             --prefer-index=false \
             --tag "${{ steps.release.outputs.production_ref }}" \
+            --tag "${{ steps.release.outputs.latest_ref }}" \
             "${{ steps.release.outputs.testing_ref }}"
 
           production_digest="$(docker buildx imagetools inspect "${{ steps.release.outputs.production_ref }}" | awk '/^Digest:/ {print $2; exit}')"
           if [[ "$production_digest" != "${{ steps.verify.outputs.digest }}" ]]; then
             echo "::error::production digest $production_digest does not match tested digest ${{ steps.verify.outputs.digest }}."
+            exit 1
+          fi
+          latest_digest="$(docker buildx imagetools inspect "${{ steps.release.outputs.latest_ref }}" | awk '/^Digest:/ {print $2; exit}')"
+          if [[ "$latest_digest" != "${{ steps.verify.outputs.digest }}" ]]; then
+            echo "::error::latest digest $latest_digest does not match tested digest ${{ steps.verify.outputs.digest }}."
             exit 1
           fi
 
@@ -110,6 +117,7 @@ jobs:
             echo "- Commit: \`${{ steps.git.outputs.commit }}\`"
             echo "- Source tag: \`${{ steps.release.outputs.testing_ref }}\`"
             echo "- Target tag: \`${{ steps.release.outputs.production_ref }}\`"
+            echo "- Latest tag: \`${{ steps.release.outputs.latest_ref }}\`"
             echo "- Digest: \`${{ steps.verify.outputs.digest }}\`"
             echo "- Immutable reference: \`${{ steps.verify.outputs.immutable_ref }}\`"
           } >> "$GITHUB_STEP_SUMMARY"

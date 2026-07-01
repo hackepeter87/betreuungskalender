@@ -375,13 +375,13 @@ Container Registry:
 ```text
 ghcr.io/hackepeter87/betreuungskalender:vX.Y.Z
 ghcr.io/hackepeter87/betreuungskalender:X.Y.Z
-ghcr.io/hackepeter87/betreuungskalender:latest
 ```
 
-`latest` is updated only for non-prerelease releases. It is a convenience tag,
-not a deployment target. Use `testing` and `production` through the promotion
-workflows, and prefer the immutable digest reference recorded in the release
-asset `betreuungskalender-vX.Y.Z.image-digest.txt` when auditing a promotion.
+Release publication does not update `latest`. The `latest` tag is a production
+alias and is updated only by the production promotion workflow together with
+`production`. Use `testing` and `production` through the promotion workflows,
+and prefer the immutable digest reference recorded in the release asset
+`betreuungskalender-vX.Y.Z.image-digest.txt` when auditing a promotion.
 
 For `v1.2.0`, the digest was backfilled manually and recorded in
 `betreuungskalender-v1.2.0.image-digest.txt` on the GitHub release. The
@@ -392,9 +392,8 @@ ghcr.io/hackepeter87/betreuungskalender:v1.2.0
 ghcr.io/hackepeter87/betreuungskalender:1.2.0
 ```
 
-Because `v1.2.0` was backfilled through a manual workflow dispatch, `latest`
-was not updated for that release. Future non-prerelease releases published
-through the normal release event update `latest` automatically.
+Because `latest` represents production, publishing a release does not update it.
+Only the production promotion workflow may move `latest`.
 
 The archive-based update flow remains supported. For image-based operations,
 use the promotion procedure and the dedicated testing or production Compose
