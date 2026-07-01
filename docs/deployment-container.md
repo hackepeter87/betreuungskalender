@@ -64,6 +64,36 @@ release `.env`. The release Compose file intentionally fixes those values inside
 the container as `/data/app.sqlite` and `/backups`; persist them through the
 host-side `./data:/data` and `./backups:/backups` bind mounts.
 
+## Release archive with native OIDC
+
+For a fresh OIDC deployment without oauth2-proxy, use `deploy/compose.yml` with
+`AUTH_MODE=native-oidc`. In this mode the app owns the OIDC login, callback,
+logout, and server-side session lifecycle. It must sit behind an existing HTTPS
+reverse proxy, but that proxy must not be treated as an authentication source.
+
+The native OIDC setup is documented in
+[native-oidc-keycloak-podman.md](native-oidc-keycloak-podman.md). The short
+shape is:
+
+```dotenv
+AUTH_MODE=native-oidc
+REQUIRE_AUTH=true
+TRUST_PROXY_AUTH=false
+OIDC_ISSUER_URL=https://idp.example.net/realms/example
+OIDC_CLIENT_ID=betreuungskalender
+OIDC_CLIENT_SECRET=CHANGE_ME
+OIDC_REDIRECT_URI=https://app.example.net/auth/callback
+OIDC_SCOPES=openid email profile
+OIDC_GROUPS_CLAIM=groups
+OIDC_REQUIRE_ROLE_CLAIM=true
+ALLOWED_ORIGIN=https://app.example.net
+```
+
+Use `HOST_BIND_ADDRESS=127.0.0.1` when the TLS reverse proxy runs on the same
+host. With rootless Podman behind a proxy on another host or VM, bind to the VM
+address or all interfaces only when firewall or proxy policy restricts access
+to the intended path.
+
 ## Release archive with oauth2-proxy
 
 For an internet-facing OIDC deployment, prefer `deploy/compose.oidc.yml` over
