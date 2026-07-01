@@ -41,7 +41,7 @@ test("uses mobile navigation and the agenda for entry creation", async ({
   )).toBe(true);
 });
 
-test("shows authenticated user and logout action in the mobile header", async ({
+test("opens authenticated user menu from the mobile header", async ({
   page
 }) => {
   await page.addInitScript(() => {
@@ -58,7 +58,7 @@ test("shows authenticated user and logout action in the mobile header", async ({
           authenticated: true,
           user: {
             id: "user_e2e_parent",
-            displayName: "parent",
+            displayName: "Nils Demo",
             role: "parent",
             email: "parent@example.test"
           },
@@ -74,7 +74,11 @@ test("shows authenticated user and logout action in the mobile header", async ({
 
   await openApp(page);
   await expect(page.getByTestId("mobile-auth-session")).toBeVisible();
-  await expect(page.getByTestId("mobile-auth-session")).toContainText("parent");
+  await expect(page.getByTestId("mobile-auth-menu")).toHaveCount(0);
+  await page.getByTestId("mobile-auth-session").click();
+  await expect(page.getByTestId("mobile-auth-menu")).toBeVisible();
+  await expect(page.getByTestId("mobile-auth-menu")).toContainText("Nils Demo");
+  await expect(page.getByTestId("mobile-auth-menu")).toContainText("parent");
   await expect(page.getByTestId("mobile-auth-logout")).toBeVisible();
   await expect(page.getByTestId("mobile-auth-logout")).toHaveAttribute(
     "href",

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useI18n } from "../i18n/I18nProvider";
 import type { TranslationKey } from "../i18n/resources";
 import { logoutSession } from "../lib/api";
@@ -121,6 +121,107 @@ function AuthSessionCard({
   return null;
 }
 
+function MobileAuthMenu({
+  session,
+  loggingOut,
+  onLogout,
+  t
+}: {
+  session: ApiSession;
+  loggingOut: boolean;
+  onLogout: () => void;
+  t: (key: TranslationKey) => string;
+}) {
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  const nativeLogout = session.authenticated && session.logoutUrl === "/auth/logout";
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!menuRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  if (session.authenticated && session.user) {
+    return (
+      <div className="auth-menu" ref={menuRef}>
+        <button
+          className="auth-menu__trigger"
+          type="button"
+          data-testid="mobile-auth-session"
+          aria-label={t("auth.userMenu")}
+          aria-expanded={open}
+          aria-haspopup="menu"
+          onClick={() => setOpen((current) => !current)}
+        >
+          <Icon name="user" size={21} />
+        </button>
+        {open ? (
+          <div className="auth-menu__popover" role="menu" data-testid="mobile-auth-menu">
+            <div className="auth-menu__identity" role="presentation">
+              <small>{t("auth.signedInAs")}</small>
+              <strong>{session.user.displayName}</strong>
+              <span>{session.user.role}</span>
+            </div>
+            {session.logoutUrl ? (
+              nativeLogout ? (
+                <button
+                  className="auth-menu__action"
+                  data-testid="mobile-auth-logout"
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setOpen(false);
+                    onLogout();
+                  }}
+                  disabled={loggingOut}
+                >
+                  {loggingOut ? t("auth.loggingOut") : t("auth.logout")}
+                </button>
+              ) : (
+                <a
+                  className="auth-menu__action"
+                  data-testid="mobile-auth-logout"
+                  role="menuitem"
+                  href={session.logoutUrl}
+                  onClick={() => setOpen(false)}
+                >
+                  {t("auth.logout")}
+                </a>
+              )
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (session.authRequired && session.loginUrl) {
+    return (
+      <a
+        className="auth-menu__trigger"
+        data-testid="mobile-auth-login"
+        href={session.loginUrl}
+        aria-label={t("auth.login")}
+      >
+        <Icon name="user" size={21} />
+      </a>
+    );
+  }
+
+  return null;
+}
+
 export function AppShell({
   activePage,
   onNavigate,
@@ -225,10 +326,8 @@ export function AppShell({
             <strong>{t("app.name")}</strong>
           </button>
           <div className="mobile-header__actions">
-            <AuthSessionCard
+            <MobileAuthMenu
               session={session}
-              mobile
-              compact
               loggingOut={loggingOut}
               onLogout={() => void logout()}
               t={t}
