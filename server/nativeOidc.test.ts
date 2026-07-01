@@ -159,6 +159,74 @@ test("native OIDC callback validates state nonce and PKCE through the client lib
   }
 });
 
+test("native OIDC callback rejects state mismatches before token exchange", async () => {
+  const { database, cleanup } = testDatabase();
+  try {
+    const grantCalls: Array<{
+      currentUrl: URL;
+      checks: {
+        pkceCodeVerifier: string;
+        expectedState: string;
+        expectedNonce: string;
+      };
+    }> = [];
+    const service = new NativeOidcService({
+      config: nativeConfig(),
+      loginStates: new OidcLoginStateStore(database),
+      library: fakeLibrary({}, grantCalls)
+    });
+
+    await service.createLoginRedirect();
+
+    await assert.rejects(
+      () => service.validateCallback("/auth/callback?code=code-123&state=wrong-state"),
+      (error) =>
+        error instanceof NativeOidcError &&
+        error.code === "native_oidc_invalid_state" &&
+        error.statusCode === 400
+    );
+    assert.equal(grantCalls.length, 0);
+  } finally {
+    cleanup();
+  }
+});
+
+for (const validationCase of [
+  "nonce mismatch",
+  "PKCE verifier mismatch",
+  "wrong issuer",
+  "wrong audience",
+  "expired token"
+]) {
+  test(`native OIDC callback rejects ${validationCase} from protocol validation`, async () => {
+    const { database, cleanup } = testDatabase();
+    try {
+      const service = new NativeOidcService({
+        config: nativeConfig(),
+        loginStates: new OidcLoginStateStore(database),
+        library: fakeLibrary({
+          authorizationCodeGrant: async () => {
+            throw new Error(validationCase);
+          }
+        })
+      });
+
+      await service.createLoginRedirect();
+
+      await assert.rejects(
+        () => service.validateCallback("/auth/callback?code=code-123&state=state-123"),
+        (error) =>
+          error instanceof NativeOidcError &&
+          error.code === "native_oidc_callback_rejected" &&
+          error.statusCode === 400 &&
+          !error.message.includes(validationCase)
+      );
+    } finally {
+      cleanup();
+    }
+  });
+}
+
 test("native OIDC callback rejects missing subjects without exposing token details", async () => {
   const { database, cleanup } = testDatabase();
   try {

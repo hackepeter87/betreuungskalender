@@ -10,6 +10,7 @@ import { createApiAuthHook } from "./authHook.js";
 import { config } from "./config.js";
 import { db } from "./db/connection.js";
 import { runMigrations } from "./db/migrate.js";
+import { sanitizeRequestUrl } from "./logging.js";
 import { auditRoutes } from "./routes/audit.js";
 import { appDataRoutes } from "./routes/appData.js";
 import { careEntryRoutes } from "./routes/careEntries.js";
@@ -26,10 +27,6 @@ import { externalCalendarRoutes } from "./routes/externalCalendars.js";
 import { calendarFeedRoutes } from "./routes/calendarFeeds.js";
 
 runMigrations();
-
-function sanitizeRequestUrl(url?: string): string | undefined {
-  return url?.replace(/\/calendar\/[^/?#]+(?:\.ics)?/g, "/calendar/[redacted].ics");
-}
 
 const app = Fastify({
   logger: {
