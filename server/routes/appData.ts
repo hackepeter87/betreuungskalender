@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../db/connection.js";
 import { recordAudit } from "../services/audit.js";
 import { nowIso } from "../services/common.js";
+import { upsertContactRuleFromPattern } from "../services/contactRules.js";
 import {
   appDataImportSchema,
   careEntryInputSchema,
@@ -54,11 +55,13 @@ export function clearDomainData(): void {
   for (const table of [
     "care_entry_children",
     "holiday_period_children",
+    "contact_rule_children",
     "contact_pattern_children",
     "trips",
     "costs",
     "care_entries",
     "holiday_periods",
+    "contact_rules",
     "contact_patterns",
     "unavailable_periods",
     "external_calendar_events",
@@ -121,6 +124,11 @@ export function insertEntry(record: DataRecord, timestamp: string, userEmail: st
     childIds: stringArray(record, "childIds"),
     generatedByPatternId: optionalText(record, "generatedByPatternId") ?? undefined,
     ruleOccurrenceDate: optionalText(record, "ruleOccurrenceDate") ?? undefined,
+    contactRuleId: optionalText(record, "contactRuleId") ?? undefined,
+    contactRuleSegmentId: optionalText(record, "contactRuleSegmentId") ?? undefined,
+    contactRuleOccurrenceKey: optionalText(record, "contactRuleOccurrenceKey") ?? undefined,
+    responsiblePartyId: optionalText(record, "responsiblePartyId") ?? undefined,
+    contactRuleSyncState: optionalText(record, "contactRuleSyncState") ?? undefined,
     status: record.status,
     careScope: deriveCareScope(record),
     cancellationReason: optionalText(record, "cancellationReason") ?? undefined,
@@ -170,16 +178,23 @@ export function insertEntry(record: DataRecord, timestamp: string, userEmail: st
   db.prepare(`
     INSERT INTO care_entries (
       id, generated_by_pattern_id, rule_occurrence_date,
+      contact_rule_id, contact_rule_segment_id, contact_rule_occurrence_key,
+      responsible_party_id, contact_rule_sync_state,
       start_datetime, end_datetime, status, care_scope, cancellation_reason,
       overnight, school_handover, holiday, weekend, additional_care, location,
       custom_location, handover_from, handover_to, notes, evidence_reference,
       has_evidence, duration_minutes, is_contact_time, created_by, updated_by,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     input.generatedByPatternId ?? null,
     input.ruleOccurrenceDate ?? null,
+    input.contactRuleId ?? null,
+    input.contactRuleSegmentId ?? null,
+    input.contactRuleOccurrenceKey ?? null,
+    input.responsiblePartyId ?? null,
+    input.contactRuleSyncState ?? null,
     input.startDateTime,
     input.endDateTime,
     input.status,
@@ -327,6 +342,19 @@ export function insertPattern(record: DataRecord, timestamp: string, userEmail: 
     ) VALUES (?, ?, ?, ?)
   `);
   for (const childId of input.childIds) junction.run(id, childId, timestamp, timestamp);
+  upsertContactRuleFromPattern({
+    id,
+    name: input.name,
+    startDate: input.startDate,
+    fridayStartTime: input.fridayStartTime,
+    sundayEndTime: input.sundayEndTime,
+    childIds: input.childIds,
+    active: input.active,
+    createdBy: text(record, "createdBy", userEmail),
+    updatedBy: text(record, "updatedBy", userEmail),
+    createdAt: text(record, "createdAt", timestamp),
+    updatedAt: text(record, "updatedAt", timestamp)
+  });
 }
 
 export function insertUnavailable(record: DataRecord, timestamp: string, userEmail: string): void {

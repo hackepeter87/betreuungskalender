@@ -21,6 +21,11 @@ interface EntryRow {
   id: string;
   generated_by_pattern_id: string | null;
   rule_occurrence_date: string | null;
+  contact_rule_id: string | null;
+  contact_rule_segment_id: string | null;
+  contact_rule_occurrence_key: string | null;
+  responsible_party_id: string | null;
+  contact_rule_sync_state: "generated" | "manual_override" | null;
   start_datetime: string;
   end_datetime: string;
   status: ApiCareEntry["status"];
@@ -124,6 +129,11 @@ function mapEntry(row: EntryRow): ApiCareEntry {
     id: row.id,
     generatedByPatternId: optional(row.generated_by_pattern_id),
     ruleOccurrenceDate: optional(row.rule_occurrence_date),
+    contactRuleId: optional(row.contact_rule_id),
+    contactRuleSegmentId: optional(row.contact_rule_segment_id),
+    contactRuleOccurrenceKey: optional(row.contact_rule_occurrence_key),
+    responsiblePartyId: optional(row.responsible_party_id),
+    contactRuleSyncState: optional(row.contact_rule_sync_state),
     startDateTime: row.start_datetime,
     endDateTime: row.end_datetime,
     childIds: getChildIds(row.id),
@@ -322,9 +332,12 @@ function persistEntry(
   const isContactTime = durationMinutes < 120;
 
   if (existing) {
+    const contactRuleSyncState = existing.contactRuleId ? "manual_override" : input.contactRuleSyncState ?? null;
     db.prepare(`
       UPDATE care_entries SET
         generated_by_pattern_id = ?, rule_occurrence_date = ?,
+        contact_rule_id = ?, contact_rule_segment_id = ?, contact_rule_occurrence_key = ?,
+        responsible_party_id = ?, contact_rule_sync_state = ?,
         start_datetime = ?, end_datetime = ?, status = ?, care_scope = ?,
         cancellation_reason = ?, overnight = ?, school_handover = ?,
         holiday = ?, weekend = ?, additional_care = ?, location = ?, custom_location = ?,
@@ -334,6 +347,9 @@ function persistEntry(
       WHERE id = ?
     `).run(
       input.generatedByPatternId ?? null, input.ruleOccurrenceDate ?? null,
+      input.contactRuleId ?? null, input.contactRuleSegmentId ?? null,
+      input.contactRuleOccurrenceKey ?? null, input.responsiblePartyId ?? null,
+      contactRuleSyncState,
       input.startDateTime, input.endDateTime, input.status, input.careScope,
       input.status === "cancelled" ? input.cancellationReason ?? null : null,
       Number(input.overnight), Number(input.schoolHandover), Number(input.holiday),
@@ -347,13 +363,18 @@ function persistEntry(
     db.prepare(`
       INSERT INTO care_entries (
         id, generated_by_pattern_id, rule_occurrence_date,
+        contact_rule_id, contact_rule_segment_id, contact_rule_occurrence_key,
+        responsible_party_id, contact_rule_sync_state,
         start_datetime, end_datetime, status, care_scope, cancellation_reason,
         overnight, school_handover, holiday, weekend, additional_care, location,
         custom_location, handover_from, handover_to, notes, evidence_reference, has_evidence,
         duration_minutes, is_contact_time, created_by, updated_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, input.generatedByPatternId ?? null, input.ruleOccurrenceDate ?? null,
+      input.contactRuleId ?? null, input.contactRuleSegmentId ?? null,
+      input.contactRuleOccurrenceKey ?? null, input.responsiblePartyId ?? null,
+      input.contactRuleSyncState ?? null,
       input.startDateTime, input.endDateTime, input.status, input.careScope,
       input.status === "cancelled" ? input.cancellationReason ?? null : null,
       Number(input.overnight), Number(input.schoolHandover), Number(input.holiday),

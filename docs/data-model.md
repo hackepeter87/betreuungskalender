@@ -25,6 +25,8 @@ discovery source; it is not synchronized or treated as current persistence.
 | `holiday_period_children` | Child assignment for holiday blocks |
 | `contact_patterns` | Biweekly Friday-to-Sunday target schedules |
 | `contact_pattern_children` | Child assignment for target schedules |
+| `contact_rules` | Flexible recurring contact rules and synchronization settings |
+| `contact_rule_children` | Child assignment for flexible contact rules |
 | `unavailable_periods` | Duty-related and other unavailable periods |
 | `settings` | JSON-encoded server-side settings |
 | `monthly_closings` | Monthly summary and post-close change marker |
@@ -101,6 +103,24 @@ Care entries contain start/end, status, care scope, overnight and holiday
 flags, additional care, location, handover, notes, evidence reference,
 calculated duration, and contact-time classification. Children, trips, and
 costs are persisted transactionally.
+
+Generated planned entries can reference a flexible contact rule with
+`contact_rule_id`, `contact_rule_segment_id`, and
+`contact_rule_occurrence_key`. `contact_rule_sync_state` distinguishes entries
+that can still be updated by rule synchronization from entries that were
+manually changed and must be preserved. The older `generated_by_pattern_id` and
+`rule_occurrence_date` columns remain for compatibility with existing
+14-day-rule data and migration paths.
+
+## Contact rules
+
+`contact_rules` stores the flexible recurrence model introduced after the
+original `contact_patterns` table. The recurrence and segments are stored as
+validated JSON, using local civil dates and `HH:mm` times. The initial sync
+window defaults to 12 months and creates planned `care_entries` when a rule is
+saved. Existing 14-day `contact_patterns` are mirrored into `contact_rules`
+with a weekly recurrence, two-week interval, Friday anchor, and a Friday-to-
+Sunday segment.
 
 ## Holidays and unavailable periods
 

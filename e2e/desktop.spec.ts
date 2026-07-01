@@ -437,9 +437,8 @@ test("generates recurring weekend contact dates and shows them in the calendar",
   await expect(page.getByTestId("contact-message")).toContainText(
     "Umgangsregel gespeichert"
   );
-  await page.getByTestId("contact-generate").click();
   await expect(page.getByTestId("contact-message")).toContainText(
-    "3 geplante Umgangstermine"
+    "geplante Termine"
   );
   await expect(page.getByTestId("contact-generated-entry")).toHaveCount(3);
   await expect(page.getByTestId("contact-preview-new-occurrence")).toHaveCount(0);
@@ -453,9 +452,14 @@ test("generates recurring weekend contact dates and shows them in the calendar",
   const generatedEntries = (await entriesResponse.json() as Array<{
     id: string;
     generatedByPatternId?: string;
+    startDateTime: string;
     status: string;
   }>).filter((entry) => entry.generatedByPatternId);
-  expect(generatedEntries).toHaveLength(3);
+  const julyGeneratedEntries = generatedEntries.filter((entry) =>
+    entry.startDateTime.startsWith("2026-07")
+  );
+  expect(generatedEntries.length).toBeGreaterThan(julyGeneratedEntries.length);
+  expect(julyGeneratedEntries).toHaveLength(3);
   expect(generatedEntries.every((entry) => entry.status === "planned")).toBe(
     true
   );
@@ -465,8 +469,10 @@ test("generates recurring weekend contact dates and shows them in the calendar",
   if (await page.getByTestId("calendar-view-month").isVisible()) {
     await page.getByTestId("calendar-view-month").click();
   }
-  await expect(page.getByTestId(`calendar-entry-${generatedEntries[0]?.id}`))
-    .toHaveCount(3);
+  for (const entry of julyGeneratedEntries) {
+    await expect(page.getByTestId(`calendar-entry-${entry.id}`).first())
+      .toBeVisible();
+  }
 });
 
 test("derives unavailability impact hints from planned contact and holidays", async ({

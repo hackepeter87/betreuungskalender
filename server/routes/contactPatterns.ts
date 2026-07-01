@@ -3,6 +3,7 @@ import { config } from "../config.js";
 import { db } from "../db/connection.js";
 import { recordAudit, recordFieldChanges } from "../services/audit.js";
 import { assertActiveChildren, bool, makeId, nowIso, syncJunction } from "../services/common.js";
+import { syncContactRule, upsertContactRuleFromPattern, type ContactRulePatternInput } from "../services/contactRules.js";
 import { contactPatternInputSchema } from "../validation/schemas.js";
 
 const readLimit = {
@@ -52,6 +53,22 @@ function mapPattern(row: PatternRow) {
   };
 }
 
+function patternInputFromRow(pattern: ReturnType<typeof mapPattern>): ContactRulePatternInput {
+  return {
+    id: pattern.id,
+    name: pattern.name,
+    startDate: pattern.startDate,
+    fridayStartTime: pattern.fridayStartTime,
+    sundayEndTime: pattern.sundayEndTime,
+    childIds: pattern.childIds,
+    active: pattern.active,
+    createdBy: pattern.createdBy,
+    updatedBy: pattern.updatedBy,
+    createdAt: pattern.createdAt,
+    updatedAt: pattern.updatedAt
+  };
+}
+
 function getPattern(id: string) {
   const row = db.prepare(`
     SELECT * FROM contact_patterns WHERE id = ? AND deleted_at IS NULL
@@ -74,6 +91,7 @@ export async function contactPatternRoutes(app: FastifyInstance): Promise<void> 
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     const id = makeId("pattern");
     const timestamp = nowIso();
+    let syncSummary;
     try {
       db.transaction(() => {
         assertActiveChildren(parsed.data.childIds);
@@ -96,11 +114,15 @@ export async function contactPatternRoutes(app: FastifyInstance): Promise<void> 
           action: "created",
           newValue: getPattern(id)
         });
+        const saved = getPattern(id);
+        if (!saved) throw new Error("Umgangsregel konnte nicht geladen werden.");
+        upsertContactRuleFromPattern(patternInputFromRow(saved));
+        syncSummary = syncContactRule(saved.id, { userEmail: request.userEmail });
       })();
     } catch (error) {
       return reply.code(400).send({ error: "invalid_relation", message: error instanceof Error ? error.message : String(error) });
     }
-    return reply.code(201).send(getPattern(id));
+    return reply.code(201).send({ ...getPattern(id), syncSummary });
   });
 
   app.put<{ Params: { id: string } }>("/api/contact-patterns/:id", writeLimit, async (request, reply) => {
@@ -109,6 +131,7 @@ export async function contactPatternRoutes(app: FastifyInstance): Promise<void> 
     const parsed = contactPatternInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     const timestamp = nowIso();
+    let syncSummary;
     try {
       db.transaction(() => {
         assertActiveChildren(parsed.data.childIds);
@@ -131,11 +154,14 @@ export async function contactPatternRoutes(app: FastifyInstance): Promise<void> 
         );
         const after = getPattern(request.params.id);
         if (after) recordFieldChanges(request.userEmail, "contact_pattern", request.params.id, before, after, ["updatedAt", "updatedBy"]);
+        if (!after) throw new Error("Umgangsregel konnte nicht geladen werden.");
+        upsertContactRuleFromPattern(patternInputFromRow(after));
+        syncSummary = syncContactRule(after.id, { userEmail: request.userEmail });
       })();
     } catch (error) {
       return reply.code(400).send({ error: "invalid_relation", message: error instanceof Error ? error.message : String(error) });
     }
-    return getPattern(request.params.id);
+    return { ...getPattern(request.params.id), syncSummary };
   });
 
   app.delete<{ Params: { id: string } }>("/api/contact-patterns/:id", writeLimit, async (request, reply) => {
@@ -146,6 +172,10 @@ export async function contactPatternRoutes(app: FastifyInstance): Promise<void> 
       db.prepare("UPDATE contact_patterns SET deleted_at = ?, updated_by = ?, updated_at = ? WHERE id = ?")
         .run(timestamp, request.userEmail, timestamp, request.params.id);
       db.prepare("UPDATE contact_pattern_children SET deleted_at = ?, updated_at = ? WHERE contact_pattern_id = ? AND deleted_at IS NULL")
+        .run(timestamp, timestamp, request.params.id);
+      db.prepare("UPDATE contact_rules SET deleted_at = ?, updated_by = ?, updated_at = ? WHERE source_contact_pattern_id = ? AND deleted_at IS NULL")
+        .run(timestamp, request.userEmail, timestamp, request.params.id);
+      db.prepare("UPDATE contact_rule_children SET deleted_at = ?, updated_at = ? WHERE contact_rule_id = ? AND deleted_at IS NULL")
         .run(timestamp, timestamp, request.params.id);
       recordAudit({
         userEmail: request.userEmail,
