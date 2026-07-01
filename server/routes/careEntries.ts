@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { ApiCareEntry, ApiCost, ApiTrip } from "../../shared/api.js";
+import type { RequestUser } from "../auth.js";
 import { config } from "../config.js";
 import { db } from "../db/connection.js";
 import {
@@ -7,6 +8,8 @@ import {
   recordAudit,
   recordFieldChanges
 } from "../services/audit.js";
+import { assertCanUseCareParty } from "../services/carePartyAccess.js";
+import { assertActiveCareParty } from "../services/careParties.js";
 import { assertActiveChildren, bool, makeId, nowIso, syncJunction } from "../services/common.js";
 import { careEntryInputSchema } from "../validation/schemas.js";
 
@@ -322,9 +325,12 @@ function persistEntry(
   id: string,
   input: ReturnType<typeof careEntryInputSchema.parse>,
   userEmail: string,
-  existing?: ApiCareEntry
+  existing?: ApiCareEntry,
+  user?: RequestUser
 ): void {
   assertActiveChildren(input.childIds);
+  assertActiveCareParty(input.responsiblePartyId);
+  assertCanUseCareParty(user, input.responsiblePartyId);
   const timestamp = nowIso();
   const durationMinutes = Math.round(
     (Date.parse(input.endDateTime) - Date.parse(input.startDateTime)) / 60000
@@ -461,7 +467,7 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     const id = makeId("entry");
     try {
-      db.transaction(() => persistEntry(id, parsed.data, request.userEmail))();
+      db.transaction(() => persistEntry(id, parsed.data, request.userEmail, undefined, request.user))();
     } catch (error) {
       return reply.code(400).send({ error: "invalid_relation", message: error instanceof Error ? error.message : String(error) });
     }
@@ -474,7 +480,7 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
     const parsed = careEntryInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     try {
-      db.transaction(() => persistEntry(request.params.id, parsed.data, request.userEmail, existing))();
+      db.transaction(() => persistEntry(request.params.id, parsed.data, request.userEmail, existing, request.user))();
     } catch (error) {
       return reply.code(400).send({ error: "invalid_relation", message: error instanceof Error ? error.message : String(error) });
     }

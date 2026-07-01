@@ -11,14 +11,18 @@ const backupDir = resolve(
 const requiredTables = [
   "schema_migrations",
   "children",
+  "care_parties",
   "care_entries",
   "trips",
   "costs",
   "holiday_periods",
   "contact_patterns",
+  "contact_rules",
+  "contact_rule_children",
   "unavailable_periods",
   "monthly_closings",
-  "audit_log"
+  "audit_log",
+  "app_user_care_party_assignments"
 ];
 
 async function latestBackup() {

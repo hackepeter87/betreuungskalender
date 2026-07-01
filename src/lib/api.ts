@@ -1,11 +1,15 @@
 import type {
   ApiAuditEntry,
+  ApiAppUser,
   ApiCalendarFeedStatus,
+  ApiCalendarFeedScope,
   ApiCareEntry,
+  ApiCareParty,
   ApiChild,
   ApiContactRule,
   ApiLogout,
   ApiSession,
+  ApiUserCarePartyAssignment,
   ApiMonthlyClosing,
   ApiUnavailablePeriod,
   ApiExternalCalendarEvent,
@@ -27,6 +31,7 @@ import type {
   AuditAction,
   AuditObjectType,
   CareEntry,
+  CareParty,
   Child,
   ContactRule,
   ContactPattern,
@@ -169,6 +174,7 @@ function mapEntry(entry: ApiCareEntry): CareEntry {
 }
 
 type CareEntryWriteInput = Omit<CareEntry, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt">;
+type CarePartyWriteInput = Omit<CareParty, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt">;
 type ChildWriteInput = Omit<Child, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt">;
 type HolidayWriteInput = Omit<HolidayPeriod, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt" | "deletedAt">;
 type ContactPatternWriteInput = Omit<ContactPattern, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt">;
@@ -226,10 +232,12 @@ const objectTypeMap: Record<string, AuditObjectType> = {
   holiday_period: "holiday",
   unavailable_period: "unavailablePeriod",
   child: "child",
+  care_party: "careParty",
   contact_pattern: "contactPattern",
   settings: "settings",
   month_closure: "monthClosure",
   app_data: "appData",
+  user_care_party_assignment: "userCarePartyAssignment",
   legacy_migration: "legacyMigration"
 };
 
@@ -276,6 +284,7 @@ function newestTimestamp(values: Array<string | undefined>): string {
 export async function loadAppData(): Promise<AppData> {
   const [
     children,
+    careParties,
     entries,
     holidayPeriods,
     unavailablePeriods,
@@ -287,6 +296,7 @@ export async function loadAppData(): Promise<AppData> {
     ,externalCalendarSources
   ] = await Promise.all([
     request<ApiChild[]>("/api/children"),
+    request<ApiCareParty[]>("/api/care-parties"),
     request<ApiCareEntry[]>("/api/care-entries"),
     request<ApiHolidayPeriod[]>("/api/holiday-periods"),
     request<ApiUnavailablePeriod[]>("/api/unavailable-periods"),
@@ -307,6 +317,7 @@ export async function loadAppData(): Promise<AppData> {
   return {
     ...empty,
     children: children as Child[],
+    careParties: careParties as CareParty[],
     entries: mappedEntries,
     holidayPeriods,
     unavailablePeriods: mappedUnavailable,
@@ -320,6 +331,7 @@ export async function loadAppData(): Promise<AppData> {
     monthClosures: mappedClosures,
     updatedAt: newestTimestamp([
       ...children.flatMap((item) => [item.createdAt, item.updatedAt]),
+      ...careParties.flatMap((item) => [item.createdAt, item.updatedAt]),
       ...mappedEntries.flatMap((item) => [item.createdAt, item.updatedAt]),
       ...holidayPeriods.flatMap((item) => [item.createdAt, item.updatedAt]),
       ...mappedUnavailable.flatMap((item) => [item.createdAt, item.updatedAt]),
@@ -352,6 +364,23 @@ export const api = {
   },
   deleteChild(id: string) {
     return request<void>(`/api/children/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    });
+  },
+  createCareParty(input: CarePartyWriteInput) {
+    return request<ApiCareParty>("/api/care-parties", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
+  },
+  updateCareParty(id: string, input: CarePartyWriteInput) {
+    return request<ApiCareParty>(`/api/care-parties/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(input)
+    });
+  },
+  deleteCareParty(id: string) {
+    return request<void>(`/api/care-parties/${encodeURIComponent(id)}`, {
       method: "DELETE"
     });
   },
@@ -529,14 +558,30 @@ export const api = {
       body: JSON.stringify(input)
     });
   },
-  getCalendarFeed() {
-    return request<ApiCalendarFeedStatus>("/api/calendar-feed");
+  getCalendarFeed(scope: ApiCalendarFeedScope = "legacy") {
+    return request<ApiCalendarFeedStatus>(`/api/calendar-feed?scope=${encodeURIComponent(scope)}`);
   },
-  rotateCalendarFeed() {
-    return request<ApiCalendarFeedStatus>("/api/calendar-feed", { method: "POST" });
+  rotateCalendarFeed(scope: ApiCalendarFeedScope = "legacy") {
+    return request<ApiCalendarFeedStatus>("/api/calendar-feed", {
+      method: "POST",
+      body: JSON.stringify({ scope })
+    });
   },
-  revokeCalendarFeed() {
-    return request<void>("/api/calendar-feed", { method: "DELETE" });
+  revokeCalendarFeed(scope?: ApiCalendarFeedScope) {
+    const suffix = scope ? `?scope=${encodeURIComponent(scope)}` : "";
+    return request<void>(`/api/calendar-feed${suffix}`, { method: "DELETE" });
+  },
+  listAppUsers() {
+    return request<ApiAppUser[]>("/api/app-users");
+  },
+  listUserCarePartyAssignments() {
+    return request<ApiUserCarePartyAssignment[]>("/api/user-care-party-assignments");
+  },
+  updateUserCarePartyAssignment(userId: string, carePartyIds: string[]) {
+    return request<ApiUserCarePartyAssignment>(
+      `/api/user-care-party-assignments/${encodeURIComponent(userId)}`,
+      { method: "PUT", body: JSON.stringify({ carePartyIds }) }
+    );
   }
   ,listExternalCalendarEvents(from: string, to: string) {
     return request<ApiExternalCalendarEvent[]>(`/api/external-calendar-events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);

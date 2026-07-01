@@ -25,6 +25,7 @@ function entry(input: {
   notes?: string;
   hasEvidence?: boolean;
   evidenceReference?: string;
+  responsiblePartyId?: string;
   generatedByPatternId?: string;
   ruleOccurrenceDate?: string;
   trips?: Array<Record<string, unknown>>;
@@ -40,6 +41,7 @@ function entry(input: {
     handoverFrom: "mother",
     handoverTo: "father",
     hasEvidence: false,
+    responsiblePartyId: "demo-party-primary",
     trips: [],
     costs: [],
     createdBy: actor,
@@ -80,6 +82,26 @@ export function createEdgeCaseDemoData(): DemoData {
       birthMonth: 7,
       birthYear: 2020,
       color: "#d97706",
+      createdBy: actor,
+      updatedBy: actor,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }
+  ];
+  const careParties = [
+    {
+      id: "demo-party-primary",
+      name: "Hauptbetreuung",
+      kind: "other",
+      createdBy: actor,
+      updatedBy: actor,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    },
+    {
+      id: "demo-party-grandparent",
+      name: "Großeltern",
+      kind: "grandparent",
       createdBy: actor,
       updatedBy: actor,
       createdAt: timestamp,
@@ -185,6 +207,7 @@ export function createEdgeCaseDemoData(): DemoData {
       careScope: "full_day",
       holiday: true,
       additionalCare: true,
+      responsiblePartyId: "demo-party-grandparent",
       location: "mainResidence",
       handoverFrom: "mother",
       handoverTo: "mother",
@@ -221,8 +244,9 @@ export function createEdgeCaseDemoData(): DemoData {
   ];
 
   const data = {
-    schemaVersion: 5,
+    schemaVersion: 6,
     children,
+    careParties,
     entries,
     holidayPeriods: [
       {
@@ -419,6 +443,7 @@ export function edgeCaseDemoSummary(data: DemoData) {
   return {
     dataset: "edge-cases",
     children: data.children.length,
+    careParties: data.careParties.length,
     entries: data.entries.length,
     holidayPeriods: data.holidayPeriods.length,
     unavailablePeriods: data.unavailablePeriods.length,

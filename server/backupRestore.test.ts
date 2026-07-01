@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { copyFileSync, mkdtempSync, rmSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -19,7 +19,9 @@ const expectedMigrations = [
   "008_calendar_feed_tokens",
   "009_native_oidc_login_states",
   "010_native_oidc_sessions",
-  "011_contact_rules"
+  "011_contact_rules",
+  "012_care_parties",
+  "013_calendar_feed_scopes_and_assignments"
 ];
 
 async function withTemporaryDirectory(
@@ -175,6 +177,43 @@ test("existing database startup preserves fictional data", async () => {
       );
     } finally {
       restarted.close();
+    }
+  });
+});
+
+test("care party migration backfills existing active entries", async () => {
+  await withTemporaryDirectory("care-party-backfill", (directory) => {
+    const oldMigrations = join(directory, "old-migrations");
+    mkdirSync(oldMigrations);
+    for (const file of readdirSync(migrationsDirectory)) {
+      if (!file.endsWith(".sql") || file.startsWith("012_") || file.startsWith("013_")) continue;
+      copyFileSync(join(migrationsDirectory, file), join(oldMigrations, file));
+    }
+
+    const database = openDatabase(join(directory, "app.sqlite"));
+    try {
+      migrateDatabase(database, oldMigrations);
+      insertFictionalData(database);
+      migrateDatabase(database, migrationsDirectory);
+
+      assert.deepEqual(database.prepare(`
+        SELECT id, name, kind
+        FROM care_parties
+        WHERE deleted_at IS NULL
+      `).get(), {
+        id: "party_primary",
+        name: "Primary caregiver",
+        kind: "other"
+      });
+      assert.deepEqual(database.prepare(`
+        SELECT responsible_party_id AS responsiblePartyId
+        FROM care_entries
+        WHERE id = ?
+      `).get("fixture-entry-1"), {
+        responsiblePartyId: "party_primary"
+      });
+    } finally {
+      database.close();
     }
   });
 });

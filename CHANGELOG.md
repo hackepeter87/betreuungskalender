@@ -6,6 +6,35 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+### Added
+
+- Added flexible contact rules with calendar-style preview, automatic planned
+  entry synchronization on save, and exception-preserving single-occurrence
+  editing.
+- Added domain-level care parties for responsible caregivers, separate from
+  authenticated `app_users`.
+- Added scoped iCalendar feeds for all visible care entries or a selected care
+  party while preserving existing legacy feed tokens.
+- Added optional admin-managed OIDC user-to-care-party assignments for shared
+  operation without making shared use mandatory.
+- Added end-to-end coverage for rule creation, calendar visibility, care-party
+  assignment, and scoped feed output.
+
+### Changed
+
+- Contact-rule setup is now a guided workflow with presets, real calendar
+  previews, and immediate feedback about synchronized entries.
+- Personal calendar feeds no longer need to rely on technical `created_by`
+  ownership once users rotate to the new `all` or `party` scopes.
+
+### Security
+
+- Shared operation keeps role authorization based on `app_users` while limiting
+  non-admin writes to assigned care parties once assignments are configured.
+- Calendar feed URLs remain bearer secrets and continue to exclude notes,
+  evidence references, trips, costs, audit metadata, deleted entries, and
+  cancelled entries.
+
 ## [1.4.3] - 2026-07-01
 
 ### Added

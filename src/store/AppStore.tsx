@@ -24,6 +24,7 @@ import type {
   AppData,
   AppSettings,
   CareEntry,
+  CareParty,
   ContactRule,
   ContactPattern,
   EntryStatus,
@@ -40,6 +41,9 @@ interface ChildInput {
   color: string;
 }
 
+type CarePartyInput = Omit<CareParty, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt"> & {
+  id?: string;
+};
 type EntryInput = Omit<CareEntry, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt"> & {
   id?: string;
 };
@@ -66,6 +70,8 @@ interface AppStoreValue {
   clearError: () => void;
   saveChild: (input: ChildInput) => Promise<boolean>;
   removeChild: (id: string) => Promise<boolean>;
+  saveCareParty: (input: CarePartyInput) => Promise<boolean>;
+  removeCareParty: (id: string) => Promise<boolean>;
   saveEntry: (input: EntryInput) => Promise<boolean>;
   removeEntry: (id: string) => Promise<boolean>;
   updateEntryStatus: (
@@ -280,6 +286,26 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       }, false);
     },
     [confirmClosedMonthChange, performWrite]
+  );
+
+  const saveCareParty = useCallback(
+    async (input: CarePartyInput) =>
+      performWrite(async () => {
+        const { id, ...payload } = input;
+        if (id) await api.updateCareParty(id, payload);
+        else await api.createCareParty(payload);
+        return true;
+      }, false),
+    [performWrite]
+  );
+
+  const removeCareParty = useCallback(
+    async (id: string) =>
+      performWrite(async () => {
+        await api.deleteCareParty(id);
+        return true;
+      }, false),
+    [performWrite]
   );
 
   const saveEntry = useCallback(
@@ -582,6 +608,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       clearError: () => setError(null),
       saveChild,
       removeChild,
+      saveCareParty,
+      removeCareParty,
       saveEntry,
       removeEntry,
       updateEntryStatus,
@@ -614,12 +642,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       recordBackupExport,
       reload,
       removeChild,
+      removeCareParty,
       removeContactPattern,
       removeEntry,
       removeHolidayPeriod,
       removeUnavailablePeriod,
       replaceData,
       saveChild,
+      saveCareParty,
       saveContactPattern,
       saveContactRule,
       saveEntry,

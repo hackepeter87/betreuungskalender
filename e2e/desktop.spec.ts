@@ -296,7 +296,7 @@ test("creates a personal calendar feed URL from settings", async ({
   await navigate(page, "settings");
 
   const manager = page.getByTestId("calendar-feed-manager");
-  await expect(manager).toContainText("Noch kein persönlicher Feed aktiv");
+  await expect(manager).toContainText("Für diese Auswahl ist noch kein Feed aktiv.");
   await manager.getByTestId("calendar-feed-rotate").click();
   await expect(manager).toContainText("Neue Feed-URL erzeugt");
   await expect(manager).toContainText("Feed aktiv seit");
@@ -307,6 +307,111 @@ test("creates a personal calendar feed URL from settings", async ({
   expect(feed.ok()).toBeTruthy();
   expect(feed.headers()["content-type"]).toContain("text/calendar");
   await expect(manager.getByTestId("calendar-feed-revoke")).toBeEnabled();
+});
+
+test("manages care parties and assigns them to entries and contact rules", async ({
+  page,
+  request
+}) => {
+  const childName = "Sam Beispiel";
+  const partyName = "Großeltern Beispiel";
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      if (new URL(url, window.location.href).pathname === "/api/session") {
+        return Promise.resolve(new Response(JSON.stringify({
+          authRequired: true,
+          authenticated: true,
+          user: {
+            id: "local-dev",
+            displayName: "local-dev",
+            role: "admin"
+          }
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }));
+      }
+      return originalFetch(input, init);
+    };
+  });
+  await openApp(page);
+  await createChild(page, childName);
+
+  await navigate(page, "settings");
+  await page.getByTestId("settings-add-care-party").click();
+  const partyForm = page.getByTestId("care-party-form");
+  await partyForm.getByTestId("care-party-name").fill(partyName);
+  await partyForm.getByTestId("care-party-kind").selectOption("grandparent");
+  await partyForm.getByTestId("care-party-submit").click();
+  await expect(partyForm).toBeHidden();
+  await expect(page.getByTestId("care-party-list").getByText(partyName, { exact: true })).toBeVisible();
+
+  const parties = await (await request.get("/api/care-parties")).json() as Array<{ id: string; name: string }>;
+  const party = parties.find((item) => item.name === partyName);
+  expect(party).toBeTruthy();
+
+  await createEntry(page, {
+    childName,
+    startDay: 9,
+    startTime: "15:00",
+    endDay: 9,
+    endTime: "18:00",
+    note: "Fiktiver Termin mit betreuender Person"
+  });
+
+  const entries = await (await request.get("/api/care-entries")).json() as Array<{ responsiblePartyId?: string }>;
+  expect(entries.some((entry) => entry.responsiblePartyId === party?.id)).toBe(true);
+
+  await navigate(page, "contact");
+  await page.getByTestId("contact-responsible-party").selectOption(party!.id);
+  await page.getByTestId("contact-pattern-save").click();
+  await expect(page.getByText(/Umgangsregel gespeichert/)).toBeVisible();
+
+  const rules = await (await request.get("/api/contact-rules")).json() as Array<{ id: string; responsiblePartyId?: string }>;
+  const assignedRule = rules.find((rule) => rule.responsiblePartyId === party?.id);
+  expect(assignedRule).toBeTruthy();
+  const generated = await (await request.get("/api/care-entries")).json() as Array<{
+    contactRuleId?: string;
+    responsiblePartyId?: string;
+  }>;
+  expect(generated.some((entry) =>
+    entry.contactRuleId === assignedRule?.id && entry.responsiblePartyId === party?.id
+  )).toBe(true);
+
+  await navigate(page, "settings");
+  const assignments = page.getByTestId("user-care-party-assignments");
+  await expect(assignments).toContainText("local-dev");
+  const partyAssignment = assignments.getByRole("checkbox", { name: partyName });
+  if (!(await partyAssignment.isChecked())) {
+    await partyAssignment.click();
+  }
+  await expect(partyAssignment).toBeChecked();
+  const assignmentRows = await (await request.get("/api/user-care-party-assignments")).json() as Array<{
+    userId: string;
+    carePartyIds: string[];
+  }>;
+  expect(assignmentRows.some((assignment) =>
+    assignment.userId === "local-dev" && assignment.carePartyIds.includes(party!.id)
+  )).toBe(true);
+
+  const manager = page.getByTestId("calendar-feed-manager");
+  await manager.getByTestId("calendar-feed-scope").selectOption(`party:${party!.id}`);
+  await manager.getByTestId("calendar-feed-rotate").click();
+  const partyFeedUrl = await manager.getByTestId("calendar-feed-url").inputValue();
+  const partyFeed = await (await request.get(new URL(partyFeedUrl).pathname)).text();
+  expect(partyFeed).toContain("X-WR-CALNAME:Kinder bei Großeltern Beispiel");
+
+  await manager.getByTestId("calendar-feed-scope").selectOption("all");
+  await manager.getByTestId("calendar-feed-rotate").click();
+  const allFeedUrl = await manager.getByTestId("calendar-feed-url").inputValue();
+  const allFeed = await (await request.get(new URL(allFeedUrl).pathname)).text();
+  expect(allFeed).toContain("X-WR-CALNAME:Betreuungskalender Gesamt");
 });
 
 test("persists the selected language and localizes the report surface", async ({

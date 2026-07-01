@@ -2,6 +2,8 @@ import type { FastifyInstance } from "fastify";
 import { config } from "../config.js";
 import { db } from "../db/connection.js";
 import { recordAudit, recordFieldChanges } from "../services/audit.js";
+import { assertCanUseCareParty } from "../services/carePartyAccess.js";
+import { assertActiveCareParty } from "../services/careParties.js";
 import { assertActiveChildren, makeId, nowIso } from "../services/common.js";
 import {
   getContactRule,
@@ -37,6 +39,8 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
     try {
       db.transaction(() => {
         assertActiveChildren(parsed.data.childIds);
+        assertActiveCareParty(parsed.data.responsiblePartyId);
+        assertCanUseCareParty(request.user, parsed.data.responsiblePartyId);
         const saved = upsertContactRule({
           id,
           rule: parsed.data,
@@ -73,6 +77,8 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
     try {
       db.transaction(() => {
         assertActiveChildren(parsed.data.childIds);
+        assertActiveCareParty(parsed.data.responsiblePartyId);
+        assertCanUseCareParty(request.user, parsed.data.responsiblePartyId);
         const saved = upsertContactRule({
           id: request.params.id,
           rule: {

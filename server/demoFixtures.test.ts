@@ -12,6 +12,7 @@ test("edge-case demo fixture is synthetic and covers operational boundary cases"
   assert.deepEqual(summary, {
     dataset: "edge-cases",
     children: 3,
+    careParties: 2,
     entries: 6,
     holidayPeriods: 2,
     unavailablePeriods: 2,
@@ -25,6 +26,7 @@ test("edge-case demo fixture is synthetic and covers operational boundary cases"
   assert.equal(data.entries.some((entry) => entry.careScope === "visit_contact"), true);
   assert.equal(data.entries.some((entry) => entry.status === "cancelled"), true);
   assert.equal(data.entries.some((entry) => entry.generatedByPatternId), true);
+  assert.equal(data.entries.some((entry) => entry.responsiblePartyId === "demo-party-grandparent"), true);
   assert.equal(data.entries.some((entry) =>
     typeof entry.startDateTime === "string" && entry.startDateTime < "2026-07-01"
   ), true);

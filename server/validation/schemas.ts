@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { careScopes, unavailableCategories } from "../../shared/api.js";
+import { carePartyKinds, careScopes, unavailableCategories } from "../../shared/api.js";
 
 const isoDateTime = z.string().refine((value) => !Number.isNaN(Date.parse(value)), {
   message: "Ungültiges Datum oder ungültige Uhrzeit."
@@ -16,6 +16,11 @@ export const childInputSchema = z.object({
   birthMonth: z.number().int().min(1).max(12),
   birthYear: z.number().int().min(1900).max(2200),
   color: z.string().trim().min(1).max(50)
+});
+
+export const carePartyInputSchema = z.object({
+  name: z.string().trim().min(1, "Name ist erforderlich.").max(200),
+  kind: z.enum(carePartyKinds).default("other")
 });
 
 export const tripInputSchema = z.object({
@@ -176,6 +181,20 @@ export const contactRuleInputSchema = z
 
 export const settingsInputSchema = z.record(z.string(), z.unknown());
 
+export const calendarFeedScopeSchema = z.union([
+  z.literal("legacy"),
+  z.literal("all"),
+  z.string().regex(/^party:[A-Za-z0-9_-]+$/)
+]);
+
+export const calendarFeedRequestSchema = z.object({
+  scope: calendarFeedScopeSchema.default("legacy")
+});
+
+export const userCarePartyAssignmentInputSchema = z.object({
+  carePartyIds: z.array(z.string().trim().min(1).max(200)).default([])
+});
+
 export const monthlyClosingInputSchema = z.object({
   monthKey: z.string().regex(/^\d{4}-\d{2}$/),
   dataUpdatedAt: isoDateTime,
@@ -190,6 +209,7 @@ export const appDataImportSchema = z.object({
   unavailablePeriods: z.array(z.record(z.string(), z.unknown())).default([]),
   externalCalendarSources: z.array(z.record(z.string(), z.unknown())).default([]),
   externalCalendarEvents: z.array(z.record(z.string(), z.unknown())).default([]),
+  careParties: z.array(z.record(z.string(), z.unknown())).default([]),
   contactPatterns: z.array(z.record(z.string(), z.unknown())).default([]),
   contactRules: z.array(z.record(z.string(), z.unknown())).default([]),
   auditLog: z.array(z.record(z.string(), z.unknown())).default([]),

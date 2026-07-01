@@ -9,6 +9,7 @@ interface AppUserRow {
   display_name: string;
   role: string;
   groups_json: string;
+  last_seen_at?: string;
 }
 
 function parseGroups(value: string): string[] {
@@ -76,4 +77,26 @@ export function findAuthenticatedUserBySubject(
     role: row.role,
     permissions: permissionsForRole(row.role)
   };
+}
+
+export function listAppUsers(database: Database.Database = db) {
+  const rows = database.prepare(`
+    SELECT id, email, display_name, role, last_seen_at
+    FROM app_users
+    WHERE deleted_at IS NULL
+    ORDER BY display_name COLLATE NOCASE, id
+  `).all() as Array<{
+    id: string;
+    email: string | null;
+    display_name: string;
+    role: AuthRole;
+    last_seen_at: string;
+  }>;
+  return rows.map((row) => ({
+    id: row.id,
+    displayName: row.display_name,
+    role: row.role,
+    ...(row.email ? { email: row.email } : {}),
+    lastSeenAt: row.last_seen_at
+  }));
 }

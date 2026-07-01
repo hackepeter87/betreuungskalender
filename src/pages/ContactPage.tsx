@@ -153,6 +153,9 @@ export function ContactPage({
   const [childIds, setChildIds] = useState<string[]>(
     existingRule?.childIds ?? data.children.map((child) => child.id)
   );
+  const [responsiblePartyId, setResponsiblePartyId] = useState(
+    existingRule?.responsiblePartyId ?? data.careParties[0]?.id ?? ""
+  );
   const [active, setActive] = useState(existingRule?.active ?? true);
   const [generationStart, setGenerationStart] = useState(defaultRange.startDate);
   const [generationEnd, setGenerationEnd] = useState(defaultRange.endDate);
@@ -274,6 +277,7 @@ export function ContactPage({
       recurrence,
       segments,
       syncHorizonMonths: 12,
+      responsiblePartyId: responsiblePartyId || undefined,
       childIds,
       active
     });
@@ -440,6 +444,23 @@ export function ContactPage({
                 })}
               </div>
             </fieldset>
+            {data.careParties.length ? (
+              <label className="field">
+                <span>{copy(locale, "contact", "responsibleParty")}</span>
+                <select
+                  data-testid="contact-responsible-party"
+                  value={responsiblePartyId}
+                  onChange={(event) => setResponsiblePartyId(event.target.value)}
+                >
+                  <option value="">{copy(locale, "contact", "responsiblePartyNone")}</option>
+                  {data.careParties.map((party) => (
+                    <option key={party.id} value={party.id}>
+                      {party.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
             <label className="toggle">
               <input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} />
               <span />

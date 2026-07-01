@@ -1,4 +1,4 @@
-import type { AppData, CareEntry, Child } from "../types";
+import type { AppData, CareEntry, CareParty, Child } from "../types";
 import { SCHEMA_VERSION } from "../types";
 import { makeId, nowIso, toDateKey } from "../lib/date";
 
@@ -8,6 +8,7 @@ export function createEmptyData(): AppData {
   return {
     schemaVersion: SCHEMA_VERSION,
     children: [],
+    careParties: [],
     entries: [],
     holidayPeriods: [],
     unavailablePeriods: [],
@@ -60,6 +61,17 @@ export function createDemoData(): AppData {
       updatedAt: timestamp
     }
   ];
+  const careParties: CareParty[] = [
+    {
+      id: makeId("party"),
+      name: "Hauptbetreuung",
+      kind: "other",
+      createdBy: "local-dev",
+      updatedBy: "local-dev",
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }
+  ];
 
   const makeEntry = (
     dayOffset: number,
@@ -76,6 +88,7 @@ export function createDemoData(): AppData {
       startDateTime: start.toISOString(),
       endDateTime: end.toISOString(),
       childIds,
+      responsiblePartyId: careParties[0]?.id,
       status,
       additionalCare: false,
       overnight,
@@ -99,6 +112,7 @@ export function createDemoData(): AppData {
   return {
     ...createEmptyData(),
     children,
+    careParties,
     entries: [
       makeEntry(-8, children.map((child) => child.id), "completed", true, "Reguläre Betreuung"),
       makeEntry(-3, [children[0].id], "completed", false, "Abholung nach der Schule"),

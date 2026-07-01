@@ -1770,6 +1770,11 @@ h3 {
   font-weight: 800;
 }
 
+.child-avatar--neutral {
+  background: color-mix(in srgb, var(--primary) 10%, white);
+  color: var(--primary);
+}
+
 .child-settings-row strong,
 .child-settings-row small {
   display: block;
@@ -1854,6 +1859,46 @@ h3 {
 .settings-note {
   margin: 0;
   padding: 0 18px;
+}
+
+.assignment-list {
+  display: grid;
+  gap: 14px;
+}
+
+.assignment-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 0.8fr) minmax(0, 1.2fr);
+  gap: 16px;
+  align-items: start;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.assignment-row:last-child {
+  border-bottom: 0;
+}
+
+.assignment-row strong,
+.assignment-row small {
+  display: block;
+}
+
+.assignment-row small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.assignment-row__choices {
+  display: grid;
+  gap: 8px;
+}
+
+@media (max-width: 640px) {
+  .assignment-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 .modal-backdrop {

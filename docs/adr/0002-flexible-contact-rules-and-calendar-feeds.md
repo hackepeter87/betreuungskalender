@@ -160,9 +160,7 @@ They are not the domain concept for "children are with this person".
 interface CareParty {
   id: string;
   name: string;
-  color: string;
-  active: boolean;
-  sortOrder: number;
+  kind: "father" | "mother" | "grandparent" | "foster_caregiver" | "other";
   createdBy: string;
   updatedBy: string;
   createdAt: string;
@@ -179,7 +177,6 @@ Optional shared operation is modeled separately:
 interface AppUserPartyAssignment {
   appUserId: string;
   carePartyId: string;
-  isDefault: boolean;
 }
 ```
 
@@ -194,7 +191,7 @@ Add new migrations instead of editing released migrations.
 New tables:
 
 - `care_parties`
-- `app_user_party_assignments`
+- `app_user_care_party_assignments`
 - `contact_rules`
 - `contact_rule_children`
 - optional `contact_rule_exceptions` if the implementation stores exceptions
@@ -231,6 +228,9 @@ New endpoints:
 - `POST /api/care-parties`
 - `PUT /api/care-parties/:id`
 - `DELETE /api/care-parties/:id`
+- `GET /api/app-users`
+- `GET /api/user-care-party-assignments`
+- `PUT /api/user-care-party-assignments/:userId`
 
 The normal `POST` and `PUT` contact-rule endpoints perform synchronization and
 return the saved rule plus sync summary.
@@ -240,9 +240,9 @@ new or rotated tokens are created:
 
 ```ts
 type CalendarFeedScope =
-  | { kind: "legacyUser"; userId: string }
-  | { kind: "all" }
-  | { kind: "careParty"; carePartyId: string };
+  | "legacy"
+  | "all"
+  | `party:${string}`;
 ```
 
 Feed output continues to exclude notes, evidence references, trips, costs,

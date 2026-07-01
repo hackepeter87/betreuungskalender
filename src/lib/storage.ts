@@ -93,6 +93,7 @@ export function normalizeBackupData(value: unknown): AppData {
       value.schemaVersion !== 2 &&
       value.schemaVersion !== 3 &&
       value.schemaVersion !== 4 &&
+      value.schemaVersion !== 5 &&
       value.schemaVersion !== SCHEMA_VERSION)
   ) {
     throw new Error("Die Sicherung verwendet eine nicht unterstützte Datenversion.");
@@ -114,6 +115,24 @@ export function normalizeBackupData(value: unknown): AppData {
       createdBy: typeof child.createdBy === "string" ? child.createdBy : "local-dev",
       updatedBy: typeof child.updatedBy === "string" ? child.updatedBy : "local-dev"
     })),
+    careParties: Array.isArray(value.careParties)
+      ? value.careParties.filter(isObject).map((party) => ({
+          id: String(party.id ?? ""),
+          name: String(party.name ?? "Betreuende Person"),
+          kind:
+            party.kind === "father" ||
+            party.kind === "mother" ||
+            party.kind === "grandparent" ||
+            party.kind === "foster_caregiver" ||
+            party.kind === "other"
+              ? party.kind
+              : "other",
+          createdBy: typeof party.createdBy === "string" ? party.createdBy : "local-dev",
+          updatedBy: typeof party.updatedBy === "string" ? party.updatedBy : "local-dev",
+          createdAt: typeof party.createdAt === "string" ? party.createdAt : nowIso(),
+          updatedAt: typeof party.updatedAt === "string" ? party.updatedAt : nowIso()
+        }))
+      : [],
     entries: value.entries.map((entry) => ({
       ...entry,
       createdBy: typeof entry.createdBy === "string" ? entry.createdBy : "local-dev",
@@ -311,7 +330,15 @@ export function normalizeBackupData(value: unknown): AppData {
             entry.objectType === "trip" ||
             entry.objectType === "cost" ||
             entry.objectType === "holiday" ||
-            entry.objectType === "unavailablePeriod"
+            entry.objectType === "unavailablePeriod" ||
+            entry.objectType === "child" ||
+            entry.objectType === "careParty" ||
+            entry.objectType === "contactPattern" ||
+            entry.objectType === "settings" ||
+            entry.objectType === "monthClosure" ||
+            entry.objectType === "appData" ||
+            entry.objectType === "userCarePartyAssignment" ||
+            entry.objectType === "legacyMigration"
               ? entry.objectType
               : "careEntry",
           objectId: String(entry.objectId ?? ""),
