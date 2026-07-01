@@ -273,6 +273,7 @@ export function requiredPermissionForRequest(
   }
   if (
     url.startsWith("/api/app-data") ||
+    url.startsWith("/api/demo-data") ||
     url.startsWith("/api/migration/")
   ) {
     return "admin";

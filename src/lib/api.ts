@@ -443,6 +443,9 @@ export const api = {
   clearData() {
     return request<void>("/api/app-data", { method: "DELETE" });
   },
+  loadEdgeCaseDemoData() {
+    return request<void>("/api/demo-data/edge-cases", { method: "POST" });
+  },
   getLegacyMigrationSummary() {
     return request<{
       database: LegacyDatabaseSummary;

@@ -101,6 +101,8 @@ export function insertChild(record: DataRecord, timestamp: string, userEmail: st
 }
 
 function deriveCareScope(record: DataRecord): string {
+  const configured = text(record, "careScope").trim();
+  if (configured) return configured;
   if (booleanValue(record, "overnight")) return "overnight";
   const durationMinutes =
     (Date.parse(text(record, "endDateTime")) -

@@ -124,6 +124,7 @@ export interface ApiAuditEntry {
 export interface ApiSession {
   authRequired: boolean;
   authenticated: boolean;
+  demoDatasetsEnabled?: boolean;
   user?: {
     id: string;
     displayName: string;

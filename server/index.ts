@@ -17,6 +17,7 @@ import { appDataRoutes } from "./routes/appData.js";
 import { careEntryRoutes } from "./routes/careEntries.js";
 import { childrenRoutes } from "./routes/children.js";
 import { contactPatternRoutes } from "./routes/contactPatterns.js";
+import { demoDataRoutes } from "./routes/demoData.js";
 import { holidayRoutes } from "./routes/holidays.js";
 import { monthClosingRoutes } from "./routes/monthClosings.js";
 import { migrationRoutes } from "./routes/migration.js";
@@ -280,12 +281,19 @@ app.get("/api/session", readLimit, async (request) => {
               role: nativeUser.role,
               ...(nativeUser.email ? { email: nativeUser.email } : {})
             },
-            logoutUrl: "/auth/logout"
+            logoutUrl: "/auth/logout",
+            ...(config.demoDatasetsEnabled ? { demoDatasetsEnabled: true } : {})
           }
-        : { loginUrl: "/auth/login" })
+        : {
+            loginUrl: "/auth/login",
+            ...(config.demoDatasetsEnabled ? { demoDatasetsEnabled: true } : {})
+          })
     };
   }
-  return sessionInfo(request.headers, config);
+  return {
+    ...sessionInfo(request.headers, config),
+    ...(config.demoDatasetsEnabled ? { demoDatasetsEnabled: true } : {})
+  };
 });
 
 await app.register(nativeOidcRoutes, { config, sessions: nativeOidcSessions });
@@ -301,6 +309,7 @@ await app.register(monthClosingRoutes);
 await app.register(migrationRoutes);
 await app.register(auditRoutes);
 await app.register(appDataRoutes);
+await app.register(demoDataRoutes);
 
 const frontendRoot = resolve(process.cwd(), "dist");
 if (existsSync(frontendRoot)) {
