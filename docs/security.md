@@ -36,7 +36,8 @@ shared unintentionally.
 
 - Use HTTPS at the reverse proxy.
 - Set `REQUIRE_AUTH=true` in production.
-- Set `TRUST_PROXY_AUTH=true` only behind a trusted authentication proxy.
+- Set `AUTH_MODE=trusted-proxy` and `TRUST_PROXY_AUTH=true` only behind a
+  trusted authentication proxy.
 - Block all direct access that could bypass oauth2-proxy.
 - In oauth2-proxy, set `trusted_ips` only to the actual upstream reverse proxy
   IP/CIDR. Never trust all client networks.
@@ -54,6 +55,8 @@ the cookie is also `Secure`. SQLite stores only a hash of the cookie token,
 the OIDC subject, timestamps, expiry, and revocation metadata. Until native
 claim-to-role authorization is complete, keep the current trusted-proxy /
 oauth2-proxy production path as the known-good rollout and rollback mode.
+Native mode rejects conflicting `TRUST_PROXY_AUTH=true` configuration and does
+not accept proxy identity headers as an API authentication bypass.
 
 ## Application hardening
 

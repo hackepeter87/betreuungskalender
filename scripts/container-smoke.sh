@@ -29,6 +29,7 @@ docker build --file "$dockerfile" --tag "$image" .
 docker volume create "$volume" >/dev/null
 docker run --detach --name "$container" \
   --volume "$volume:/data" \
+  --env AUTH_MODE=local \
   --env REQUIRE_AUTH=false \
   --env TRUST_PROXY_AUTH=false \
   --env ALLOWED_ORIGIN=http://localhost:3000 \

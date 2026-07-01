@@ -37,7 +37,8 @@ curl --fail http://127.0.0.1:3000/api/health
 
 The root-level `compose.yaml` binds only to `127.0.0.1:3000` and uses named
 volumes for `/data` and `/backups`. Its authentication is disabled for a local
-single-user start. Change these values before exposing the service.
+single-user start with `AUTH_MODE=local`. Change these values before exposing
+the service.
 
 For a persistent production installation, use the separate stable bind-mount
 layout in [update.md](update.md), which installs `deploy/compose.yml` as
@@ -103,6 +104,7 @@ Compose file exposes only oauth2-proxy:
 HOST_BIND_ADDRESS=0.0.0.0
 HOST_PORT=8080
 ALLOWED_ORIGIN=https://app.example.net
+AUTH_MODE=trusted-proxy
 REQUIRE_AUTH=true
 TRUST_PROXY_AUTH=true
 ```
@@ -253,6 +255,7 @@ start -a CONTAINER` shows immediate foreground startup failures, and
 podman build -t betreuungskalender:local .
 podman run --rm -d --name betreuungskalender \
   -p 127.0.0.1:3000:3000 \
+  -e AUTH_MODE=local \
   -e REQUIRE_AUTH=false \
   -e TRUST_PROXY_AUTH=false \
   -e ALLOWED_ORIGIN=http://localhost:3000 \
@@ -353,6 +356,7 @@ podman run --rm -d --name betreuungskalender \
   -e PORT=3000 \
   -e DATABASE_PATH=/data/app.sqlite \
   -e BACKUP_DIR=/backups \
+  -e AUTH_MODE=local \
   -e REQUIRE_AUTH=true \
   -e TRUST_PROXY_AUTH=false \
   -e ALLOWED_ORIGIN=https://betreuungskalender.example.net \

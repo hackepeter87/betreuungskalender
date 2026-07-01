@@ -64,6 +64,7 @@ test("production runtime sends documented security headers and restrictive CORS"
         PORT: String(port),
         DATABASE_PATH: join(root, "app.sqlite"),
         BACKUP_DIR: join(root, "backups"),
+        AUTH_MODE: "local",
         REQUIRE_AUTH: "false",
         TRUST_PROXY_AUTH: "false",
         ALLOWED_ORIGIN: "https://allowed.example.test",
@@ -168,7 +169,12 @@ test("runtime exposes compact session metadata for trusted proxy auth", async (t
   await waitForHealth(`${baseUrl}/api/health`, () => logs);
 
   const missingIdentity = await fetch(`${baseUrl}/api/session`);
-  assert.equal(missingIdentity.status, 401);
+  assert.equal(missingIdentity.status, 200);
+  assert.deepEqual(await missingIdentity.json(), {
+    authRequired: true,
+    authenticated: false,
+    logoutUrl: "/oauth2/sign_out"
+  });
 
   const session = await fetch(`${baseUrl}/api/session`, {
     headers: {
@@ -426,10 +432,10 @@ test("runtime rejects users without matching OIDC groups when strict role claims
   const session = await fetch(`${baseUrl}/api/session`, {
     headers: noMatchingRoleHeaders
   });
-  assert.equal(session.status, 403);
+  assert.equal(session.status, 200);
   assert.deepEqual(await session.json(), {
-    error: "authorization_required",
-    message: "Keine passende Berechtigung in den OIDC-Claims gefunden."
+    authRequired: true,
+    authenticated: false
   });
 
   const read = await fetch(`${baseUrl}/api/children`, {
@@ -567,7 +573,7 @@ test("runtime serves revocable personal iCalendar feeds without broader token ac
   const token = feedUrl.pathname.split("/").at(-1)?.replace(/\.ics$/, "");
   assert(token);
 
-  const apiWithTokenOnly = await fetch(`${baseUrl}/api/session`, {
+  const apiWithTokenOnly = await fetch(`${baseUrl}/api/children`, {
     headers: { authorization: `Bearer ${token}` }
   });
   assert.equal(apiWithTokenOnly.status, 401);
@@ -617,8 +623,10 @@ test("production runtime applies central and stricter API rate limits", async (t
         PORT: String(port),
         DATABASE_PATH: join(root, "app.sqlite"),
         BACKUP_DIR: join(root, "backups"),
-        REQUIRE_AUTH: "false",
+        AUTH_MODE: "trusted-proxy",
+        REQUIRE_AUTH: "true",
         TRUST_PROXY_AUTH: "true",
+        OIDC_REQUIRE_ROLE_CLAIM: "true",
         ALLOWED_ORIGIN: "https://allowed.example.test",
         LOG_LEVEL: "warn",
         RATE_LIMIT_MAX: "2",
@@ -642,7 +650,13 @@ test("production runtime applies central and stricter API rate limits", async (t
   const request = (path: string, ip: string, init?: RequestInit) =>
     fetch(`${baseUrl}${path}`, {
       ...init,
-      headers: { "x-forwarded-for": ip, ...init?.headers }
+      headers: {
+        "x-forwarded-for": ip,
+        "x-auth-request-user": `rate-limit-${ip}`,
+        "x-auth-request-email": `rate-limit-${ip}@example.test`,
+        "x-auth-request-groups": "/betreuungskalender/admins",
+        ...init?.headers
+      }
     });
 
   assert.equal((await request("/api/children", "198.51.100.1")).status, 200);
