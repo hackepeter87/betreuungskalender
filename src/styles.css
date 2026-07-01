@@ -270,12 +270,27 @@ h3 {
   white-space: nowrap;
 }
 
+.session-card--login strong {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
 .session-card__logout {
   flex: 0 0 auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
   color: var(--teal-strong);
+  cursor: pointer;
   font-size: 0.72rem;
   font-weight: 700;
   text-decoration: none;
+}
+
+.session-card__logout:disabled {
+  cursor: progress;
+  opacity: 0.72;
 }
 
 .session-card__logout:focus-visible,

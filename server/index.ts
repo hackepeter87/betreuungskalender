@@ -246,7 +246,7 @@ app.get("/api/session", readLimit, async (request) => {
             },
             logoutUrl: "/auth/logout"
           }
-        : {})
+        : { loginUrl: "/auth/login" })
     };
   }
   return sessionInfo(request.headers, config);

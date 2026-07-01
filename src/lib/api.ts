@@ -107,6 +107,10 @@ export async function loadSession(): Promise<ApiSession> {
   return request<ApiSession>("/api/session");
 }
 
+export async function logoutSession(logoutUrl: string): Promise<void> {
+  await request<void>(logoutUrl, { method: "POST" });
+}
+
 interface ApiHolidayPeriod extends HolidayPeriod {
   createdAt: string;
   updatedAt: string;

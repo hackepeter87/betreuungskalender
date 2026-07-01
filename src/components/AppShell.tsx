@@ -1,7 +1,9 @@
 import { useState, type ReactNode } from "react";
 import { useI18n } from "../i18n/I18nProvider";
 import type { TranslationKey } from "../i18n/resources";
+import { logoutSession } from "../lib/api";
 import { useAppStore } from "../store/AppStore";
+import type { ApiSession } from "../../shared/api";
 import type { IconName } from "./Icon";
 import { Icon } from "./Icon";
 
@@ -41,6 +43,77 @@ const mobileNavItems = navItems.filter((item) =>
   ["dashboard", "calendar", "entries", "analytics"].includes(item.id)
 );
 
+function AuthSessionCard({
+  session,
+  mobile = false,
+  loggingOut,
+  onLogout,
+  t
+}: {
+  session: ApiSession;
+  mobile?: boolean;
+  loggingOut: boolean;
+  onLogout: () => void;
+  t: (key: TranslationKey) => string;
+}) {
+  if (session.authenticated && session.user) {
+    const nativeLogout = session.logoutUrl === "/auth/logout";
+    return (
+      <div
+        className={`session-card${mobile ? " session-card--mobile" : ""}`}
+        data-testid={mobile ? "mobile-auth-session" : "auth-session"}
+      >
+        <Icon name="lock" size={17} />
+        <span>
+          <small>{t("auth.signedInAs")}</small>
+          <strong>{session.user.displayName}</strong>
+        </span>
+        {session.logoutUrl ? (
+          nativeLogout ? (
+            <button
+              className="session-card__logout"
+              data-testid={mobile ? "mobile-auth-logout" : "auth-logout"}
+              type="button"
+              onClick={onLogout}
+              disabled={loggingOut}
+            >
+              {loggingOut ? t("auth.loggingOut") : t("auth.logout")}
+            </button>
+          ) : (
+            <a
+              className="session-card__logout"
+              data-testid={mobile ? "mobile-auth-logout" : "auth-logout"}
+              href={session.logoutUrl}
+            >
+              {t("auth.logout")}
+            </a>
+          )
+        ) : null}
+      </div>
+    );
+  }
+
+  if (session.authRequired && session.loginUrl) {
+    return (
+      <div
+        className={`session-card session-card--login${mobile ? " session-card--mobile" : ""}`}
+        data-testid={mobile ? "mobile-auth-login" : "auth-login"}
+      >
+        <Icon name="lock" size={17} />
+        <span>
+          <small>{t("auth.required")}</small>
+          <strong>{t("auth.loginRequired")}</strong>
+        </span>
+        <a className="session-card__logout" href={session.loginUrl}>
+          {t("auth.login")}
+        </a>
+      </div>
+    );
+  }
+
+  return null;
+}
+
 export function AppShell({
   activePage,
   onNavigate,
@@ -54,6 +127,7 @@ export function AppShell({
 }) {
   const { t } = useI18n();
   const [showMore, setShowMore] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const {
     serverStatus,
     session,
@@ -68,6 +142,20 @@ export function AppShell({
   const navigate = (page: PageId) => {
     setShowMore(false);
     onNavigate(page);
+  };
+
+  const logout = async () => {
+    if (!session.logoutUrl) return;
+    setLoggingOut(true);
+    try {
+      await logoutSession(session.logoutUrl);
+      await reload();
+      setShowMore(false);
+    } catch {
+      window.location.assign(session.logoutUrl);
+    } finally {
+      setLoggingOut(false);
+    }
   };
 
   return (
@@ -101,24 +189,12 @@ export function AppShell({
           <p>{t("app.storageNotice")}</p>
         </div>
 
-        {session.authenticated && session.user ? (
-          <div className="session-card" data-testid="auth-session">
-            <Icon name="lock" size={17} />
-            <span>
-              <small>{t("auth.signedInAs")}</small>
-              <strong>{session.user.displayName}</strong>
-            </span>
-            {session.logoutUrl ? (
-              <a
-                className="session-card__logout"
-                data-testid="auth-logout"
-                href={session.logoutUrl}
-              >
-                {t("auth.logout")}
-              </a>
-            ) : null}
-          </div>
-        ) : null}
+        <AuthSessionCard
+          session={session}
+          loggingOut={loggingOut}
+          onLogout={() => void logout()}
+          t={t}
+        />
 
         <button
           className={`sidebar__settings ${activePage === "settings" ? "is-active" : ""}`}
@@ -213,24 +289,13 @@ export function AppShell({
                 <Icon name="close" size={19} />
               </button>
             </div>
-            {session.authenticated && session.user ? (
-              <div className="session-card session-card--mobile" data-testid="mobile-auth-session">
-                <Icon name="lock" size={17} />
-                <span>
-                  <small>{t("auth.signedInAs")}</small>
-                  <strong>{session.user.displayName}</strong>
-                </span>
-                {session.logoutUrl ? (
-                  <a
-                    className="session-card__logout"
-                    data-testid="mobile-auth-logout"
-                    href={session.logoutUrl}
-                  >
-                    {t("auth.logout")}
-                  </a>
-                ) : null}
-              </div>
-            ) : null}
+            <AuthSessionCard
+              session={session}
+              mobile
+              loggingOut={loggingOut}
+              onLogout={() => void logout()}
+              t={t}
+            />
             <div className="mobile-more-sheet__grid">
               {navItems
                 .filter((item) => !mobileNavItems.some((mobileItem) => mobileItem.id === item.id))
