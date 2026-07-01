@@ -24,6 +24,13 @@ export interface RequestUser {
   permissions: AuthPermission[];
 }
 
+export interface AuthenticatedClaims {
+  subject: string;
+  email?: string;
+  displayName?: string;
+  groups: string[];
+}
+
 export interface SessionInfo {
   authRequired: boolean;
   authenticated: boolean;
@@ -72,7 +79,7 @@ function stableUserId(subject: string): string {
   return `user_${createHash("sha256").update(subject).digest("hex").slice(0, 24)}`;
 }
 
-function permissionsForRole(role: AuthRole): AuthPermission[] {
+export function permissionsForRole(role: AuthRole): AuthPermission[] {
   if (role === "admin") return ["read", "write", "admin"];
   if (role === "parent") return ["read", "write"];
   return ["read"];
@@ -103,6 +110,32 @@ export function roleFromGroups(
   if (groupSet.has(options.parentGroup)) return "parent";
   if (groupSet.has(options.readonlyGroup)) return "readonly";
   return options.requireRoleClaim ? undefined : "parent";
+}
+
+export function userFromClaims(
+  claims: AuthenticatedClaims,
+  options: {
+    adminGroup: string;
+    parentGroup: string;
+    readonlyGroup: string;
+    requireRoleClaim: boolean;
+  }
+): { authenticated: boolean; user?: RequestUser; reason?: "missing_role" } {
+  const role = roleFromGroups(claims.groups, options);
+  if (!role) return { authenticated: false, reason: "missing_role" };
+  const displayName = claims.displayName ?? claims.email ?? claims.subject;
+  return {
+    authenticated: true,
+    user: {
+      id: stableUserId(claims.subject),
+      externalSubject: claims.subject,
+      ...(claims.email ? { email: claims.email } : {}),
+      displayName: displayNameForIdentity(displayName),
+      groups: claims.groups,
+      role,
+      permissions: permissionsForRole(role)
+    }
+  };
 }
 
 export function resolveRequestUser(

@@ -52,9 +52,11 @@ path uses Authorization Code + PKCE, server-side state/nonce/PKCE verifier
 records, and the maintained `openid-client` library for protocol validation.
 Native sessions use an opaque `HttpOnly`, `SameSite=Lax` cookie. In production
 the cookie is also `Secure`. SQLite stores only a hash of the cookie token,
-the OIDC subject, timestamps, expiry, and revocation metadata. Until native
-claim-to-role authorization is complete, keep the current trusted-proxy /
-oauth2-proxy production path as the known-good rollout and rollback mode.
+the OIDC subject, timestamps, expiry, and revocation metadata. Native mode maps
+validated OIDC claims into `app_users`, derives roles from configured groups,
+and rejects users without a matching role group by default. Keep the current
+trusted-proxy / oauth2-proxy path available as the known-good rollout and
+rollback mode until native OIDC has been verified in the live environment.
 Native mode rejects conflicting `TRUST_PROXY_AUTH=true` configuration and does
 not accept proxy identity headers as an API authentication bypass.
 

@@ -130,6 +130,7 @@ export const config = {
   oidcClientSecret: process.env.OIDC_CLIENT_SECRET?.trim() || undefined,
   oidcRedirectUri: process.env.OIDC_REDIRECT_URI?.trim() || undefined,
   oidcScopes: textEnv(process.env.OIDC_SCOPES, "openid email profile"),
+  oidcGroupsClaim: textEnv(process.env.OIDC_GROUPS_CLAIM, "groups"),
   oidcLoginStateTtlSeconds: positiveNumberEnv(process.env.OIDC_LOGIN_STATE_TTL_SECONDS, 600),
   sessionCookieName: textEnv(process.env.SESSION_COOKIE_NAME, "betreuungskalender_session"),
   sessionTtlSeconds: positiveNumberEnv(process.env.SESSION_TTL_SECONDS, 28 * 24 * 60 * 60),
@@ -140,7 +141,7 @@ export const config = {
   oidcAdminGroup: textEnv(process.env.OIDC_ADMIN_GROUP, "/betreuungskalender/admins"),
   oidcParentGroup: textEnv(process.env.OIDC_PARENT_GROUP, "/betreuungskalender/parents"),
   oidcReadonlyGroup: textEnv(process.env.OIDC_READONLY_GROUP, "/betreuungskalender/readers"),
-  oidcRequireRoleClaim: booleanEnv(process.env.OIDC_REQUIRE_ROLE_CLAIM),
+  oidcRequireRoleClaim: booleanEnv(process.env.OIDC_REQUIRE_ROLE_CLAIM, authMode === "native-oidc"),
   allowedOrigin: process.env.ALLOWED_ORIGIN ?? "http://localhost:5173",
   logLevel: process.env.LOG_LEVEL ?? (
     process.env.NODE_ENV === "production" ? "info" : "debug"

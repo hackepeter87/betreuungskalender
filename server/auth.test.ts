@@ -8,7 +8,8 @@ import {
   resolveRequestIdentity,
   resolveRequestUser,
   roleFromGroups,
-  sessionInfo
+  sessionInfo,
+  userFromClaims
 } from "./auth.js";
 
 test("reads supported proxy identity headers in priority order", () => {
@@ -151,6 +152,41 @@ test("derives roles from configured OIDC groups", () => {
   assert.equal(roleFromGroups(["readers"], options), "readonly");
   assert.equal(roleFromGroups(["unknown"], options), undefined);
   assert.equal(roleFromGroups([], { ...options, requireRoleClaim: false }), "parent");
+});
+
+test("maps native OIDC claims to stable users and role permissions", () => {
+  const options = {
+    adminGroup: "/betreuungskalender/admins",
+    parentGroup: "/betreuungskalender/parents",
+    readonlyGroup: "/betreuungskalender/readers",
+    requireRoleClaim: true
+  };
+
+  const admin = userFromClaims({
+    subject: "subject-admin",
+    email: "admin@example.net",
+    displayName: "Admin User",
+    groups: ["/betreuungskalender/admins", "/betreuungskalender/parents"]
+  }, options);
+  assert.equal(admin.authenticated, true);
+  assert.equal(admin.user?.role, "admin");
+  assert.deepEqual(admin.user?.permissions, ["read", "write", "admin"]);
+  assert.equal(admin.user?.externalSubject, "subject-admin");
+  assert.equal(admin.user?.email, "admin@example.net");
+  assert.equal(admin.user?.displayName, "Admin User");
+
+  const readonly = userFromClaims({
+    subject: "subject-reader",
+    groups: ["/betreuungskalender/readers"]
+  }, options);
+  assert.equal(readonly.user?.role, "readonly");
+  assert.deepEqual(readonly.user?.permissions, ["read"]);
+
+  const missing = userFromClaims({
+    subject: "subject-unknown",
+    groups: ["/other"]
+  }, options);
+  assert.deepEqual(missing, { authenticated: false, reason: "missing_role" });
 });
 
 test("enforces read, write and admin authorization decisions", () => {

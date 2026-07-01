@@ -27,6 +27,7 @@ import { unavailablePeriodRoutes } from "./routes/unavailablePeriods.js";
 import { externalCalendarRoutes } from "./routes/externalCalendars.js";
 import { calendarFeedRoutes } from "./routes/calendarFeeds.js";
 import { OidcSessionStore } from "./services/oidcSessions.js";
+import { findAuthenticatedUserBySubject } from "./services/users.js";
 
 runMigrations();
 
@@ -124,7 +125,9 @@ await app.register(rateLimit, {
 app.decorateRequest("userEmail", "local-dev");
 app.decorateRequest("user", undefined);
 
-const apiAuthHook = createApiAuthHook(config, app.rateLimit());
+const apiAuthHook = createApiAuthHook(config, app.rateLimit(), {
+  nativeSessions: nativeOidcSessions
+});
 // codeql[js/missing-rate-limiting]: createApiAuthHook receives app.rateLimit() and runs that Fastify rate-limit preHandler before authorization.
 app.addHook("preHandler", apiAuthHook);
 
@@ -227,10 +230,23 @@ app.get("/api/session", readLimit, async (request) => {
     const nativeSession = nativeOidcSessions.findByToken(
       cookieValue(request.headers.cookie, config.sessionCookieName)
     );
+    const nativeUser = nativeSession
+      ? findAuthenticatedUserBySubject(nativeSession.externalSubject)
+      : undefined;
     return {
       authRequired: config.requireAuth,
-      authenticated: Boolean(nativeSession),
-      ...(nativeSession ? { logoutUrl: "/auth/logout" } : {})
+      authenticated: Boolean(nativeSession && nativeUser),
+      ...(nativeUser
+        ? {
+            user: {
+              id: nativeUser.id,
+              displayName: nativeUser.displayName,
+              role: nativeUser.role,
+              ...(nativeUser.email ? { email: nativeUser.email } : {})
+            },
+            logoutUrl: "/auth/logout"
+          }
+        : {})
     };
   }
   return sessionInfo(request.headers, config);
