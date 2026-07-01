@@ -2,6 +2,8 @@ import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
+export type AuthMode = "local" | "trusted-proxy" | "native-oidc";
+
 function booleanEnv(value: string | undefined, fallback = false): boolean {
   if (value === undefined) return fallback;
   return value.toLowerCase() === "true";
@@ -25,7 +27,7 @@ function textEnv(value: string | undefined, fallback: string): string {
 function authModeEnv(
   value: string | undefined,
   fallback: "local" | "trusted-proxy"
-): "local" | "trusted-proxy" | "native-oidc" {
+): AuthMode {
   const normalized = value?.trim();
   if (!normalized) return fallback;
   if (
@@ -36,6 +38,63 @@ function authModeEnv(
     return normalized;
   }
   throw new Error("AUTH_MODE must be one of local, trusted-proxy, native-oidc.");
+}
+
+export interface AuthModeValidationInput {
+  nodeEnv: string;
+  authMode: AuthMode;
+  requireAuth: boolean;
+  configuredTrustProxyAuth: boolean;
+  explicitAuthMode: boolean;
+  oidcIssuerUrl?: string;
+  oidcClientId?: string;
+  oidcRedirectUri?: string;
+}
+
+function requiredNativeOidcValues(input: AuthModeValidationInput): string[] {
+  return [
+    { name: "OIDC_ISSUER_URL", value: input.oidcIssuerUrl },
+    { name: "OIDC_CLIENT_ID", value: input.oidcClientId },
+    { name: "OIDC_REDIRECT_URI", value: input.oidcRedirectUri }
+  ]
+    .filter((item) => !item.value?.trim())
+    .map((item) => item.name);
+}
+
+export function validateAuthModeConfig(input: AuthModeValidationInput): void {
+  const production = input.nodeEnv === "production";
+  if (
+    input.explicitAuthMode &&
+    input.authMode !== "trusted-proxy" &&
+    input.configuredTrustProxyAuth
+  ) {
+    throw new Error(
+      "TRUST_PROXY_AUTH=true is only valid with AUTH_MODE=trusted-proxy."
+    );
+  }
+  if (
+    production &&
+    input.authMode === "local" &&
+    !input.requireAuth &&
+    !input.explicitAuthMode
+  ) {
+    throw new Error(
+      "Production local auth without REQUIRE_AUTH=true requires explicit AUTH_MODE=local."
+    );
+  }
+  if (production && input.authMode !== "local" && !input.requireAuth) {
+    throw new Error(
+      "Production external authentication modes require REQUIRE_AUTH=true."
+    );
+  }
+  if (input.authMode === "native-oidc") {
+    const missing = requiredNativeOidcValues(input);
+    if (missing.length) {
+      throw new Error(
+        `AUTH_MODE=native-oidc requires ${missing.join(", ")}.`
+      );
+    }
+  }
 }
 
 function packageVersion(): string {
@@ -49,7 +108,12 @@ function packageVersion(): string {
   }
 }
 
-const trustProxyAuth = booleanEnv(process.env.TRUST_PROXY_AUTH);
+const configuredTrustProxyAuth = booleanEnv(process.env.TRUST_PROXY_AUTH);
+const explicitAuthMode = Boolean(process.env.AUTH_MODE?.trim());
+const authMode = authModeEnv(
+  process.env.AUTH_MODE,
+  configuredTrustProxyAuth ? "trusted-proxy" : "local"
+);
 
 export const config = {
   nodeEnv: process.env.NODE_ENV ?? "development",
@@ -58,11 +122,8 @@ export const config = {
   databasePath: resolve(process.cwd(), process.env.DATABASE_PATH ?? "./data/app.sqlite"),
   backupDir: resolve(process.cwd(), process.env.BACKUP_DIR ?? "./backups"),
   requireAuth: booleanEnv(process.env.REQUIRE_AUTH),
-  trustProxyAuth,
-  authMode: authModeEnv(
-    process.env.AUTH_MODE,
-    trustProxyAuth ? "trusted-proxy" : "local"
-  ),
+  trustProxyAuth: authMode === "trusted-proxy",
+  authMode,
   authLogoutUrl: process.env.AUTH_LOGOUT_URL?.trim() || undefined,
   oidcIssuerUrl: process.env.OIDC_ISSUER_URL?.trim() || undefined,
   oidcClientId: process.env.OIDC_CLIENT_ID?.trim() || undefined,
@@ -91,3 +152,14 @@ export const config = {
   rateLimitWindowMs: positiveNumberEnv(process.env.RATE_LIMIT_WINDOW_MS, 60_000),
   version: packageVersion()
 } as const;
+
+validateAuthModeConfig({
+  nodeEnv: config.nodeEnv,
+  authMode: config.authMode,
+  requireAuth: config.requireAuth,
+  configuredTrustProxyAuth,
+  explicitAuthMode,
+  oidcIssuerUrl: config.oidcIssuerUrl,
+  oidcClientId: config.oidcClientId,
+  oidcRedirectUri: config.oidcRedirectUri
+});

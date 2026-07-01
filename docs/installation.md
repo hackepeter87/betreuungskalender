@@ -24,6 +24,7 @@ HOST=127.0.0.1
 PORT=3000
 DATABASE_PATH=./data/app.sqlite
 BACKUP_DIR=./backups
+AUTH_MODE=local
 REQUIRE_AUTH=false
 TRUST_PROXY_AUTH=false
 ALLOWED_ORIGIN=http://localhost:5173

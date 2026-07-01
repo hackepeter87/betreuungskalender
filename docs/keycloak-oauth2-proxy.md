@@ -90,8 +90,8 @@ allowed to inject or spoof forwarded headers.
 ## Identity and authorization headers
 
 Betreuungskalender accepts trusted claim-derived headers when
-`TRUST_PROXY_AUTH=true`. Configure the app to read the same headers that
-oauth2-proxy sends:
+`AUTH_MODE=trusted-proxy` and `TRUST_PROXY_AUTH=true`. Configure the app to
+read the same headers that oauth2-proxy sends:
 
 ```dotenv
 OIDC_USER_ID_HEADER=x-auth-request-user
@@ -145,6 +145,7 @@ privately in `.env`.
 ## Required app settings
 
 ```dotenv
+AUTH_MODE=trusted-proxy
 REQUIRE_AUTH=true
 TRUST_PROXY_AUTH=true
 AUTH_LOGOUT_URL=/oauth2/sign_out

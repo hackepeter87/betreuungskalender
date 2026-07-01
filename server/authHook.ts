@@ -9,6 +9,7 @@ import { upsertAuthenticatedUser } from "./services/users.js";
 
 type AuthConfig = Pick<
   typeof appConfig,
+  | "authMode"
   | "requireAuth"
   | "trustProxyAuth"
   | "oidcUserIdHeader"
@@ -34,8 +35,16 @@ export function createApiAuthHook(
     if (
       !request.url.startsWith("/api/") ||
       request.url === "/api/health" ||
-      request.url === "/api/ready"
+      request.url === "/api/ready" ||
+      request.url === "/api/session"
     ) return;
+    if (config.authMode === "native-oidc") {
+      throw httpError(
+        "authentication_required",
+        401,
+        "Authentifizierung erforderlich."
+      );
+    }
     const auth = resolveRequestUser(request.headers, {
       requireAuth: config.requireAuth,
       trustProxyAuth: config.trustProxyAuth,

@@ -17,6 +17,7 @@ Set:
 ```dotenv
 HOST=127.0.0.1
 PORT=3000
+AUTH_MODE=trusted-proxy
 REQUIRE_AUTH=true
 TRUST_PROXY_AUTH=true
 ALLOWED_ORIGIN=https://betreuung.example.net

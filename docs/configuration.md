@@ -16,9 +16,9 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `HOST_PORT` | Host port published by release Compose | `3000` | Recommended for `deploy/compose.yml` | `3000` | Expose only through the intended firewall/proxy |
 | `DATABASE_PATH` | SQLite database file | `/var/lib/betreuungskalender/app.sqlite` | Recommended | `./data/app.sqlite` | Contains sensitive API data; protect permissions and disk |
 | `BACKUP_DIR` | Destination for SQLite backups | `/var/backups/betreuungskalender` | Recommended | `./backups` | Contains sensitive copies; use mode `0700` |
-| `AUTH_MODE` | Authentication implementation mode | `trusted-proxy` | Optional | Derived from `TRUST_PROXY_AUTH` | `native-oidc` is introduced incrementally and is not complete until server-side sessions are enabled |
+| `AUTH_MODE` | Authentication implementation mode | `trusted-proxy` | Optional | Derived from `TRUST_PROXY_AUTH` | Selects the only authentication implementation the API will accept |
 | `REQUIRE_AUTH` | Require a trusted identity for API routes | `true` | Recommended in production | `false` | Must be `true` for protected reverse-proxy operation |
-| `TRUST_PROXY_AUTH` | Trust supported identity headers and proxy addresses | `true` | Required with external auth | `false` | Never enable when clients can directly reach the app |
+| `TRUST_PROXY_AUTH` | Legacy trusted-proxy switch and header-trust flag | `true` | Required with `AUTH_MODE=trusted-proxy` | `false` | Only valid for trusted-proxy auth; never enable when clients can directly reach the app |
 | `AUTH_LOGOUT_URL` | Optional browser logout path shown in the app shell | `/oauth2/sign_out` | Optional with external auth | None | Keep same-origin or reviewed by the operator |
 | `OIDC_ISSUER_URL` | Native OIDC issuer URL | `https://idp.example.net/realms/family` | Required for `AUTH_MODE=native-oidc` | None | Must match the provider issuer exactly |
 | `OIDC_CLIENT_ID` | Native OIDC client ID | `betreuungskalender` | Required for `AUTH_MODE=native-oidc` | None | Register the exact redirect URI with this client |
@@ -67,23 +67,33 @@ expected role before enabling `OIDC_REQUIRE_ROLE_CLAIM=true`.
 
 ## Authentication modes
 
-`AUTH_MODE` accepts `local`, `trusted-proxy`, or `native-oidc`. When it is not
-set, the app preserves the existing behavior and derives the mode from
-`TRUST_PROXY_AUTH`: `trusted-proxy` when trusted proxy auth is enabled,
-otherwise `local`.
+`AUTH_MODE` accepts `local`, `trusted-proxy`, or `native-oidc`. It is the
+authoritative authentication mode: the API only accepts credentials from the
+selected mode. When `AUTH_MODE` is not set, the app preserves the existing
+behavior and derives the mode from `TRUST_PROXY_AUTH`: `trusted-proxy` when
+trusted proxy auth is enabled, otherwise `local`.
+
+`TRUST_PROXY_AUTH=true` is only valid with `AUTH_MODE=trusted-proxy`. Do not
+leave it enabled while testing `AUTH_MODE=native-oidc`; native mode must not
+accept proxy identity headers as an authentication bypass.
 
 ### Local development
 
 ```dotenv
+AUTH_MODE=local
 REQUIRE_AUTH=false
 TRUST_PROXY_AUTH=false
 ```
 
-Audit records created through the API use `local-dev` as identity.
+Audit records created through the API use `local-dev` as identity. Production
+starts that intentionally run without authentication must set `AUTH_MODE=local`
+explicitly; the default production examples keep `REQUIRE_AUTH=true` so an
+accidental direct deployment fails closed.
 
 ### Trusted reverse proxy
 
 ```dotenv
+AUTH_MODE=trusted-proxy
 REQUIRE_AUTH=true
 TRUST_PROXY_AUTH=true
 ```
@@ -129,6 +139,11 @@ validates Authorization Code + PKCE callbacks with `openid-client`, stores
 short-lived server-side login state, and creates server-side sessions with an
 opaque browser cookie. The browser cookie contains only a random session token;
 SQLite stores only the token hash plus session metadata.
+
+Native mode requires `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, and
+`OIDC_REDIRECT_URI` at startup. In production it also requires
+`REQUIRE_AUTH=true`. Keep `TRUST_PROXY_AUTH=false`; trusted proxy headers are
+ignored by native mode and conflicting configuration is rejected.
 
 Native OIDC callback handling must not expose ID tokens, access tokens,
 refresh tokens, authorization codes, state, nonce, PKCE verifiers, raw claims,

@@ -50,6 +50,7 @@ APP_RELEASE_VERSION=X.Y.Z
 APP_RELEASE_DIR=/opt/svc_betreuung/betreuungskalender/releases/vX.Y.Z
 HOST_BIND_ADDRESS=127.0.0.1
 HOST_PORT=3000
+AUTH_MODE=trusted-proxy
 REQUIRE_AUTH=true
 TRUST_PROXY_AUTH=true
 ALLOWED_ORIGIN=https://betreuung.example.net
