@@ -172,6 +172,8 @@ Complete guide: [docs/deployment-lxc.md](docs/deployment-lxc.md)
 All settings are environment based. `.env.example` contains production-shaped
 example values for the direct Compose/systemd path using `example.net` only. Use
 `deploy/.env.oidc.example` instead for the oauth2-proxy/OIDC Compose topology.
+For native OIDC without oauth2-proxy, keep the direct Compose path and set
+`AUTH_MODE=native-oidc`.
 
 Key variables:
 
@@ -227,6 +229,8 @@ port unless another reviewed proxy boundary prevents all direct client access.
 
 - HAProxy, nginx, Caddy, and Traefik:
   [docs/reverse-proxy.md](docs/reverse-proxy.md)
+- Native OIDC with Keycloak and Podman:
+  [docs/native-oidc-keycloak-podman.md](docs/native-oidc-keycloak-podman.md)
 - Detailed Keycloak and oauth2-proxy setup:
   [docs/keycloak-oauth2-proxy.md](docs/keycloak-oauth2-proxy.md)
 

@@ -163,6 +163,11 @@ In native mode, unauthenticated `/api/session` responses include
 `logoutUrl: "/auth/logout"`, which the frontend calls with `POST` before it
 refreshes session state.
 
+For a fresh Keycloak and Podman Compose installation, follow
+[native-oidc-keycloak-podman.md](native-oidc-keycloak-podman.md). Native OIDC
+uses `deploy/compose.yml`; `deploy/compose.oidc.yml` remains the oauth2-proxy
+trusted-header topology.
+
 ## CORS and same-origin operation
 
 Production should normally serve frontend and API from the same origin.
