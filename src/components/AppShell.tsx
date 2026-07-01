@@ -46,22 +46,29 @@ const mobileNavItems = navItems.filter((item) =>
 function AuthSessionCard({
   session,
   mobile = false,
+  compact = false,
+  testIdPrefix,
   loggingOut,
   onLogout,
   t
 }: {
   session: ApiSession;
   mobile?: boolean;
+  compact?: boolean;
+  testIdPrefix?: string;
   loggingOut: boolean;
   onLogout: () => void;
   t: (key: TranslationKey) => string;
 }) {
+  const testId = (name: "auth-session" | "auth-logout" | "auth-login") =>
+    testIdPrefix ? `${testIdPrefix}-${name}` : mobile ? `mobile-${name}` : name;
+
   if (session.authenticated && session.user) {
     const nativeLogout = session.logoutUrl === "/auth/logout";
     return (
       <div
-        className={`session-card${mobile ? " session-card--mobile" : ""}`}
-        data-testid={mobile ? "mobile-auth-session" : "auth-session"}
+        className={`session-card${mobile ? " session-card--mobile" : ""}${compact ? " session-card--compact" : ""}`}
+        data-testid={testId("auth-session")}
       >
         <Icon name="lock" size={17} />
         <span>
@@ -72,7 +79,7 @@ function AuthSessionCard({
           nativeLogout ? (
             <button
               className="session-card__logout"
-              data-testid={mobile ? "mobile-auth-logout" : "auth-logout"}
+              data-testid={testId("auth-logout")}
               type="button"
               onClick={onLogout}
               disabled={loggingOut}
@@ -82,7 +89,7 @@ function AuthSessionCard({
           ) : (
             <a
               className="session-card__logout"
-              data-testid={mobile ? "mobile-auth-logout" : "auth-logout"}
+              data-testid={testId("auth-logout")}
               href={session.logoutUrl}
             >
               {t("auth.logout")}
@@ -96,8 +103,8 @@ function AuthSessionCard({
   if (session.authRequired && session.loginUrl) {
     return (
       <div
-        className={`session-card session-card--login${mobile ? " session-card--mobile" : ""}`}
-        data-testid={mobile ? "mobile-auth-login" : "auth-login"}
+        className={`session-card session-card--login${mobile ? " session-card--mobile" : ""}${compact ? " session-card--compact" : ""}`}
+        data-testid={testId("auth-login")}
       >
         <Icon name="lock" size={17} />
         <span>
@@ -217,17 +224,27 @@ export function AppShell({
             <span className="brand__mark"><Icon name="calendar" size={20} /></span>
             <strong>{t("app.name")}</strong>
           </button>
-          <button
-            className="button button--primary button--icon-mobile"
-            type="button"
-            data-testid="mobile-entry-create"
-            onClick={onNewEntry}
-            disabled={!canWrite}
-            aria-label={t("action.newEntry")}
-          >
-            <Icon name="plus" />
-            <span>{t("action.entryShort")}</span>
-          </button>
+          <div className="mobile-header__actions">
+            <AuthSessionCard
+              session={session}
+              mobile
+              compact
+              loggingOut={loggingOut}
+              onLogout={() => void logout()}
+              t={t}
+            />
+            <button
+              className="button button--primary button--icon-mobile"
+              type="button"
+              data-testid="mobile-entry-create"
+              onClick={onNewEntry}
+              disabled={!canWrite}
+              aria-label={t("action.newEntry")}
+            >
+              <Icon name="plus" />
+              <span>{t("action.entryShort")}</span>
+            </button>
+          </div>
         </header>
         {serverStatus === "offline" ? (
           <div
@@ -296,6 +313,7 @@ export function AppShell({
             <AuthSessionCard
               session={session}
               mobile
+              testIdPrefix="mobile-more"
               loggingOut={loggingOut}
               onLogout={() => void logout()}
               t={t}
