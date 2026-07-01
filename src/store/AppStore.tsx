@@ -95,6 +95,10 @@ const defaultSession: ApiSession = {
   authenticated: false
 };
 
+function requiresLogin(session: ApiSession): boolean {
+  return session.authRequired && !session.authenticated;
+}
+
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData>(createEmptyData);
   const [session, setSession] = useState<ApiSession>(defaultSession);
@@ -121,28 +125,52 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  const setUnauthenticatedState = useCallback((nextSession: ApiSession) => {
+    const empty = createEmptyData();
+    dataRef.current = empty;
+    setData(empty);
+    setSession(nextSession);
+    setServerStatus("online");
+    setError(null);
+  }, []);
+
   const reloadInternal = useCallback(
     async (silent = false): Promise<boolean> => {
       if (!silent) setIsLoading(true);
       try {
-        const [next, nextSession] = await Promise.all([
-          loadAppData(),
-          loadSession()
-        ]);
+        const nextSession = await loadSession();
+        setSession(nextSession);
+        if (requiresLogin(nextSession)) {
+          setUnauthenticatedState(nextSession);
+          return true;
+        }
+
+        const next = await loadAppData();
         dataRef.current = next;
         setData(next);
-        setSession(nextSession);
         setServerStatus("online");
         setError(null);
         return true;
       } catch (reason) {
+        if (reason instanceof ApiError && reason.status === 401) {
+          try {
+            const nextSession = await loadSession();
+            setSession(nextSession);
+            if (requiresLogin(nextSession)) {
+              setUnauthenticatedState(nextSession);
+              return true;
+            }
+          } catch {
+            // Keep the original API error; it carries the failed domain request.
+          }
+        }
         handleError(reason);
         return false;
       } finally {
         if (!silent) setIsLoading(false);
       }
     },
-    [handleError]
+    [handleError, setUnauthenticatedState]
   );
 
   const reload = useCallback(() => reloadInternal(false), [reloadInternal]);
@@ -518,7 +546,11 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       isLoading,
       isSaving,
       error,
-      canWrite: serverStatus === "online" && !isLoading && !isSaving,
+      canWrite:
+        serverStatus === "online" &&
+        !isLoading &&
+        !isSaving &&
+        (!session.authRequired || session.authenticated),
       reload,
       clearError: () => setError(null),
       saveChild,

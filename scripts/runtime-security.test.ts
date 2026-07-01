@@ -1,17 +1,32 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
-import { mkdtemp, rm } from "node:fs/promises";
+import { existsSync } from "node:fs";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import Database from "better-sqlite3";
 import ICAL from "ical.js";
 import { migrateDatabase } from "../server/db/migrationRunner.js";
 import { oidcSessionTokenForTesting } from "../server/services/oidcSessions.js";
 
 const projectRoot = resolve(import.meta.dirname, "..");
+
+async function ensureFrontendFallback(t: TestContext): Promise<void> {
+  const indexPath = join(projectRoot, "dist/index.html");
+  if (existsSync(indexPath)) return;
+  await mkdir(join(projectRoot, "dist"), { recursive: true });
+  await writeFile(
+    indexPath,
+    "<!doctype html><html><body><div id=\"root\"></div></body></html>",
+    "utf8"
+  );
+  t.after(async () => {
+    await rm(indexPath, { force: true });
+  });
+}
 
 async function freePort(): Promise<number> {
   const server = createServer();
@@ -506,6 +521,7 @@ test("runtime rejects users without matching OIDC groups when strict role claims
 });
 
 test("runtime enforces native OIDC sessions without trusting proxy headers or logging secrets", async (t) => {
+  await ensureFrontendFallback(t);
   const root = await mkdtemp(join(tmpdir(), "betreuungskalender-native-oidc-runtime-"));
   const databasePath = join(root, "app.sqlite");
   const seededDatabase = new Database(databasePath);
@@ -587,6 +603,20 @@ test("runtime enforces native OIDC sessions without trusting proxy headers or lo
   const cookie = (token: string) => ({
     cookie: `betreuungskalender_session=${token}`
   });
+
+  const unauthenticatedSpa = await fetch(`${baseUrl}/`, { redirect: "manual" });
+  assert.equal(unauthenticatedSpa.status, 302);
+  assert.equal(
+    new URL(unauthenticatedSpa.headers.get("location") ?? "", baseUrl).pathname,
+    "/auth/login"
+  );
+
+  const authenticatedSpa = await fetch(`${baseUrl}/`, {
+    headers: cookie(parentToken)
+  });
+  assert.equal(authenticatedSpa.status, 200);
+  assert.match(authenticatedSpa.headers.get("content-type") ?? "", /text\/html/);
+  assert.match(await authenticatedSpa.text(), /<div id="root">/);
 
   const parentSession = await fetch(`${baseUrl}/api/session`, {
     headers: cookie(parentToken)
