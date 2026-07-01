@@ -14,6 +14,7 @@ export function createEmptyData(): AppData {
     externalCalendarSources: [],
     externalCalendarEvents: [],
     contactPatterns: [],
+    contactRules: [],
     auditLog: [],
     monthClosures: [],
     settings: {
@@ -105,6 +106,7 @@ export function createDemoData(): AppData {
       makeEntry(5, [children[1].id], "planned", false, "Zusätzlicher Nachmittag")
     ],
     contactPatterns: [],
+    contactRules: [],
     holidayPeriods: [],
     unavailablePeriods: [],
     updatedAt: timestamp

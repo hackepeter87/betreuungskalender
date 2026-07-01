@@ -117,6 +117,63 @@ export const contactPatternInputSchema = z
     message: "Das Startdatum einer 14-Tage-Regel muss ein Freitag sein."
   });
 
+const contactRuleWeekdaySchema = z.enum(["MO", "TU", "WE", "TH", "FR", "SA", "SU"]);
+
+const contactRuleRecurrenceSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("weekly"),
+    intervalWeeks: z.number().int().min(1).max(12),
+    weekdays: z.array(contactRuleWeekdaySchema).min(1).max(7)
+  }),
+  z.object({
+    kind: z.literal("monthlyByWeekday"),
+    intervalMonths: z.number().int().min(1).max(12),
+    ordinals: z.array(z.union([
+      z.literal(1),
+      z.literal(2),
+      z.literal(3),
+      z.literal(4),
+      z.literal(5),
+      z.literal(-1)
+    ])).min(1).max(5),
+    weekdays: z.array(contactRuleWeekdaySchema).min(1).max(7)
+  })
+]);
+
+const contactRuleSegmentSchema = z
+  .object({
+    id: z.string().trim().min(1).max(100),
+    startDayOffset: z.number().int().min(0).max(30),
+    startTime: z.string().regex(/^\d{2}:\d{2}$/),
+    endDayOffset: z.number().int().min(0).max(30),
+    endTime: z.string().regex(/^\d{2}:\d{2}$/)
+  })
+  .refine((segment) => {
+    if (segment.endDayOffset > segment.startDayOffset) return true;
+    return segment.endDayOffset === segment.startDayOffset && segment.endTime > segment.startTime;
+  }, {
+    path: ["endTime"],
+    message: "Das Ende der Zeitspanne muss nach dem Beginn liegen."
+  });
+
+export const contactRuleInputSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200),
+    startDate: dateKey,
+    endDate: dateKey.optional(),
+    timezone: z.literal("Europe/Berlin").default("Europe/Berlin"),
+    recurrence: contactRuleRecurrenceSchema,
+    segments: z.array(contactRuleSegmentSchema).min(1).max(8),
+    syncHorizonMonths: z.number().int().min(1).max(36).default(12),
+    responsiblePartyId: z.string().trim().min(1).max(200).optional(),
+    childIds,
+    active: z.boolean().default(true)
+  })
+  .refine((rule) => !rule.endDate || rule.endDate >= rule.startDate, {
+    path: ["endDate"],
+    message: "Das Ende darf nicht vor dem Beginn liegen."
+  });
+
 export const settingsInputSchema = z.record(z.string(), z.unknown());
 
 export const monthlyClosingInputSchema = z.object({
@@ -134,6 +191,7 @@ export const appDataImportSchema = z.object({
   externalCalendarSources: z.array(z.record(z.string(), z.unknown())).default([]),
   externalCalendarEvents: z.array(z.record(z.string(), z.unknown())).default([]),
   contactPatterns: z.array(z.record(z.string(), z.unknown())).default([]),
+  contactRules: z.array(z.record(z.string(), z.unknown())).default([]),
   auditLog: z.array(z.record(z.string(), z.unknown())).default([]),
   monthClosures: z.array(z.record(z.string(), z.unknown())).default([]),
   lastJsonBackupAt: z.string().optional(),

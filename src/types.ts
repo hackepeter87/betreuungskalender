@@ -1,3 +1,5 @@
+import type { ApiContactRule } from "../shared/api";
+
 export const SCHEMA_VERSION = 5 as const;
 
 export type EntryStatus = "planned" | "completed" | "cancelled";
@@ -151,6 +153,8 @@ export interface ContactPattern {
   };
 }
 
+export type ContactRule = ApiContactRule;
+
 export type UnavailableCategory =
   | "duty"
   | "training_course"
@@ -300,6 +304,7 @@ export interface AppData {
   externalCalendarSources: ExternalCalendarSource[];
   externalCalendarEvents: ExternalCalendarBackupEvent[];
   contactPatterns: ContactPattern[];
+  contactRules: ContactRule[];
   auditLog: AuditLogEntry[];
   monthClosures: MonthlyClosure[];
   lastJsonBackupAt?: string;

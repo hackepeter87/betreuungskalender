@@ -15,6 +15,10 @@ COPY src ./src
 COPY scripts/copy-migrations.js ./scripts/copy-migrations.js
 RUN npm run build
 
+FROM build AS production-deps
+
+RUN rm -rf node_modules && npm ci --omit=dev && npm cache clean --force
+
 FROM node:24.18.0-bookworm-slim AS runtime
 
 ENV NODE_ENV=production \
@@ -28,7 +32,7 @@ ENV NODE_ENV=production \
 WORKDIR /app
 RUN npm install -g npm@11.18.0 && npm cache clean --force
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+COPY --from=production-deps /app/node_modules ./node_modules
 
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/dist-server ./dist-server

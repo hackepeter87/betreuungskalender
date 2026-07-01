@@ -2,11 +2,12 @@ import type { FastifyInstance } from "fastify";
 import { db } from "../db/connection.js";
 import { recordAudit } from "../services/audit.js";
 import { nowIso } from "../services/common.js";
-import { upsertContactRuleFromPattern } from "../services/contactRules.js";
+import { upsertContactRule, upsertContactRuleFromPattern } from "../services/contactRules.js";
 import {
   appDataImportSchema,
   careEntryInputSchema,
   childInputSchema,
+  contactRuleInputSchema,
   contactPatternInputSchema,
   holidayInputSchema,
   unavailablePeriodInputSchema
@@ -357,6 +358,34 @@ export function insertPattern(record: DataRecord, timestamp: string, userEmail: 
   });
 }
 
+export function insertContactRule(record: DataRecord, timestamp: string, userEmail: string): void {
+  const input = contactRuleInputSchema.parse({
+    name: record.name,
+    startDate: record.startDate,
+    endDate: optionalText(record, "endDate") ?? undefined,
+    timezone: text(record, "timezone", "Europe/Berlin"),
+    recurrence: record.recurrence,
+    segments: record.segments,
+    syncHorizonMonths: numberValue(record, "syncHorizonMonths", 12),
+    responsiblePartyId: optionalText(record, "responsiblePartyId") ?? undefined,
+    childIds: stringArray(record, "childIds"),
+    active: booleanValue(record, "active", true)
+  });
+  const id = text(record, "id");
+  if (!id) throw new Error("Umgangsregel ohne ID kann nicht importiert werden.");
+  upsertContactRule({
+    id,
+    rule: {
+      ...input,
+      sourceContactPatternId: optionalText(record, "sourceContactPatternId") ?? undefined
+    },
+    createdBy: text(record, "createdBy", userEmail),
+    updatedBy: text(record, "updatedBy", userEmail),
+    createdAt: text(record, "createdAt", timestamp),
+    updatedAt: text(record, "updatedAt", timestamp)
+  });
+}
+
 export function insertUnavailable(record: DataRecord, timestamp: string, userEmail: string): void {
   if (record.deletedAt) return;
   const input = unavailablePeriodInputSchema.parse({
@@ -405,6 +434,7 @@ export function importData(data: ReturnType<typeof appDataImportSchema.parse>, u
   for (const entry of data.entries) insertEntry(entry, timestamp, userEmail);
   for (const holiday of data.holidayPeriods) insertHoliday(holiday, timestamp, userEmail);
   for (const pattern of data.contactPatterns) insertPattern(pattern, timestamp, userEmail);
+  for (const rule of data.contactRules) insertContactRule(rule, timestamp, userEmail);
   for (const period of data.unavailablePeriods) insertUnavailable(period, timestamp, userEmail);
   const sourceInsert = db.prepare(`INSERT INTO external_calendar_sources (id, name, color, visible, last_imported_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`);
   for (const source of data.externalCalendarSources) {
