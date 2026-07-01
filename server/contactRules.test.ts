@@ -246,6 +246,58 @@ test("sync preserves manually changed generated entries", () => {
   });
 });
 
+test("sync preserves cancelled generated entries as exceptions", () => {
+  withDatabase((database) => {
+    insertChild(database);
+    insertLegacyPattern(database);
+    upsertContactRuleFromPattern({
+      id: "pattern-a",
+      name: "14-Tage-Regel",
+      startDate: "2026-07-03",
+      fridayStartTime: "16:00",
+      sundayEndTime: "18:00",
+      childIds: ["child-a"],
+      active: true,
+      createdBy: "tester",
+      updatedBy: "tester",
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }, database);
+    syncContactRule("pattern-a", {
+      database,
+      userEmail: "tester",
+      startDate: "2026-07-01",
+      endDate: "2026-07-31",
+      now: timestamp
+    });
+
+    database.prepare(`
+      UPDATE care_entries
+      SET status = 'cancelled', cancellation_reason = 'Fiktive Testabsage'
+      WHERE rule_occurrence_date = '2026-07-17'
+    `).run();
+    const summary = syncContactRule("pattern-a", {
+      database,
+      userEmail: "tester",
+      startDate: "2026-07-01",
+      endDate: "2026-07-31",
+      now: timestamp
+    });
+
+    assert.equal(summary.preserved, 1);
+    const cancelled = database.prepare(`
+      SELECT status, cancellation_reason AS cancellationReason, contact_rule_sync_state AS syncState
+      FROM care_entries
+      WHERE rule_occurrence_date = '2026-07-17'
+    `).get() as { status: string; cancellationReason: string; syncState: string };
+    assert.deepEqual(cancelled, {
+      status: "cancelled",
+      cancellationReason: "Fiktive Testabsage",
+      syncState: "generated"
+    });
+  });
+});
+
 test("sync updates child assignments for unchanged planned entries", () => {
   withDatabase((database) => {
     insertChild(database);

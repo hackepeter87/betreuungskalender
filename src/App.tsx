@@ -24,6 +24,7 @@ import { HolidaysPage } from "./pages/HolidaysPage";
 import { ReportPage } from "./pages/ReportPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { UnavailablePeriodsPage } from "./pages/UnavailablePeriodsPage";
+import { Icon } from "./components/Icon";
 import type { CareEntry } from "./types";
 import type { LegacyDatabaseSummary } from "../shared/migration";
 import { useAppStore } from "./store/AppStore";
@@ -40,6 +41,8 @@ export function App() {
   const [activePage, setActivePage] = useState<PageId>("dashboard");
   const [monthKey, setMonthKey] = useState(() => toMonthKey(new Date()));
   const [entryDialog, setEntryDialog] = useState<EntryDialogState | null>(null);
+  const [ruleEntryChoice, setRuleEntryChoice] = useState<CareEntry | null>(null);
+  const [focusedContactRuleId, setFocusedContactRuleId] = useState<string | undefined>();
   const [legacyMigration, setLegacyMigration] = useState<{
     legacy: LegacyBrowserData;
     database: LegacyDatabaseSummary;
@@ -67,7 +70,24 @@ export function App() {
 
   const openNewEntry = (date?: string, additionalCare = false) =>
     setEntryDialog({ date, additionalCare });
-  const openEditEntry = (entry: CareEntry) => setEntryDialog({ entry });
+  const openEditEntry = (entry: CareEntry) => {
+    if (entry.contactRuleId || entry.generatedByPatternId) {
+      setRuleEntryChoice(entry);
+      return;
+    }
+    setEntryDialog({ entry });
+  };
+  const openSingleRuleEntry = () => {
+    if (!ruleEntryChoice) return;
+    setEntryDialog({ entry: ruleEntryChoice });
+    setRuleEntryChoice(null);
+  };
+  const openRuleSeries = () => {
+    if (!ruleEntryChoice) return;
+    setFocusedContactRuleId(ruleEntryChoice.contactRuleId ?? ruleEntryChoice.generatedByPatternId);
+    setRuleEntryChoice(null);
+    setActivePage("contact");
+  };
 
   let page;
   switch (activePage) {
@@ -83,6 +103,8 @@ export function App() {
     case "contact":
       page = (
         <ContactPage
+          key={focusedContactRuleId ?? "contact"}
+          focusedRuleId={focusedContactRuleId}
           onEditEntry={openEditEntry}
           onNewEntry={() => openNewEntry(undefined, true)}
         />
@@ -130,13 +152,9 @@ export function App() {
       {entryDialog ? (
         <Modal
           title={
-            locale === "en"
-              ? entryDialog.entry
-                ? copy(locale, "app", "editCareEntry")
-                : copy(locale, "app", "createCareEntry")
-              : entryDialog.entry
-                ? copy(locale, "app", "editCareEntry")
-                : copy(locale, "app", "createCareEntry")
+            entryDialog.entry
+              ? copy(locale, "app", "editCareEntry")
+              : copy(locale, "app", "createCareEntry")
           }
           size="large"
           onClose={() => setEntryDialog(null)}
@@ -148,6 +166,36 @@ export function App() {
             onSaved={() => setEntryDialog(null)}
             onCancel={() => setEntryDialog(null)}
           />
+        </Modal>
+      ) : null}
+      {ruleEntryChoice ? (
+        <Modal
+          title={copy(locale, "app", "editRuleEntryTitle")}
+          onClose={() => setRuleEntryChoice(null)}
+        >
+          <div className="choice-dialog" data-testid="rule-entry-edit-choice">
+            <p>{copy(locale, "app", "editRuleEntryDescription")}</p>
+            <div className="choice-dialog__actions">
+              <button
+                className="button button--secondary"
+                type="button"
+                data-testid="edit-rule-entry-single"
+                onClick={openSingleRuleEntry}
+              >
+                <Icon name="edit" size={17} />
+                {copy(locale, "app", "editSingleRuleEntry")}
+              </button>
+              <button
+                className="button button--primary"
+                type="button"
+                data-testid="edit-rule-entry-series"
+                onClick={openRuleSeries}
+              >
+                <Icon name="repeat" size={17} />
+                {copy(locale, "app", "editRuleSeries")}
+              </button>
+            </div>
+          </div>
         </Modal>
       ) : null}
       {legacyMigration ? (

@@ -1052,6 +1052,17 @@ h3 {
   text-decoration: line-through;
 }
 
+.calendar-event--rule {
+  border-left-width: 3px;
+}
+
+.calendar-event--exception {
+  border-style: solid;
+  border-color: #9b8bdc;
+  background: #f5f2ff;
+  color: #33245d;
+}
+
 .calendar-event__colors {
   display: flex;
   align-self: stretch;
@@ -3058,6 +3069,37 @@ h3 {
 .rule-entry__actions .button {
   min-height: 36px;
   padding-inline: 10px;
+}
+
+.choice-dialog {
+  display: grid;
+  gap: 18px;
+  padding: 20px;
+  background: var(--surface);
+}
+
+.choice-dialog p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.choice-dialog__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .choice-dialog {
+    min-height: 100%;
+    align-content: start;
+    padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+  }
+
+  .choice-dialog__actions {
+    grid-template-columns: 1fr;
+  }
 }
 
 .holiday-list {

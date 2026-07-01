@@ -111,9 +111,11 @@ function previewItemFromRuleEntry(
 }
 
 export function ContactPage({
+  focusedRuleId,
   onEditEntry,
   onNewEntry
 }: {
+  focusedRuleId?: string;
   onEditEntry: (entry: CareEntry) => void;
   onNewEntry: () => void;
 }) {
@@ -128,7 +130,8 @@ export function ContactPage({
   const contactCopy = (key: string) => copy(locale, "contact", key as CatalogKey<"contact">);
   const templateCopyKey = (template: ContactRuleTemplateId, suffix = "") =>
     `template_${template.replaceAll("-", "_")}${suffix}`;
-  const existingRule = data.contactRules[0];
+  const existingRule =
+    data.contactRules.find((rule) => rule.id === focusedRuleId) ?? data.contactRules[0];
   const currentYear = new Date().getFullYear();
   const defaultRange = rangeForYear(currentYear);
   const existingTemplate = templateForRule(existingRule);
@@ -565,6 +568,12 @@ export function ContactPage({
         <div className="rule-entry-list" data-testid="contact-generated-list">
           {relevantEntries.map((entry) => {
             const isRuleEntry = Boolean(entry.contactRuleId || entry.generatedByPatternId);
+            const isException = entry.contactRuleSyncState === "manual_override";
+            const exceptionLabel = entry.status === "cancelled"
+              ? copy(locale, "contact", "ruleExceptionCancelled")
+              : isException
+                ? copy(locale, "contact", "ruleExceptionChanged")
+                : copy(locale, "contact", "ruleExceptionRegular");
             const overlaps = isRuleEntry
               ? unavailableForEntry(entry, data.unavailablePeriods, {
                   affectsContactOnly: true
@@ -580,6 +589,7 @@ export function ContactPage({
                 <span>
                   <strong>{entry.childIds.map((id) => data.children.find((child) => child.id === id)?.name).filter(Boolean).join(copy(locale, "contact", "and"))}</strong>
                   <small>{entry.additionalCare ? copy(locale, "contact", "additionalCare") : copy(locale, "contact", "defaultName")}</small>
+                  {isRuleEntry ? <small>{exceptionLabel}</small> : null}
                   <small>
                     {copy(locale, "common", "updatedBy", {
                       actor: actorDisplayName(data, entry.updatedBy),

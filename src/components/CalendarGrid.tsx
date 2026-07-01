@@ -114,22 +114,37 @@ export function CalendarGrid({
                   </button>
                 ))}
                 {dayEntries.slice(0, dayUnavailable.length ? 2 : 3).map((entry) => {
+                  const isRuleEntry = Boolean(entry.contactRuleId || entry.generatedByPatternId);
+                  const isRuleException = entry.contactRuleSyncState === "manual_override";
+                  const ruleStateLabel = entry.status === "cancelled"
+                    ? copy(locale, "calendar", "ruleCancelled")
+                    : isRuleException
+                      ? copy(locale, "calendar", "ruleChanged")
+                      : isRuleEntry
+                        ? copy(locale, "calendar", "ruleRegular")
+                        : "";
                   const hasOverlap =
                     entry.status === "planned" &&
-                    entry.generatedByPatternId &&
+                    isRuleEntry &&
                     unavailableForEntry(entry, unavailablePeriods, {
                       affectsContactOnly: true
                     }).length > 0;
                   return (
                   <button
-                    className={`calendar-event calendar-event--${entry.status} ${hasOverlap ? "calendar-event--overlap" : ""}`}
+                    className={[
+                      "calendar-event",
+                      `calendar-event--${entry.status}`,
+                      isRuleEntry ? "calendar-event--rule" : "",
+                      isRuleException ? "calendar-event--exception" : "",
+                      hasOverlap ? "calendar-event--overlap" : ""
+                    ].filter(Boolean).join(" ")}
                     type="button"
                     key={entry.id}
                     data-testid={`calendar-entry-${entry.id}`}
                     onClick={() => onSelectEntry(entry)}
                     title={hasOverlap
                       ? copy(locale, "agenda", "overlap")
-                      : `${entry.status === "completed" ? copy(locale, "calendar", "completed") : entry.status === "planned" ? copy(locale, "calendar", "planned") : copy(locale, "calendar", "cancelled")} · ${formatTime(entry.startDateTime, intlLocale)}`}
+                      : `${entry.status === "completed" ? copy(locale, "calendar", "completed") : entry.status === "planned" ? copy(locale, "calendar", "planned") : copy(locale, "calendar", "cancelled")} · ${ruleStateLabel ? `${ruleStateLabel} · ` : ""}${formatTime(entry.startDateTime, intlLocale)}`}
                   >
                     <span className="calendar-event__colors">
                       {entry.childIds.map((id) => (
@@ -146,7 +161,7 @@ export function CalendarGrid({
                           : childMap.get(entry.childIds[0])?.name ?? copy(locale, "calendar", "entry")}
                     </span>
                     {entry.overnight ? <Icon name="moon" size={13} /> : null}
-                    {hasOverlap ? <Icon name="alert" size={13} /> : null}
+                    {hasOverlap ? <Icon name="alert" size={13} /> : isRuleException ? <Icon name="edit" size={13} /> : isRuleEntry ? <Icon name="repeat" size={13} /> : null}
                   </button>
                   );
                 })}

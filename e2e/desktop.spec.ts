@@ -452,6 +452,7 @@ test("generates recurring weekend contact dates and shows them in the calendar",
   const generatedEntries = (await entriesResponse.json() as Array<{
     id: string;
     generatedByPatternId?: string;
+    contactRuleSyncState?: string;
     startDateTime: string;
     status: string;
   }>).filter((entry) => entry.generatedByPatternId);
@@ -473,6 +474,53 @@ test("generates recurring weekend contact dates and shows them in the calendar",
     await expect(page.getByTestId(`calendar-entry-${entry.id}`).first())
       .toBeVisible();
   }
+
+  const changedEntry = julyGeneratedEntries[0];
+  await page.getByTestId(`calendar-entry-${changedEntry.id}`).first().click();
+  await expect(page.getByTestId("rule-entry-edit-choice")).toBeVisible();
+  await page.getByTestId("edit-rule-entry-single").click();
+  await page.getByTestId("entry-start-time").fill("17:00");
+  await page.getByTestId("entry-submit").click();
+  await expect(page.getByTestId("entry-form")).toBeHidden();
+  await expect(page.getByTestId(`calendar-entry-${changedEntry.id}`).first())
+    .toHaveClass(/calendar-event--exception/);
+  await expect(page.getByTestId(`calendar-entry-${changedEntry.id}`).first())
+    .toHaveAttribute("title", /Geänderter Regeltermin/);
+
+  const changedResponse = await request.get("/api/care-entries");
+  expect(changedResponse.ok()).toBeTruthy();
+  const changedAfterEdit = (await changedResponse.json() as Array<{
+    id: string;
+    startDateTime: string;
+    contactRuleSyncState?: string;
+  }>).find((entry) => entry.id === changedEntry.id);
+  expect(changedAfterEdit?.startDateTime).toContain("T17:00");
+  expect(changedAfterEdit?.contactRuleSyncState).toBe("manual_override");
+
+  await navigate(page, "contact");
+  await expect(page.getByTestId("contact-generated-list")).toContainText(
+    "geändert - bleibt beim Speichern der Regel erhalten"
+  );
+  await page.getByTestId("contact-pattern-save").click();
+  await expect(page.getByTestId("contact-message")).toContainText(
+    "Umgangsregel gespeichert"
+  );
+
+  const changedAfterResyncResponse = await request.get("/api/care-entries");
+  expect(changedAfterResyncResponse.ok()).toBeTruthy();
+  const changedAfterResync = (await changedAfterResyncResponse.json() as Array<{
+    id: string;
+    startDateTime: string;
+    contactRuleSyncState?: string;
+  }>).find((entry) => entry.id === changedEntry.id);
+  expect(changedAfterResync?.startDateTime).toContain("T17:00");
+  expect(changedAfterResync?.contactRuleSyncState).toBe("manual_override");
+
+  await navigate(page, "calendar");
+  await page.getByTestId("month-picker").fill("2026-07");
+  await page.getByTestId(`calendar-entry-${julyGeneratedEntries[1].id}`).first().click();
+  await page.getByTestId("edit-rule-entry-series").click();
+  await expect(page.getByTestId("page-contact")).toBeVisible();
 });
 
 test("uses a weekly multi-day contact rule template with calendar preview", async ({
