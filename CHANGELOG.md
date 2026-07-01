@@ -6,13 +6,36 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-07-01
+
 ### Added
 
+- Added native OIDC authentication with Authorization Code + PKCE login,
+  callback, logout, server-side login state, opaque session cookies, and
+  claim-based mapping into the existing `app_users` model.
+- Added native OIDC frontend login/logout handling while keeping `/api/session`
+  as the UI source for authentication and role state.
+- Added native OIDC installation, migration, rollback, and release validation
+  documentation for Podman/Compose deployments without oauth2-proxy.
 - Added native OIDC release hardening checks, trusted-proxy transition
-  guidance, and draft `v1.4.0` release notes covering migration, rollback, and
+  guidance, and `v1.4.0` release notes covering migration, rollback, and
   security validation.
+- Added GHCR testing and production image-promotion workflows plus
+  image-based Podman Compose examples for demo and production channels.
+
+### Changed
+
 - Updated the release/container toolchain to Node.js 24 LTS with npm 11.18.0 and
   direct `node` container startup to avoid npm runtime update-notifier noise.
+
+### Security
+
+- Native OIDC keeps raw tokens out of browser storage and stores only opaque
+  server-side session material.
+- Native OIDC production mode rejects users without a configured role group
+  when `OIDC_REQUIRE_ROLE_CLAIM=true`.
+- Trusted-proxy/oauth2-proxy remains documented as a transition and rollback
+  mode instead of being removed by this release.
 
 ## [1.3.0] - 2026-06-30
 
