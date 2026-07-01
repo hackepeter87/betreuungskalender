@@ -11,7 +11,7 @@ travel, costs, holidays, and unavailable periods.
 
 ## Project status
 
-- Latest published release: [v1.4.3](docs/release-notes/v1.4.3.md)
+- Latest published release: [v1.5.0](docs/release-notes/v1.5.0.md)
 - Current `main`: SQLite/API domain persistence, language packs, external
   read-only calendar overlays, native OIDC authentication, trusted-proxy
   rollback support, flexible contact rules with calendar synchronization,

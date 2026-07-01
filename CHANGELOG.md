@@ -6,6 +6,8 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-07-02
+
 ### Added
 
 - Added flexible contact rules with calendar-style preview, automatic planned
