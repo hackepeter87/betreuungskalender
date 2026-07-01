@@ -303,6 +303,100 @@ h3 {
   padding: 7px 8px;
 }
 
+.auth-menu {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.auth-menu__trigger {
+  display: inline-flex;
+  width: 42px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--teal-strong);
+  cursor: pointer;
+  box-shadow: 0 8px 18px rgba(29, 45, 73, 0.08);
+  text-decoration: none;
+}
+
+.auth-menu__trigger:hover,
+.auth-menu__trigger:focus-visible,
+.auth-menu__trigger[aria-expanded="true"] {
+  border-color: rgba(15, 137, 128, 0.35);
+  background: var(--surface-soft);
+}
+
+.auth-menu__popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  z-index: 75;
+  width: min(250px, calc(100vw - 28px));
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.auth-menu__identity {
+  display: grid;
+  gap: 3px;
+  padding: 13px 14px 12px;
+}
+
+.auth-menu__identity small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.auth-menu__identity strong {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 0.9rem;
+  line-height: 1.25;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-menu__identity span {
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
+.auth-menu__action {
+  display: flex;
+  width: 100%;
+  min-height: 44px;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 0 14px;
+  border: 0;
+  border-top: 1px solid var(--line);
+  background: transparent;
+  color: var(--teal-strong);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.86rem;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.auth-menu__action:disabled {
+  cursor: progress;
+  opacity: 0.72;
+}
+
+.auth-menu__action:hover,
+.auth-menu__action:focus-visible {
+  background: var(--surface-soft);
+}
+
 .sidebar__settings {
   width: 100%;
   margin-top: 10px;
@@ -3890,36 +3984,6 @@ h3 {
     align-items: center;
     justify-content: flex-end;
     gap: 8px;
-  }
-
-  .mobile-header .session-card {
-    width: auto;
-    max-width: min(47vw, 190px);
-    min-height: 42px;
-    flex: 0 1 auto;
-    gap: 7px;
-    border-radius: 8px;
-    background: var(--surface);
-  }
-
-  .mobile-header .session-card svg,
-  .mobile-header .session-card small {
-    display: none;
-  }
-
-  .mobile-header .session-card strong {
-    margin-top: 0;
-    font-size: 0.72rem;
-  }
-
-  .mobile-header .session-card__logout {
-    min-height: 30px;
-    padding: 0 7px;
-    border: 1px solid var(--line);
-    border-radius: 7px;
-    font-size: 0.68rem;
-    line-height: 1;
-    white-space: nowrap;
   }
 
   .mobile-nav {

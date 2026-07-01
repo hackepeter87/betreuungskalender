@@ -32,6 +32,7 @@ export type IconName =
   | "history"
   | "book"
   | "lock"
+  | "user"
   | "briefcase";
 
 const paths: Record<IconName, React.ReactNode> = {
@@ -190,6 +191,12 @@ const paths: Record<IconName, React.ReactNode> = {
     <>
       <rect x="4" y="10" width="16" height="11" rx="2" />
       <path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3" />
+    </>
+  ),
+  user: (
+    <>
+      <circle cx="12" cy="8" r="4" />
+      <path d="M5 21v-1a7 7 0 0 1 14 0v1" />
     </>
   ),
   briefcase: (
