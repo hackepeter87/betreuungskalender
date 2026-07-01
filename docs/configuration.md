@@ -26,6 +26,8 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `OIDC_REDIRECT_URI` | Native OIDC callback URI | `https://betreuung.example.net/auth/callback` | Required for `AUTH_MODE=native-oidc` | None | Must be same-origin and pre-registered at the provider |
 | `OIDC_SCOPES` | Native OIDC scopes requested at login | `openid email profile` | Optional for `AUTH_MODE=native-oidc` | `openid email profile` | Keep minimal; group claims are configured in later native authorization work |
 | `OIDC_LOGIN_STATE_TTL_SECONDS` | Native OIDC login transaction lifetime | `600` | Optional for `AUTH_MODE=native-oidc` | `600` | Short-lived state, nonce, and PKCE verifier records limit replay windows |
+| `SESSION_COOKIE_NAME` | Native OIDC opaque session cookie name | `betreuungskalender_session` | Optional for `AUTH_MODE=native-oidc` | `betreuungskalender_session` | Cookie value is opaque and never stores claims or tokens |
+| `SESSION_TTL_SECONDS` | Native OIDC server-side session lifetime | `2419200` | Optional for `AUTH_MODE=native-oidc` | `2419200` | Limits how long an unreused opaque session can remain valid |
 | `OIDC_USER_ID_HEADER` | Trusted header containing the stable OIDC subject or user ID | `x-auth-request-user` | Recommended with OIDC | `x-auth-request-user` | Must be stable across email/name changes |
 | `OIDC_EMAIL_HEADER` | Trusted header containing the OIDC email claim | `x-auth-request-email` | Optional with OIDC | `x-auth-request-email` | Stored on the internal user record when present |
 | `OIDC_DISPLAY_NAME_HEADER` | Trusted header containing the OIDC display-name claim | `x-auth-request-preferred-username` | Optional with OIDC | `x-auth-request-preferred-username` | Shown compactly in the app shell |
@@ -122,15 +124,19 @@ oauth2-proxy. Do not add an app `ports:` mapping while `TRUST_PROXY_AUTH=true`.
 
 ### Native OIDC
 
-`AUTH_MODE=native-oidc` is the target architecture for the v1.4 workstream. The
-first implementation slice validates Authorization Code + PKCE callbacks with
-`openid-client` and stores only short-lived server-side login state. It does
-not yet create persistent application sessions; that follows in the dedicated
-server-side session work package.
+`AUTH_MODE=native-oidc` is the target architecture for the v1.4 workstream. It
+validates Authorization Code + PKCE callbacks with `openid-client`, stores
+short-lived server-side login state, and creates server-side sessions with an
+opaque browser cookie. The browser cookie contains only a random session token;
+SQLite stores only the token hash plus session metadata.
 
 Native OIDC callback handling must not expose ID tokens, access tokens,
 refresh tokens, authorization codes, state, nonce, PKCE verifiers, raw claims,
 client secrets, or session identifiers to frontend JavaScript or logs.
+
+The initial native session implementation intentionally does not grant API
+roles by itself. Claim-to-role mapping and API authorization for native OIDC
+are handled by the dedicated native authorization work package.
 
 ## CORS and same-origin operation
 
