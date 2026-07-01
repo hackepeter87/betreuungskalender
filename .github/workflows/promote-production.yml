@@ -90,6 +90,7 @@ jobs:
         shell: bash
         run: |
           docker buildx imagetools create \
+            --prefer-index=false \
             --tag "${{ steps.release.outputs.production_ref }}" \
             "${{ steps.release.outputs.testing_ref }}"
 

@@ -73,7 +73,7 @@ jobs:
             exit 1
           fi
 
-          docker buildx imagetools create --tag "$target_ref" "$source_ref"
+          docker buildx imagetools create --prefer-index=false --tag "$target_ref" "$source_ref"
 
           target_digest="$(docker buildx imagetools inspect "$target_ref" | awk '/^Digest:/ {print $2; exit}')"
           if [[ "$target_digest" != "$source_digest" ]]; then

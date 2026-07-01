@@ -473,6 +473,7 @@ function checkDeploymentExamples(cwd, report) {
 
   const promotionWorkflowRequired = [
     "docker buildx imagetools create",
+    "--prefer-index=false",
     "ghcr.io",
     ":testing",
     ":production"
