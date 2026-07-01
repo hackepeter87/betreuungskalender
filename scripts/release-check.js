@@ -38,6 +38,8 @@ const CRITICAL_PROJECT_PATHS = [
   "README.md",
   "LICENSE",
   "docs/backup-restore.md",
+  "docs/native-oidc-keycloak-podman.md",
+  "docs/native-oidc-migration-rollback.md",
   "docs/release.md",
   "server/migrations/001_initial_schema.sql",
   ".github/workflows/ci.yml",
@@ -304,9 +306,19 @@ function checkReleaseMetadata(cwd, packageJson, version, report) {
 function checkDeploymentExamples(cwd, report) {
   let envExample;
   let compose;
+  let nativeInstallDocs;
+  let nativeMigrationDocs;
   try {
     envExample = readFileSync(resolve(cwd, ".env.example"), "utf8");
     compose = readFileSync(resolve(cwd, "deploy", "compose.yml"), "utf8");
+    nativeInstallDocs = readFileSync(
+      resolve(cwd, "docs", "native-oidc-keycloak-podman.md"),
+      "utf8"
+    );
+    nativeMigrationDocs = readFileSync(
+      resolve(cwd, "docs", "native-oidc-migration-rollback.md"),
+      "utf8"
+    );
   } catch {
     report.fail("release deployment examples could not be read");
     return;
@@ -325,6 +337,45 @@ function checkDeploymentExamples(cwd, report) {
     return;
   }
   report.pass("direct Compose example does not trust proxy identity headers");
+
+  const nativeInstallRequired = [
+    "AUTH_MODE=native-oidc",
+    "TRUST_PROXY_AUTH=false",
+    "OIDC_REQUIRE_ROLE_CLAIM=true",
+    "https://app.example.net/auth/callback",
+    "tokens, session cookies"
+  ];
+  const missingInstallDocs = nativeInstallRequired.filter(
+    (text) => !nativeInstallDocs.includes(text)
+  );
+  if (missingInstallDocs.length) {
+    report.fail(
+      "native OIDC install docs are missing required safety examples",
+      missingInstallDocs.map((text) => `  - ${text}`)
+    );
+  } else {
+    report.pass("native OIDC install docs include safe production defaults");
+  }
+
+  const nativeMigrationRequired = [
+    "compose.oidc.yml",
+    "AUTH_MODE=native-oidc",
+    "TRUST_PROXY_AUTH=false",
+    "AUTH_MODE=trusted-proxy",
+    "TRUST_PROXY_AUTH=true",
+    "rollback"
+  ];
+  const missingMigrationDocs = nativeMigrationRequired.filter(
+    (text) => !nativeMigrationDocs.includes(text)
+  );
+  if (missingMigrationDocs.length) {
+    report.fail(
+      "native OIDC migration docs are missing rollback safety examples",
+      missingMigrationDocs.map((text) => `  - ${text}`)
+    );
+  } else {
+    report.pass("native OIDC migration docs include trusted-proxy rollback");
+  }
 }
 
 function checkGitRepository(cwd, options, report) {

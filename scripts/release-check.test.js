@@ -182,10 +182,29 @@ test("direct Compose example does not trust proxy identity headers", () => {
   const envExample = readFileSync(resolve(".env.example"), "utf8");
   const directCompose = readFileSync(resolve("deploy", "compose.yml"), "utf8");
   const oidcEnvExample = readFileSync(resolve("deploy", ".env.oidc.example"), "utf8");
+  const nativeInstallDocs = readFileSync(
+    resolve("docs", "native-oidc-keycloak-podman.md"),
+    "utf8"
+  );
+  const nativeMigrationDocs = readFileSync(
+    resolve("docs", "native-oidc-migration-rollback.md"),
+    "utf8"
+  );
 
   assert.equal(composePublishesAppPort(directCompose), true);
   assert.equal(parseEnvValue(envExample, "TRUST_PROXY_AUTH"), "false");
   assert.equal(parseEnvValue(oidcEnvExample, "TRUST_PROXY_AUTH"), "true");
+  assert.match(nativeInstallDocs, /AUTH_MODE=native-oidc/);
+  assert.match(nativeInstallDocs, /TRUST_PROXY_AUTH=false/);
+  assert.match(nativeInstallDocs, /OIDC_REQUIRE_ROLE_CLAIM=true/);
+  assert.match(nativeInstallDocs, /https:\/\/app\.example\.net\/auth\/callback/);
+  assert.match(nativeInstallDocs, /tokens, session cookies/);
+  assert.match(nativeMigrationDocs, /compose\.oidc\.yml/);
+  assert.match(nativeMigrationDocs, /AUTH_MODE=native-oidc/);
+  assert.match(nativeMigrationDocs, /TRUST_PROXY_AUTH=false/);
+  assert.match(nativeMigrationDocs, /AUTH_MODE=trusted-proxy/);
+  assert.match(nativeMigrationDocs, /TRUST_PROXY_AUTH=true/);
+  assert.match(nativeMigrationDocs, /rollback/i);
 });
 
 test("OIDC Compose mode keeps the app private behind oauth2-proxy", () => {

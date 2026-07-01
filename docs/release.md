@@ -44,8 +44,9 @@ npm run release:check:strict
 
 The strict release check verifies the Git state, sensitive artifact patterns,
 `.gitignore`, matching package and lockfile versions, changelog and release-note
-metadata, and the expected `v<version>` tag. If the tag already exists, it must
-point to `HEAD`. The command also runs the build, lint, and test scripts.
+metadata, native OIDC deployment documentation, and the expected `v<version>`
+tag. If the tag already exists, it must point to `HEAD`. The command also runs
+the build, lint, and test scripts.
 
 ## 6. Commit the release preparation
 
@@ -106,6 +107,8 @@ recorded checksum.
 - Mark early versions as pre-releases where appropriate.
 - Do not attach real exports, backups, reports, databases, or screenshots with
   personal data.
+- For native OIDC releases, include the fresh-install, migration, rollback, and
+  trusted-proxy transition notes in the release description.
 - Publish only after the tag workflow and checksum verification pass.
 
 Publishing a non-draft `v*` release starts

@@ -154,6 +154,16 @@ Rollback must be available before cleanup starts. Use it if native login fails,
 role mapping is wrong, users lose access, or the external proxy cannot reach
 the direct app service.
 
+The restored `.env` must return to the trusted-proxy topology:
+
+```dotenv
+APP_COMPOSE_FILE=compose.oidc.yml
+AUTH_MODE=trusted-proxy
+REQUIRE_AUTH=true
+TRUST_PROXY_AUTH=true
+AUTH_LOGOUT_URL=/oauth2/sign_out
+```
+
 ```bash
 cd /opt/svc_betreuung/betreuungskalender
 cp -p config-backups/pre-native-oidc/.env .env
