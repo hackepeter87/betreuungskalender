@@ -332,7 +332,13 @@ function persistEntry(
   const isContactTime = durationMinutes < 120;
 
   if (existing) {
-    const contactRuleSyncState = existing.contactRuleId ? "manual_override" : input.contactRuleSyncState ?? null;
+    const generatedByPatternId = input.generatedByPatternId ?? existing.generatedByPatternId ?? null;
+    const ruleOccurrenceDate = input.ruleOccurrenceDate ?? existing.ruleOccurrenceDate ?? null;
+    const contactRuleId = input.contactRuleId ?? existing.contactRuleId ?? null;
+    const contactRuleSegmentId = input.contactRuleSegmentId ?? existing.contactRuleSegmentId ?? null;
+    const contactRuleOccurrenceKey = input.contactRuleOccurrenceKey ?? existing.contactRuleOccurrenceKey ?? null;
+    const responsiblePartyId = input.responsiblePartyId ?? existing.responsiblePartyId ?? null;
+    const contactRuleSyncState = contactRuleId ? "manual_override" : input.contactRuleSyncState ?? null;
     db.prepare(`
       UPDATE care_entries SET
         generated_by_pattern_id = ?, rule_occurrence_date = ?,
@@ -346,9 +352,9 @@ function persistEntry(
         updated_by = ?, updated_at = ?, deleted_at = NULL
       WHERE id = ?
     `).run(
-      input.generatedByPatternId ?? null, input.ruleOccurrenceDate ?? null,
-      input.contactRuleId ?? null, input.contactRuleSegmentId ?? null,
-      input.contactRuleOccurrenceKey ?? null, input.responsiblePartyId ?? null,
+      generatedByPatternId, ruleOccurrenceDate,
+      contactRuleId, contactRuleSegmentId,
+      contactRuleOccurrenceKey, responsiblePartyId,
       contactRuleSyncState,
       input.startDateTime, input.endDateTime, input.status, input.careScope,
       input.status === "cancelled" ? input.cancellationReason ?? null : null,
