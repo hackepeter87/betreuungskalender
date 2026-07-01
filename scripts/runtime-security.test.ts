@@ -6,7 +6,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import test from "node:test";
+import Database from "better-sqlite3";
 import ICAL from "ical.js";
+import { migrateDatabase } from "../server/db/migrationRunner.js";
+import { oidcSessionTokenForTesting } from "../server/services/oidcSessions.js";
 
 const projectRoot = resolve(import.meta.dirname, "..");
 
@@ -46,6 +49,49 @@ async function stop(process: ChildProcessWithoutNullStreams): Promise<void> {
     new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 5_000))
   ]);
   if (process.exitCode === null) process.kill("SIGKILL");
+}
+
+function seedNativeOidcUser(
+  database: Database.Database,
+  input: {
+    id: string;
+    externalSubject: string;
+    email: string;
+    displayName: string;
+    role: "admin" | "parent" | "readonly";
+    groups: string[];
+    token: string;
+  }
+): void {
+  const now = "2026-07-01T00:00:00.000Z";
+  const expiresAt = "2026-07-02T00:00:00.000Z";
+  database.prepare(`
+    INSERT INTO app_users (
+      id, external_subject, email, display_name, role, groups_json,
+      last_seen_at, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    input.id,
+    input.externalSubject,
+    input.email,
+    input.displayName,
+    input.role,
+    JSON.stringify(input.groups),
+    now,
+    now,
+    now
+  );
+  database.prepare(`
+    INSERT INTO native_oidc_sessions (
+      id, session_hash, external_subject, created_at, expires_at
+    ) VALUES (?, ?, ?, ?, ?)
+  `).run(
+    `session-${input.role}`,
+    oidcSessionTokenForTesting.hashSessionToken(input.token),
+    input.externalSubject,
+    now,
+    expiresAt
+  );
 }
 
 test("production runtime sends documented security headers and restrictive CORS", async (t) => {
@@ -457,6 +503,167 @@ test("runtime rejects users without matching OIDC groups when strict role claims
     })
   });
   assert.equal(write.status, 403);
+});
+
+test("runtime enforces native OIDC sessions without trusting proxy headers or logging secrets", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "betreuungskalender-native-oidc-runtime-"));
+  const databasePath = join(root, "app.sqlite");
+  const seededDatabase = new Database(databasePath);
+  seededDatabase.pragma("foreign_keys = ON");
+  migrateDatabase(seededDatabase);
+  const parentToken = "native-parent-session-secret";
+  const readonlyToken = "native-readonly-session-secret";
+  seedNativeOidcUser(seededDatabase, {
+    id: "user_parent",
+    externalSubject: "subject-parent",
+    email: "parent@example.net",
+    displayName: "Parent User",
+    role: "parent",
+    groups: ["/betreuungskalender/parents"],
+    token: parentToken
+  });
+  seedNativeOidcUser(seededDatabase, {
+    id: "user_readonly",
+    externalSubject: "subject-readonly",
+    email: "readonly@example.net",
+    displayName: "Readonly User",
+    role: "readonly",
+    groups: ["/betreuungskalender/readers"],
+    token: readonlyToken
+  });
+  seededDatabase.prepare(`
+    INSERT INTO native_oidc_sessions (
+      id, session_hash, external_subject, created_at, expires_at
+    ) VALUES (?, ?, ?, ?, ?)
+  `).run(
+    "session-missing-user",
+    oidcSessionTokenForTesting.hashSessionToken("native-missing-user-session-secret"),
+    "subject-missing-user",
+    "2026-07-01T00:00:00.000Z",
+    "2026-07-02T00:00:00.000Z"
+  );
+  seededDatabase.close();
+
+  const port = await freePort();
+  let logs = "";
+  const runtime = spawn(
+    process.execPath,
+    [resolve(projectRoot, "node_modules/tsx/dist/cli.mjs"), "server/index.ts"],
+    {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        NODE_ENV: "production",
+        HOST: "127.0.0.1",
+        PORT: String(port),
+        DATABASE_PATH: databasePath,
+        BACKUP_DIR: join(root, "backups"),
+        AUTH_MODE: "native-oidc",
+        REQUIRE_AUTH: "true",
+        TRUST_PROXY_AUTH: "false",
+        OIDC_ISSUER_URL: "https://idp.example.test/realms/demo",
+        OIDC_CLIENT_ID: "betreuungskalender",
+        OIDC_REDIRECT_URI: `http://127.0.0.1:${port}/auth/callback`,
+        OIDC_REQUIRE_ROLE_CLAIM: "true",
+        ALLOWED_ORIGIN: "https://allowed.example.test",
+        LOG_LEVEL: "warn",
+        RATE_LIMIT_MAX: "200",
+        RATE_LIMIT_WRITE_MAX: "200",
+        RATE_LIMIT_SENSITIVE_MAX: "200",
+        RATE_LIMIT_EXPORT_MAX: "200"
+      }
+    }
+  );
+  runtime.stdout.on("data", (chunk) => { logs += chunk; });
+  runtime.stderr.on("data", (chunk) => { logs += chunk; });
+
+  t.after(async () => {
+    await stop(runtime);
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const baseUrl = `http://127.0.0.1:${port}`;
+  await waitForHealth(`${baseUrl}/api/health`, () => logs);
+  const cookie = (token: string) => ({
+    cookie: `betreuungskalender_session=${token}`
+  });
+
+  const parentSession = await fetch(`${baseUrl}/api/session`, {
+    headers: cookie(parentToken)
+  });
+  assert.equal(parentSession.status, 200);
+  assert.deepEqual(await parentSession.json(), {
+    authRequired: true,
+    authenticated: true,
+    user: {
+      id: "user_parent",
+      displayName: "Parent User",
+      role: "parent",
+      email: "parent@example.net"
+    },
+    logoutUrl: "/auth/logout"
+  });
+
+  const trustedProxyHeadersOnly = await fetch(`${baseUrl}/api/children`, {
+    headers: {
+      "x-auth-request-user": "subject-admin",
+      "x-auth-request-groups": "/betreuungskalender/admins"
+    }
+  });
+  assert.equal(trustedProxyHeadersOnly.status, 401);
+
+  const missingUserSession = await fetch(`${baseUrl}/api/session`, {
+    headers: cookie("native-missing-user-session-secret")
+  });
+  assert.equal(missingUserSession.status, 200);
+  assert.deepEqual(await missingUserSession.json(), {
+    authRequired: true,
+    authenticated: false
+  });
+
+  assert.equal((await fetch(`${baseUrl}/api/children`, {
+    headers: cookie(readonlyToken)
+  })).status, 200);
+
+  const readonlyWrite = await fetch(`${baseUrl}/api/children`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...cookie(readonlyToken)
+    },
+    body: JSON.stringify({
+      name: "Native Readonly Child",
+      birthMonth: 1,
+      birthYear: 2016,
+      color: "#2563eb"
+    })
+  });
+  assert.equal(readonlyWrite.status, 403);
+
+  const parentWrite = await fetch(`${baseUrl}/api/children`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...cookie(parentToken)
+    },
+    body: JSON.stringify({
+      name: "Native Parent Child",
+      birthMonth: 1,
+      birthYear: 2016,
+      color: "#2563eb"
+    })
+  });
+  assert.equal(parentWrite.status, 201);
+
+  const callback = await fetch(
+    `${baseUrl}/auth/callback?code=native-code-secret&state=native-state-secret`
+  );
+  assert.equal(callback.status, 400);
+
+  assert.doesNotMatch(logs, /native-parent-session-secret/);
+  assert.doesNotMatch(logs, /native-readonly-session-secret/);
+  assert.doesNotMatch(logs, /native-missing-user-session-secret/);
+  assert.doesNotMatch(logs, /native-code-secret|native-state-secret/);
 });
 
 test("runtime serves revocable personal iCalendar feeds without broader token access", async (t) => {
