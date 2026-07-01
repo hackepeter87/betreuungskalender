@@ -14,11 +14,11 @@ The image tags have fixed meanings:
 | `vX.Y.Z` | Immutable release image and source of truth | Never edited |
 | `testing` | Mutable tag promoted from a release after image validation | `bk-demo.saas-lab.de` |
 | `production` | Mutable tag promoted from the tested digest | Production |
-| `latest` | Convenience tag for the newest non-prerelease image | Not used by deployments |
+| `latest` | Alias for the currently promoted production digest | Production convenience tag |
 
 Do not use `latest` in Compose files. Demo and production deployments must use
 `testing` and `production` respectively so promotion state is explicit. The
-`latest` tag is not used by deployments.
+`latest` tag is updated only by the production promotion workflow.
 
 ## Demo deployment
 
@@ -114,7 +114,8 @@ After the release image exists:
 2. Update `bk-demo.saas-lab.de` and complete the technical and domain smoke
    tests.
 3. Run **Promote production image** with the same release tag. The workflow
-   fails if `testing` no longer points at the release digest.
+   fails if `testing` no longer points at the release digest and updates both
+   `production` and `latest` to the tested digest.
 4. Pull and restart production after backup and restore validation.
 
 Both promotion workflows log the version, Git commit, channel tag, digest, and

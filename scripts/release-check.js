@@ -326,6 +326,7 @@ function checkDeploymentExamples(cwd, report) {
   let nativeMigrationDocs;
   let imagePromotionDocs;
   let promoteTestingWorkflow;
+  let publishReleaseImageWorkflow;
   let promoteProductionWorkflow;
   try {
     envExample = readFileSync(resolve(cwd, ".env.example"), "utf8");
@@ -348,6 +349,10 @@ function checkDeploymentExamples(cwd, report) {
     );
     promoteTestingWorkflow = readFileSync(
       resolve(cwd, ".github", "workflows", "promote-testing.yml"),
+      "utf8"
+    );
+    publishReleaseImageWorkflow = readFileSync(
+      resolve(cwd, ".github", "workflows", "publish-release-image.yml"),
       "utf8"
     );
     promoteProductionWorkflow = readFileSync(
@@ -436,7 +441,7 @@ function checkDeploymentExamples(cwd, report) {
     "deploy/compose.testing.yml",
     "deploy/compose.production.yml",
     "latest",
-    "not used by deployments",
+    "updated only by the production promotion workflow",
     "bk-demo.saas-lab.de",
     "podman-compose --env-file app.env -f compose.yml pull",
     "runtime-verify.js --expected-version X.Y.Z"
@@ -476,7 +481,8 @@ function checkDeploymentExamples(cwd, report) {
     "--prefer-index=false",
     "ghcr.io",
     ":testing",
-    ":production"
+    ":production",
+    ":latest"
   ];
   const promotionWorkflowContent = `${promoteTestingWorkflow}\n${promoteProductionWorkflow}`;
   const missingPromotionWorkflow = promotionWorkflowRequired.filter(
@@ -487,6 +493,16 @@ function checkDeploymentExamples(cwd, report) {
       "promotion workflows are missing required GHCR channel operations",
       missingPromotionWorkflow.map((text) => `  - ${text}`)
     );
+  } else if (
+    publishReleaseImageWorkflow.includes('tags+=$\'\\n\'"${image}:latest"') ||
+    publishReleaseImageWorkflow.includes("${image}:latest")
+  ) {
+    report.fail("release image publication must not update latest; latest is production only");
+  } else if (
+    !promoteProductionWorkflow.includes("latest_ref=") ||
+    !promoteProductionWorkflow.includes("--tag \"${{ steps.release.outputs.latest_ref }}\"")
+  ) {
+    report.fail("production promotion must update both production and latest tags");
   } else {
     report.pass("promotion workflows retag immutable release images");
   }
