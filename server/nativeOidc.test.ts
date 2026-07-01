@@ -57,6 +57,13 @@ function fakeLibrary(
       url.searchParams.set("client_id", "betreuungskalender");
       return url;
     },
+    buildEndSessionUrl: (_config, parameters) => {
+      const url = new URL("https://idp.example.test/realms/demo/protocol/openid-connect/logout");
+      for (const [key, value] of Object.entries(parameters)) {
+        url.searchParams.set(key, value);
+      }
+      return url;
+    },
     authorizationCodeGrant: async (_config, currentUrl, checks) => {
       grantCalls.push({ currentUrl, checks });
       return {
@@ -124,6 +131,43 @@ test("native OIDC login stores server-side state and redirects with PKCE and non
   } finally {
     cleanup();
   }
+});
+
+test("native OIDC logout redirects to the provider end-session endpoint", async () => {
+  const service = new NativeOidcService({
+    config: {
+      ...nativeConfig(),
+      postLogoutRedirectUri: "https://bk.example.test/logged-out"
+    },
+    library: fakeLibrary()
+  });
+
+  const redirect = await service.createLogoutRedirect();
+
+  assert.equal(
+    redirect.origin + redirect.pathname,
+    "https://idp.example.test/realms/demo/protocol/openid-connect/logout"
+  );
+  assert.equal(redirect.searchParams.get("client_id"), "betreuungskalender");
+  assert.equal(
+    redirect.searchParams.get("post_logout_redirect_uri"),
+    "https://bk.example.test/logged-out"
+  );
+  assert.equal(redirect.searchParams.has("id_token_hint"), false);
+});
+
+test("native OIDC logout defaults the post-logout redirect to the app origin", async () => {
+  const service = new NativeOidcService({
+    config: nativeConfig(),
+    library: fakeLibrary()
+  });
+
+  const redirect = await service.createLogoutRedirect();
+
+  assert.equal(
+    redirect.searchParams.get("post_logout_redirect_uri"),
+    "https://bk.example.test/"
+  );
 });
 
 test("native OIDC callback validates state nonce and PKCE through the client library", async () => {
@@ -279,6 +323,7 @@ test("native OIDC routes redirect login and keep callback responses token-free",
       oidcClientId: "betreuungskalender",
       oidcClientSecret: "test-secret",
       oidcRedirectUri: "https://bk.example.test/auth/callback",
+      oidcPostLogoutRedirectUri: "https://bk.example.test/",
       oidcScopes: "openid email profile",
       oidcGroupsClaim: "groups",
       oidcLoginStateTtlSeconds: 600,
@@ -293,6 +338,8 @@ test("native OIDC routes redirect login and keep callback responses token-free",
     },
     service: {
       createLoginRedirect: async () => new URL("https://idp.example.test/auth?state=state-123"),
+      createLogoutRedirect: async () =>
+        new URL("https://idp.example.test/logout?client_id=betreuungskalender"),
       validateCallback: async () => ({
         subject: "subject-123",
         email: "parent@example.net",
@@ -352,10 +399,22 @@ test("native OIDC routes redirect login and keep callback responses token-free",
     assert.equal(logout.statusCode, 200);
     assert.deepEqual(JSON.parse(logout.payload), {
       authenticated: false,
-      loggedOut: true
+      loggedOut: true,
+      logoutRedirectUrl: "https://idp.example.test/logout?client_id=betreuungskalender"
     });
     assert.match(String(logout.headers["set-cookie"]), /Max-Age=0/);
     assert.equal(sessions.findByToken(sessionToken), undefined);
+
+    const browserLogout = await app.inject({
+      method: "GET",
+      url: "/auth/logout",
+      headers: { cookie: cookieHeader ?? "" }
+    });
+    assert.equal(browserLogout.statusCode, 302);
+    assert.equal(
+      browserLogout.headers.location,
+      "https://idp.example.test/logout?client_id=betreuungskalender"
+    );
   } finally {
     await app.close();
     cleanup();
@@ -373,6 +432,7 @@ test("native OIDC callback rejects claims without a configured role group", asyn
       oidcClientId: "betreuungskalender",
       oidcClientSecret: "test-secret",
       oidcRedirectUri: "https://bk.example.test/auth/callback",
+      oidcPostLogoutRedirectUri: "https://bk.example.test/",
       oidcScopes: "openid email profile",
       oidcGroupsClaim: "groups",
       oidcLoginStateTtlSeconds: 600,
@@ -387,6 +447,7 @@ test("native OIDC callback rejects claims without a configured role group", asyn
     },
     service: {
       createLoginRedirect: async () => new URL("https://idp.example.test/auth?state=state-123"),
+      createLogoutRedirect: async () => new URL("https://idp.example.test/logout"),
       validateCallback: async () => ({
         subject: "subject-123",
         groups: ["/other"]

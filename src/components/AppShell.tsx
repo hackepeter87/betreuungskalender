@@ -148,7 +148,11 @@ export function AppShell({
     if (!session.logoutUrl) return;
     setLoggingOut(true);
     try {
-      await logoutSession(session.logoutUrl);
+      const logout = await logoutSession(session.logoutUrl);
+      if (logout.logoutRedirectUrl) {
+        window.location.assign(logout.logoutRedirectUrl);
+        return;
+      }
       await reload();
       setShowMore(false);
     } catch {

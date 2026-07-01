@@ -17,6 +17,7 @@ type NativeOidcRouteConfig = Pick<
   | "oidcClientId"
   | "oidcClientSecret"
   | "oidcRedirectUri"
+  | "oidcPostLogoutRedirectUri"
   | "oidcScopes"
   | "oidcGroupsClaim"
   | "oidcLoginStateTtlSeconds"
@@ -33,7 +34,10 @@ type NativeOidcRouteConfig = Pick<
 
 interface NativeOidcRoutesOptions {
   config: NativeOidcRouteConfig;
-  service?: Pick<NativeOidcService, "createLoginRedirect" | "validateCallback">;
+  service?: Pick<
+    NativeOidcService,
+    "createLoginRedirect" | "createLogoutRedirect" | "validateCallback"
+  >;
   sessions?: OidcSessionStore;
   upsertUser?: (user: RequestUser) => void;
 }
@@ -73,6 +77,7 @@ export async function nativeOidcRoutes(
       clientId: options.config.oidcClientId,
       clientSecret: options.config.oidcClientSecret,
       redirectUri: options.config.oidcRedirectUri,
+      postLogoutRedirectUri: options.config.oidcPostLogoutRedirectUri,
       scopes: options.config.oidcScopes,
       groupsClaim: options.config.oidcGroupsClaim,
       loginStateTtlSeconds: options.config.oidcLoginStateTtlSeconds
@@ -80,6 +85,21 @@ export async function nativeOidcRoutes(
   });
   const sessions = options.sessions ?? new OidcSessionStore();
   const upsertUser = options.upsertUser ?? upsertAuthenticatedUser;
+
+  const providerLogoutUrl = async (
+    log: FastifyInstance["log"]
+  ): Promise<string | undefined> => {
+    try {
+      return (await service.createLogoutRedirect()).href;
+    } catch (error) {
+      const normalized = sanitizedError(error);
+      log.warn(
+        { code: normalized.code, statusCode: normalized.statusCode },
+        "native oidc provider logout unavailable"
+      );
+      return undefined;
+    }
+  };
 
   app.get("/auth/login", authRateLimit, async (_request, reply) => {
     if (options.config.authMode !== "native-oidc") return notFound(reply);
@@ -140,9 +160,10 @@ export async function nativeOidcRoutes(
     sessions.revokeByToken(
       cookieValue(request.headers.cookie, options.config.sessionCookieName)
     );
+    const redirectUrl = await providerLogoutUrl(request.log);
     return reply
       .header("set-cookie", clearSessionCookie(options.config.sessionCookieName, secureCookie))
-      .redirect("/");
+      .redirect(redirectUrl ?? "/");
   });
 
   app.post("/auth/logout", authRateLimit, async (request, reply) => {
@@ -150,8 +171,13 @@ export async function nativeOidcRoutes(
     sessions.revokeByToken(
       cookieValue(request.headers.cookie, options.config.sessionCookieName)
     );
+    const redirectUrl = await providerLogoutUrl(request.log);
     return reply
       .header("set-cookie", clearSessionCookie(options.config.sessionCookieName, secureCookie))
-      .send({ authenticated: false, loggedOut: true });
+      .send({
+        authenticated: false,
+        loggedOut: true,
+        ...(redirectUrl ? { logoutRedirectUrl: redirectUrl } : {})
+      });
   });
 }
