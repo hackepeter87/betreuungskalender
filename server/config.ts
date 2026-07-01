@@ -70,6 +70,8 @@ export const config = {
   oidcRedirectUri: process.env.OIDC_REDIRECT_URI?.trim() || undefined,
   oidcScopes: textEnv(process.env.OIDC_SCOPES, "openid email profile"),
   oidcLoginStateTtlSeconds: positiveNumberEnv(process.env.OIDC_LOGIN_STATE_TTL_SECONDS, 600),
+  sessionCookieName: textEnv(process.env.SESSION_COOKIE_NAME, "betreuungskalender_session"),
+  sessionTtlSeconds: positiveNumberEnv(process.env.SESSION_TTL_SECONDS, 28 * 24 * 60 * 60),
   oidcUserIdHeader: textEnv(process.env.OIDC_USER_ID_HEADER, "x-auth-request-user"),
   oidcEmailHeader: textEnv(process.env.OIDC_EMAIL_HEADER, "x-auth-request-email"),
   oidcDisplayNameHeader: textEnv(process.env.OIDC_DISPLAY_NAME_HEADER, "x-auth-request-preferred-username"),

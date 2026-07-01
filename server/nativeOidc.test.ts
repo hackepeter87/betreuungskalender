@@ -14,6 +14,7 @@ import {
 } from "./nativeOidc.js";
 import { nativeOidcRoutes } from "./routes/nativeOidc.js";
 import { OidcLoginStateStore } from "./services/oidcLoginStates.js";
+import { OidcSessionStore } from "./services/oidcSessions.js";
 
 function testDatabase() {
   const root = mkdtempSync(join(tmpdir(), "betreuungskalender-oidc-"));
@@ -255,23 +256,29 @@ test("native OIDC callback rejects missing subjects without exposing token detai
 });
 
 test("native OIDC routes redirect login and keep callback responses token-free", async () => {
+  const { database, cleanup } = testDatabase();
   const app = Fastify({ logger: false });
+  const sessions = new OidcSessionStore(database);
   await app.register(nativeOidcRoutes, {
     config: {
       authMode: "native-oidc",
+      nodeEnv: "production",
       oidcIssuerUrl: "https://idp.example.test/realms/demo",
       oidcClientId: "betreuungskalender",
       oidcClientSecret: "test-secret",
       oidcRedirectUri: "https://bk.example.test/auth/callback",
       oidcScopes: "openid email profile",
       oidcLoginStateTtlSeconds: 600,
+      sessionCookieName: "betreuungskalender_session",
+      sessionTtlSeconds: 3600,
       rateLimitSensitiveMax: 5,
       rateLimitWindowMs: 60_000
     },
     service: {
       createLoginRedirect: async () => new URL("https://idp.example.test/auth?state=state-123"),
       validateCallback: async () => ({ subject: "subject-123" })
-    }
+    },
+    sessions
   });
 
   try {
@@ -283,15 +290,35 @@ test("native OIDC routes redirect login and keep callback responses token-free",
       method: "GET",
       url: "/auth/callback?code=code-123&state=state-123"
     });
-    assert.equal(callback.statusCode, 200);
-    assert.deepEqual(JSON.parse(callback.payload), {
-      authenticated: false,
-      loginValidated: true,
-      sessionCreated: false
-    });
+    assert.equal(callback.statusCode, 302);
+    assert.equal(callback.headers.location, "/");
     assert.equal(callback.payload.includes("subject-123"), false);
     assert.equal(callback.payload.includes("code-123"), false);
+    const setCookie = String(callback.headers["set-cookie"]);
+    assert.match(setCookie, /^betreuungskalender_session=[^;]+;/);
+    assert.match(setCookie, /HttpOnly/);
+    assert.match(setCookie, /SameSite=Lax/);
+    assert.match(setCookie, /Secure/);
+    assert.match(setCookie, /Max-Age=3600/);
+    const cookieHeader = setCookie.split(";")[0];
+    const sessionToken = cookieHeader?.split("=")[1];
+    assert.equal(Boolean(sessionToken), true);
+    assert.equal(sessions.findByToken(sessionToken)?.externalSubject, "subject-123");
+
+    const logout = await app.inject({
+      method: "POST",
+      url: "/auth/logout",
+      headers: { cookie: cookieHeader ?? "" }
+    });
+    assert.equal(logout.statusCode, 200);
+    assert.deepEqual(JSON.parse(logout.payload), {
+      authenticated: false,
+      loggedOut: true
+    });
+    assert.match(String(logout.headers["set-cookie"]), /Max-Age=0/);
+    assert.equal(sessions.findByToken(sessionToken), undefined);
   } finally {
     await app.close();
+    cleanup();
   }
 });

@@ -32,6 +32,7 @@ discovery source; it is not synchronized or treated as current persistence.
 | `app_users` | Stable users derived from trusted OIDC/proxy-auth headers |
 | `calendar_feed_tokens` | Revocable per-user iCalendar feed token hashes |
 | `native_oidc_login_states` | Short-lived server-side OIDC state, nonce, and PKCE verifier records |
+| `native_oidc_sessions` | Server-side native OIDC session token hashes and expiry metadata |
 
 ## Soft delete
 
@@ -85,6 +86,12 @@ records for native OIDC. It contains the random `state`, matching `nonce`,
 server-side PKCE verifier, redirect URI, creation timestamp, expiry timestamp,
 and optional consumption timestamp. It never stores ID tokens, access tokens,
 refresh tokens, client secrets, or browser session identifiers.
+
+`native_oidc_sessions` stores server-side native OIDC sessions. Browser cookies
+contain only random opaque tokens; SQLite stores their SHA-256 hashes, the OIDC
+subject, creation time, optional last-seen time, expiry time, and optional
+revocation time. Session rows do not store OIDC tokens, authorization codes,
+raw claims, client secrets, or role decisions.
 
 ## Care entries
 

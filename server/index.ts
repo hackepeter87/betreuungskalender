@@ -8,6 +8,7 @@ import { resolve } from "node:path";
 import { sessionInfo } from "./auth.js";
 import { createApiAuthHook } from "./authHook.js";
 import { config } from "./config.js";
+import { cookieValue } from "./cookies.js";
 import { db } from "./db/connection.js";
 import { runMigrations } from "./db/migrate.js";
 import { sanitizeRequestUrl } from "./logging.js";
@@ -25,8 +26,11 @@ import { settingsRoutes } from "./routes/settings.js";
 import { unavailablePeriodRoutes } from "./routes/unavailablePeriods.js";
 import { externalCalendarRoutes } from "./routes/externalCalendars.js";
 import { calendarFeedRoutes } from "./routes/calendarFeeds.js";
+import { OidcSessionStore } from "./services/oidcSessions.js";
 
 runMigrations();
+
+const nativeOidcSessions = new OidcSessionStore();
 
 const app = Fastify({
   logger: {
@@ -218,11 +222,21 @@ app.get("/api/ready", readLimit, async (_request, reply) => {
   });
 });
 
-app.get("/api/session", readLimit, async (request) =>
-  sessionInfo(request.headers, config)
-);
+app.get("/api/session", readLimit, async (request) => {
+  if (config.authMode === "native-oidc") {
+    const nativeSession = nativeOidcSessions.findByToken(
+      cookieValue(request.headers.cookie, config.sessionCookieName)
+    );
+    return {
+      authRequired: config.requireAuth,
+      authenticated: Boolean(nativeSession),
+      ...(nativeSession ? { logoutUrl: "/auth/logout" } : {})
+    };
+  }
+  return sessionInfo(request.headers, config);
+});
 
-await app.register(nativeOidcRoutes, { config });
+await app.register(nativeOidcRoutes, { config, sessions: nativeOidcSessions });
 await app.register(childrenRoutes);
 await app.register(careEntryRoutes);
 await app.register(holidayRoutes);

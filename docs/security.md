@@ -49,9 +49,11 @@ shared unintentionally.
 Native OIDC is introduced as the v1.4 target architecture. The native callback
 path uses Authorization Code + PKCE, server-side state/nonce/PKCE verifier
 records, and the maintained `openid-client` library for protocol validation.
-Persistent native app sessions are a separate follow-up step; until that is
-complete, keep the current trusted-proxy/oauth2-proxy production path as the
-known-good rollout and rollback mode.
+Native sessions use an opaque `HttpOnly`, `SameSite=Lax` cookie. In production
+the cookie is also `Secure`. SQLite stores only a hash of the cookie token,
+the OIDC subject, timestamps, expiry, and revocation metadata. Until native
+claim-to-role authorization is complete, keep the current trusted-proxy /
+oauth2-proxy production path as the known-good rollout and rollback mode.
 
 ## Application hardening
 
@@ -72,8 +74,10 @@ evidence files.
 Set `LOG_LEVEL=info` or `warn` in production. Request bodies are not logged by
 default. Authentication and cookie headers are redacted. Native OIDC tokens,
 authorization codes, state, nonce, PKCE verifiers, raw claims, and client
-secrets must not be logged. Do not add names, notes, evidence references,
-exported data, or full request bodies to routine logs.
+secrets must not be logged. Native session cookie values and raw session
+tokens must not be logged; store only their hashes server-side. Do not add
+names, notes, evidence references, exported data, or full request bodies to
+routine logs.
 
 Calendar feed request paths redact the token segment before application
 request metadata is logged. Reverse proxies may still log the full URL unless

@@ -17,7 +17,8 @@ const expectedMigrations = [
   "006_oidc_users",
   "007_actor_metadata",
   "008_calendar_feed_tokens",
-  "009_native_oidc_login_states"
+  "009_native_oidc_login_states",
+  "010_native_oidc_sessions"
 ];
 
 async function withTemporaryDirectory(
