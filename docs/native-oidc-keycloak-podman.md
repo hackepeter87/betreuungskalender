@@ -7,6 +7,9 @@ headers, and stores only an opaque server-side session cookie in the browser.
 Use this path for a fresh v1.4-style installation behind an existing HTTPS
 reverse proxy. Keep the oauth2-proxy trusted-proxy deployment available as the
 rollback path until native OIDC has been verified in the live environment.
+For existing oauth2-proxy deployments, follow
+[native-oidc-migration-rollback.md](native-oidc-migration-rollback.md)
+instead of treating the fresh-install steps as an in-place migration.
 
 ## Keycloak client
 

@@ -94,6 +94,10 @@ host. With rootless Podman behind a proxy on another host or VM, bind to the VM
 address or all interfaces only when firewall or proxy policy restricts access
 to the intended path.
 
+Existing oauth2-proxy deployments should use the migration and rollback guide
+instead of switching files ad hoc:
+[native-oidc-migration-rollback.md](native-oidc-migration-rollback.md).
+
 ## Release archive with oauth2-proxy
 
 For an internet-facing OIDC deployment, prefer `deploy/compose.oidc.yml` over
