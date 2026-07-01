@@ -31,12 +31,32 @@ export const unavailableCategories = [
 
 export type ApiUnavailableCategory = (typeof unavailableCategories)[number];
 
+export const carePartyKinds = [
+  "father",
+  "mother",
+  "grandparent",
+  "foster_caregiver",
+  "other"
+] as const;
+
+export type ApiCarePartyKind = (typeof carePartyKinds)[number];
+
 export interface ApiChild {
   id: string;
   name: string;
   birthMonth: number;
   birthYear: number;
   color: string;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ApiCareParty {
+  id: string;
+  name: string;
+  kind: ApiCarePartyKind;
   createdBy: string;
   updatedBy: string;
   createdAt: string;
@@ -140,6 +160,8 @@ export interface ApiSession {
   logoutUrl?: string;
 }
 
+export type ApiCalendarFeedScope = "legacy" | "all" | `party:${string}`;
+
 export interface ApiLogout {
   authenticated: false;
   loggedOut: true;
@@ -148,9 +170,28 @@ export interface ApiLogout {
 
 export interface ApiCalendarFeedStatus {
   active: boolean;
+  scope: ApiCalendarFeedScope;
   createdAt?: string;
   lastUsedAt?: string;
   feedUrl?: string;
+}
+
+export interface ApiCalendarFeedScopeOption {
+  scope: ApiCalendarFeedScope;
+  label: string;
+}
+
+export interface ApiAppUser {
+  id: string;
+  displayName: string;
+  role: "admin" | "parent" | "readonly";
+  email?: string;
+  lastSeenAt: string;
+}
+
+export interface ApiUserCarePartyAssignment {
+  userId: string;
+  carePartyIds: string[];
 }
 
 export type ContactRuleWeekday = "MO" | "TU" | "WE" | "TH" | "FR" | "SA" | "SU";

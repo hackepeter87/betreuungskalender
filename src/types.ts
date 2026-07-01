@@ -1,6 +1,6 @@
-import type { ApiContactRule } from "../shared/api";
+import type { ApiCareParty, ApiContactRule } from "../shared/api";
 
-export const SCHEMA_VERSION = 5 as const;
+export const SCHEMA_VERSION = 6 as const;
 
 export type EntryStatus = "planned" | "completed" | "cancelled";
 export type CareLocation =
@@ -54,6 +54,8 @@ export interface Child {
   createdAt: string;
   updatedAt: string;
 }
+
+export type CareParty = ApiCareParty;
 
 export interface Trip {
   id: string;
@@ -241,10 +243,12 @@ export type AuditObjectType =
   | "holiday"
   | "unavailablePeriod"
   | "child"
+  | "careParty"
   | "contactPattern"
   | "settings"
   | "monthClosure"
   | "appData"
+  | "userCarePartyAssignment"
   | "legacyMigration";
 export type AuditAction = "created" | "updated" | "deleted" | "postCloseChange";
 
@@ -298,6 +302,7 @@ export interface MonthlyClosure {
 export interface AppData {
   schemaVersion: typeof SCHEMA_VERSION;
   children: Child[];
+  careParties: CareParty[];
   entries: CareEntry[];
   holidayPeriods: HolidayPeriod[];
   unavailablePeriods: UnavailablePeriod[];

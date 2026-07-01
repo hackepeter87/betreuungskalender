@@ -14,7 +14,9 @@ import { runMigrations } from "./db/migrate.js";
 import { sanitizeRequestUrl } from "./logging.js";
 import { auditRoutes } from "./routes/audit.js";
 import { appDataRoutes } from "./routes/appData.js";
+import { appUserRoutes } from "./routes/appUsers.js";
 import { careEntryRoutes } from "./routes/careEntries.js";
+import { carePartyRoutes } from "./routes/careParties.js";
 import { childrenRoutes } from "./routes/children.js";
 import { contactPatternRoutes } from "./routes/contactPatterns.js";
 import { contactRuleRoutes } from "./routes/contactRules.js";
@@ -299,6 +301,7 @@ app.get("/api/session", readLimit, async (request) => {
 
 await app.register(nativeOidcRoutes, { config, sessions: nativeOidcSessions });
 await app.register(childrenRoutes);
+await app.register(carePartyRoutes);
 await app.register(careEntryRoutes);
 await app.register(holidayRoutes);
 await app.register(contactPatternRoutes);
@@ -310,6 +313,7 @@ await app.register(calendarFeedRoutes);
 await app.register(monthClosingRoutes);
 await app.register(migrationRoutes);
 await app.register(auditRoutes);
+await app.register(appUserRoutes);
 await app.register(appDataRoutes);
 await app.register(demoDataRoutes);
 

@@ -5,15 +5,22 @@ import { FieldHelpButton, FieldHelpLabel } from "../components/FieldHelp";
 import { Modal } from "../components/Modal";
 import { ExternalCalendarManager } from "../components/ExternalCalendarManager";
 import { useI18n } from "../i18n/I18nProvider";
-import { copy } from "../i18n/catalog";
+import { copy, type CatalogKey } from "../i18n/catalog";
 import { localeMetadata, supportedLocales } from "../i18n/resources";
 import { actorDisplayName } from "../lib/actors";
 import { api } from "../lib/api";
 import { formatDateTime } from "../lib/date";
 import { handoverLabel, locationLabel } from "../lib/labels";
 import { useAppStore } from "../store/AppStore";
-import type { ApiCalendarFeedStatus } from "../../shared/api";
-import type { CareLocation, Child, HandoverParty } from "../types";
+import {
+  carePartyKinds,
+  type ApiAppUser,
+  type ApiCalendarFeedScope,
+  type ApiCalendarFeedStatus,
+  type ApiCarePartyKind,
+  type ApiUserCarePartyAssignment
+} from "../../shared/api";
+import type { CareLocation, CareParty, Child, HandoverParty } from "../types";
 
 function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
   const { saveChild, canWrite, isSaving } = useAppStore();
@@ -74,17 +81,85 @@ function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
   );
 }
 
+function carePartyKindLabel(kind: ApiCarePartyKind, locale: "de" | "en") {
+  return copy(locale, "settings", `carePartyKind_${kind}` as CatalogKey<"settings">);
+}
+
+function CarePartyForm({ party, onDone }: { party?: CareParty; onDone: () => void }) {
+  const { saveCareParty, canWrite, isSaving } = useAppStore();
+  const { locale } = useI18n();
+  const [name, setName] = useState(party?.name ?? "");
+  const [kind, setKind] = useState<ApiCarePartyKind>(party?.kind ?? "other");
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!name.trim()) return;
+    if (await saveCareParty({ id: party?.id, name: name.trim(), kind })) {
+      onDone();
+    }
+  };
+
+  return (
+    <form className="child-form" data-testid="care-party-form" onSubmit={submit}>
+      <label className="field">
+        <span>{copy(locale, "settings", "carePartyName")}</span>
+        <input
+          data-testid="care-party-name"
+          autoFocus
+          required
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder={copy(locale, "settings", "carePartyNamePlaceholder")}
+        />
+      </label>
+      <label className="field">
+        <span>{copy(locale, "settings", "carePartyKind")}</span>
+        <select
+          data-testid="care-party-kind"
+          value={kind}
+          onChange={(event) => setKind(event.target.value as ApiCarePartyKind)}
+        >
+          {carePartyKinds.map((option) => (
+            <option key={option} value={option}>
+              {carePartyKindLabel(option, locale)}
+            </option>
+          ))}
+        </select>
+      </label>
+      <footer className="form-actions">
+        <span />
+        <div className="form-actions__right">
+          <button className="button button--secondary" type="button" onClick={onDone}>
+            {copy(locale, "settings", "cancel")}
+          </button>
+          <button className="button button--primary" data-testid="care-party-submit" type="submit" disabled={!canWrite || isSaving}>
+            {party ? copy(locale, "settings", "saveCareParty") : copy(locale, "settings", "addCareParty")}
+          </button>
+        </div>
+      </footer>
+    </form>
+  );
+}
+
 function CalendarFeedManager() {
   const { locale, intlLocale } = useI18n();
-  const { canWrite } = useAppStore();
-  const [status, setStatus] = useState<ApiCalendarFeedStatus>({ active: false });
+  const { canWrite, data } = useAppStore();
+  const [selectedScope, setSelectedScope] = useState<ApiCalendarFeedScope>("all");
+  const [status, setStatus] = useState<ApiCalendarFeedStatus>({ active: false, scope: "all" });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const scopeOptions: Array<{ scope: ApiCalendarFeedScope; label: string }> = [
+    { scope: "all", label: copy(locale, "calendarFeed", "scopeAll") },
+    ...data.careParties.map((party) => ({
+      scope: `party:${party.id}` as ApiCalendarFeedScope,
+      label: copy(locale, "calendarFeed", "scopeParty", { name: party.name })
+    }))
+  ];
 
   const loadStatus = async () => {
     try {
-      setStatus(await api.getCalendarFeed());
+      setStatus(await api.getCalendarFeed(selectedScope));
       setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -93,14 +168,14 @@ function CalendarFeedManager() {
 
   useEffect(() => {
     void loadStatus();
-  }, []);
+  }, [selectedScope]);
 
   const rotate = async () => {
     setBusy(true);
     setMessage(null);
     setError(null);
     try {
-      const next = await api.rotateCalendarFeed();
+      const next = await api.rotateCalendarFeed(selectedScope);
       setStatus(next);
       setMessage(copy(locale, "calendarFeed", "generated"));
     } catch (reason) {
@@ -116,8 +191,8 @@ function CalendarFeedManager() {
     setMessage(null);
     setError(null);
     try {
-      await api.revokeCalendarFeed();
-      setStatus({ active: false });
+      await api.revokeCalendarFeed(selectedScope);
+      setStatus({ active: false, scope: selectedScope });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -155,6 +230,23 @@ function CalendarFeedManager() {
             : copy(locale, "calendarFeed", "neverUsed")}
         </small>
       </div>
+      <label className="field">
+        <span>{copy(locale, "calendarFeed", "scopeLabel")}</span>
+        <select
+          data-testid="calendar-feed-scope"
+          value={selectedScope}
+          onChange={(event) => {
+            setSelectedScope(event.target.value as ApiCalendarFeedScope);
+            setMessage(null);
+          }}
+        >
+          {scopeOptions.map((option) => (
+            <option key={option.scope} value={option.scope}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
       {status.feedUrl ? (
         <div className="calendar-feed-url">
           <input readOnly value={status.feedUrl} data-testid="calendar-feed-url" />
@@ -183,11 +275,107 @@ function CalendarFeedManager() {
   );
 }
 
+function UserCarePartyAssignmentManager() {
+  const { locale } = useI18n();
+  const { data, session, canWrite } = useAppStore();
+  const [users, setUsers] = useState<ApiAppUser[]>([]);
+  const [assignments, setAssignments] = useState<ApiUserCarePartyAssignment[]>([]);
+  const [busyUserId, setBusyUserId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const load = async () => {
+    if (session.user?.role !== "admin") return;
+    try {
+      const [nextUsers, nextAssignments] = await Promise.all([
+        api.listAppUsers(),
+        api.listUserCarePartyAssignments()
+      ]);
+      setUsers(nextUsers);
+      setAssignments(nextAssignments);
+      setError(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
+  useEffect(() => {
+    void load();
+  }, [session.user?.role]);
+
+  if (session.user?.role !== "admin") return null;
+
+  const assignmentFor = (userId: string) =>
+    assignments.find((assignment) => assignment.userId === userId)?.carePartyIds ?? [];
+
+  const toggle = async (userId: string, carePartyId: string) => {
+    const current = assignmentFor(userId);
+    const next = current.includes(carePartyId)
+      ? current.filter((id) => id !== carePartyId)
+      : [...current, carePartyId];
+    setBusyUserId(userId);
+    setError(null);
+    try {
+      const saved = await api.updateUserCarePartyAssignment(userId, next);
+      setAssignments((items) => [
+        ...items.filter((item) => item.userId !== userId),
+        saved
+      ]);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusyUserId(null);
+    }
+  };
+
+  return (
+    <section className="panel settings-section" data-testid="user-care-party-assignments">
+      <div className="panel__header panel__header--compact">
+        <div>
+          <h2>{copy(locale, "settings", "userAssignments")}</h2>
+          <p>{copy(locale, "settings", "userAssignmentsDescription")}</p>
+        </div>
+      </div>
+      {users.length && data.careParties.length ? (
+        <div className="assignment-list">
+          {users.map((user) => {
+            const selected = assignmentFor(user.id);
+            return (
+              <div className="assignment-row" key={user.id}>
+                <div>
+                  <strong>{user.displayName}</strong>
+                  <small>{user.email ?? user.role}</small>
+                </div>
+                <div className="assignment-row__choices">
+                  {data.careParties.map((party) => (
+                    <label className="check-row" key={party.id}>
+                      <input
+                        type="checkbox"
+                        checked={selected.includes(party.id)}
+                        disabled={!canWrite || busyUserId === user.id}
+                        onChange={() => void toggle(user.id, party.id)}
+                      />
+                      {party.name}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <p className="empty-copy empty-copy--padded">{copy(locale, "settings", "userAssignmentsEmpty")}</p>
+      )}
+      {error ? <p className="form-error" role="alert">{error}</p> : null}
+    </section>
+  );
+}
+
 export function SettingsPage() {
   const { locale, intlLocale, setLocale, t } = useI18n();
   const {
     data,
     removeChild,
+    removeCareParty,
     updateSettings,
     loadDemo,
     loadEdgeCaseDemo,
@@ -197,6 +385,7 @@ export function SettingsPage() {
     isSaving
   } = useAppStore();
   const [editingChild, setEditingChild] = useState<Child | "new" | null>(null);
+  const [editingCareParty, setEditingCareParty] = useState<CareParty | "new" | null>(null);
 
   const deleteChild = async (child: Child) => {
     const affected = data.entries.filter((entry) => !entry.deletedAt && entry.childIds.includes(child.id)).length;
@@ -204,6 +393,16 @@ export function SettingsPage() {
       ? copy(locale, "settings", "childDeleteAffected", { name: child.name, count: affected })
       : copy(locale, "settings", "childDelete", { name: child.name });
     if (window.confirm(message)) await removeChild(child.id);
+  };
+
+  const deleteCareParty = async (party: CareParty) => {
+    const affectedEntries = data.entries.filter((entry) => !entry.deletedAt && entry.responsiblePartyId === party.id).length;
+    const affectedRules = data.contactRules.filter((rule) => rule.responsiblePartyId === party.id).length;
+    const affected = affectedEntries + affectedRules;
+    const message = affected
+      ? copy(locale, "settings", "carePartyDeleteBlocked", { name: party.name, count: affected })
+      : copy(locale, "settings", "carePartyDelete", { name: party.name });
+    if (window.confirm(message)) await removeCareParty(party.id);
   };
 
   const loadExamples = async () => {
@@ -260,6 +459,45 @@ export function SettingsPage() {
             </select>
             <small>{t("settings.language.fallback")}</small>
           </label>
+        </div>
+      </section>
+
+      <UserCarePartyAssignmentManager />
+
+      <section className="panel settings-section">
+        <div className="panel__header">
+          <div>
+            <h2>{copy(locale, "settings", "careParties")}</h2>
+            <p>{copy(locale, "settings", "carePartiesDescription")}</p>
+          </div>
+          <button className="button button--primary" data-testid="settings-add-care-party" type="button" onClick={() => setEditingCareParty("new")} disabled={!canWrite || isSaving}>
+            <Icon name="plus" size={17} />
+            {copy(locale, "settings", "addCareParty")}
+          </button>
+        </div>
+        <div className="child-settings-list" data-testid="care-party-list">
+          {data.careParties.map((party) => (
+            <div className="child-settings-row" key={party.id}>
+              <span className="child-avatar child-avatar--neutral">
+                <Icon name="user" size={20} />
+              </span>
+              <span>
+                <strong>{party.name}</strong>
+                <small>{carePartyKindLabel(party.kind, locale)}</small>
+                <small>
+                  {copy(locale, "common", "updatedBy", {
+                    actor: actorDisplayName(data, party.updatedBy),
+                    date: formatDateTime(party.updatedAt, intlLocale)
+                  })}
+                </small>
+              </span>
+              <span className="child-settings-row__actions">
+                <button className="icon-button icon-button--bordered" type="button" onClick={() => setEditingCareParty(party)} aria-label={copy(locale, "settings", "editCarePartyAria", { name: party.name })}><Icon name="edit" size={17} /></button>
+                <button className="icon-button icon-button--bordered icon-button--danger" type="button" onClick={() => void deleteCareParty(party)} disabled={!canWrite || isSaving} aria-label={copy(locale, "settings", "deleteCarePartyAria", { name: party.name })}><Icon name="trash" size={17} /></button>
+              </span>
+            </div>
+          ))}
+          {data.careParties.length === 0 ? <p className="empty-copy empty-copy--padded">{copy(locale, "settings", "noCareParties")}</p> : null}
         </div>
       </section>
 
@@ -369,6 +607,11 @@ export function SettingsPage() {
       {editingChild ? (
         <Modal title={editingChild === "new" ? copy(locale, "settings", "addChild") : copy(locale, "settings", "editChild")} onClose={() => setEditingChild(null)}>
           <ChildForm child={editingChild === "new" ? undefined : editingChild} onDone={() => setEditingChild(null)} />
+        </Modal>
+      ) : null}
+      {editingCareParty ? (
+        <Modal title={editingCareParty === "new" ? copy(locale, "settings", "addCareParty") : copy(locale, "settings", "editCareParty")} onClose={() => setEditingCareParty(null)}>
+          <CarePartyForm party={editingCareParty === "new" ? undefined : editingCareParty} onDone={() => setEditingCareParty(null)} />
         </Modal>
       ) : null}
     </div>

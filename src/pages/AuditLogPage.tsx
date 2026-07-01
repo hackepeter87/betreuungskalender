@@ -14,10 +14,12 @@ const objectLabels: Record<AuditObjectType, string> = {
   holiday: "Ferien",
   unavailablePeriod: "Nichtverfügbarkeit",
   child: "Kind",
+  careParty: "Betreuende Person",
   contactPattern: "Umgangsregel",
   settings: "Einstellungen",
   monthClosure: "Monatsabschluss",
   appData: "Datenbestand",
+  userCarePartyAssignment: "Nutzer-Zuordnung",
   legacyMigration: "Legacy-Migration"
 };
 

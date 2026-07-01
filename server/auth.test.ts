@@ -212,6 +212,8 @@ test("enforces read, write and admin authorization decisions", () => {
   assert.equal(requiredPermissionForRequest("GET", "/api/children"), "read");
   assert.equal(requiredPermissionForRequest("POST", "/api/children"), "write");
   assert.equal(requiredPermissionForRequest("PUT", "/api/app-data"), "admin");
+  assert.equal(requiredPermissionForRequest("GET", "/api/app-users"), "admin");
+  assert.equal(requiredPermissionForRequest("GET", "/api/user-care-party-assignments"), "admin");
   assert.equal(requiredPermissionForRequest("POST", "/api/demo-data/edge-cases"), "admin");
   assert.equal(requiredPermissionForRequest("POST", "/api/migration/legacy-import"), "admin");
 

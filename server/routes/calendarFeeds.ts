@@ -3,10 +3,12 @@ import { config } from "../config.js";
 import {
   buildPersonalCalendarFeed,
   calendarFeedStatus,
+  parseCalendarFeedScope,
   resolveCalendarFeedToken,
   revokeCalendarFeedTokens,
   rotateCalendarFeedToken
 } from "../services/calendarFeeds.js";
+import { calendarFeedRequestSchema } from "../validation/schemas.js";
 
 const readLimit = {
   config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
@@ -38,20 +40,32 @@ function tokenFromParam(value: string): string {
 }
 
 export async function calendarFeedRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/calendar-feed", readLimit, async (request) =>
-    calendarFeedStatus(request.userEmail)
-  );
-
-  app.post("/api/calendar-feed", writeLimit, async (request, reply) => {
-    const { token, status } = rotateCalendarFeedToken(request.userEmail);
-    return reply.code(201).send({
-      ...status,
-      feedUrl: feedUrl(request, token)
-    });
+  app.get<{ Querystring: { scope?: string } }>("/api/calendar-feed", readLimit, async (request) => {
+    const scope = parseCalendarFeedScope(request.query.scope).scope;
+    return calendarFeedStatus(request.userEmail, scope);
   });
 
-  app.delete("/api/calendar-feed", writeLimit, async (request, reply) => {
-    revokeCalendarFeedTokens(request.userEmail);
+  app.post("/api/calendar-feed", writeLimit, async (request, reply) => {
+    const parsed = calendarFeedRequestSchema.safeParse(request.body ?? {});
+    if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
+    try {
+      const scope = parseCalendarFeedScope(parsed.data.scope).scope;
+      const { token, status } = rotateCalendarFeedToken(request.userEmail, scope);
+      return reply.code(201).send({
+        ...status,
+        feedUrl: feedUrl(request, token)
+      });
+    } catch (error) {
+      return reply.code(400).send({
+        error: "invalid_feed_scope",
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
+  app.delete<{ Querystring: { scope?: string } }>("/api/calendar-feed", writeLimit, async (request, reply) => {
+    const scope = request.query.scope ? parseCalendarFeedScope(request.query.scope).scope : undefined;
+    revokeCalendarFeedTokens(request.userEmail, scope);
     return reply.code(204).send();
   });
 
@@ -63,10 +77,7 @@ export async function calendarFeedRoutes(app: FastifyInstance): Promise<void> {
         message: "Kalenderfeed nicht gefunden."
       });
     }
-    const calendar = buildPersonalCalendarFeed({
-      userId: token.user_id,
-      displayName: token.display_name
-    });
+    const calendar = buildPersonalCalendarFeed({ token });
     return reply
       .header("content-type", "text/calendar; charset=utf-8")
       .header("cache-control", "no-store")

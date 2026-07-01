@@ -85,6 +85,9 @@ export function EntryForm({
     ? dateTimeParts(entry.endDateTime)
     : { date: defaultDate, time: "19:00" };
   const [childIds, setChildIds] = useState<string[]>(entry?.childIds ?? []);
+  const [responsiblePartyId, setResponsiblePartyId] = useState(
+    entry?.responsiblePartyId ?? data.careParties[0]?.id ?? ""
+  );
   const [status, setStatus] = useState<EntryStatus>(entry?.status ?? "completed");
   const [additionalCare, setAdditionalCare] = useState(
     entry?.additionalCare ?? initialAdditionalCare ?? false
@@ -195,7 +198,7 @@ export function EntryForm({
       contactRuleId: entry?.contactRuleId,
       contactRuleSegmentId: entry?.contactRuleSegmentId,
       contactRuleOccurrenceKey: entry?.contactRuleOccurrenceKey,
-      responsiblePartyId: entry?.responsiblePartyId,
+      responsiblePartyId: responsiblePartyId || undefined,
       contactRuleSyncState: entry?.contactRuleSyncState,
       overnight,
       schoolHandover,
@@ -325,6 +328,23 @@ export function EntryForm({
             <FieldHelpLabel fieldId="careEntry.additionalCare">
               {copy(locale, "entryForm", "additionalCare")}
             </FieldHelpLabel>
+          </label>
+        ) : null}
+        {data.careParties.length ? (
+          <label className="field">
+            <span>{copy(locale, "entryForm", "responsibleParty")}</span>
+            <select
+              data-testid="entry-responsible-party"
+              value={responsiblePartyId}
+              onChange={(event) => setResponsiblePartyId(event.target.value)}
+            >
+              <option value="">{copy(locale, "entryForm", "responsiblePartyNone")}</option>
+              {data.careParties.map((party) => (
+                <option key={party.id} value={party.id}>
+                  {party.name}
+                </option>
+              ))}
+            </select>
           </label>
         ) : null}
       </fieldset>

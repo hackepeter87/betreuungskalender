@@ -268,15 +268,17 @@ export function requiredPermissionForRequest(
   url: string
 ): AuthPermission {
   const normalizedMethod = method.toUpperCase();
-  if (normalizedMethod === "GET" || normalizedMethod === "HEAD" || normalizedMethod === "OPTIONS") {
-    return "read";
-  }
   if (
     url.startsWith("/api/app-data") ||
+    url.startsWith("/api/app-users") ||
+    url.startsWith("/api/user-care-party-assignments") ||
     url.startsWith("/api/demo-data") ||
     url.startsWith("/api/migration/")
   ) {
     return "admin";
+  }
+  if (normalizedMethod === "GET" || normalizedMethod === "HEAD" || normalizedMethod === "OPTIONS") {
+    return "read";
   }
   return "write";
 }

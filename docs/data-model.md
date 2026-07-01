@@ -17,6 +17,7 @@ discovery source; it is not synchronized or treated as current persistence.
 | --- | --- |
 | `schema_migrations` | Applied migration identifiers and timestamps |
 | `children` | Child aliases, birth month/year, and calendar color |
+| `care_parties` | Domain caregivers such as parents, grandparents, or other responsible parties |
 | `care_entries` | Planned, completed, or cancelled care periods and details |
 | `care_entry_children` | Many-to-many child assignment for care entries |
 | `trips` | Multiple trips belonging to a care entry |
@@ -32,6 +33,7 @@ discovery source; it is not synchronized or treated as current persistence.
 | `monthly_closings` | Monthly summary and post-close change marker |
 | `audit_log` | Field changes, creates, deletes, and post-close changes |
 | `app_users` | Stable users derived from trusted proxy headers or native OIDC claims |
+| `app_user_care_party_assignments` | Optional mapping between authenticated users and domain care parties |
 | `calendar_feed_tokens` | Revocable per-user iCalendar feed token hashes |
 | `native_oidc_login_states` | Short-lived server-side OIDC state, nonce, and PKCE verifier records |
 | `native_oidc_sessions` | Server-side native OIDC session token hashes and expiry metadata |
@@ -70,17 +72,43 @@ as changed.
 for attribution and audit display; authorization still comes from the current
 request user and role.
 
+## Care parties
+
+`care_parties` stores the domain-level responsible people for care planning.
+They are deliberately separate from `app_users`: one authenticated user can
+manage all care parties in solo mode, and optional OIDC user-to-party
+assignment can be added separately for shared management.
+
+Each care party has a free display name and a coarse kind (`father`, `mother`,
+`grandparent`, `foster_caregiver`, or `other`). Existing active care entries
+and flexible contact rules are backfilled to a neutral default care party
+during migration `012_care_parties` when such data exists.
+
+`app_user_care_party_assignments` enables optional shared management. When no
+active assignment exists, the installation remains in solo mode and users with
+write permission can manage all care parties. Once at least one assignment is
+configured, non-admin users must write care entries and contact rules for one
+of their assigned care parties. Admin users remain unrestricted so they can
+repair assignments and data.
+
 ## Personal calendar feeds
 
 `calendar_feed_tokens` stores revocable per-user feed credentials. The raw
 token is shown only when generated; SQLite stores `token_hash`, the owning
-`app_users.id`, creation time, optional last-use time, and optional revocation
-time. The token authorizes only the read-only `.ics` feed endpoint and never
-grants API access.
+`app_users.id`, feed scope, creation time, optional last-use time, and optional
+revocation time. The token authorizes only the read-only `.ics` feed endpoint
+and never grants API access.
 
-Feed contents are derived from active `care_entries` where `created_by` equals
-the feed owner and `status` is not `cancelled`. Notes, evidence references,
-trips, costs, and audit data are not exported.
+Feed scopes are:
+
+- `legacy`: existing pre-v1.5 tokens; contents are derived from active
+  `care_entries` where `created_by` equals the feed owner.
+- `all`: all active, non-cancelled care entries in solo mode; for non-admin
+  shared users this is limited to their assigned care parties.
+- `party`: active, non-cancelled care entries where `responsible_party_id`
+  matches the selected care party.
+
+Notes, evidence references, trips, costs, and audit data are not exported.
 
 ## Native OIDC login state
 
@@ -101,8 +129,9 @@ decisions are read from the matching `app_users` row on each API request.
 
 Care entries contain start/end, status, care scope, overnight and holiday
 flags, additional care, location, handover, notes, evidence reference,
-calculated duration, and contact-time classification. Children, trips, and
-costs are persisted transactionally.
+calculated duration, contact-time classification, and an optional
+`responsible_party_id`. Children, trips, and costs are persisted
+transactionally.
 
 Generated planned entries can reference a flexible contact rule with
 `contact_rule_id`, `contact_rule_segment_id`, and
@@ -120,7 +149,8 @@ validated JSON, using local civil dates and `HH:mm` times. The initial sync
 window defaults to 12 months and creates planned `care_entries` when a rule is
 saved. Existing 14-day `contact_patterns` are mirrored into `contact_rules`
 with a weekly recurrence, two-week interval, Friday anchor, and a Friday-to-
-Sunday segment.
+Sunday segment. `responsible_party_id` is copied from the rule to generated
+planned entries.
 
 ## Holidays and unavailable periods
 
@@ -139,8 +169,8 @@ write-once archive.
 
 The browser backup envelope contains an application identifier, export
 timestamp, schema version, children, care entries with trips and costs,
-holidays, contact patterns, unavailable periods, audit entries, monthly
-closures, settings, actor metadata, and backup metadata. Import normalizes
+care parties, holidays, contact patterns, unavailable periods, audit entries,
+monthly closures, settings, actor metadata, and backup metadata. Import normalizes
 older supported schema versions and fills missing actor metadata with the
 importing user or the legacy `local-dev` actor where no authenticated actor is
 available.

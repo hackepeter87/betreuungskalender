@@ -5,6 +5,7 @@ import { nowIso } from "../services/common.js";
 import { upsertContactRule, upsertContactRuleFromPattern } from "../services/contactRules.js";
 import {
   appDataImportSchema,
+  carePartyInputSchema,
   careEntryInputSchema,
   childInputSchema,
   contactRuleInputSchema,
@@ -64,6 +65,8 @@ export function clearDomainData(): void {
     "holiday_periods",
     "contact_rules",
     "contact_patterns",
+    "app_user_care_party_assignments",
+    "care_parties",
     "unavailable_periods",
     "external_calendar_events",
     "external_calendar_sources",
@@ -97,6 +100,29 @@ export function insertChild(record: DataRecord, timestamp: string, userEmail: st
     input.birthMonth,
     input.birthYear,
     input.color,
+    text(record, "createdBy", userEmail),
+    text(record, "updatedBy", userEmail),
+    text(record, "createdAt", timestamp),
+    text(record, "updatedAt", timestamp)
+  );
+}
+
+export function insertCareParty(record: DataRecord, timestamp: string, userEmail: string): void {
+  if (record.deletedAt) return;
+  const input = carePartyInputSchema.parse({
+    name: record.name,
+    kind: record.kind
+  });
+  const id = text(record, "id");
+  if (!id) throw new Error("Betreuende Person ohne ID kann nicht importiert werden.");
+  db.prepare(`
+    INSERT INTO care_parties (
+      id, name, kind, created_by, updated_by, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    input.name,
+    input.kind,
     text(record, "createdBy", userEmail),
     text(record, "updatedBy", userEmail),
     text(record, "createdAt", timestamp),
@@ -431,6 +457,7 @@ export function importData(data: ReturnType<typeof appDataImportSchema.parse>, u
   const timestamp = nowIso();
   clearDomainData();
   for (const child of data.children) insertChild(child, timestamp, userEmail);
+  for (const party of data.careParties) insertCareParty(party, timestamp, userEmail);
   for (const entry of data.entries) insertEntry(entry, timestamp, userEmail);
   for (const holiday of data.holidayPeriods) insertHoliday(holiday, timestamp, userEmail);
   for (const pattern of data.contactPatterns) insertPattern(pattern, timestamp, userEmail);
@@ -501,6 +528,7 @@ export function importData(data: ReturnType<typeof appDataImportSchema.parse>, u
     holiday: "holiday_period",
     unavailablePeriod: "unavailable_period",
     child: "child",
+    careParty: "care_party",
     contactPattern: "contact_pattern",
     settings: "settings",
     monthClosure: "month_closure"
