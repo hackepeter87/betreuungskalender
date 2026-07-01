@@ -28,7 +28,7 @@ Example dashboard using fictional demonstration data. No real personal data is
 included in repository screenshots.
 
 [Features](#features) · [Development](#development-quick-start) ·
-[Container](#container-quick-start) · [Updates](docs/update.md) · [systemd/LXC](#lxcsystemd-quick-start) ·
+[Container](#container-quick-start) · [Image Promotion](docs/image-promotion.md) · [Updates](docs/update.md) · [systemd/LXC](#lxcsystemd-quick-start) ·
 [Configuration](docs/configuration.md) · [Security](docs/security.md) ·
 [Backup](docs/backup-restore.md) · [Legacy migration](docs/migration.md) ·
 [Calendar feed](docs/personal-calendar-feed.md) ·
