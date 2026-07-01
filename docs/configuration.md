@@ -158,6 +158,11 @@ and `OIDC_READONLY_GROUP` settings are used in trusted-proxy and native mode.
 When no configured group matches, native OIDC rejects the callback with `403`
 by default and does not create a browser session.
 
+In native mode, unauthenticated `/api/session` responses include
+`loginUrl: "/auth/login"`. Authenticated native sessions include
+`logoutUrl: "/auth/logout"`, which the frontend calls with `POST` before it
+refreshes session state.
+
 ## CORS and same-origin operation
 
 Production should normally serve frontend and API from the same origin.

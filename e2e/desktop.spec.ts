@@ -136,6 +136,94 @@ test("shows authenticated user and logout action when session metadata is availa
   );
 });
 
+test("shows native OIDC login action when authentication is required", async ({
+  page
+}) => {
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      if (new URL(url, window.location.href).pathname === "/api/session") {
+        return Promise.resolve(new Response(JSON.stringify({
+          authRequired: true,
+          authenticated: false,
+          loginUrl: "/auth/login"
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }));
+      }
+      return originalFetch(input, init);
+    };
+  });
+
+  await openApp(page);
+  await expect(page.getByTestId("auth-login")).toContainText("Nicht angemeldet");
+  await expect(page.getByTestId("auth-login").getByRole("link", { name: "Anmelden" }))
+    .toHaveAttribute("href", "/auth/login");
+});
+
+test("uses native OIDC POST logout and returns to unauthenticated state", async ({
+  page
+}) => {
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    let authenticated = true;
+    window.fetch = (input, init) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      const path = new URL(url, window.location.href).pathname;
+      const method = init?.method?.toUpperCase() ?? "GET";
+      if (path === "/auth/logout" && method === "POST") {
+        authenticated = false;
+        return Promise.resolve(new Response(JSON.stringify({
+          authenticated: false,
+          loggedOut: true
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }));
+      }
+      if (path === "/api/session") {
+        return Promise.resolve(new Response(JSON.stringify(authenticated
+          ? {
+              authRequired: true,
+              authenticated: true,
+              user: {
+                id: "user_e2e_parent",
+                displayName: "parent",
+                role: "parent",
+                email: "parent@example.test"
+              },
+              logoutUrl: "/auth/logout"
+            }
+          : {
+              authRequired: true,
+              authenticated: false,
+              loginUrl: "/auth/login"
+            }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }));
+      }
+      return originalFetch(input, init);
+    };
+  });
+
+  await openApp(page);
+  await expect(page.getByTestId("auth-session")).toContainText("parent");
+  await page.getByTestId("auth-logout").click();
+  await expect(page.getByTestId("auth-session")).toHaveCount(0);
+  await expect(page.getByTestId("auth-login")).toContainText("Nicht angemeldet");
+});
+
 test("keeps the shell quiet in local development without authentication", async ({
   page
 }) => {

@@ -130,6 +130,7 @@ export interface ApiSession {
     role: "admin" | "parent" | "readonly";
     email?: string;
   };
+  loginUrl?: string;
   logoutUrl?: string;
 }
 

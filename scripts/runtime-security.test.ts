@@ -618,7 +618,8 @@ test("runtime enforces native OIDC sessions without trusting proxy headers or lo
   assert.equal(missingUserSession.status, 200);
   assert.deepEqual(await missingUserSession.json(), {
     authRequired: true,
-    authenticated: false
+    authenticated: false,
+    loginUrl: "/auth/login"
   });
 
   assert.equal((await fetch(`${baseUrl}/api/children`, {
