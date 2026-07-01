@@ -6,6 +6,27 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-07-01
+
+### Added
+
+- Added an opt-in `DEMO_DATASETS_ENABLED` demo/staging feature that lets admin
+  users load a fully synthetic edge-case dataset for demos and regression
+  checks.
+
+### Changed
+
+- Mobile authenticated headers now use a compact user icon with a submenu for
+  display name, role, and logout instead of showing a crowded role/logout chip
+  directly in the header.
+- Demo/staging deployment documentation now explains the synthetic edge-case
+  dataset loader and keeps it disabled for production by default.
+
+### Fixed
+
+- Mobile native OIDC sessions now remain visible and usable from the header
+  without overflowing narrow iPhone-sized layouts.
+
 ## [1.4.2] - 2026-07-01
 
 ### Changed
