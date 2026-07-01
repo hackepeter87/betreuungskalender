@@ -185,7 +185,8 @@ test("uses native OIDC POST logout and returns to unauthenticated state", async 
         authenticated = false;
         return Promise.resolve(new Response(JSON.stringify({
           authenticated: false,
-          loggedOut: true
+          loggedOut: true,
+          logoutRedirectUrl: "/provider-logout-test"
         }), {
           status: 200,
           headers: { "content-type": "application/json" }
@@ -229,9 +230,7 @@ test("uses native OIDC POST logout and returns to unauthenticated state", async 
   await openApp(page);
   await expect(page.getByTestId("auth-session")).toContainText("parent");
   await page.getByTestId("auth-logout").click();
-  await expect(page.getByTestId("auth-session")).toHaveCount(0);
-  await expect(page.getByTestId("auth-login")).toContainText("Nicht angemeldet");
-  await expect(page.getByTestId("dashboard-new-entry")).toBeDisabled();
+  await expect(page).toHaveURL(/\/provider-logout-test$/);
 });
 
 test("keeps the shell quiet in local development without authentication", async ({

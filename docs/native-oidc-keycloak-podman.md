@@ -21,6 +21,7 @@ Create a dedicated OpenID Connect client for the app:
 - Direct Access Grants: disabled
 - Client authentication: enabled
 - Valid redirect URI: `https://app.example.net/auth/callback`
+- Valid post logout redirect URI: `https://app.example.net/`
 - Web origin: `https://app.example.net`
 - Scopes: `openid email profile`
 - MFA: recommended for every interactive user
@@ -97,6 +98,7 @@ OIDC_ISSUER_URL=https://idp.example.net/realms/example
 OIDC_CLIENT_ID=betreuungskalender
 OIDC_CLIENT_SECRET=CHANGE_ME
 OIDC_REDIRECT_URI=https://app.example.net/auth/callback
+OIDC_POST_LOGOUT_REDIRECT_URI=https://app.example.net/
 OIDC_SCOPES=openid email profile
 OIDC_GROUPS_CLAIM=groups
 OIDC_ADMIN_GROUP=/betreuungskalender/admins
@@ -112,8 +114,10 @@ LOG_LEVEL=info
 
 `OIDC_ISSUER_URL` must exactly match the Keycloak realm issuer. The redirect
 URI must exactly match the public callback URI registered on the Keycloak
-client. `OIDC_CLIENT_SECRET` is a secret and belongs only in the private `.env`
-or a reviewed secret-management mechanism.
+client. The post-logout redirect URI must also be registered on the Keycloak
+client; otherwise Keycloak may reject provider logout after the app session is
+cleared. `OIDC_CLIENT_SECRET` is a secret and belongs only in the private
+`.env` or a reviewed secret-management mechanism.
 
 Do not set `TRUST_PROXY_AUTH=true` in native mode. The application rejects that
 combination because native OIDC must not accept forged proxy identity headers
@@ -155,8 +159,9 @@ After starting the stack:
 6. Test one user per role: admin, parent, readonly, and a user without a
    configured group. The no-group user should be rejected while
    `OIDC_REQUIRE_ROLE_CLAIM=true`.
-7. Use the app logout action and confirm `/api/session` becomes
-   unauthenticated.
+7. Use the app logout action and confirm the browser is redirected through
+   Keycloak logout. A later app visit should require a fresh Keycloak login,
+   not silently reuse the old SSO session.
 8. Inspect application logs for OIDC failures only by error code and request
    ID. Logs must not contain authorization codes, tokens, session cookies,
    nonce values, PKCE verifiers, raw claims, or client secrets.
@@ -167,6 +172,9 @@ After starting the stack:
   container host connectivity to it.
 - Login loops or callback fails: verify the Keycloak redirect URI is exactly
   `https://app.example.net/auth/callback` and `OIDC_REDIRECT_URI` matches it.
+- Logout returns to the app but immediately signs in again: verify the Keycloak
+  client has `https://app.example.net/` configured as a valid post logout
+  redirect URI and `OIDC_POST_LOGOUT_REDIRECT_URI` matches it.
 - User gets `403`: verify the Keycloak ID token includes the configured
   `OIDC_GROUPS_CLAIM` with one of the full group paths.
 - Session cookie is not accepted: verify the public URL uses HTTPS in

@@ -7,6 +7,7 @@ export interface NativeOidcConfig {
   clientId?: string;
   clientSecret?: string;
   redirectUri?: string;
+  postLogoutRedirectUri?: string;
   scopes: string;
   groupsClaim: string;
   loginStateTtlSeconds: number;
@@ -32,6 +33,10 @@ export interface OidcLibrary {
     configuration: oidc.Configuration,
     parameters: Record<string, string>
   ): URL;
+  buildEndSessionUrl(
+    configuration: oidc.Configuration,
+    parameters: Record<string, string>
+  ): URL;
   authorizationCodeGrant(
     configuration: oidc.Configuration,
     currentUrl: URL,
@@ -51,6 +56,7 @@ const openidClientLibrary: OidcLibrary = {
   randomPKCECodeVerifier: oidc.randomPKCECodeVerifier,
   calculatePKCECodeChallenge: oidc.calculatePKCECodeChallenge,
   buildAuthorizationUrl: oidc.buildAuthorizationUrl,
+  buildEndSessionUrl: oidc.buildEndSessionUrl,
   authorizationCodeGrant: oidc.authorizationCodeGrant
 };
 
@@ -134,6 +140,14 @@ export class NativeOidcService {
     });
   }
 
+  async createLogoutRedirect(): Promise<URL> {
+    const configuration = await this.#configuration();
+    return this.#library.buildEndSessionUrl(configuration, {
+      client_id: this.#required("clientId", this.#config.clientId),
+      post_logout_redirect_uri: this.#postLogoutRedirectUri()
+    });
+  }
+
   async validateCallback(requestUrl: string): Promise<NativeOidcClaims> {
     const callbackUrl = this.#callbackUrl(requestUrl);
     const state = callbackUrl.searchParams.get("state")?.trim();
@@ -214,6 +228,14 @@ export class NativeOidcService {
     const callback = new URL(redirectUri);
     callback.search = request.search;
     return callback;
+  }
+
+  #postLogoutRedirectUri(): string {
+    const configured = this.#config.postLogoutRedirectUri?.trim();
+    if (configured) return configured;
+    const redirectUri = this.#required("redirectUri", this.#config.redirectUri);
+    const redirectUrl = new URL(redirectUri);
+    return `${redirectUrl.origin}/`;
   }
 
   #required(name: keyof NativeOidcConfig, value: string | undefined): string {

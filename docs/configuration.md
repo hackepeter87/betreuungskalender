@@ -24,6 +24,7 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `OIDC_CLIENT_ID` | Native OIDC client ID | `betreuungskalender` | Required for `AUTH_MODE=native-oidc` | None | Register the exact redirect URI with this client |
 | `OIDC_CLIENT_SECRET` | Native OIDC client secret | Secret value | Required for confidential native OIDC clients | None | Secret; keep only in private environment files |
 | `OIDC_REDIRECT_URI` | Native OIDC callback URI | `https://betreuung.example.net/auth/callback` | Required for `AUTH_MODE=native-oidc` | None | Must be same-origin and pre-registered at the provider |
+| `OIDC_POST_LOGOUT_REDIRECT_URI` | Native OIDC post-logout URI | `https://betreuung.example.net/` | Optional for `AUTH_MODE=native-oidc` | App origin derived from `OIDC_REDIRECT_URI` | Must be pre-registered as a valid post-logout redirect URI in Keycloak |
 | `OIDC_SCOPES` | Native OIDC scopes requested at login | `openid email profile` | Optional for `AUTH_MODE=native-oidc` | `openid email profile` | Keep minimal; add only the provider scopes required to emit configured claims |
 | `OIDC_GROUPS_CLAIM` | Native OIDC claim containing group or role values | `groups` | Recommended for `AUTH_MODE=native-oidc` | `groups` | Used for server-side native authorization |
 | `OIDC_LOGIN_STATE_TTL_SECONDS` | Native OIDC login transaction lifetime | `600` | Optional for `AUTH_MODE=native-oidc` | `600` | Short-lived state, nonce, and PKCE verifier records limit replay windows |
@@ -160,8 +161,9 @@ by default and does not create a browser session.
 
 In native mode, unauthenticated `/api/session` responses include
 `loginUrl: "/auth/login"`. Authenticated native sessions include
-`logoutUrl: "/auth/logout"`, which the frontend calls with `POST` before it
-refreshes session state.
+`logoutUrl: "/auth/logout"`, which the frontend calls with `POST`. The route
+revokes the app session, clears the app cookie, and returns a Keycloak
+end-session redirect URL so the browser can also end the upstream SSO session.
 
 For a fresh Keycloak and Podman Compose installation, follow
 [native-oidc-keycloak-podman.md](native-oidc-keycloak-podman.md). Native OIDC

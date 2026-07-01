@@ -3,6 +3,7 @@ import type {
   ApiCalendarFeedStatus,
   ApiCareEntry,
   ApiChild,
+  ApiLogout,
   ApiSession,
   ApiMonthlyClosing,
   ApiUnavailablePeriod,
@@ -107,8 +108,8 @@ export async function loadSession(): Promise<ApiSession> {
   return request<ApiSession>("/api/session");
 }
 
-export async function logoutSession(logoutUrl: string): Promise<void> {
-  await request<void>(logoutUrl, { method: "POST" });
+export async function logoutSession(logoutUrl: string): Promise<ApiLogout> {
+  return request<ApiLogout>(logoutUrl, { method: "POST" });
 }
 
 interface ApiHolidayPeriod extends HolidayPeriod {

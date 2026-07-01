@@ -129,6 +129,7 @@ export const config = {
   oidcClientId: process.env.OIDC_CLIENT_ID?.trim() || undefined,
   oidcClientSecret: process.env.OIDC_CLIENT_SECRET?.trim() || undefined,
   oidcRedirectUri: process.env.OIDC_REDIRECT_URI?.trim() || undefined,
+  oidcPostLogoutRedirectUri: process.env.OIDC_POST_LOGOUT_REDIRECT_URI?.trim() || undefined,
   oidcScopes: textEnv(process.env.OIDC_SCOPES, "openid email profile"),
   oidcGroupsClaim: textEnv(process.env.OIDC_GROUPS_CLAIM, "groups"),
   oidcLoginStateTtlSeconds: positiveNumberEnv(process.env.OIDC_LOGIN_STATE_TTL_SECONDS, 600),

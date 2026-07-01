@@ -134,6 +134,12 @@ export interface ApiSession {
   logoutUrl?: string;
 }
 
+export interface ApiLogout {
+  authenticated: false;
+  loggedOut: true;
+  logoutRedirectUrl?: string;
+}
+
 export interface ApiCalendarFeedStatus {
   active: boolean;
   createdAt?: string;

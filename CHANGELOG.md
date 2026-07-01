@@ -6,6 +6,23 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.4.2] - 2026-07-01
+
+### Changed
+
+- Native OIDC logout now redirects the browser through the provider
+  end-session endpoint so Keycloak SSO sessions are ended, not only the local
+  app session.
+- Added `OIDC_POST_LOGOUT_REDIRECT_URI` for explicit Keycloak post-logout
+  redirect configuration, defaulting to the app origin derived from
+  `OIDC_REDIRECT_URI`.
+
+### Security
+
+- Logout continues to keep tokens out of browser storage and logs while
+  clearing the app cookie and revoking the server-side session before provider
+  logout navigation.
+
 ## [1.4.1] - 2026-07-01
 
 ### Changed
