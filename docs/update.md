@@ -12,11 +12,11 @@ It never attempts reverse database migrations.
 
 | Path | Status | Update method |
 | --- | --- | --- |
-| Docker Compose | Primary production path | `npm run update` / `scripts/update.js` |
+| Docker Compose archive layout | Supported archive path | `npm run update` / `scripts/update.js` |
 | Docker without Compose | Supported runtime | Follow the same archive, backup, and rollback checks manually |
 | systemd/direct Node.js | Fallback and development path | Stop service, retain prior release, backup, install, validate, and restore manually |
 | Podman Compose | Tested compatibility only | Validate the equivalent commands in a non-production environment first |
-| GHCR image | Supported runtime artifact | Pull the immutable release digest and perform backup, migration, verification, and rollback checks manually |
+| Promoted GHCR image | Preferred image path | Pull `testing` or `production` after GitHub promotion, then perform backup, migration, verification, and rollback checks manually |
 
 The automated tool only manages the Compose layout below. Do not point it at a
 development checkout, a named-volume evaluation setup, or a live systemd
@@ -160,7 +160,7 @@ Use `v1.0.0` or a newer verified release artifact for normal production OIDC
 deployment instead of mixing an older published runtime with deployment files
 copied from `main`.
 
-## GHCR image artifact
+## Promoted GHCR image update
 
 Published releases from `v1.2.0` onward may include a prebuilt runtime image in
 GitHub Container Registry. Prefer the immutable digest recorded in
@@ -170,14 +170,33 @@ GitHub Container Registry. Prefer the immutable digest recorded in
 ghcr.io/hackepeter87/betreuungskalender@sha256:<digest>
 ```
 
-The managed update tool does not currently switch a deployment to a GHCR image.
-It manages the archive-based Compose layout where `deploy/compose.yml` or
+The managed update tool does not switch a deployment to a GHCR image. It
+manages the archive-based Compose layout where `deploy/compose.yml` or
 `deploy/compose.oidc.yml` builds `Dockerfile.release` from the verified
-extracted release directory. If an operator chooses GHCR, they must keep an
-explicit deployment-specific Compose file or Podman run configuration, retain
-the same `./data:/data` and `./backups:/backups` persistence boundary, and run
-the same backup, restore, runtime-version, readiness, and auth-boundary checks
-manually.
+extracted release directory.
+
+For image-based deployments, use `deploy/compose.testing.yml` or
+`deploy/compose.production.yml` and the promotion channels documented in
+[image-promotion.md](image-promotion.md):
+
+- `testing` for `bk-demo.saas-lab.de`;
+- `production` for production;
+- `latest` only as a convenience tag, never as a deployment target.
+
+Production image updates must still run a backup and restore check before
+pulling the promoted image:
+
+```bash
+podman-compose --env-file app.env -f compose.yml exec betreuungskalender npm run backup
+podman-compose --env-file app.env -f compose.yml exec betreuungskalender npm run restore:check
+podman-compose --env-file app.env -f compose.yml pull
+podman-compose --env-file app.env -f compose.yml up -d --force-recreate
+podman exec APP_CONTAINER node scripts/runtime-verify.js --expected-version X.Y.Z
+```
+
+Retain the same `./data:/data` and `./backups:/backups` persistence boundary.
+Rollback to an older image tag does not reverse database migrations; restore
+the matching verified SQLite backup if a failed migration changed the database.
 
 For `v1.2.0`, the GHCR image was backfilled manually. It published
 `ghcr.io/hackepeter87/betreuungskalender:v1.2.0` and

@@ -8,6 +8,9 @@ export const REQUIRED_GITIGNORE_RULES = [
   ".env.*",
   "!.env.example",
   "!deploy/.env.oidc.example",
+  "app.env",
+  "app.env.*",
+  "!deploy/app.env.demo.example",
   "/data/",
   "/backups/",
   "/exports/",
@@ -25,6 +28,7 @@ export const REQUIRED_GITIGNORE_RULES = [
 const ALLOWED_PATHS = new Set([
   ".env.example",
   "deploy/.env.oidc.example",
+  "deploy/app.env.demo.example",
   "scripts/backup.js",
   "scripts/release-check.js",
   "src/lib/export.ts",
@@ -40,11 +44,17 @@ const CRITICAL_PROJECT_PATHS = [
   "docs/backup-restore.md",
   "docs/native-oidc-keycloak-podman.md",
   "docs/native-oidc-migration-rollback.md",
+  "docs/image-promotion.md",
   "docs/release.md",
+  "deploy/compose.testing.yml",
+  "deploy/compose.production.yml",
+  "deploy/app.env.demo.example",
   "server/migrations/001_initial_schema.sql",
   ".github/workflows/ci.yml",
   ".github/workflows/container.yml",
   ".github/workflows/release.yml",
+  ".github/workflows/promote-testing.yml",
+  ".github/workflows/promote-production.yml",
   ".github/actions/validate-container/action.yml",
   ".env.example"
 ];
@@ -70,7 +80,9 @@ export function classifySensitiveArtifact(filePath) {
 
   if (
     fileName === ".env" ||
-    (fileName.startsWith(".env.") && fileName !== ".env.example")
+    (fileName.startsWith(".env.") && fileName !== ".env.example") ||
+    fileName === "app.env" ||
+    (fileName.startsWith("app.env.") && fileName !== "app.env.demo.example")
   ) {
     return "environment file";
   }
@@ -306,17 +318,36 @@ function checkReleaseMetadata(cwd, packageJson, version, report) {
 function checkDeploymentExamples(cwd, report) {
   let envExample;
   let compose;
+  let testingCompose;
+  let productionCompose;
   let nativeInstallDocs;
   let nativeMigrationDocs;
+  let imagePromotionDocs;
+  let promoteTestingWorkflow;
+  let promoteProductionWorkflow;
   try {
     envExample = readFileSync(resolve(cwd, ".env.example"), "utf8");
     compose = readFileSync(resolve(cwd, "deploy", "compose.yml"), "utf8");
+    testingCompose = readFileSync(resolve(cwd, "deploy", "compose.testing.yml"), "utf8");
+    productionCompose = readFileSync(resolve(cwd, "deploy", "compose.production.yml"), "utf8");
     nativeInstallDocs = readFileSync(
       resolve(cwd, "docs", "native-oidc-keycloak-podman.md"),
       "utf8"
     );
     nativeMigrationDocs = readFileSync(
       resolve(cwd, "docs", "native-oidc-migration-rollback.md"),
+      "utf8"
+    );
+    imagePromotionDocs = readFileSync(
+      resolve(cwd, "docs", "image-promotion.md"),
+      "utf8"
+    );
+    promoteTestingWorkflow = readFileSync(
+      resolve(cwd, ".github", "workflows", "promote-testing.yml"),
+      "utf8"
+    );
+    promoteProductionWorkflow = readFileSync(
+      resolve(cwd, ".github", "workflows", "promote-production.yml"),
       "utf8"
     );
   } catch {
@@ -375,6 +406,64 @@ function checkDeploymentExamples(cwd, report) {
     );
   } else {
     report.pass("native OIDC migration docs include trusted-proxy rollback");
+  }
+
+  const imagePromotionRequired = [
+    "deploy/compose.testing.yml",
+    "deploy/compose.production.yml",
+    "latest",
+    "not used by deployments",
+    "bk-demo.saas-lab.de",
+    "podman-compose --env-file app.env -f compose.yml pull",
+    "runtime-verify.js --expected-version X.Y.Z"
+  ];
+  const missingImageDocs = imagePromotionRequired.filter(
+    (text) => !imagePromotionDocs.includes(text)
+  );
+  if (missingImageDocs.length) {
+    report.fail(
+      "image promotion docs are missing required channel and validation examples",
+      missingImageDocs.map((text) => `  - ${text}`)
+    );
+  } else {
+    report.pass("image promotion docs define testing and production channels");
+  }
+
+  const imageComposeContent = `${testingCompose}\n${productionCompose}`;
+  if (
+    imageComposeContent.includes("APP_RELEASE_DIR") ||
+    imageComposeContent.includes("APP_RELEASE_VERSION") ||
+    imageComposeContent.includes("\n    build:")
+  ) {
+    report.fail(
+      "image Compose example must pull promoted images without release archive build settings"
+    );
+  } else if (
+    !testingCompose.includes("ghcr.io/hackepeter87/betreuungskalender:testing") ||
+    !productionCompose.includes("ghcr.io/hackepeter87/betreuungskalender:production")
+  ) {
+    report.fail("image Compose examples must use explicit testing and production tags");
+  } else {
+    report.pass("image Compose example pulls promoted GHCR tags");
+  }
+
+  const promotionWorkflowRequired = [
+    "docker buildx imagetools create",
+    "ghcr.io",
+    ":testing",
+    ":production"
+  ];
+  const promotionWorkflowContent = `${promoteTestingWorkflow}\n${promoteProductionWorkflow}`;
+  const missingPromotionWorkflow = promotionWorkflowRequired.filter(
+    (text) => !promotionWorkflowContent.includes(text)
+  );
+  if (missingPromotionWorkflow.length) {
+    report.fail(
+      "promotion workflows are missing required GHCR channel operations",
+      missingPromotionWorkflow.map((text) => `  - ${text}`)
+    );
+  } else {
+    report.pass("promotion workflows retag immutable release images");
   }
 }
 

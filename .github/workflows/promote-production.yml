@@ -1,0 +1,114 @@
+name: Promote production image
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag already promoted to testing, for example v1.4.0
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+
+jobs:
+  promote:
+    name: Promote tested image to production
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Resolve image references
+        id: release
+        shell: bash
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+          REGISTRY: ${{ env.REGISTRY }}
+          IMAGE_NAME: ${{ env.IMAGE_NAME }}
+        run: |
+          tag="$INPUT_TAG"
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Release tag must be SemVer with a leading v, got '$tag'."
+            exit 1
+          fi
+
+          image="${REGISTRY}/${IMAGE_NAME,,}"
+          {
+            echo "tag=$tag"
+            echo "version=${tag#v}"
+            echo "image=$image"
+            echo "release_ref=${image}:${tag}"
+            echo "testing_ref=${image}:testing"
+            echo "production_ref=${image}:production"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+          fetch-depth: 0
+
+      - name: Resolve release commit
+        id: git
+        run: echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Verify testing matches the release image
+        id: verify
+        shell: bash
+        run: |
+          release_ref="${{ steps.release.outputs.release_ref }}"
+          testing_ref="${{ steps.release.outputs.testing_ref }}"
+
+          release_digest="$(docker buildx imagetools inspect "$release_ref" | awk '/^Digest:/ {print $2; exit}')"
+          testing_digest="$(docker buildx imagetools inspect "$testing_ref" | awk '/^Digest:/ {print $2; exit}')"
+          if [[ -z "$release_digest" || -z "$testing_digest" ]]; then
+            echo "::error::Could not resolve release or testing digest."
+            exit 1
+          fi
+          if [[ "$testing_digest" != "$release_digest" ]]; then
+            echo "::error::testing digest $testing_digest does not match $release_ref digest $release_digest."
+            echo "::error::Promote ${{ steps.release.outputs.tag }} to testing and complete demo validation first."
+            exit 1
+          fi
+
+          {
+            echo "digest=$testing_digest"
+            echo "immutable_ref=${{ steps.release.outputs.image }}@$testing_digest"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Promote tested image
+        shell: bash
+        run: |
+          docker buildx imagetools create \
+            --tag "${{ steps.release.outputs.production_ref }}" \
+            "${{ steps.release.outputs.testing_ref }}"
+
+          production_digest="$(docker buildx imagetools inspect "${{ steps.release.outputs.production_ref }}" | awk '/^Digest:/ {print $2; exit}')"
+          if [[ "$production_digest" != "${{ steps.verify.outputs.digest }}" ]]; then
+            echo "::error::production digest $production_digest does not match tested digest ${{ steps.verify.outputs.digest }}."
+            exit 1
+          fi
+
+      - name: Summarize promotion
+        run: |
+          {
+            echo "## Production promotion"
+            echo
+            echo "- Version: \`${{ steps.release.outputs.version }}\`"
+            echo "- Release tag: \`${{ steps.release.outputs.tag }}\`"
+            echo "- Commit: \`${{ steps.git.outputs.commit }}\`"
+            echo "- Source tag: \`${{ steps.release.outputs.testing_ref }}\`"
+            echo "- Target tag: \`${{ steps.release.outputs.production_ref }}\`"
+            echo "- Digest: \`${{ steps.verify.outputs.digest }}\`"
+            echo "- Immutable reference: \`${{ steps.verify.outputs.immutable_ref }}\`"
+          } >> "$GITHUB_STEP_SUMMARY"

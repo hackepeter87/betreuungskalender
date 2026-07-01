@@ -129,8 +129,23 @@ Published image tags:
 - `ghcr.io/hackepeter87/betreuungskalender:latest` for non-prerelease
   published releases
 
-Prefer the immutable digest reference recorded in the release asset for
-deployments that use GHCR.
+`latest` is a convenience tag only. Do not use it in demo or production
+Compose files. Image-based deployments use explicit promotion channels:
+
+- `testing` for the `bk-demo.saas-lab.de` demo machine;
+- `production` for the production machine.
+
+Run the **Promote testing image** workflow with the release tag after the GHCR
+release image exists. Deploy and validate the demo machine, including native
+OIDC login, `/api/health`, `/api/ready`, unauthenticated `401` API responses,
+and persistence of synthetic demo data across the update. Only then run
+**Promote production image** with the same release tag. The production promotion
+fails if `testing` does not point at the same digest as the release tag.
+
+Prefer the immutable digest reference recorded in the release asset and workflow
+summaries when auditing what was promoted. See
+[image-promotion.md](image-promotion.md) for the Podman Compose runtime and
+promotion procedure.
 
 ## 11. Record the published-artifact smoke test
 

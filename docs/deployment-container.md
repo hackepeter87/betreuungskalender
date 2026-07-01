@@ -10,6 +10,9 @@ The repository supports three container paths:
   runtime behind oauth2-proxy on one exposed host port.
 - Published GHCR release images for operators that want to pull an immutable
   image instead of building the release runtime from an extracted archive.
+- `deploy/compose.testing.yml` and `deploy/compose.production.yml` for
+  image-based testing and production channels
+  where machines pull `testing` or `production` without local image builds.
 
 Both runtime images use Node.js 22 LTS, install production dependencies only,
 run as the unprivileged `node` user, and include a healthcheck.
@@ -20,11 +23,12 @@ pull requests and pushes. Validation succeeds only after the container's
 image to a registry and does not require deployment secrets.
 
 Published GitHub releases from `v1.2.0` onward may also include a GHCR image
-digest asset. The archive-based update path remains the primary documented
-production path because it validates the release archive, backup, migration,
-runtime version, and rollback as one operation. GHCR image deployment is useful
-when image distribution is preferred, but operators must still keep the same
-configuration, persistence, backup, and auth-boundary checks.
+digest asset. The archive-based update path remains supported because it
+validates the release archive, backup, migration, runtime version, and rollback
+as one operation. Image-based deployments are the preferred path when operators
+want stable machine configuration and updates by pulling promoted GHCR tags.
+Operators must still keep the same persistence, backup, runtime verification,
+and auth-boundary checks.
 
 ## Local checkout Docker Compose
 
@@ -63,6 +67,19 @@ Do not set host filesystem paths for `DATABASE_PATH` or `BACKUP_DIR` in the
 release `.env`. The release Compose file intentionally fixes those values inside
 the container as `/data/app.sqlite` and `/backups`; persist them through the
 host-side `./data:/data` and `./backups:/backups` bind mounts.
+
+## Promoted GHCR image deployment
+
+For testing and production machines that should not build from release
+archives, install the matching image Compose file as `compose.yml` and keep
+private settings in `app.env`. Use `deploy/compose.testing.yml` only on the demo
+machine, currently `bk-demo.saas-lab.de`. Use `deploy/compose.production.yml`
+only on the production machine. Do not use `latest` in deployment Compose files;
+it is not a release gate.
+
+The image-based path is documented in [image-promotion.md](image-promotion.md).
+It uses native OIDC without oauth2-proxy when `AUTH_MODE=native-oidc` and
+`TRUST_PROXY_AUTH=false` are set in `app.env`.
 
 ## Release archive with native OIDC
 
@@ -357,9 +374,10 @@ ghcr.io/hackepeter87/betreuungskalender:X.Y.Z
 ghcr.io/hackepeter87/betreuungskalender:latest
 ```
 
-`latest` is updated only for non-prerelease releases. Prefer the immutable
-digest reference recorded in the release asset
-`betreuungskalender-vX.Y.Z.image-digest.txt` when deploying from GHCR.
+`latest` is updated only for non-prerelease releases. It is a convenience tag,
+not a deployment target. Use `testing` and `production` through the promotion
+workflows, and prefer the immutable digest reference recorded in the release
+asset `betreuungskalender-vX.Y.Z.image-digest.txt` when auditing a promotion.
 
 For `v1.2.0`, the digest was backfilled manually and recorded in
 `betreuungskalender-v1.2.0.image-digest.txt` on the GitHub release. The
@@ -374,9 +392,10 @@ Because `v1.2.0` was backfilled through a manual workflow dispatch, `latest`
 was not updated for that release. Future non-prerelease releases published
 through the normal release event update `latest` automatically.
 
-The archive-based update flow remains the primary documented production update
-path because it validates the checksum, migration readiness, backup, rollback,
-and runtime version together. Keep registry credentials outside the repository.
+The archive-based update flow remains supported. For image-based operations,
+use the promotion procedure and the dedicated testing or production Compose
+files so machines pull a reviewed channel tag instead of building locally. Keep
+registry credentials outside the repository.
 
 With Podman, pull by digest and keep the same runtime environment and bind
 mounts as the release archive container:
@@ -399,12 +418,11 @@ podman run --rm -d --name betreuungskalender \
   ghcr.io/hackepeter87/betreuungskalender@sha256:<digest>
 ```
 
-For the trusted-header OIDC topology, keep the app container private and expose
-only oauth2-proxy, just as in `deploy/compose.oidc.yml`. If using Compose with
-the GHCR image, create a private deployment-specific Compose file by copying
-`deploy/compose.yml` or `deploy/compose.oidc.yml`, replacing the local image
-name with the immutable GHCR reference, and deleting the `build:` block. Keep
-that file outside the repository when it contains local deployment values.
+For normal image-based Compose deployments, copy `deploy/compose.testing.yml`
+or `deploy/compose.production.yml` to the target host as `compose.yml` and keep
+local deployment values in private `app.env`. For trusted-header OIDC rollback
+topologies, keep the app container private and expose only oauth2-proxy, just as
+in `deploy/compose.oidc.yml`.
 
 After starting an image-based deployment, run the same runtime verification as
 for archive deployments:

@@ -28,6 +28,7 @@ test("allows source and documentation files whose names mention backup or export
   const allowed = [
     ".env.example",
     "deploy/.env.oidc.example",
+    "deploy/app.env.demo.example",
     "docs/backup-restore.md",
     "docs/systemd/betreuungskalender-backup.service",
     "docs/systemd/betreuungskalender-backup.timer",
@@ -50,6 +51,9 @@ test("detects real databases, exports, backups, and environment files", () => {
     "deploy/.env",
     "deploy/.env.production",
     ".env.production",
+    "app.env",
+    "app.env.production",
+    "deploy/app.env",
     "data/app.sqlite",
     "data/app.sqlite-wal",
     "local.db",
@@ -181,6 +185,17 @@ test("detects whether direct Compose publishes the app port", () => {
 test("direct Compose example does not trust proxy identity headers", () => {
   const envExample = readFileSync(resolve(".env.example"), "utf8");
   const directCompose = readFileSync(resolve("deploy", "compose.yml"), "utf8");
+  const testingCompose = readFileSync(resolve("deploy", "compose.testing.yml"), "utf8");
+  const productionCompose = readFileSync(resolve("deploy", "compose.production.yml"), "utf8");
+  const imagePromotionDocs = readFileSync(resolve("docs", "image-promotion.md"), "utf8");
+  const promoteTestingWorkflow = readFileSync(
+    resolve(".github", "workflows", "promote-testing.yml"),
+    "utf8"
+  );
+  const promoteProductionWorkflow = readFileSync(
+    resolve(".github", "workflows", "promote-production.yml"),
+    "utf8"
+  );
   const oidcEnvExample = readFileSync(resolve("deploy", ".env.oidc.example"), "utf8");
   const nativeInstallDocs = readFileSync(
     resolve("docs", "native-oidc-keycloak-podman.md"),
@@ -205,6 +220,18 @@ test("direct Compose example does not trust proxy identity headers", () => {
   assert.match(nativeMigrationDocs, /AUTH_MODE=trusted-proxy/);
   assert.match(nativeMigrationDocs, /TRUST_PROXY_AUTH=true/);
   assert.match(nativeMigrationDocs, /rollback/i);
+
+  assert.match(testingCompose, /ghcr\.io\/hackepeter87\/betreuungskalender:testing/);
+  assert.match(productionCompose, /ghcr\.io\/hackepeter87\/betreuungskalender:production/);
+  assert.doesNotMatch(`${testingCompose}\n${productionCompose}`, /APP_RELEASE_DIR|APP_RELEASE_VERSION|\n    build:/);
+  assert.match(imagePromotionDocs, /deploy\/compose\.testing\.yml/);
+  assert.match(imagePromotionDocs, /deploy\/compose\.production\.yml/);
+  assert.match(imagePromotionDocs, /latest.*not used by deployments/s);
+  assert.match(imagePromotionDocs, /bk-demo\.saas-lab\.de/);
+  assert.match(promoteTestingWorkflow, /docker buildx imagetools create/);
+  assert.match(promoteTestingWorkflow, /target_ref=.*:testing/);
+  assert.match(promoteProductionWorkflow, /environment: production/);
+  assert.match(promoteProductionWorkflow, /production_ref=.*:production/);
 });
 
 test("OIDC Compose mode keeps the app private behind oauth2-proxy", () => {
