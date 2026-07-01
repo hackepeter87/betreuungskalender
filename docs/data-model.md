@@ -29,7 +29,7 @@ discovery source; it is not synchronized or treated as current persistence.
 | `settings` | JSON-encoded server-side settings |
 | `monthly_closings` | Monthly summary and post-close change marker |
 | `audit_log` | Field changes, creates, deletes, and post-close changes |
-| `app_users` | Stable users derived from trusted OIDC/proxy-auth headers |
+| `app_users` | Stable users derived from trusted proxy headers or native OIDC claims |
 | `calendar_feed_tokens` | Revocable per-user iCalendar feed token hashes |
 | `native_oidc_login_states` | Short-lived server-side OIDC state, nonce, and PKCE verifier records |
 | `native_oidc_sessions` | Server-side native OIDC session token hashes and expiry metadata |
@@ -42,10 +42,11 @@ trips, and costs follow the same principle. Audit records retain the change.
 
 ## Audit log
 
-`app_users` maps trusted OIDC/proxy subjects to stable internal user IDs. It
-stores the latest display name, email, derived role, group list, timestamps,
-and soft-delete metadata. The stable internal ID is used in API audit fields so
-name or email changes do not rewrite historical actors.
+`app_users` maps trusted proxy subjects or native OIDC `sub` claims to stable
+internal user IDs. It stores the latest display name, email, derived role,
+group list, timestamps, and soft-delete metadata. The stable internal ID is
+used in API audit fields so name or email changes do not rewrite historical
+actors.
 
 `audit_log` stores timestamp, stable API user ID, entity type and ID, action,
 field name, old/new serialized values, and optional metadata. Audit API
@@ -91,7 +92,8 @@ refresh tokens, client secrets, or browser session identifiers.
 contain only random opaque tokens; SQLite stores their SHA-256 hashes, the OIDC
 subject, creation time, optional last-seen time, expiry time, and optional
 revocation time. Session rows do not store OIDC tokens, authorization codes,
-raw claims, client secrets, or role decisions.
+raw claims, client secrets, or role decisions. Current role and permission
+decisions are read from the matching `app_users` row on each API request.
 
 ## Care entries
 

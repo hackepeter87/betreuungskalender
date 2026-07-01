@@ -15,6 +15,7 @@ import {
 import { nativeOidcRoutes } from "./routes/nativeOidc.js";
 import { OidcLoginStateStore } from "./services/oidcLoginStates.js";
 import { OidcSessionStore } from "./services/oidcSessions.js";
+import { upsertAuthenticatedUser } from "./services/users.js";
 
 function testDatabase() {
   const root = mkdtempSync(join(tmpdir(), "betreuungskalender-oidc-"));
@@ -59,7 +60,12 @@ function fakeLibrary(
     authorizationCodeGrant: async (_config, currentUrl, checks) => {
       grantCalls.push({ currentUrl, checks });
       return {
-        claims: () => ({ sub: "subject-123" })
+        claims: () => ({
+          sub: "subject-123",
+          email: "parent@example.net",
+          preferred_username: "Example Parent",
+          groups: ["/betreuungskalender/parents", "/other"]
+        })
       };
     },
     ...overrides
@@ -73,6 +79,7 @@ function nativeConfig() {
     clientSecret: "test-secret",
     redirectUri: "https://bk.example.test/auth/callback",
     scopes: "openid email profile",
+    groupsClaim: "groups",
     loginStateTtlSeconds: 600
   };
 }
@@ -139,7 +146,12 @@ test("native OIDC callback validates state nonce and PKCE through the client lib
     await service.createLoginRedirect();
     const result = await service.validateCallback("/auth/callback?code=code-123&state=state-123");
 
-    assert.deepEqual(result, { subject: "subject-123" });
+    assert.deepEqual(result, {
+      subject: "subject-123",
+      email: "parent@example.net",
+      displayName: "Example Parent",
+      groups: ["/betreuungskalender/parents", "/other"]
+    });
     assert.equal(grantCalls.length, 1);
     assert.equal(grantCalls[0]?.currentUrl.href, "https://bk.example.test/auth/callback?code=code-123&state=state-123");
     assert.deepEqual(grantCalls[0]?.checks, {
@@ -268,7 +280,12 @@ test("native OIDC routes redirect login and keep callback responses token-free",
       oidcClientSecret: "test-secret",
       oidcRedirectUri: "https://bk.example.test/auth/callback",
       oidcScopes: "openid email profile",
+      oidcGroupsClaim: "groups",
       oidcLoginStateTtlSeconds: 600,
+      oidcAdminGroup: "/betreuungskalender/admins",
+      oidcParentGroup: "/betreuungskalender/parents",
+      oidcReadonlyGroup: "/betreuungskalender/readers",
+      oidcRequireRoleClaim: true,
       sessionCookieName: "betreuungskalender_session",
       sessionTtlSeconds: 3600,
       rateLimitSensitiveMax: 5,
@@ -276,9 +293,15 @@ test("native OIDC routes redirect login and keep callback responses token-free",
     },
     service: {
       createLoginRedirect: async () => new URL("https://idp.example.test/auth?state=state-123"),
-      validateCallback: async () => ({ subject: "subject-123" })
+      validateCallback: async () => ({
+        subject: "subject-123",
+        email: "parent@example.net",
+        displayName: "Example Parent",
+        groups: ["/betreuungskalender/parents"]
+      })
     },
-    sessions
+    sessions,
+    upsertUser: (user) => upsertAuthenticatedUser(user, new Date().toISOString(), database)
   });
 
   try {
@@ -304,6 +327,22 @@ test("native OIDC routes redirect login and keep callback responses token-free",
     const sessionToken = cookieHeader?.split("=")[1];
     assert.equal(Boolean(sessionToken), true);
     assert.equal(sessions.findByToken(sessionToken)?.externalSubject, "subject-123");
+    const user = database.prepare(`
+      SELECT email, display_name, role, groups_json
+      FROM app_users
+      WHERE external_subject = ?
+    `).get("subject-123") as {
+      email: string;
+      display_name: string;
+      role: string;
+      groups_json: string;
+    };
+    assert.deepEqual(user, {
+      email: "parent@example.net",
+      display_name: "Example Parent",
+      role: "parent",
+      groups_json: "[\"/betreuungskalender/parents\"]"
+    });
 
     const logout = await app.inject({
       method: "POST",
@@ -317,6 +356,56 @@ test("native OIDC routes redirect login and keep callback responses token-free",
     });
     assert.match(String(logout.headers["set-cookie"]), /Max-Age=0/);
     assert.equal(sessions.findByToken(sessionToken), undefined);
+  } finally {
+    await app.close();
+    cleanup();
+  }
+});
+
+test("native OIDC callback rejects claims without a configured role group", async () => {
+  const { database, cleanup } = testDatabase();
+  const app = Fastify({ logger: false });
+  await app.register(nativeOidcRoutes, {
+    config: {
+      authMode: "native-oidc",
+      nodeEnv: "production",
+      oidcIssuerUrl: "https://idp.example.test/realms/demo",
+      oidcClientId: "betreuungskalender",
+      oidcClientSecret: "test-secret",
+      oidcRedirectUri: "https://bk.example.test/auth/callback",
+      oidcScopes: "openid email profile",
+      oidcGroupsClaim: "groups",
+      oidcLoginStateTtlSeconds: 600,
+      oidcAdminGroup: "/betreuungskalender/admins",
+      oidcParentGroup: "/betreuungskalender/parents",
+      oidcReadonlyGroup: "/betreuungskalender/readers",
+      oidcRequireRoleClaim: true,
+      sessionCookieName: "betreuungskalender_session",
+      sessionTtlSeconds: 3600,
+      rateLimitSensitiveMax: 5,
+      rateLimitWindowMs: 60_000
+    },
+    service: {
+      createLoginRedirect: async () => new URL("https://idp.example.test/auth?state=state-123"),
+      validateCallback: async () => ({
+        subject: "subject-123",
+        groups: ["/other"]
+      })
+    },
+    sessions: new OidcSessionStore(database)
+  });
+
+  try {
+    const callback = await app.inject({
+      method: "GET",
+      url: "/auth/callback?code=code-123&state=state-123"
+    });
+    assert.equal(callback.statusCode, 403);
+    assert.equal(callback.headers["set-cookie"], undefined);
+    assert.deepEqual(JSON.parse(callback.payload), {
+      error: "authorization_required",
+      message: "Keine passende Berechtigung in den OIDC-Claims gefunden."
+    });
   } finally {
     await app.close();
     cleanup();

@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
+import { userFromClaims, type RequestUser } from "../auth.js";
 import type { config as appConfig } from "../config.js";
 import {
   clearSessionCookie,
@@ -7,6 +8,7 @@ import {
 } from "../cookies.js";
 import { NativeOidcError, NativeOidcService } from "../nativeOidc.js";
 import { OidcSessionStore } from "../services/oidcSessions.js";
+import { upsertAuthenticatedUser } from "../services/users.js";
 
 type NativeOidcRouteConfig = Pick<
   typeof appConfig,
@@ -16,7 +18,12 @@ type NativeOidcRouteConfig = Pick<
   | "oidcClientSecret"
   | "oidcRedirectUri"
   | "oidcScopes"
+  | "oidcGroupsClaim"
   | "oidcLoginStateTtlSeconds"
+  | "oidcAdminGroup"
+  | "oidcParentGroup"
+  | "oidcReadonlyGroup"
+  | "oidcRequireRoleClaim"
   | "sessionCookieName"
   | "sessionTtlSeconds"
   | "nodeEnv"
@@ -28,6 +35,7 @@ interface NativeOidcRoutesOptions {
   config: NativeOidcRouteConfig;
   service?: Pick<NativeOidcService, "createLoginRedirect" | "validateCallback">;
   sessions?: OidcSessionStore;
+  upsertUser?: (user: RequestUser) => void;
 }
 
 function notFound(reply: FastifyReply) {
@@ -66,10 +74,12 @@ export async function nativeOidcRoutes(
       clientSecret: options.config.oidcClientSecret,
       redirectUri: options.config.oidcRedirectUri,
       scopes: options.config.oidcScopes,
+      groupsClaim: options.config.oidcGroupsClaim,
       loginStateTtlSeconds: options.config.oidcLoginStateTtlSeconds
     }
   });
   const sessions = options.sessions ?? new OidcSessionStore();
+  const upsertUser = options.upsertUser ?? upsertAuthenticatedUser;
 
   app.get("/auth/login", authRateLimit, async (_request, reply) => {
     if (options.config.authMode !== "native-oidc") return notFound(reply);
@@ -89,7 +99,21 @@ export async function nativeOidcRoutes(
     if (options.config.authMode !== "native-oidc") return notFound(reply);
     try {
       const claims = await service.validateCallback(request.url);
-      const session = sessions.create(claims.subject, options.config.sessionTtlSeconds);
+      const auth = userFromClaims(claims, {
+        adminGroup: options.config.oidcAdminGroup,
+        parentGroup: options.config.oidcParentGroup,
+        readonlyGroup: options.config.oidcReadonlyGroup,
+        requireRoleClaim: options.config.oidcRequireRoleClaim
+      });
+      if (!auth.user) {
+        throw new NativeOidcError(
+          "authorization_required",
+          403,
+          "Keine passende Berechtigung in den OIDC-Claims gefunden."
+        );
+      }
+      upsertUser(auth.user);
+      const session = sessions.create(auth.user.externalSubject, options.config.sessionTtlSeconds);
       return reply
         .header("set-cookie", serializeSessionCookie({
           name: options.config.sessionCookieName,

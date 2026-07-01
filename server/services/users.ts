@@ -1,8 +1,36 @@
 import { db } from "../db/connection.js";
-import type { RequestUser } from "../auth.js";
+import { permissionsForRole, type AuthRole, type RequestUser } from "../auth.js";
+import type Database from "better-sqlite3";
 
-export function upsertAuthenticatedUser(user: RequestUser, timestamp = new Date().toISOString()): void {
-  db.prepare(`
+interface AppUserRow {
+  id: string;
+  external_subject: string;
+  email: string | null;
+  display_name: string;
+  role: string;
+  groups_json: string;
+}
+
+function parseGroups(value: string): string[] {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter((item): item is string => typeof item === "string");
+  } catch {
+    return [];
+  }
+}
+
+function isAuthRole(value: string): value is AuthRole {
+  return value === "admin" || value === "parent" || value === "readonly";
+}
+
+export function upsertAuthenticatedUser(
+  user: RequestUser,
+  timestamp = new Date().toISOString(),
+  database: Database.Database = db
+): void {
+  database.prepare(`
     INSERT INTO app_users (
       id, external_subject, email, display_name, role, groups_json,
       last_seen_at, created_at, updated_at
@@ -26,4 +54,26 @@ export function upsertAuthenticatedUser(user: RequestUser, timestamp = new Date(
     timestamp,
     timestamp
   );
+}
+
+export function findAuthenticatedUserBySubject(
+  externalSubject: string,
+  database: Database.Database = db
+): RequestUser | undefined {
+  const row = database.prepare(`
+    SELECT id, external_subject, email, display_name, role, groups_json
+    FROM app_users
+    WHERE external_subject = ?
+      AND deleted_at IS NULL
+  `).get(externalSubject) as AppUserRow | undefined;
+  if (!row || !isAuthRole(row.role)) return undefined;
+  return {
+    id: row.id,
+    externalSubject: row.external_subject,
+    ...(row.email ? { email: row.email } : {}),
+    displayName: row.display_name,
+    groups: parseGroups(row.groups_json),
+    role: row.role,
+    permissions: permissionsForRole(row.role)
+  };
 }

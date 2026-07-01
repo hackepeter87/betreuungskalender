@@ -24,7 +24,8 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `OIDC_CLIENT_ID` | Native OIDC client ID | `betreuungskalender` | Required for `AUTH_MODE=native-oidc` | None | Register the exact redirect URI with this client |
 | `OIDC_CLIENT_SECRET` | Native OIDC client secret | Secret value | Required for confidential native OIDC clients | None | Secret; keep only in private environment files |
 | `OIDC_REDIRECT_URI` | Native OIDC callback URI | `https://betreuung.example.net/auth/callback` | Required for `AUTH_MODE=native-oidc` | None | Must be same-origin and pre-registered at the provider |
-| `OIDC_SCOPES` | Native OIDC scopes requested at login | `openid email profile` | Optional for `AUTH_MODE=native-oidc` | `openid email profile` | Keep minimal; group claims are configured in later native authorization work |
+| `OIDC_SCOPES` | Native OIDC scopes requested at login | `openid email profile` | Optional for `AUTH_MODE=native-oidc` | `openid email profile` | Keep minimal; add only the provider scopes required to emit configured claims |
+| `OIDC_GROUPS_CLAIM` | Native OIDC claim containing group or role values | `groups` | Recommended for `AUTH_MODE=native-oidc` | `groups` | Used for server-side native authorization |
 | `OIDC_LOGIN_STATE_TTL_SECONDS` | Native OIDC login transaction lifetime | `600` | Optional for `AUTH_MODE=native-oidc` | `600` | Short-lived state, nonce, and PKCE verifier records limit replay windows |
 | `SESSION_COOKIE_NAME` | Native OIDC opaque session cookie name | `betreuungskalender_session` | Optional for `AUTH_MODE=native-oidc` | `betreuungskalender_session` | Cookie value is opaque and never stores claims or tokens |
 | `SESSION_TTL_SECONDS` | Native OIDC server-side session lifetime | `2419200` | Optional for `AUTH_MODE=native-oidc` | `2419200` | Limits how long an unreused opaque session can remain valid |
@@ -35,7 +36,7 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `OIDC_ADMIN_GROUP` | Group that grants read, write, and administrative permissions | `/betreuungskalender/admins` | Recommended with OIDC | Same | Required for imports, destructive app-data operations, and migration endpoints |
 | `OIDC_PARENT_GROUP` | Group that grants normal read and write permissions | `/betreuungskalender/parents` | Recommended with OIDC | Same | Allows ordinary app data editing |
 | `OIDC_READONLY_GROUP` | Group that grants read-only access | `/betreuungskalender/readers` | Optional with OIDC | Same | Allows viewing/export reads but blocks writes |
-| `OIDC_REQUIRE_ROLE_CLAIM` | Reject users without a matching configured group | `true` | Recommended after rollout | `false` | `false` preserves existing single-user proxy deployments during migration |
+| `OIDC_REQUIRE_ROLE_CLAIM` | Reject users without a matching configured group | `true` | Recommended after rollout | `false` for local/trusted-proxy, `true` for native OIDC | `false` preserves existing single-user proxy deployments during migration; native OIDC fails closed by default |
 | `ALLOWED_ORIGIN` | Single permitted browser origin for CORS | `https://betreuung.example.net` | Recommended | `http://localhost:5173` | Prevents cross-origin browser API use |
 | `LOG_LEVEL` | Fastify/Pino log level | `info` | Optional | `info` in production, `debug` otherwise | Avoid `debug` in production unless investigating |
 | `RATE_LIMIT_MAX` | Maximum API requests per client and time window | `120` | Optional | `120` | Baseline protection for every API route, including health and readiness |
@@ -149,9 +150,13 @@ Native OIDC callback handling must not expose ID tokens, access tokens,
 refresh tokens, authorization codes, state, nonce, PKCE verifiers, raw claims,
 client secrets, or session identifiers to frontend JavaScript or logs.
 
-The initial native session implementation intentionally does not grant API
-roles by itself. Claim-to-role mapping and API authorization for native OIDC
-are handled by the dedicated native authorization work package.
+Native OIDC maps the stable `sub` claim to `app_users.external_subject`.
+`OIDC_GROUPS_CLAIM` selects the claim used for authorization and defaults to
+`groups`. Values may be emitted as an array or as comma, semicolon, or
+newline-separated strings. The same `OIDC_ADMIN_GROUP`, `OIDC_PARENT_GROUP`,
+and `OIDC_READONLY_GROUP` settings are used in trusted-proxy and native mode.
+When no configured group matches, native OIDC rejects the callback with `403`
+by default and does not create a browser session.
 
 ## CORS and same-origin operation
 

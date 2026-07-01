@@ -1,4 +1,5 @@
 import * as oidc from "openid-client";
+import type { AuthenticatedClaims } from "./auth.js";
 import { OidcLoginStateStore } from "./services/oidcLoginStates.js";
 
 export interface NativeOidcConfig {
@@ -7,15 +8,14 @@ export interface NativeOidcConfig {
   clientSecret?: string;
   redirectUri?: string;
   scopes: string;
+  groupsClaim: string;
   loginStateTtlSeconds: number;
 }
 
-export interface NativeOidcClaims {
-  subject: string;
-}
+export type NativeOidcClaims = AuthenticatedClaims;
 
 interface TokenResponseWithClaims {
-  claims(): { sub?: unknown } | undefined;
+  claims(): Record<string, unknown> | undefined;
 }
 
 export interface OidcLibrary {
@@ -53,6 +53,29 @@ const openidClientLibrary: OidcLibrary = {
   buildAuthorizationUrl: oidc.buildAuthorizationUrl,
   authorizationCodeGrant: oidc.authorizationCodeGrant
 };
+
+function stringClaim(claims: Record<string, unknown>, name: string): string | undefined {
+  const value = claims[name];
+  if (typeof value !== "string") return undefined;
+  const normalized = value.trim();
+  return normalized || undefined;
+}
+
+function groupsClaim(claims: Record<string, unknown>, name: string): string[] {
+  const value = claims[name];
+  const values = Array.isArray(value) ? value : [value];
+  return Array.from(
+    new Set(
+      values.flatMap((item) => {
+        if (typeof item !== "string") return [];
+        return item
+          .split(/[,\n;]/)
+          .map((group) => group.trim())
+          .filter(Boolean);
+      })
+    )
+  );
+}
 
 export class NativeOidcError extends Error {
   constructor(
@@ -155,7 +178,8 @@ export class NativeOidcService {
       );
     }
 
-    const subject = tokenResponse.claims()?.sub;
+    const claims = tokenResponse.claims() ?? {};
+    const subject = claims.sub;
     if (typeof subject !== "string" || !subject.trim()) {
       throw new NativeOidcError(
         "native_oidc_missing_subject",
@@ -164,7 +188,15 @@ export class NativeOidcService {
       );
     }
 
-    return { subject };
+    const email = stringClaim(claims, "email");
+    const displayName = stringClaim(claims, "preferred_username") ?? stringClaim(claims, "name");
+
+    return {
+      subject: subject.trim(),
+      groups: groupsClaim(claims, this.#config.groupsClaim),
+      ...(email ? { email } : {}),
+      ...(displayName ? { displayName } : {})
+    };
   }
 
   async #configuration(): Promise<oidc.Configuration> {
