@@ -118,8 +118,8 @@ For native OIDC without oauth2-proxy, use the direct `compose.yml` layout with
 trusted-proxy rollback path remains available until native login, role mapping,
 logout, and runtime verification pass in production.
 
-Replace `X.Y.Z` with the package version, for example `1.2.0`, and `vX.Y.Z`
-with the matching release tag, for example `v1.2.0`.
+Replace `X.Y.Z` with the package version, for example `1.4.3`, and `vX.Y.Z`
+with the matching release tag, for example `v1.4.3`.
 
 If a rootless Podman or Docker host is behind a reverse proxy running on a
 different host or VM, `HOST_BIND_ADDRESS=127.0.0.1` may not be reachable by that

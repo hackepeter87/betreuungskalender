@@ -15,6 +15,7 @@ Depending on use, the application may store:
 - Audit identities and change history
 - Monthly closure summaries
 - Personal calendar feed token hashes
+- Optional app-user to care-party assignments for shared operation
 
 The React UI reads and writes domain data only through the Fastify API and its
 SQLite database. Browser local storage is limited to non-sensitive UI
@@ -29,8 +30,9 @@ Do not send them unencrypted or upload them to public issue trackers.
 
 Personal iCalendar feed URLs are bearer secrets. The application stores only a
 hash of the token, but anyone with the generated URL can read that feed until
-it is revoked. Rotate or revoke the URL from settings if it may have been
-shared unintentionally.
+it is revoked. Feeds may cover all visible entries or one selected care party.
+Rotate or revoke the URL from settings if it may have been shared
+unintentionally.
 
 ## Network and authentication
 
@@ -77,7 +79,13 @@ external analytics, tracking services, or CDN runtime dependencies.
 
 Calendar feed tokens grant access only to the read-only `.ics` endpoint. They
 are not accepted for `/api/*` routes. Feed output excludes notes, evidence
-references, trips, costs, deleted entries, and cancelled entries.
+references, trips, costs, audit metadata, deleted entries, and cancelled
+entries. Existing legacy feed tokens retain their original user-created scope;
+new scoped tokens can be rotated per all-calendar or care-party scope.
+
+Care parties are domain records, not authentication principals. Optional
+app-user to care-party assignments restrict non-admin shared users once at
+least one assignment exists, but they do not replace `app_users.role`.
 
 The UI references external evidence by name only; it does not upload or store
 evidence files.

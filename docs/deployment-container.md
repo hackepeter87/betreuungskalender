@@ -57,9 +57,9 @@ and is the only layout managed by `npm run update`.
 The release Compose file requires `APP_RELEASE_VERSION`, `APP_RELEASE_DIR`,
 `HOST_BIND_ADDRESS`, and `HOST_PORT` in `.env`; these values are included in
 `.env.example`. `APP_RELEASE_VERSION` is the package version without the leading
-`v`, for example `1.2.0`. `APP_RELEASE_DIR` points at the extracted release
+`v`, for example `X.Y.Z`. `APP_RELEASE_DIR` points at the extracted release
 directory, for example
-`/opt/svc_betreuung/betreuungskalender/releases/v1.2.0`.
+`/opt/svc_betreuung/betreuungskalender/releases/vX.Y.Z`.
 
 The generic `.env.example` is safe for the direct `deploy/compose.yml` path and
 therefore sets `TRUST_PROXY_AUTH=false`. Do not enable trusted proxy auth while

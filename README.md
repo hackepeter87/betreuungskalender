@@ -11,11 +11,12 @@ travel, costs, holidays, and unavailable periods.
 
 ## Project status
 
-- Latest release: [v1.3.0](docs/release-notes/v1.3.0.md)
+- Latest published release: [v1.4.3](docs/release-notes/v1.4.3.md)
 - Current `main`: SQLite/API domain persistence, language packs, external
-  read-only calendar overlays, trusted OIDC claim authorization,
-  multi-parent audit metadata, personal calendar feeds, responsive mobile
-  support, backup/restore tooling, release archives, and GHCR release images
+  read-only calendar overlays, native OIDC authentication, trusted-proxy
+  rollback support, flexible contact rules with calendar synchronization,
+  care parties, scoped calendar feeds, responsive mobile support,
+  backup/restore tooling, release archives, and GHCR release images
 - Roadmap and work tracking: [GitHub milestones and issues](https://github.com/hackepeter87/betreuungskalender/milestones)
 - Stability target: stable self-hosted release line with roadmap work tracked in
   GitHub milestones
@@ -41,8 +42,9 @@ included in repository screenshots.
   reasons, overnight stays, handovers, locations, notes, and evidence references
 - Mobile agenda, tablet/desktop calendar, responsive forms, PWA manifest, and
   touch-friendly help for all input fields
-- Configurable biweekly Friday-to-Sunday target schedule and
-  planned-versus-actual analysis
+- Flexible recurring contact rules with presets, calendar preview, automatic
+  planned-entry synchronization, and planned-versus-actual analysis
+- Care parties for domain-level caregiver assignment, separate from app users
 - Additional care, holiday blocks and allocation, and actual holiday statistics
 - Duty-related and other unavailable periods with overlap notices
 - Multiple trips and costs per care entry with period statistics
@@ -50,8 +52,8 @@ included in repository screenshots.
 - JSON backup/import, separate CSV exports, neutral PDF report, and A4 print view
 - Local `.ics` holiday calendar import with source visibility and read-only
   overlays; imported events do not affect care statistics or reports
-- Revocable personal iCalendar subscription feed for care entries created by
-  the signed-in user
+- Revocable iCalendar subscription feeds for all visible care entries or a
+  selected care party; existing legacy user-created feeds remain valid
 - Fastify API with SQLite, migrations, validation, auth-proxy support, health
   endpoints, and production security headers
 
@@ -68,11 +70,12 @@ React + TypeScript + Vite
                 +-- SQLite (domain source of truth)
 ```
 
-The browser UI loads and stores children, care entries, holidays, contact
-patterns, trips, costs, unavailable periods, settings, monthly closings, and
-audit records exclusively through the API in SQLite. `localStorage` is not
-used for current domain persistence. When the API is unavailable, the
-application displays a server error and blocks write actions.
+The browser UI loads and stores children, care parties, care entries, holidays,
+flexible contact rules, legacy contact patterns, trips, costs, unavailable
+periods, settings, monthly closings, and audit records exclusively through the
+API in SQLite. `localStorage` is not used for current domain persistence. When
+the API is unavailable, the application displays a server error and blocks
+write actions.
 
 Existing data from older browser-only versions is read solely as a legacy
 migration source. The [migration assistant](docs/migration.md) previews the
