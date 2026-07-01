@@ -2,8 +2,8 @@
 
 ## Requirements
 
-- Node.js 22 LTS or a newer supported LTS release
-- npm
+- Node.js 24 LTS or a newer supported LTS release
+- npm 11 or newer
 - Build tools required by `better-sqlite3` if a prebuilt binary is unavailable
 - A writable directory for SQLite and backups
 

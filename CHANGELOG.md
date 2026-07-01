@@ -11,6 +11,8 @@ project follows semantic versioning where practical.
 - Added native OIDC release hardening checks, trusted-proxy transition
   guidance, and draft `v1.4.0` release notes covering migration, rollback, and
   security validation.
+- Updated the release/container toolchain to Node.js 24 LTS with npm 11.18.0 and
+  direct `node` container startup to avoid npm runtime update-notifier noise.
 
 ## [1.3.0] - 2026-06-30
 

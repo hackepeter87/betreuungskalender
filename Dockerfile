@@ -1,6 +1,9 @@
-FROM node:22-bookworm-slim AS build
+FROM node:24.18.0-bookworm-slim AS build
+
+ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
 WORKDIR /app
+RUN npm install -g npm@11.18.0 && npm cache clean --force
 COPY package.json package-lock.json ./
 RUN npm ci
 
@@ -12,9 +15,10 @@ COPY src ./src
 COPY scripts/copy-migrations.js ./scripts/copy-migrations.js
 RUN npm run build
 
-FROM node:22-bookworm-slim AS runtime
+FROM node:24.18.0-bookworm-slim AS runtime
 
 ENV NODE_ENV=production \
+    NPM_CONFIG_UPDATE_NOTIFIER=false \
     HOST=0.0.0.0 \
     PORT=3000 \
     DATABASE_PATH=/data/app.sqlite \
@@ -22,6 +26,7 @@ ENV NODE_ENV=production \
     LOG_LEVEL=info
 
 WORKDIR /app
+RUN npm install -g npm@11.18.0 && npm cache clean --force
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 
@@ -38,4 +43,4 @@ VOLUME ["/data", "/backups"]
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD ["node", "scripts/healthcheck.js"]
 
-CMD ["npm", "run", "start"]
+CMD ["node", "dist-server/server/index.js"]

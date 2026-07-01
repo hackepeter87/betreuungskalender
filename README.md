@@ -83,7 +83,7 @@ There is no cloud synchronization, analytics, or external tracking.
 
 ## Development quick start
 
-Requirements: Node.js 22 LTS, npm, and a build environment supported by
+Requirements: Node.js 24 LTS, npm 11, and a build environment supported by
 `better-sqlite3`.
 
 ```bash
@@ -128,7 +128,8 @@ NODE_ENV=production npm run start
 ```
 
 `npm run start` serves the built frontend and `/api` from one Fastify process.
-Migrations run at startup.
+Container images start the same server directly with `node` to avoid npm
+runtime update-notifier noise. Migrations run at startup.
 
 ## Container quick start
 

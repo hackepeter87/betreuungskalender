@@ -15,9 +15,10 @@ git status
 npm ci
 ```
 
-GitHub Actions uses Node.js 22.x and follows the same non-interactive sequence:
-`npm ci`, `npm run release:check`, and `npm run build`. The frontend is built
-with Vite through the package script; Webpack is not part of the build.
+GitHub Actions uses Node.js 24.18.0 LTS with npm 11 and follows the same
+non-interactive sequence: `npm ci`, `npm run release:check`, and
+`npm run build`. The frontend is built with Vite through the package script;
+Webpack is not part of the build.
 
 ## 3. Set the version
 
