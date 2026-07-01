@@ -3,6 +3,11 @@
   "private": true,
   "version": "1.3.0",
   "type": "module",
+  "packageManager": "npm@11.18.0",
+  "engines": {
+    "node": ">=24.0.0",
+    "npm": ">=11.18.0"
+  },
   "scripts": {
     "dev": "concurrently -k -n frontend,backend -c cyan,green \"npm:dev:frontend\" \"npm:dev:server\"",
     "dev:frontend": "vite",

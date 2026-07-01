@@ -320,6 +320,8 @@ function checkDeploymentExamples(cwd, report) {
   let compose;
   let testingCompose;
   let productionCompose;
+  let dockerfile;
+  let releaseDockerfile;
   let nativeInstallDocs;
   let nativeMigrationDocs;
   let imagePromotionDocs;
@@ -330,6 +332,8 @@ function checkDeploymentExamples(cwd, report) {
     compose = readFileSync(resolve(cwd, "deploy", "compose.yml"), "utf8");
     testingCompose = readFileSync(resolve(cwd, "deploy", "compose.testing.yml"), "utf8");
     productionCompose = readFileSync(resolve(cwd, "deploy", "compose.production.yml"), "utf8");
+    dockerfile = readFileSync(resolve(cwd, "Dockerfile"), "utf8");
+    releaseDockerfile = readFileSync(resolve(cwd, "Dockerfile.release"), "utf8");
     nativeInstallDocs = readFileSync(
       resolve(cwd, "docs", "native-oidc-keycloak-podman.md"),
       "utf8"
@@ -368,6 +372,26 @@ function checkDeploymentExamples(cwd, report) {
     return;
   }
   report.pass("direct Compose example does not trust proxy identity headers");
+
+  const dockerfiles = `${dockerfile}\n${releaseDockerfile}`;
+  if (
+    !dockerfile.includes("FROM node:24.18.0-bookworm-slim AS build") ||
+    !dockerfile.includes("FROM node:24.18.0-bookworm-slim AS runtime") ||
+    !releaseDockerfile.includes("FROM node:24.18.0-bookworm-slim AS runtime") ||
+    !dockerfiles.includes("npm install -g npm@11.18.0")
+  ) {
+    report.fail("Dockerfiles must use the pinned Node.js 24 LTS runtime image and npm 11.18.0");
+  } else if (
+    !dockerfiles.includes("NPM_CONFIG_UPDATE_NOTIFIER=false") ||
+    dockerfiles.includes('CMD ["npm", "run", "start"]') ||
+    !dockerfiles.includes('CMD ["node", "dist-server/server/index.js"]')
+  ) {
+    report.fail(
+      "Dockerfiles must disable npm update notifications and start the server directly with node"
+    );
+  } else {
+    report.pass("Dockerfiles use Node.js 24 LTS without npm runtime startup");
+  }
 
   const nativeInstallRequired = [
     "AUTH_MODE=native-oidc",

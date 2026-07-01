@@ -45,7 +45,8 @@ shared unintentionally.
 - Keep API rate limits enabled and tune their documented environment variables
   only after reviewing expected client traffic. Imports, migrations, exports,
   and writes intentionally have stricter limits than normal API reads.
-- Keep the host, Node.js, proxy, Keycloak, and container images updated.
+- Keep the host, Node.js 24 LTS runtime, npm 11 toolchain, proxy, Keycloak,
+  and container images updated.
 
 Native OIDC is introduced as the v1.4 target architecture. The native callback
 path uses Authorization Code + PKCE, server-side state/nonce/PKCE verifier

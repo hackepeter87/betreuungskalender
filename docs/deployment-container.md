@@ -14,8 +14,12 @@ The repository supports three container paths:
   image-based testing and production channels
   where machines pull `testing` or `production` without local image builds.
 
-Both runtime images use Node.js 22 LTS, install production dependencies only,
-run as the unprivileged `node` user, and include a healthcheck.
+Both runtime images use Node.js 24 LTS and explicitly install npm 11.18.0 with
+npm update notifications disabled. They install production dependencies only,
+run as the unprivileged `node` user, and include a healthcheck. The container
+entrypoint starts the Fastify server directly with `node` instead of
+`npm run start`, so normal container startup logs do not contain npm
+update-notifier messages.
 
 GitHub Actions builds the image and starts a disposable container on relevant
 pull requests and pushes. Validation succeeds only after the container's

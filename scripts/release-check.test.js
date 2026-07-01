@@ -196,6 +196,8 @@ test("direct Compose example does not trust proxy identity headers", () => {
     resolve(".github", "workflows", "promote-production.yml"),
     "utf8"
   );
+  const dockerfile = readFileSync(resolve("Dockerfile"), "utf8");
+  const releaseDockerfile = readFileSync(resolve("Dockerfile.release"), "utf8");
   const oidcEnvExample = readFileSync(resolve("deploy", ".env.oidc.example"), "utf8");
   const nativeInstallDocs = readFileSync(
     resolve("docs", "native-oidc-keycloak-podman.md"),
@@ -209,6 +211,13 @@ test("direct Compose example does not trust proxy identity headers", () => {
   assert.equal(composePublishesAppPort(directCompose), true);
   assert.equal(parseEnvValue(envExample, "TRUST_PROXY_AUTH"), "false");
   assert.equal(parseEnvValue(oidcEnvExample, "TRUST_PROXY_AUTH"), "true");
+  assert.match(dockerfile, /FROM node:24\.18\.0-bookworm-slim AS build/);
+  assert.match(dockerfile, /FROM node:24\.18\.0-bookworm-slim AS runtime/);
+  assert.match(releaseDockerfile, /FROM node:24\.18\.0-bookworm-slim AS runtime/);
+  assert.match(`${dockerfile}\n${releaseDockerfile}`, /npm install -g npm@11\.18\.0/);
+  assert.match(`${dockerfile}\n${releaseDockerfile}`, /NPM_CONFIG_UPDATE_NOTIFIER=false/);
+  assert.doesNotMatch(`${dockerfile}\n${releaseDockerfile}`, /CMD \["npm", "run", "start"\]/);
+  assert.match(`${dockerfile}\n${releaseDockerfile}`, /CMD \["node", "dist-server\/server\/index\.js"\]/);
   assert.match(nativeInstallDocs, /AUTH_MODE=native-oidc/);
   assert.match(nativeInstallDocs, /TRUST_PROXY_AUTH=false/);
   assert.match(nativeInstallDocs, /OIDC_REQUIRE_ROLE_CLAIM=true/);
