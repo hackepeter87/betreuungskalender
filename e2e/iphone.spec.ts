@@ -41,6 +41,50 @@ test("uses mobile navigation and the agenda for entry creation", async ({
   )).toBe(true);
 });
 
+test("shows authenticated user and logout action in the mobile header", async ({
+  page
+}) => {
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      if (new URL(url, window.location.href).pathname === "/api/session") {
+        return Promise.resolve(new Response(JSON.stringify({
+          authRequired: true,
+          authenticated: true,
+          user: {
+            id: "user_e2e_parent",
+            displayName: "parent",
+            role: "parent",
+            email: "parent@example.test"
+          },
+          logoutUrl: "/oauth2/sign_out"
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }));
+      }
+      return originalFetch(input, init);
+    };
+  });
+
+  await openApp(page);
+  await expect(page.getByTestId("mobile-auth-session")).toBeVisible();
+  await expect(page.getByTestId("mobile-auth-session")).toContainText("parent");
+  await expect(page.getByTestId("mobile-auth-logout")).toBeVisible();
+  await expect(page.getByTestId("mobile-auth-logout")).toHaveAttribute(
+    "href",
+    "/oauth2/sign_out"
+  );
+  expect(await page.evaluate(
+    () => document.documentElement.scrollWidth <= document.documentElement.clientWidth
+  )).toBe(true);
+});
+
 test("explains read-only mode on mobile when the server is unavailable", async ({
   context,
   page

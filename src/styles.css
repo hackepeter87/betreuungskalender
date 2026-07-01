@@ -298,6 +298,11 @@ h3 {
   text-decoration: underline;
 }
 
+.session-card--compact {
+  margin: 0;
+  padding: 7px 8px;
+}
+
 .sidebar__settings {
   width: 100%;
   margin-top: 10px;
@@ -3853,6 +3858,7 @@ h3 {
     height: auto;
     align-items: center;
     justify-content: space-between;
+    gap: 10px;
     padding: env(safe-area-inset-top) 14px 0;
     border-bottom: 1px solid var(--line);
     background: rgba(255, 255, 255, 0.97);
@@ -3860,13 +3866,60 @@ h3 {
   }
 
   .brand--compact {
+    min-width: 0;
     width: auto;
+    flex: 1 1 auto;
+  }
+
+  .brand--compact strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .brand--compact .brand__mark {
     width: 38px;
     height: 38px;
     flex-basis: 38px;
+  }
+
+  .mobile-header__actions {
+    display: flex;
+    min-width: 0;
+    flex: 0 1 auto;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  .mobile-header .session-card {
+    width: auto;
+    max-width: min(47vw, 190px);
+    min-height: 42px;
+    flex: 0 1 auto;
+    gap: 7px;
+    border-radius: 8px;
+    background: var(--surface);
+  }
+
+  .mobile-header .session-card svg,
+  .mobile-header .session-card small {
+    display: none;
+  }
+
+  .mobile-header .session-card strong {
+    margin-top: 0;
+    font-size: 0.72rem;
+  }
+
+  .mobile-header .session-card__logout {
+    min-height: 30px;
+    padding: 0 7px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    font-size: 0.68rem;
+    line-height: 1;
+    white-space: nowrap;
   }
 
   .mobile-nav {
