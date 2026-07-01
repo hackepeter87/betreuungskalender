@@ -6,6 +6,23 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.4.1] - 2026-07-01
+
+### Changed
+
+- Native OIDC deployments with `REQUIRE_AUTH=true` now redirect browser SPA
+  entry requests to `/auth/login` when no valid server-side session exists.
+- The frontend now loads `/api/session` before domain data and clears stale
+  local data, write actions, errors, and user display state when authentication
+  is required but no longer valid.
+
+### Security
+
+- Unauthenticated users can no longer receive the React SPA shell in native OIDC
+  mode when browser login is required.
+- Session expiry or logout followed by `401` API responses refreshes the
+  frontend session state instead of leaving stale authenticated UI visible.
+
 ## [1.4.0] - 2026-07-01
 
 ### Added

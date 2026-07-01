@@ -2,7 +2,7 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import fastifyStatic from "@fastify/static";
 import rateLimit from "@fastify/rate-limit";
-import Fastify from "fastify";
+import Fastify, { type FastifyRequest } from "fastify";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { sessionInfo } from "./auth.js";
@@ -200,6 +200,42 @@ const readLimit = {
   config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
 };
 
+function requestPath(request: FastifyRequest): string {
+  try {
+    return new URL(request.url, "http://localhost").pathname;
+  } catch {
+    return request.url.split("?")[0] ?? request.url;
+  }
+}
+
+function isSpaFallbackRequest(request: FastifyRequest): boolean {
+  const path = requestPath(request);
+  return (
+    request.method === "GET" &&
+    !path.startsWith("/api/") &&
+    !path.startsWith("/auth/") &&
+    !path.includes(".")
+  );
+}
+
+function hasNativeOidcBrowserSession(request: FastifyRequest): boolean {
+  const nativeSession = nativeOidcSessions.findByToken(
+    cookieValue(request.headers.cookie, config.sessionCookieName)
+  );
+  return Boolean(
+    nativeSession && findAuthenticatedUserBySubject(nativeSession.externalSubject)
+  );
+}
+
+function requiresNativeOidcBrowserLogin(request: FastifyRequest): boolean {
+  return (
+    config.authMode === "native-oidc" &&
+    config.requireAuth &&
+    isSpaFallbackRequest(request) &&
+    !hasNativeOidcBrowserSession(request)
+  );
+}
+
 app.get("/api/health", readLimit, async (_request, reply) => {
   const reachable = databaseReachable();
   return reply.code(reachable ? 200 : 503).send({
@@ -268,17 +304,22 @@ await app.register(appDataRoutes);
 
 const frontendRoot = resolve(process.cwd(), "dist");
 if (existsSync(frontendRoot)) {
+  app.addHook("preHandler", async (request, reply) => {
+    if (requiresNativeOidcBrowserLogin(request)) {
+      return reply.redirect("/auth/login");
+    }
+  });
+
   await app.register(fastifyStatic, {
     root: frontendRoot,
     prefix: "/"
   });
 
   app.setNotFoundHandler((request, reply) => {
-    if (
-      request.method === "GET" &&
-      !request.url.startsWith("/api/") &&
-      !request.url.includes(".")
-    ) {
+    if (isSpaFallbackRequest(request)) {
+      if (requiresNativeOidcBrowserLogin(request)) {
+        return reply.redirect("/auth/login");
+      }
       return reply.sendFile("index.html");
     }
     return reply.code(404).send({

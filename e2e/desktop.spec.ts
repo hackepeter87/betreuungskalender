@@ -213,6 +213,15 @@ test("uses native OIDC POST logout and returns to unauthenticated state", async 
           headers: { "content-type": "application/json" }
         }));
       }
+      if (!authenticated && path.startsWith("/api/")) {
+        return Promise.resolve(new Response(JSON.stringify({
+          error: "authentication_required",
+          message: "Authentifizierung erforderlich."
+        }), {
+          status: 401,
+          headers: { "content-type": "application/json" }
+        }));
+      }
       return originalFetch(input, init);
     };
   });
@@ -222,6 +231,7 @@ test("uses native OIDC POST logout and returns to unauthenticated state", async 
   await page.getByTestId("auth-logout").click();
   await expect(page.getByTestId("auth-session")).toHaveCount(0);
   await expect(page.getByTestId("auth-login")).toContainText("Nicht angemeldet");
+  await expect(page.getByTestId("dashboard-new-entry")).toBeDisabled();
 });
 
 test("keeps the shell quiet in local development without authentication", async ({
