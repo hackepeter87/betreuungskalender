@@ -3,6 +3,7 @@ import type {
   ApiCalendarFeedStatus,
   ApiCareEntry,
   ApiChild,
+  ApiContactRule,
   ApiLogout,
   ApiSession,
   ApiMonthlyClosing,
@@ -27,6 +28,7 @@ import type {
   AuditObjectType,
   CareEntry,
   Child,
+  ContactRule,
   ContactPattern,
   HolidayPeriod,
   MonthlyClosure,
@@ -170,6 +172,7 @@ type CareEntryWriteInput = Omit<CareEntry, "id" | "createdBy" | "updatedBy" | "c
 type ChildWriteInput = Omit<Child, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt">;
 type HolidayWriteInput = Omit<HolidayPeriod, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt" | "deletedAt">;
 type ContactPatternWriteInput = Omit<ContactPattern, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt">;
+type ContactRuleWriteInput = Omit<ContactRule, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt" | "syncSummary" | "sourceContactPatternId">;
 
 function careScopeFor(entry: CareEntryWriteInput): CareScope {
   if (entry.overnight) return "overnight";
@@ -277,6 +280,7 @@ export async function loadAppData(): Promise<AppData> {
     holidayPeriods,
     unavailablePeriods,
     contactPatterns,
+    contactRules,
     rawSettings,
     auditLog,
     monthClosures
@@ -287,6 +291,7 @@ export async function loadAppData(): Promise<AppData> {
     request<ApiHolidayPeriod[]>("/api/holiday-periods"),
     request<ApiUnavailablePeriod[]>("/api/unavailable-periods"),
     request<ApiContactPattern[]>("/api/contact-patterns"),
+    request<ApiContactRule[]>("/api/contact-rules"),
     request<Record<string, unknown>>("/api/settings"),
     request<ApiAuditEntry[]>("/api/audit-log?limit=50000"),
     request<ApiMonthlyClosing[]>("/api/month-closings")
@@ -307,6 +312,7 @@ export async function loadAppData(): Promise<AppData> {
     unavailablePeriods: mappedUnavailable,
     externalCalendarSources,
     contactPatterns,
+    contactRules,
     settings: { ...empty.settings, ...settings } as AppSettings,
     lastJsonBackupAt:
       typeof lastJsonBackupAt === "string" ? lastJsonBackupAt : undefined,
@@ -318,6 +324,7 @@ export async function loadAppData(): Promise<AppData> {
       ...holidayPeriods.flatMap((item) => [item.createdAt, item.updatedAt]),
       ...mappedUnavailable.flatMap((item) => [item.createdAt, item.updatedAt]),
       ...contactPatterns.flatMap((item) => [item.createdAt, item.updatedAt]),
+      ...contactRules.flatMap((item) => [item.createdAt, item.updatedAt]),
       ...auditLog.map((item) => item.timestamp),
       ...mappedClosures.flatMap((item) => [
         item.closedAt,
@@ -425,6 +432,23 @@ export const api = {
   },
   deletePattern(id: string) {
     return request<void>(`/api/contact-patterns/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    });
+  },
+  createContactRule(input: ContactRuleWriteInput) {
+    return request<ApiContactRule>("/api/contact-rules", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
+  },
+  updateContactRule(id: string, input: ContactRuleWriteInput) {
+    return request<ApiContactRule>(
+      `/api/contact-rules/${encodeURIComponent(id)}`,
+      { method: "PUT", body: JSON.stringify(input) }
+    );
+  },
+  deleteContactRule(id: string) {
+    return request<void>(`/api/contact-rules/${encodeURIComponent(id)}`, {
       method: "DELETE"
     });
   },

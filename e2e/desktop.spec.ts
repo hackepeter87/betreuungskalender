@@ -475,6 +475,57 @@ test("generates recurring weekend contact dates and shows them in the calendar",
   }
 });
 
+test("uses a weekly multi-day contact rule template with calendar preview", async ({
+  page,
+  request
+}) => {
+  await openApp(page);
+  await createChild(page, "Wochentage Kind");
+
+  await navigate(page, "contact");
+  await page.getByTestId("contact-template-weekly-days").click();
+  await page.getByTestId("contact-pattern-start-date").fill("2026-07-01");
+  await page.getByTestId("contact-pattern-friday-start-time").fill("15:00");
+  await page.getByTestId("contact-pattern-sunday-end-time").fill("18:00");
+  await page.getByTestId("contact-weekday-FR").click();
+  await page.getByTestId("contact-generation-start").fill("2026-07-01");
+  await page.getByTestId("contact-generation-end").fill("2026-07-10");
+
+  await expect(page.getByTestId("contact-generation-preview")).toContainText(
+    "4 neue geplante Termine"
+  );
+  await expect(page.getByTestId("contact-preview-day-2026-07-01").first())
+    .toHaveClass(/contact-preview-day--active/);
+  await expect(page.locator('[data-testid="contact-preview-day-2026-07-03"].contact-preview-day--active'))
+    .toHaveCount(1);
+
+  await page.getByTestId("contact-pattern-save").click();
+  await expect(page.getByTestId("contact-message")).toContainText(
+    "Umgangsregel gespeichert"
+  );
+
+  const entriesResponse = await request.get("/api/care-entries");
+  expect(entriesResponse.ok()).toBeTruthy();
+  const generatedEntries = (await entriesResponse.json() as Array<{
+    id: string;
+    contactRuleId?: string;
+    startDateTime: string;
+    status: string;
+  }>).filter((entry) => entry.contactRuleId && entry.startDateTime.startsWith("2026-07"));
+  expect(generatedEntries).toHaveLength(10);
+  expect(generatedEntries.every((entry) => entry.status === "planned")).toBe(true);
+
+  await navigate(page, "calendar");
+  await page.getByTestId("month-picker").fill("2026-07");
+  if (await page.getByTestId("calendar-view-month").isVisible()) {
+    await page.getByTestId("calendar-view-month").click();
+  }
+  for (const entry of generatedEntries.slice(0, 4)) {
+    await expect(page.getByTestId(`calendar-entry-${entry.id}`).first())
+      .toBeVisible();
+  }
+});
+
 test("derives unavailability impact hints from planned contact and holidays", async ({
   page,
   request

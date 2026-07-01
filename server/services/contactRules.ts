@@ -56,6 +56,20 @@ export interface ContactRulePatternInput {
   updatedAt: string;
 }
 
+export interface ContactRuleInput {
+  name: string;
+  startDate: string;
+  endDate?: string;
+  timezone: string;
+  recurrence: ContactRuleRecurrence;
+  segments: ApiContactRuleSegment[];
+  syncHorizonMonths: number;
+  responsiblePartyId?: string;
+  childIds: string[];
+  active: boolean;
+  sourceContactPatternId?: string;
+}
+
 export interface ContactRuleSyncOptions {
   startDate?: string;
   endDate?: string;
@@ -397,6 +411,87 @@ export function upsertContactRuleFromPattern(
   for (const childId of selected) insert.run(pattern.id, childId, timestamp, timestamp);
 
   const rule = getContactRule(pattern.id, database);
+  if (!rule) throw new Error("Umgangsregel konnte nicht geladen werden.");
+  return rule;
+}
+
+export function upsertContactRule(input: {
+  id: string;
+  rule: ContactRuleInput;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: string;
+  updatedAt: string;
+  database?: Database.Database;
+}): ApiContactRule {
+  const database = input.database ?? defaultDb;
+  database.prepare(`
+    INSERT INTO contact_rules (
+      id, name, start_date, end_date, timezone, recurrence_json, segments_json,
+      sync_horizon_months, responsible_party_id, active, source_contact_pattern_id,
+      created_by, updated_by, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      start_date = excluded.start_date,
+      end_date = excluded.end_date,
+      timezone = excluded.timezone,
+      recurrence_json = excluded.recurrence_json,
+      segments_json = excluded.segments_json,
+      sync_horizon_months = excluded.sync_horizon_months,
+      responsible_party_id = excluded.responsible_party_id,
+      active = excluded.active,
+      source_contact_pattern_id = excluded.source_contact_pattern_id,
+      updated_by = excluded.updated_by,
+      updated_at = excluded.updated_at,
+      deleted_at = NULL
+  `).run(
+    input.id,
+    input.rule.name,
+    input.rule.startDate,
+    input.rule.endDate ?? null,
+    input.rule.timezone,
+    JSON.stringify(input.rule.recurrence),
+    JSON.stringify(input.rule.segments),
+    input.rule.syncHorizonMonths,
+    input.rule.responsiblePartyId ?? null,
+    Number(input.rule.active),
+    input.rule.sourceContactPatternId ?? null,
+    input.createdBy,
+    input.updatedBy,
+    input.createdAt,
+    input.updatedAt
+  );
+
+  const existing = database.prepare(`
+    SELECT child_id AS childId, deleted_at AS deletedAt
+    FROM contact_rule_children
+    WHERE contact_rule_id = ?
+  `).all(input.id) as Array<{ childId: string; deletedAt: string | null }>;
+  const selected = new Set(input.rule.childIds);
+  for (const link of existing) {
+    if (selected.has(link.childId)) {
+      database.prepare(`
+        UPDATE contact_rule_children
+        SET deleted_at = NULL, updated_at = ?
+        WHERE contact_rule_id = ? AND child_id = ?
+      `).run(input.updatedAt, input.id, link.childId);
+      selected.delete(link.childId);
+    } else if (!link.deletedAt) {
+      database.prepare(`
+        UPDATE contact_rule_children
+        SET deleted_at = ?, updated_at = ?
+        WHERE contact_rule_id = ? AND child_id = ?
+      `).run(input.updatedAt, input.updatedAt, input.id, link.childId);
+    }
+  }
+  const insert = database.prepare(`
+    INSERT INTO contact_rule_children (contact_rule_id, child_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?)
+  `);
+  for (const childId of selected) insert.run(input.id, childId, input.updatedAt, input.updatedAt);
+
+  const rule = getContactRule(input.id, database);
   if (!rule) throw new Error("Umgangsregel konnte nicht geladen werden.");
   return rule;
 }

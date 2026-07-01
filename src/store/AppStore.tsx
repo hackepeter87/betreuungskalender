@@ -24,6 +24,7 @@ import type {
   AppData,
   AppSettings,
   CareEntry,
+  ContactRule,
   ContactPattern,
   EntryStatus,
   HolidayPeriod,
@@ -45,6 +46,8 @@ type EntryInput = Omit<CareEntry, "id" | "createdBy" | "updatedBy" | "createdAt"
 type HolidayInput = Omit<HolidayPeriod, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt" | "deletedAt"> & { id?: string };
 type PatternInput = Omit<ContactPattern, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt"> & { id?: string };
 type PatternSaveResult = Pick<ContactPattern, "id" | "syncSummary">;
+type ContactRuleInput = Omit<ContactRule, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt" | "syncSummary" | "sourceContactPatternId"> & { id?: string };
+type ContactRuleSaveResult = Pick<ContactRule, "id" | "syncSummary">;
 type UnavailableInput = Omit<
   UnavailablePeriod,
   "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt" | "deletedAt"
@@ -75,6 +78,7 @@ interface AppStoreValue {
   saveUnavailablePeriod: (input: UnavailableInput) => Promise<boolean>;
   removeUnavailablePeriod: (id: string) => Promise<boolean>;
   saveContactPattern: (input: PatternInput) => Promise<PatternSaveResult | null>;
+  saveContactRule: (input: ContactRuleInput) => Promise<ContactRuleSaveResult | null>;
   removeContactPattern: (id: string) => Promise<boolean>;
   generateContactEntries: (
     patternId: string,
@@ -447,6 +451,18 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     [performWrite]
   );
 
+  const saveContactRule = useCallback(
+    async (input: ContactRuleInput) =>
+      performWrite(async () => {
+        const { id, ...payload } = input;
+        const saved = id
+          ? await api.updateContactRule(id, payload)
+          : await api.createContactRule(payload);
+        return { id: saved.id, syncSummary: saved.syncSummary };
+      }, null),
+    [performWrite]
+  );
+
   const removeContactPattern = useCallback(
     async (id: string) =>
       performWrite(async () => {
@@ -574,6 +590,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       saveUnavailablePeriod,
       removeUnavailablePeriod,
       saveContactPattern,
+      saveContactRule,
       removeContactPattern,
       generateContactEntries,
       replaceData,
@@ -604,6 +621,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       replaceData,
       saveChild,
       saveContactPattern,
+      saveContactRule,
       saveEntry,
       saveHolidayPeriod,
       saveUnavailablePeriod,
