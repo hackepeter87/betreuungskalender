@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   createChild,
   createEntry,
+  expectNoUnavailableModalOverflow,
   navigate,
   openApp,
   resetApp
@@ -108,4 +109,12 @@ test("explains read-only mode on mobile when the server is unavailable", async (
   await expect(page.getByTestId("calendar-add-entry")).toBeDisabled();
 
   await context.setOffline(false);
+});
+
+test("keeps the unavailability modal contained on mobile", async ({ page }) => {
+  await openApp(page);
+  await navigate(page, "unavailable");
+  await page.getByTestId("unavailable-add").click();
+  await expect(page.getByTestId("unavailable-form")).toBeVisible();
+  await expectNoUnavailableModalOverflow(page);
 });

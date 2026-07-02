@@ -153,6 +153,8 @@ export function UnavailablePeriodsPage() {
               : copy(locale, "unavailable", "editTitle")
           }
           onClose={() => setEditing(null)}
+          size="large"
+          className="modal--unavailable"
         >
           <UnavailablePeriodForm
             period={editing === "new" ? undefined : editing}

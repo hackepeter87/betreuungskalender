@@ -6,6 +6,15 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.6.1] - 2026-07-02
+
+### Fixed
+
+- Fixed overlapping labels, help buttons, date/time inputs, and impact toggles
+  in the unavailability modal on desktop, tablet, and mobile viewports.
+- Open the unavailability form in a dedicated wider modal layout while keeping
+  the modal vertically scrollable and preventing horizontal overflow.
+
 ## [1.6.0] - 2026-07-02
 
 ### Added

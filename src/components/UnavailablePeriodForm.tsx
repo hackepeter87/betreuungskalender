@@ -6,7 +6,7 @@ import { copy } from "../i18n/catalog";
 import { rangesOverlap, toDateKey } from "../lib/date";
 import { useAppStore } from "../store/AppStore";
 import type { UnavailableCategory, UnavailablePeriod } from "../types";
-import { FieldHelpLabel } from "./FieldHelp";
+import { FieldHelpButton, FieldHelpLabel } from "./FieldHelp";
 import { Icon } from "./Icon";
 
 function localParts(value?: string): { date: string; time: string } {
@@ -24,6 +24,22 @@ function fromInputValue(date: string, time: string): string {
   return new Date(`${date}T${time}`).toISOString();
 }
 
+function RequiredInlineLabel({
+  children,
+  requiredText
+}: {
+  children: string;
+  requiredText: string;
+}) {
+  return (
+    <span className="field-label-text">
+      {children}
+      <span className="required-mark" aria-hidden="true"> *</span>
+      <span className="sr-only"> {requiredText}</span>
+    </span>
+  );
+}
+
 export function UnavailablePeriodForm({
   period,
   initialDate,
@@ -35,6 +51,7 @@ export function UnavailablePeriodForm({
 }) {
   const { locale } = useI18n();
   const { data, saveUnavailablePeriod, canWrite, isSaving } = useAppStore();
+  const requiredText = copy(locale, "documentation", "required");
   const today = toDateKey(new Date());
   const initialStart = localParts(period?.startDateTime);
   const initialEnd = localParts(period?.endDateTime);
@@ -170,51 +187,61 @@ export function UnavailablePeriodForm({
         <h3>{copy(locale, "unavailable", "periodCategory")}</h3>
         <div className="unavailable-time-grid">
           <div className="unavailable-time-group">
-            <strong>{copy(locale, "unavailable", "startGroup")}</strong>
-            <label className="field">
-              <FieldHelpLabel fieldId="unavailable.startDateTime">{copy(locale, "entryForm", "startDate")}</FieldHelpLabel>
-              <input
-                autoFocus
-                required
-                data-testid="unavailable-start-date"
-                type="date"
-                value={startDate}
-                onChange={(event) => setStartDate(event.target.value)}
-              />
-            </label>
-            <label className="field">
-              <FieldHelpLabel fieldId="unavailable.startDateTime">{copy(locale, "entryForm", "startTime")}</FieldHelpLabel>
-              <input
-                required
-                data-testid="unavailable-start-time"
-                type="time"
-                value={startTime}
-                onChange={(event) => setStartTime(event.target.value)}
-              />
-            </label>
+            <div className="unavailable-time-group__header">
+              <strong>{copy(locale, "unavailable", "startGroup")}</strong>
+              <FieldHelpButton fieldId="unavailable.startDateTime" />
+            </div>
+            <div className="unavailable-time-fields">
+              <label className="field">
+                <RequiredInlineLabel requiredText={requiredText}>{copy(locale, "entryForm", "startDate")}</RequiredInlineLabel>
+                <input
+                  autoFocus
+                  required
+                  data-testid="unavailable-start-date"
+                  type="date"
+                  value={startDate}
+                  onChange={(event) => setStartDate(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <RequiredInlineLabel requiredText={requiredText}>{copy(locale, "entryForm", "startTime")}</RequiredInlineLabel>
+                <input
+                  required
+                  data-testid="unavailable-start-time"
+                  type="time"
+                  value={startTime}
+                  onChange={(event) => setStartTime(event.target.value)}
+                />
+              </label>
+            </div>
           </div>
           <div className="unavailable-time-group">
-            <strong>{copy(locale, "unavailable", "endGroup")}</strong>
-            <label className="field">
-              <FieldHelpLabel fieldId="unavailable.endDateTime">{copy(locale, "entryForm", "endDate")}</FieldHelpLabel>
-              <input
-                required
-                data-testid="unavailable-end-date"
-                type="date"
-                value={endDate}
-                onChange={(event) => setEndDate(event.target.value)}
-              />
-            </label>
-            <label className="field">
-              <FieldHelpLabel fieldId="unavailable.endDateTime">{copy(locale, "entryForm", "endTime")}</FieldHelpLabel>
-              <input
-                required
-                data-testid="unavailable-end-time"
-                type="time"
-                value={endTime}
-                onChange={(event) => setEndTime(event.target.value)}
-              />
-            </label>
+            <div className="unavailable-time-group__header">
+              <strong>{copy(locale, "unavailable", "endGroup")}</strong>
+              <FieldHelpButton fieldId="unavailable.endDateTime" />
+            </div>
+            <div className="unavailable-time-fields">
+              <label className="field">
+                <RequiredInlineLabel requiredText={requiredText}>{copy(locale, "entryForm", "endDate")}</RequiredInlineLabel>
+                <input
+                  required
+                  data-testid="unavailable-end-date"
+                  type="date"
+                  value={endDate}
+                  onChange={(event) => setEndDate(event.target.value)}
+                />
+              </label>
+              <label className="field">
+                <RequiredInlineLabel requiredText={requiredText}>{copy(locale, "entryForm", "endTime")}</RequiredInlineLabel>
+                <input
+                  required
+                  data-testid="unavailable-end-time"
+                  type="time"
+                  value={endTime}
+                  onChange={(event) => setEndTime(event.target.value)}
+                />
+              </label>
+            </div>
           </div>
         </div>
         <label className="field">
@@ -266,36 +293,54 @@ export function UnavailablePeriodForm({
           ) : null}
         </div>
         <div className="unavailable-toggle-list">
-          <label className="toggle">
-            <input
-              type="checkbox"
-              data-testid="unavailable-duty-related"
-              checked={dutyRelated}
-              onChange={(event) => setDutyRelated(event.target.checked)}
-            />
-            <span />
-            <FieldHelpLabel fieldId="unavailable.dutyRelated" />
-          </label>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              data-testid="unavailable-affects-contact"
-              checked={affectsContact}
-              onChange={(event) => setAffectsContact(event.target.checked)}
-            />
-            <span />
-            <FieldHelpLabel fieldId="unavailable.affectsContact" />
-          </label>
-          <label className="toggle">
-            <input
-              type="checkbox"
-              data-testid="unavailable-affects-holidays"
-              checked={affectsHolidays}
-              onChange={(event) => setAffectsHolidays(event.target.checked)}
-            />
-            <span />
-            <FieldHelpLabel fieldId="unavailable.affectsHolidays" />
-          </label>
+          <div className="unavailable-toggle-card">
+            <label className="toggle unavailable-toggle-card__switch">
+              <input
+                type="checkbox"
+                aria-label={copy(locale, "unavailable", "dutyRelated")}
+                data-testid="unavailable-duty-related"
+                checked={dutyRelated}
+                onChange={(event) => setDutyRelated(event.target.checked)}
+              />
+              <span />
+            </label>
+            <span className="unavailable-toggle-card__label">
+              <RequiredInlineLabel requiredText={requiredText}>{copy(locale, "unavailable", "dutyRelated")}</RequiredInlineLabel>
+            </span>
+            <FieldHelpButton fieldId="unavailable.dutyRelated" />
+          </div>
+          <div className="unavailable-toggle-card">
+            <label className="toggle unavailable-toggle-card__switch">
+              <input
+                type="checkbox"
+                aria-label={copy(locale, "unavailable", "affectsContact")}
+                data-testid="unavailable-affects-contact"
+                checked={affectsContact}
+                onChange={(event) => setAffectsContact(event.target.checked)}
+              />
+              <span />
+            </label>
+            <span className="unavailable-toggle-card__label">
+              <RequiredInlineLabel requiredText={requiredText}>{copy(locale, "unavailable", "affectsContact")}</RequiredInlineLabel>
+            </span>
+            <FieldHelpButton fieldId="unavailable.affectsContact" />
+          </div>
+          <div className="unavailable-toggle-card">
+            <label className="toggle unavailable-toggle-card__switch">
+              <input
+                type="checkbox"
+                aria-label={copy(locale, "unavailable", "affectsHolidays")}
+                data-testid="unavailable-affects-holidays"
+                checked={affectsHolidays}
+                onChange={(event) => setAffectsHolidays(event.target.checked)}
+              />
+              <span />
+            </label>
+            <span className="unavailable-toggle-card__label">
+              <RequiredInlineLabel requiredText={requiredText}>{copy(locale, "unavailable", "affectsHolidays")}</RequiredInlineLabel>
+            </span>
+            <FieldHelpButton fieldId="unavailable.affectsHolidays" />
+          </div>
         </div>
       </section>
 
