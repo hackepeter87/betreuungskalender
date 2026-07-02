@@ -310,6 +310,58 @@ test("creates a personal calendar feed URL from settings", async ({
   await expect(manager.getByTestId("calendar-feed-revoke")).toBeEnabled();
 });
 
+test("persists configured child colors and uses them in the calendar", async ({
+  page,
+  request
+}) => {
+  const childName = "Farbtest Kind";
+  const selectedColor = "#c24170";
+  await openApp(page);
+  await createChild(page, childName);
+
+  await navigate(page, "settings");
+  await page.getByRole("button", { name: `${childName} bearbeiten` }).click();
+  const form = page.getByTestId("child-form");
+  await form.getByTestId("child-color-option-c24170").check({ force: true });
+  await form.getByTestId("child-submit").click();
+  await expect(form).toBeHidden();
+
+  const childrenResponse = await request.get("/api/children");
+  expect(childrenResponse.ok()).toBeTruthy();
+  const children = await childrenResponse.json() as Array<{
+    id: string;
+    name: string;
+    color: string;
+  }>;
+  const child = children.find((item) => item.name === childName);
+  expect(child?.color).toBe(selectedColor);
+
+  await createEntry(page, {
+    childName,
+    startDay: 11,
+    startTime: "10:00",
+    endDay: 11,
+    endTime: "14:00",
+    note: "Fiktiver Eintrag zur Farbprüfung"
+  });
+
+  const entriesResponse = await request.get("/api/care-entries");
+  expect(entriesResponse.ok()).toBeTruthy();
+  const [entry] = await entriesResponse.json() as Array<{ id: string }>;
+  expect(entry?.id).toBeTruthy();
+
+  await navigate(page, "calendar");
+  if (await page.getByTestId("calendar-view-month").isVisible()) {
+    await page.getByTestId("calendar-view-month").click();
+  }
+  const marker = page
+    .getByTestId(`calendar-entry-${entry.id}`)
+    .first()
+    .getByTestId(`calendar-entry-child-color-${child!.id}`);
+  await expect(marker).toBeVisible();
+  await expect(marker).toHaveCSS("background-color", "rgb(194, 65, 112)");
+});
+
 test("manages care parties and assigns them to entries and contact rules", async ({
   page,
   request

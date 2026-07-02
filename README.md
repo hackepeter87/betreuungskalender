@@ -12,7 +12,7 @@ travel, costs, holidays, and unavailable periods.
 ## Project status
 
 - Latest published release: [v1.6.0](docs/release-notes/v1.6.0.md)
-- Current release candidate: [v1.6.1](docs/release-notes/v1.6.1.md)
+- Current release candidate: [v1.6.2](docs/release-notes/v1.6.2.md)
 - Current `main`: SQLite/API domain persistence, language packs, external
   read-only calendar overlays, native OIDC authentication, trusted-proxy
   rollback support, RRULE-compatible contact rules with calendar synchronization,
