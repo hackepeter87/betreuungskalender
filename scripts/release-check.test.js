@@ -3,9 +3,11 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 import {
+  REQUIRED_DOCKERIGNORE_RULES,
   REQUIRED_GITIGNORE_RULES,
   classifySensitiveArtifact,
   composePublishesAppPort,
+  findMissingDockerignoreRules,
   findMissingGitignoreRules,
   hasChangelogRelease,
   hasReleaseNotesHeading,
@@ -127,6 +129,15 @@ test("reports exact missing gitignore safety rules", () => {
   );
 });
 
+test("reports exact missing dockerignore safety rules", () => {
+  const complete = REQUIRED_DOCKERIGNORE_RULES.join("\n");
+  assert.deepEqual(findMissingDockerignoreRules(complete), []);
+  assert.deepEqual(
+    findMissingDockerignoreRules(complete.replace("test-results\n", "")),
+    ["test-results"]
+  );
+});
+
 test("validates SemVer versions", () => {
   assert.equal(isValidSemver("0.1.0"), true);
   assert.equal(isValidSemver("1.2.3-beta.1+build.9"), true);
@@ -183,6 +194,7 @@ test("detects whether direct Compose publishes the app port", () => {
 });
 
 test("direct Compose example does not trust proxy identity headers", () => {
+  const packageJson = JSON.parse(readFileSync(resolve("package.json"), "utf8"));
   const envExample = readFileSync(resolve(".env.example"), "utf8");
   const directCompose = readFileSync(resolve("deploy", "compose.yml"), "utf8");
   const testingCompose = readFileSync(resolve("deploy", "compose.testing.yml"), "utf8");
@@ -213,6 +225,10 @@ test("direct Compose example does not trust proxy identity headers", () => {
   );
 
   assert.equal(composePublishesAppPort(directCompose), true);
+  assert.equal(parseEnvValue(envExample, "APP_RELEASE_VERSION"), packageJson.version);
+  assert.equal(parseEnvValue(oidcEnvExample, "APP_RELEASE_VERSION"), packageJson.version);
+  assert.equal(parseEnvValue(envExample, "APP_RELEASE_DIR")?.endsWith(`/v${packageJson.version}`), true);
+  assert.equal(parseEnvValue(oidcEnvExample, "APP_RELEASE_DIR")?.endsWith(`/v${packageJson.version}`), true);
   assert.equal(parseEnvValue(envExample, "TRUST_PROXY_AUTH"), "false");
   assert.equal(parseEnvValue(oidcEnvExample, "TRUST_PROXY_AUTH"), "true");
   assert.match(dockerfile, /FROM node:24\.18\.0-bookworm-slim AS build/);
