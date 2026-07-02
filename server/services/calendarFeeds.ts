@@ -35,8 +35,19 @@ interface FeedEntryRow {
   start_datetime: string;
   end_datetime: string;
   status: "planned" | "completed";
+  location: string | null;
+  custom_location: string | null;
   updated_at: string;
 }
+
+const CARE_LOCATION_LABELS: Record<string, string> = {
+  commuterApartment: "Pendlerwohnung",
+  mainResidence: "Hauptwohnsitz",
+  mother: "Bei der Mutter",
+  school: "Schule",
+  ogs: "OGS",
+  other: "Anderer Ort"
+};
 
 export function parseCalendarFeedScope(scope: string | undefined): {
   type: "legacy" | "all" | "party";
@@ -181,7 +192,7 @@ function feedEntriesForToken(token: TokenRow): FeedEntryRow[] {
   const scope = scopeFromRow(token);
   if (scope === "legacy") {
     return db.prepare(`
-      SELECT id, start_datetime, end_datetime, status, updated_at
+      SELECT id, start_datetime, end_datetime, status, location, custom_location, updated_at
       FROM care_entries
       WHERE deleted_at IS NULL
         AND status IN ('planned', 'completed')
@@ -191,7 +202,7 @@ function feedEntriesForToken(token: TokenRow): FeedEntryRow[] {
   }
   if (scope.startsWith("party:")) {
     return db.prepare(`
-      SELECT id, start_datetime, end_datetime, status, updated_at
+      SELECT id, start_datetime, end_datetime, status, location, custom_location, updated_at
       FROM care_entries
       WHERE deleted_at IS NULL
         AND status IN ('planned', 'completed')
@@ -202,7 +213,7 @@ function feedEntriesForToken(token: TokenRow): FeedEntryRow[] {
   if (assignedIds.length > 0) {
     const placeholders = assignedIds.map(() => "?").join(", ");
     return db.prepare(`
-      SELECT id, start_datetime, end_datetime, status, updated_at
+      SELECT id, start_datetime, end_datetime, status, location, custom_location, updated_at
       FROM care_entries
       WHERE deleted_at IS NULL
         AND status IN ('planned', 'completed')
@@ -211,7 +222,7 @@ function feedEntriesForToken(token: TokenRow): FeedEntryRow[] {
     `).all(...assignedIds) as FeedEntryRow[];
   }
   return db.prepare(`
-    SELECT id, start_datetime, end_datetime, status, updated_at
+    SELECT id, start_datetime, end_datetime, status, location, custom_location, updated_at
     FROM care_entries
     WHERE deleted_at IS NULL
       AND status IN ('planned', 'completed')
@@ -226,6 +237,14 @@ function escapeText(value: string): string {
     .replaceAll("\r", "")
     .replaceAll(";", "\\;")
     .replaceAll(",", "\\,");
+}
+
+function feedLocation(entry: FeedEntryRow): string | undefined {
+  const customLocation = entry.custom_location?.trim();
+  if (customLocation) return customLocation;
+  const location = entry.location?.trim();
+  if (!location) return undefined;
+  return CARE_LOCATION_LABELS[location] ?? location;
 }
 
 function foldLine(line: string): string {
@@ -277,6 +296,7 @@ export function buildPersonalCalendarFeed(input: {
     "X-WR-TIMEZONE:Europe/Berlin"
   ];
   for (const entry of feedEntriesForToken(input.token)) {
+    const location = feedLocation(entry);
     lines.push(
       "BEGIN:VEVENT",
       `UID:${escapeText(`${entry.id}@betreuungskalender`)}`,
@@ -284,6 +304,7 @@ export function buildPersonalCalendarFeed(input: {
       `DTSTART:${localDateTimeValue(entry.start_datetime)}`,
       `DTEND:${localDateTimeValue(entry.end_datetime)}`,
       `SUMMARY:${escapeText(title)}`,
+      ...(location ? [`LOCATION:${escapeText(location)}`] : []),
       `LAST-MODIFIED:${utcDateTimeValue(entry.updated_at)}`,
       `CATEGORIES:${entry.status === "planned" ? "Geplant" : "Durchgeführt"}`,
       "END:VEVENT"
