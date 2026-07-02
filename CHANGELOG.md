@@ -6,6 +6,20 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.5.1] - 2026-07-02
+
+### Fixed
+
+- Normalized mobile Settings layout so external calendar source rows, toggle
+  controls, and calendar feed fields no longer overflow or appear misaligned.
+- Aligned the mobile dashboard close-month action with its help control.
+- Hardened release hygiene checks around generated image artifacts.
+
+### Testing
+
+- Made native OIDC runtime-security session fixtures use future-relative
+  expiration times so CI does not fail after a fixed calendar date.
+
 ## [1.5.0] - 2026-07-02
 
 ### Added
