@@ -1826,11 +1826,32 @@ h3 {
   grid-template-columns:
     minmax(180px, 1fr)
     110px
+    minmax(170px, 0.8fr)
     minmax(220px, 1.1fr)
     minmax(170px, max-content);
   align-items: end;
   gap: 14px;
   padding: 18px;
+}
+
+.field--compact {
+  min-width: 160px;
+}
+
+.field--compact span {
+  font-size: 0.62rem;
+}
+
+.holiday-derive-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(160px, 0.7fr) minmax(0, 1.3fr) auto;
+  align-items: end;
+  gap: 14px;
+  padding: 18px;
+}
+
+.holiday-derive-form__children {
+  margin: 0;
 }
 
 .external-calendar-color-field input[type="color"] {
@@ -2525,6 +2546,10 @@ h3 {
   }
 
   .external-calendar-import-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .holiday-derive-form {
     grid-template-columns: 1fr;
   }
 
@@ -4221,6 +4246,15 @@ h3 {
   .external-calendar-import-grid > .button {
     grid-column: 1 / -1;
     justify-self: start;
+  }
+
+  .holiday-derive-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .holiday-derive-form__children,
+  .holiday-derive-form > .button {
+    grid-column: 1 / -1;
   }
 
   .privacy-card {

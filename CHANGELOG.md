@@ -6,6 +6,13 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+### Added
+
+- Added external-calendar source classification for overlay-only calendars and
+  holiday sources.
+- Added explicit holiday-block derivation from all-day imported holiday source
+  events without silently changing existing holiday blocks.
+
 ## [1.6.2] - 2026-07-02
 
 ### Added

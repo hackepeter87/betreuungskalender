@@ -161,6 +161,7 @@ export interface ApiSession {
 }
 
 export type ApiCalendarFeedScope = "legacy" | "all" | `party:${string}`;
+export type ApiExternalCalendarSourceType = "overlay" | "holiday";
 
 export interface ApiLogout {
   authenticated: false;
@@ -270,11 +271,28 @@ export interface ApiUnavailablePeriod {
   warnings: string[];
 }
 
+export interface ApiHolidayPeriod {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate: string;
+  childIds: string[];
+  assignedTo: "father" | "mother" | "shared";
+  notes?: string;
+  sourceExternalCalendarSourceId?: string;
+  sourceExternalCalendarEventId?: string;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ApiExternalCalendarSource {
   id: string;
   name: string;
   color: string;
   visible: boolean;
+  sourceType: ApiExternalCalendarSourceType;
   lastImportedAt: string;
   createdAt: string;
   updatedAt: string;
@@ -307,6 +325,14 @@ export interface ApiExternalCalendarBackupEvent {
   rawHash: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ApiExternalCalendarHolidayDeriveResult {
+  source: ApiExternalCalendarSource;
+  created: number;
+  skippedExisting: number;
+  skippedUnsupported: number;
+  holidays: ApiHolidayPeriod[];
 }
 
 export type ExternalCalendarErrorCode =

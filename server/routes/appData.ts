@@ -31,6 +31,10 @@ function booleanValue(record: DataRecord, key: string, fallback = false): boolea
   return typeof value === "boolean" ? value : fallback;
 }
 
+function externalCalendarSourceType(record: DataRecord): "overlay" | "holiday" {
+  return record.sourceType === "holiday" ? "holiday" : "overlay";
+}
+
 function numberValue(record: DataRecord, key: string, fallback = 0): number {
   const value = record[key];
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
@@ -310,9 +314,10 @@ export function insertHoliday(record: DataRecord, timestamp: string, userEmail: 
   if (!id) throw new Error("Ferienzeitraum ohne ID kann nicht importiert werden.");
   db.prepare(`
     INSERT INTO holiday_periods (
-      id, name, start_date, end_date, assigned_to, notes, created_by, updated_by,
-      created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      id, name, start_date, end_date, assigned_to, notes,
+      source_external_calendar_source_id, source_external_calendar_event_id,
+      created_by, updated_by, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     input.name,
@@ -320,6 +325,8 @@ export function insertHoliday(record: DataRecord, timestamp: string, userEmail: 
     input.endDate,
     input.assignedTo,
     input.notes ?? null,
+    optionalText(record, "sourceExternalCalendarSourceId"),
+    optionalText(record, "sourceExternalCalendarEventId"),
     text(record, "createdBy", userEmail),
     text(record, "updatedBy", userEmail),
     text(record, "createdAt", timestamp),
@@ -463,11 +470,11 @@ export function importData(data: ReturnType<typeof appDataImportSchema.parse>, u
   for (const pattern of data.contactPatterns) insertPattern(pattern, timestamp, userEmail);
   for (const rule of data.contactRules) insertContactRule(rule, timestamp, userEmail);
   for (const period of data.unavailablePeriods) insertUnavailable(period, timestamp, userEmail);
-  const sourceInsert = db.prepare(`INSERT INTO external_calendar_sources (id, name, color, visible, last_imported_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)`);
+  const sourceInsert = db.prepare(`INSERT INTO external_calendar_sources (id, name, color, visible, source_type, last_imported_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
   for (const source of data.externalCalendarSources) {
     const id = text(source, "id");
     if (!id) throw new Error("External calendar source without ID.");
-    sourceInsert.run(id, text(source, "name"), text(source, "color"), Number(booleanValue(source, "visible", true)), text(source, "lastImportedAt", timestamp), text(source, "createdAt", timestamp), text(source, "updatedAt", timestamp));
+    sourceInsert.run(id, text(source, "name"), text(source, "color"), Number(booleanValue(source, "visible", true)), externalCalendarSourceType(source), text(source, "lastImportedAt", timestamp), text(source, "createdAt", timestamp), text(source, "updatedAt", timestamp));
   }
   const eventInsert = db.prepare(`INSERT INTO external_calendar_events (id, source_id, ical_uid, recurrence_id, title, description, start_datetime, end_datetime, all_day, location, raw_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   for (const event of data.externalCalendarEvents) {

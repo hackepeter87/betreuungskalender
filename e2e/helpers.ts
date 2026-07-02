@@ -242,8 +242,9 @@ export async function importExternalCalendar(page: Page, name: string) {
   const manager = page.getByTestId("external-calendar-manager");
   await manager.getByTestId("external-calendar-name").fill(name);
   await manager.getByTestId("external-calendar-color").fill("#2563eb");
+  await manager.getByTestId("external-calendar-source-type").selectOption("overlay");
   await manager.getByTestId("external-calendar-file").setInputFiles(externalCalendarFixture);
   await manager.getByTestId("external-calendar-import").click();
   await expect(manager.getByTestId("external-calendar-message")).toContainText("1");
-  await expect(manager.getByText(name, { exact: true })).toBeVisible();
+  await expect(manager.locator(".child-settings-row--external-source")).toHaveCount(1);
 }

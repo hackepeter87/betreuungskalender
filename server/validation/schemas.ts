@@ -305,6 +305,7 @@ export const unavailablePeriodInputSchema = z
 export const externalCalendarImportSchema = z.object({
   name: z.string().trim().min(1).max(200),
   color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/),
+  sourceType: z.enum(["overlay", "holiday"]).default("overlay"),
   content: z.string().min(1).max(1_000_000)
 });
 
@@ -312,9 +313,15 @@ export const externalCalendarUpdateSchema = z
   .object({
     name: z.string().trim().min(1).max(200).optional(),
     color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/).optional(),
-    visible: z.boolean().optional()
+    visible: z.boolean().optional(),
+    sourceType: z.enum(["overlay", "holiday"]).optional()
   })
   .refine((value) => Object.keys(value).length > 0);
+
+export const externalCalendarHolidayDeriveSchema = z.object({
+  childIds,
+  assignedTo: z.enum(["father", "mother", "shared"]).default("shared")
+});
 
 export function unavailablePeriodWarnings(input: {
   category: string;

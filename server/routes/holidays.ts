@@ -23,6 +23,8 @@ interface HolidayRow {
   end_date: string;
   assigned_to: "father" | "mother" | "shared";
   notes: string | null;
+  source_external_calendar_source_id: string | null;
+  source_external_calendar_event_id: string | null;
   created_by: string;
   updated_by: string;
   created_at: string;
@@ -47,6 +49,8 @@ function mapHoliday(row: HolidayRow) {
     childIds: getChildIds(row.id),
     assignedTo: row.assigned_to,
     notes: row.notes ?? undefined,
+    sourceExternalCalendarSourceId: row.source_external_calendar_source_id ?? undefined,
+    sourceExternalCalendarEventId: row.source_external_calendar_event_id ?? undefined,
     createdBy: row.created_by,
     updatedBy: row.updated_by,
     createdAt: row.created_at,

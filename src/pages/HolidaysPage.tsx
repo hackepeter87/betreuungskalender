@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { Icon } from "../components/Icon";
 import { FieldHelpButton, FieldHelpLabel } from "../components/FieldHelp";
 import { Modal } from "../components/Modal";
@@ -9,12 +9,108 @@ import {
 } from "../components/PeriodSelector";
 import { calculateHolidayStats } from "../lib/analytics";
 import { actorDisplayName } from "../lib/actors";
+import { api } from "../lib/api";
 import { formatDate, formatDateTime, toMonthKey } from "../lib/date";
 import { holidayAssignmentLabel } from "../lib/labels";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
 import { useAppStore } from "../store/AppStore";
 import type { HolidayPeriod } from "../types";
+
+function ExternalHolidayDerivationPanel() {
+  const { locale } = useI18n();
+  const { data, reload, canWrite, isSaving } = useAppStore();
+  const holidaySources = data.externalCalendarSources.filter((source) => source.sourceType === "holiday");
+  const [sourceId, setSourceId] = useState(holidaySources[0]?.id ?? "");
+  const [assignedTo, setAssignedTo] = useState<HolidayPeriod["assignedTo"]>("shared");
+  const [childIds, setChildIds] = useState<string[]>(data.children.map((child) => child.id));
+  const [message, setMessage] = useState<string | null>(null);
+
+  const selectedSource = holidaySources.find((source) => source.id === sourceId);
+
+  useEffect(() => {
+    if (sourceId && holidaySources.some((source) => source.id === sourceId)) return;
+    setSourceId(holidaySources[0]?.id ?? "");
+  }, [holidaySources, sourceId]);
+
+  useEffect(() => {
+    setChildIds((current) => {
+      const activeChildIds = new Set(data.children.map((child) => child.id));
+      const retained = current.filter((id) => activeChildIds.has(id));
+      return retained.length ? retained : data.children.map((child) => child.id);
+    });
+  }, [data.children]);
+
+  const derive = async () => {
+    if (!sourceId || !childIds.length) return;
+    const result = await api.deriveHolidaysFromExternalCalendar(sourceId, {
+      childIds,
+      assignedTo
+    });
+    await reload();
+    setMessage(copy(locale, "holiday", "derivedFromExternal", {
+      created: result.created,
+      skipped: result.skippedExisting + result.skippedUnsupported
+    }));
+  };
+
+  return (
+    <section className="panel">
+      <div className="panel__header">
+        <div>
+          <h2>{copy(locale, "holiday", "externalSources")}</h2>
+          <p>{copy(locale, "holiday", "externalSourcesDescription")}</p>
+        </div>
+      </div>
+      <div className="holiday-derive-form">
+        {holidaySources.length ? (
+          <>
+            <label className="field">
+              <span>{copy(locale, "holiday", "externalSource")}</span>
+              <select data-testid="holiday-external-source" value={sourceId} onChange={(event) => setSourceId(event.target.value)}>
+                {holidaySources.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}
+              </select>
+            </label>
+            <label className="field">
+              <span>{copy(locale, "holiday", "assignedTo")}</span>
+              <select data-testid="holiday-external-assigned-to" value={assignedTo} onChange={(event) => setAssignedTo(event.target.value as HolidayPeriod["assignedTo"])}>
+                {(["father", "mother", "shared"] as HolidayPeriod["assignedTo"][]).map((value) => <option key={value} value={value}>{holidayAssignmentLabel(value, locale)}</option>)}
+              </select>
+            </label>
+            <fieldset className="inline-fieldset holiday-derive-form__children">
+              <legend className="field-label-row">
+                <span>{copy(locale, "holiday", "children")}</span>
+              </legend>
+              <div className="child-choice-grid">
+                {data.children.map((child) => {
+                  const checked = childIds.includes(child.id);
+                  return (
+                    <label className={`choice-card ${checked ? "choice-card--selected" : ""}`} key={child.id}>
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => setChildIds((current) => checked ? current.filter((id) => id !== child.id) : [...current, child.id])}
+                      />
+                      <span className="child-dot" style={{ backgroundColor: child.color }} />
+                      {child.name}
+                    </label>
+                  );
+                })}
+              </div>
+            </fieldset>
+            <button className="button button--primary" data-testid="holiday-derive-external" type="button" disabled={!canWrite || isSaving || !selectedSource || !childIds.length} onClick={() => void derive()}>
+              <Icon name="sun" size={17} />
+              {copy(locale, "holiday", "deriveExternal")}
+            </button>
+          </>
+        ) : (
+          <p className="empty-copy empty-copy--padded">{copy(locale, "holiday", "noExternalSources")}</p>
+        )}
+      </div>
+      {message ? <p className="inline-message" role="status" data-testid="holiday-external-message">{message}</p> : null}
+    </section>
+  );
+}
 
 function HolidayForm({
   period,
@@ -196,6 +292,8 @@ export function HolidaysPage() {
           </div>
         </section>
       ) : null}
+
+      <ExternalHolidayDerivationPanel />
 
       <section className="panel">
         <div className="panel__header">

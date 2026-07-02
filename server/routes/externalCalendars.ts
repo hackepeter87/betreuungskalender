@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { config } from "../config.js";
-import { ExternalCalendarError, deleteExternalCalendarSource, importExternalCalendar, listExternalCalendarBackupEvents, listExternalCalendarSources, updateExternalCalendarSource, visibleExternalCalendarEvents } from "../services/externalCalendars.js";
-import { externalCalendarImportSchema, externalCalendarUpdateSchema } from "../validation/schemas.js";
+import { ExternalCalendarError, deleteExternalCalendarSource, deriveHolidayPeriodsFromExternalCalendar, importExternalCalendar, listExternalCalendarBackupEvents, listExternalCalendarSources, updateExternalCalendarSource, visibleExternalCalendarEvents } from "../services/externalCalendars.js";
+import { externalCalendarHolidayDeriveSchema, externalCalendarImportSchema, externalCalendarUpdateSchema } from "../validation/schemas.js";
 
 function errorReply(reply: { code(status: number): { send(payload: unknown): unknown } }, error: unknown) {
   if (error instanceof ExternalCalendarError) return reply.code(error.code === "external_calendar_not_found" ? 404 : 400).send({ error: error.code });
@@ -25,24 +25,44 @@ export async function externalCalendarRoutes(app: FastifyInstance): Promise<void
       }
     }
   };
+  const writeLimit = {
+    config: {
+      rateLimit: {
+        max: config.rateLimitWriteMax,
+        timeWindow: config.rateLimitWindowMs
+      }
+    }
+  };
   app.get("/api/external-calendars", readLimit, async () => listExternalCalendarSources());
   app.get("/api/external-calendar-events/export", exportLimit, async () => listExternalCalendarBackupEvents());
-  app.post("/api/external-calendars/import", async (request, reply) => {
+  app.post("/api/external-calendars/import", writeLimit, async (request, reply) => {
     const parsed = externalCalendarImportSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "external_calendar_invalid" });
     try { return reply.code(201).send(importExternalCalendar(parsed.data)); } catch (error) { return errorReply(reply, error); }
   });
-  app.put<{ Params: { id: string } }>("/api/external-calendars/:id/import", async (request, reply) => {
+  app.put<{ Params: { id: string } }>("/api/external-calendars/:id/import", writeLimit, async (request, reply) => {
     const parsed = externalCalendarImportSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "external_calendar_invalid" });
     try { return importExternalCalendar(parsed.data, request.params.id); } catch (error) { return errorReply(reply, error); }
   });
-  app.patch<{ Params: { id: string } }>("/api/external-calendars/:id", async (request, reply) => {
+  app.patch<{ Params: { id: string } }>("/api/external-calendars/:id", writeLimit, async (request, reply) => {
     const parsed = externalCalendarUpdateSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "external_calendar_invalid" });
     try { return updateExternalCalendarSource(request.params.id, parsed.data); } catch (error) { return errorReply(reply, error); }
   });
-  app.delete<{ Params: { id: string } }>("/api/external-calendars/:id", async (request, reply) => {
+  app.post<{ Params: { id: string } }>("/api/external-calendars/:id/derive-holidays", writeLimit, async (request, reply) => {
+    const parsed = externalCalendarHolidayDeriveSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
+    try {
+      return deriveHolidayPeriodsFromExternalCalendar(request.params.id, {
+        ...parsed.data,
+        userEmail: request.userEmail
+      });
+    } catch (error) {
+      return errorReply(reply, error);
+    }
+  });
+  app.delete<{ Params: { id: string } }>("/api/external-calendars/:id", writeLimit, async (request, reply) => {
     if (!deleteExternalCalendarSource(request.params.id)) return reply.code(404).send({ error: "external_calendar_not_found" });
     return reply.code(204).send();
   });

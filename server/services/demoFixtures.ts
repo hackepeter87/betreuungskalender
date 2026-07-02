@@ -315,6 +315,7 @@ export function createEdgeCaseDemoData(): DemoData {
         name: "Fiktiver Schulkalender",
         color: "#2563eb",
         visible: true,
+        sourceType: "overlay",
         lastImportedAt: timestamp,
         createdAt: timestamp,
         updatedAt: timestamp

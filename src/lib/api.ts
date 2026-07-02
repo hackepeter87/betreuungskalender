@@ -15,6 +15,7 @@ import type {
   ApiExternalCalendarEvent,
   ApiExternalCalendarBackupEvent,
   ApiExternalCalendarSource,
+  ApiExternalCalendarHolidayDeriveResult,
   CareScope
 } from "../../shared/api";
 import type {
@@ -589,14 +590,17 @@ export const api = {
   listExternalCalendarBackupEvents() {
     return request<ApiExternalCalendarBackupEvent[]>("/api/external-calendar-events/export");
   },
-  importExternalCalendar(input: { name: string; color: string; content: string }) {
+  importExternalCalendar(input: { name: string; color: string; sourceType: ExternalCalendarSource["sourceType"]; content: string }) {
     return request<{ source: ExternalCalendarSource; importedEvents: number }>("/api/external-calendars/import", { method: "POST", body: JSON.stringify(input) });
   },
-  replaceExternalCalendar(id: string, input: { name: string; color: string; content: string }) {
+  replaceExternalCalendar(id: string, input: { name: string; color: string; sourceType: ExternalCalendarSource["sourceType"]; content: string }) {
     return request<{ source: ExternalCalendarSource; importedEvents: number }>(`/api/external-calendars/${encodeURIComponent(id)}/import`, { method: "PUT", body: JSON.stringify(input) });
   },
-  updateExternalCalendar(id: string, input: Partial<Pick<ExternalCalendarSource, "name" | "color" | "visible">>) {
+  updateExternalCalendar(id: string, input: Partial<Pick<ExternalCalendarSource, "name" | "color" | "visible" | "sourceType">>) {
     return request<ExternalCalendarSource>(`/api/external-calendars/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
+  },
+  deriveHolidaysFromExternalCalendar(id: string, input: { childIds: string[]; assignedTo: HolidayPeriod["assignedTo"] }) {
+    return request<ApiExternalCalendarHolidayDeriveResult>(`/api/external-calendars/${encodeURIComponent(id)}/derive-holidays`, { method: "POST", body: JSON.stringify(input) });
   },
   deleteExternalCalendar(id: string) { return request<void>(`/api/external-calendars/${encodeURIComponent(id)}`, { method: "DELETE" }); }
 };

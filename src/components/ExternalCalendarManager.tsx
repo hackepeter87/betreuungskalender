@@ -13,6 +13,7 @@ export function ExternalCalendarManager() {
   const inputRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
   const [color, setColor] = useState(DEFAULT_COLOR);
+  const [sourceType, setSourceType] = useState<"overlay" | "holiday">("overlay");
   const [message, setMessage] = useState<string | null>(null);
   const [replacingId, setReplacingId] = useState<string | null>(null);
   const [fileName, setFileName] = useState("");
@@ -26,10 +27,11 @@ export function ExternalCalendarManager() {
     try {
       const content = await readFile(file);
       const result = sourceId
-        ? await api.replaceExternalCalendar(sourceId, { name: name.trim(), color, content })
-        : await api.importExternalCalendar({ name: name.trim(), color, content });
+        ? await api.replaceExternalCalendar(sourceId, { name: name.trim(), color, sourceType, content })
+        : await api.importExternalCalendar({ name: name.trim(), color, sourceType, content });
       setMessage(copy(locale, "externalCalendar", "imported", { count: result.importedEvents }));
       setName("");
+      setSourceType("overlay");
       setFileName("");
       if (inputRef.current) inputRef.current.value = "";
       await reload();
@@ -43,6 +45,13 @@ export function ExternalCalendarManager() {
     <div className="external-calendar-import-grid">
       <label className="field"><span>{copy(locale, "externalCalendar", "sourceName")}</span><input data-testid="external-calendar-name" value={name} onChange={(event) => setName(event.target.value)} /></label>
       <label className="field external-calendar-color-field"><span>{copy(locale, "externalCalendar", "color")}</span><input data-testid="external-calendar-color" type="color" value={color} onChange={(event) => setColor(event.target.value)} /></label>
+      <label className="field">
+        <span>{copy(locale, "externalCalendar", "sourceType")}</span>
+        <select data-testid="external-calendar-source-type" value={sourceType} onChange={(event) => setSourceType(event.target.value as "overlay" | "holiday")}>
+          <option value="overlay">{copy(locale, "externalCalendar", "sourceTypeOverlay")}</option>
+          <option value="holiday">{copy(locale, "externalCalendar", "sourceTypeHoliday")}</option>
+        </select>
+      </label>
       <div className="field external-calendar-file-field">
         <span>{copy(locale, "externalCalendar", "file")}</span>
         <div className="file-picker-row">
@@ -71,10 +80,26 @@ export function ExternalCalendarManager() {
     <div className="child-settings-list">
       {data.externalCalendarSources.map((source) => <div className="child-settings-row child-settings-row--external-source" key={source.id} data-testid={`external-calendar-source-${source.id}`}>
         <span className="child-avatar" style={{ backgroundColor: `${source.color}18`, color: source.color }}><Icon name="calendar" size={18} /></span>
-        <span><strong>{source.name}</strong><small>{new Date(source.lastImportedAt).toLocaleString(intlLocale)}</small></span>
+        <span>
+          <strong>{source.name}</strong>
+          <small>{source.sourceType === "holiday" ? copy(locale, "externalCalendar", "sourceTypeHoliday") : copy(locale, "externalCalendar", "sourceTypeOverlay")}</small>
+          <small>{new Date(source.lastImportedAt).toLocaleString(intlLocale)}</small>
+        </span>
         <span className="child-settings-row__actions">
           <label className="toggle" data-testid={`external-calendar-visible-control-${source.id}`}><input data-testid={`external-calendar-visible-${source.id}`} type="checkbox" checked={source.visible} disabled={!canWrite || isSaving} onChange={(event) => void api.updateExternalCalendar(source.id, { visible: event.target.checked }).then(reload)} /><span />{copy(locale, "externalCalendar", "visible")}</label>
-          <button className="button button--secondary" type="button" data-testid={`external-calendar-replace-${source.id}`} disabled={!canWrite || isSaving} onClick={() => { setName(source.name); setColor(source.color); setReplacingId(source.id); inputRef.current?.click(); }}>{copy(locale, "externalCalendar", "replace")}</button>
+          <label className="field field--compact">
+            <span>{copy(locale, "externalCalendar", "sourceType")}</span>
+            <select
+              data-testid={`external-calendar-source-type-${source.id}`}
+              value={source.sourceType}
+              disabled={!canWrite || isSaving}
+              onChange={(event) => void api.updateExternalCalendar(source.id, { sourceType: event.target.value as "overlay" | "holiday" }).then(reload)}
+            >
+              <option value="overlay">{copy(locale, "externalCalendar", "sourceTypeOverlay")}</option>
+              <option value="holiday">{copy(locale, "externalCalendar", "sourceTypeHoliday")}</option>
+            </select>
+          </label>
+          <button className="button button--secondary" type="button" data-testid={`external-calendar-replace-${source.id}`} disabled={!canWrite || isSaving} onClick={() => { setName(source.name); setColor(source.color); setSourceType(source.sourceType); setReplacingId(source.id); inputRef.current?.click(); }}>{copy(locale, "externalCalendar", "replace")}</button>
           <button className="icon-button icon-button--danger" data-testid={`external-calendar-delete-${source.id}`} aria-label={copy(locale, "externalCalendar", "delete")} type="button" disabled={!canWrite || isSaving} onClick={() => { if (window.confirm(copy(locale, "externalCalendar", "deleteConfirm"))) void api.deleteExternalCalendar(source.id).then(reload); }}><Icon name="trash" size={17} /></button>
         </span>
       </div>)}
