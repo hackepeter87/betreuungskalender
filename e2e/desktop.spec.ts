@@ -4,6 +4,7 @@ import {
   createEntry,
   createHoliday,
   dateInCurrentMonth,
+  expectNoUnavailableModalOverflow,
   importExternalCalendar,
   navigate,
   openApp,
@@ -734,10 +735,12 @@ test("derives unavailability impact hints from planned contact and holidays", as
   await expect(page.getByTestId("page-unavailable")).toBeVisible();
   await page.getByTestId("unavailable-add").click();
   const form = page.getByTestId("unavailable-form");
+  await expectNoUnavailableModalOverflow(page);
   await form.getByTestId("unavailable-start-date").fill("2026-07-03");
   await form.getByTestId("unavailable-start-time").fill("15:00");
   await form.getByTestId("unavailable-end-date").fill("2026-07-03");
   await form.getByTestId("unavailable-end-time").fill("20:00");
+  await expectNoUnavailableModalOverflow(page);
 
   await expect(form.getByTestId("unavailable-derived-impact")).toContainText(
     "geplanten Umgangstermin"
@@ -750,6 +753,7 @@ test("derives unavailability impact hints from planned contact and holidays", as
 
   await form.getByTestId("unavailable-affects-contact").check({ force: true });
   await form.getByTestId("unavailable-affects-holidays").check({ force: true });
+  await expectNoUnavailableModalOverflow(page);
   await expect(form.getByTestId("unavailable-derived-impact")).toContainText(
     "wird im Soll-Ist-Hinweis berücksichtigt"
   );

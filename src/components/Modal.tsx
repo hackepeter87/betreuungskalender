@@ -7,12 +7,14 @@ export function Modal({
   title,
   children,
   onClose,
-  size = "medium"
+  size = "medium",
+  className
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
   size?: "medium" | "large";
+  className?: string;
 }) {
   const { locale } = useI18n();
   useEffect(() => {
@@ -26,7 +28,7 @@ export function Modal({
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section
-        className={`modal modal--${size}`}
+        className={["modal", `modal--${size}`, className].filter(Boolean).join(" ")}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"

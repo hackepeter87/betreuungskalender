@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   createChild,
   createEntry,
+  expectNoUnavailableModalOverflow,
   navigate,
   openApp,
   resetApp
@@ -71,4 +72,18 @@ test("avoids page overflow at compact and landscape tablet sizes", async ({
   await navigate(page, "settings");
   await expect(page.getByTestId("page-settings")).toBeVisible();
   await expectNoPageOverflow(page);
+});
+
+test("keeps the unavailability modal contained on tablet viewports", async ({
+  page
+}) => {
+  await page.setViewportSize({ width: 768, height: 1024 });
+  await openApp(page);
+  await navigate(page, "unavailable");
+  await page.getByTestId("unavailable-add").click();
+  await expect(page.getByTestId("unavailable-form")).toBeVisible();
+  await expectNoUnavailableModalOverflow(page);
+
+  await page.setViewportSize({ width: 1194, height: 834 });
+  await expectNoUnavailableModalOverflow(page);
 });

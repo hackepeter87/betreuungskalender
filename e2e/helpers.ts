@@ -36,6 +36,94 @@ export async function openApp(page: Page) {
   await expect(page.getByTestId("app-loading")).toBeHidden();
 }
 
+export async function expectNoUnavailableModalOverflow(page: Page) {
+  const result = await page.evaluate(() => {
+    const tolerance = 1;
+    const modal = document.querySelector(".modal--unavailable") as HTMLElement | null;
+    const backdrop = modal?.closest(".modal-backdrop") as HTMLElement | null;
+    const body = modal?.querySelector(".modal__body") as HTMLElement | null;
+    if (!modal || !body || !backdrop) {
+      return {
+        docOverflow: false,
+        modalOverflow: false,
+        bodyOverflow: false,
+        mobileNavAboveModal: false,
+        visibleInputs: false,
+        violations: ["missing unavailable modal"]
+      };
+    }
+
+    const boundary = body.getBoundingClientRect();
+    const violations: string[] = [];
+    const checkInsideBody = (element: Element, label: string) => {
+      const rect = element.getBoundingClientRect();
+      if (!rect.width || !rect.height) return;
+      if (rect.left < boundary.left - tolerance || rect.right > boundary.right + tolerance) {
+        violations.push(`${label} escapes modal body`);
+      }
+    };
+
+    modal
+      .querySelectorAll(
+        ".unavailable-time-group, .unavailable-toggle-card, input, select, textarea, .field-help-button"
+      )
+      .forEach((element) => checkInsideBody(element, element.className || element.tagName));
+
+    modal
+      .querySelectorAll(".unavailable-time-group .field-help-button, .unavailable-toggle-card .field-help-button")
+      .forEach((button) => {
+        const container = button.closest(".unavailable-time-group, .unavailable-toggle-card");
+        if (!container) return;
+        const buttonRect = button.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        if (
+          buttonRect.left < containerRect.left - tolerance ||
+          buttonRect.right > containerRect.right + tolerance
+        ) {
+          violations.push("help button escapes its card");
+        }
+      });
+
+    const visibleInputs = [
+      "unavailable-start-date",
+      "unavailable-start-time",
+      "unavailable-end-date",
+      "unavailable-end-time"
+    ].every((testId) => {
+      const element = modal.querySelector(`[data-testid="${testId}"]`);
+      const rect = element?.getBoundingClientRect();
+      return Boolean(rect && rect.width > 40 && rect.height > 20);
+    });
+    const mobileNavigation = document.querySelector(
+      '[data-testid="mobile-navigation"]'
+    ) as HTMLElement | null;
+    const toZIndex = (element: HTMLElement) => {
+      const value = Number.parseInt(window.getComputedStyle(element).zIndex, 10);
+      return Number.isFinite(value) ? value : 0;
+    };
+    const mobileNavAboveModal =
+      Boolean(mobileNavigation) &&
+      window.getComputedStyle(mobileNavigation!).display !== "none" &&
+      toZIndex(mobileNavigation!) >= toZIndex(backdrop);
+
+    return {
+      docOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + tolerance,
+      modalOverflow: modal.scrollWidth > modal.clientWidth + tolerance,
+      bodyOverflow: body.scrollWidth > body.clientWidth + tolerance,
+      mobileNavAboveModal,
+      visibleInputs,
+      violations
+    };
+  });
+
+  expect(result.docOverflow).toBe(false);
+  expect(result.modalOverflow).toBe(false);
+  expect(result.bodyOverflow).toBe(false);
+  expect(result.mobileNavAboveModal).toBe(false);
+  expect(result.visibleInputs).toBe(true);
+  expect(result.violations).toEqual([]);
+}
+
 export async function navigate(page: Page, destination: AppPage) {
   const mobileNavigation = page.getByTestId("mobile-navigation");
   if (await mobileNavigation.isVisible()) {
