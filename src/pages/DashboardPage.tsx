@@ -125,17 +125,19 @@ export function DashboardPage({
         </div>
         <div className="page-header__actions">
           <MonthToolbar monthKey={monthKey} onChange={onMonthChange} />
-          <button
-            className={closure ? "button button--secondary" : "button button--primary"}
-            type="button"
-            data-testid="dashboard-close-month"
-            onClick={openClosureDialog}
-            disabled={!closure && (!canWrite || isSaving)}
-          >
-            <Icon name={closure ? "lock" : "check"} size={17} />
-            {closure ? copy(locale, "dashboard", "monthClosed") : copy(locale, "dashboard", "closeMonth")}
-          </button>
-          <FieldHelpButton fieldId="monthClosure.close" />
+          <span className="action-with-help action-with-help--header">
+            <button
+              className={closure ? "button button--secondary" : "button button--primary"}
+              type="button"
+              data-testid="dashboard-close-month"
+              onClick={openClosureDialog}
+              disabled={!closure && (!canWrite || isSaving)}
+            >
+              <Icon name={closure ? "lock" : "check"} size={17} />
+              {closure ? copy(locale, "dashboard", "monthClosed") : copy(locale, "dashboard", "closeMonth")}
+            </button>
+            <FieldHelpButton fieldId="monthClosure.close" />
+          </span>
           <button className="button button--primary desktop-only" data-testid="dashboard-new-entry" type="button" onClick={() => onNewEntry()} disabled={!canWrite || isSaving}>
             <Icon name="plus" />
             {copy(locale, "dashboard", "createEntry")}

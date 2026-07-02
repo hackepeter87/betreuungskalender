@@ -5132,6 +5132,10 @@ h3 {
   gap: 0.45rem;
 }
 
+.action-with-help--header {
+  flex: 0 0 auto;
+}
+
 .panel__header > .field-help-trigger {
   margin-left: auto;
 }
@@ -5278,6 +5282,16 @@ h3 {
     min-height: 44px;
     min-width: 44px;
     width: 44px;
+  }
+
+  .action-with-help--header {
+    display: flex;
+    width: 100%;
+  }
+
+  .action-with-help--header > .button {
+    flex: 1 1 auto;
+    min-width: 0;
   }
 
   .field-label-row {
