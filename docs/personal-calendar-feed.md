@@ -32,6 +32,8 @@ New tokens can use these scopes:
 - `legacy`: existing pre-v1.5 tokens. These remain valid and keep their old
   `created_by` owner behavior until rotated or revoked.
 
+The feed includes the care-entry location as an iCalendar `LOCATION` value so
+subscribed calendars can show where the handover or care period is planned.
 The feed deliberately excludes notes, evidence references, trips, costs, audit
 data, internal actor history, and deleted or cancelled entries. Event titles
 use a compact form:
@@ -45,7 +47,7 @@ all-scope feed, the calendar name identifies the overall Betreuungskalender
 feed.
 
 Events use stable UIDs derived from the care-entry ID and include start, end,
-`DTSTAMP`, and `LAST-MODIFIED` values.
+`LOCATION`, `DTSTAMP`, and `LAST-MODIFIED` values.
 
 ## Subscribe
 

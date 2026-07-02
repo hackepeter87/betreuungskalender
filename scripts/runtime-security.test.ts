@@ -827,6 +827,7 @@ test("runtime serves revocable personal iCalendar feeds without broader token ac
   const calendarText = await calendarResponse.text();
   new ICAL.Component(ICAL.parse(calendarText));
   assert.match(calendarText, /SUMMARY:Kinder bei Alpha Parent/);
+  assert.match(calendarText, /LOCATION:Pendlerwohnung/);
   assert.match(calendarText, /DTSTART:20260807T160000/);
   assert.doesNotMatch(calendarText, /20260814T160000/);
   assert.doesNotMatch(calendarText, /20260821T160000/);
