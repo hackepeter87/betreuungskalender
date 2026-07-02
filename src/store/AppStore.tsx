@@ -23,6 +23,7 @@ import { buildMonthlyClosureSummary, monthKeysForRange } from "../lib/monthClosu
 import type {
   AppData,
   AppSettings,
+  CareConfirmationRequest,
   CareEntry,
   CareParty,
   ContactRule,
@@ -30,6 +31,8 @@ import type {
   EntryStatus,
   HolidayPeriod,
   MonthlyClosure,
+  NotificationPreference,
+  NotificationPreferencesResponse,
   UnavailablePeriod
 } from "../types";
 
@@ -66,6 +69,8 @@ interface AppStoreValue {
   isSaving: boolean;
   error: string | null;
   canWrite: boolean;
+  openConfirmations: CareConfirmationRequest[];
+  notificationPreferences: NotificationPreferencesResponse | null;
   reload: () => Promise<boolean>;
   clearError: () => void;
   saveChild: (input: ChildInput) => Promise<boolean>;
@@ -79,6 +84,14 @@ interface AppStoreValue {
     status: EntryStatus,
     cancellationReason?: string
   ) => Promise<boolean>;
+  answerCareConfirmation: (
+    id: string,
+    status: "completed" | "cancelled" | "partial",
+    note?: string
+  ) => Promise<boolean>;
+  remindCareConfirmationLater: (id: string) => Promise<boolean>;
+  updateNotificationPreferences: (preferences: NotificationPreference[]) => Promise<boolean>;
+  registerPushSubscription: () => Promise<boolean>;
   saveHolidayPeriod: (input: HolidayInput) => Promise<boolean>;
   removeHolidayPeriod: (id: string) => Promise<boolean>;
   saveUnavailablePeriod: (input: UnavailableInput) => Promise<boolean>;
@@ -111,6 +124,13 @@ function requiresLogin(session: ApiSession): boolean {
   return session.authRequired && !session.authenticated;
 }
 
+function urlBase64ToUint8Array(value: string): ArrayBuffer {
+  const padding = "=".repeat((4 - (value.length % 4)) % 4);
+  const base64 = `${value}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64);
+  return Uint8Array.from([...raw].map((char) => char.charCodeAt(0))).buffer;
+}
+
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData>(createEmptyData);
   const [session, setSession] = useState<ApiSession>(defaultSession);
@@ -118,6 +138,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [openConfirmations, setOpenConfirmations] = useState<CareConfirmationRequest[]>([]);
+  const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferencesResponse | null>(null);
   const dataRef = useRef(data);
   const serverStatusRef = useRef(serverStatus);
   dataRef.current = data;
@@ -141,6 +163,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     const empty = createEmptyData();
     dataRef.current = empty;
     setData(empty);
+    setOpenConfirmations([]);
+    setNotificationPreferences(null);
     setSession(nextSession);
     setServerStatus("online");
     setError(null);
@@ -157,9 +181,15 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           return true;
         }
 
-        const next = await loadAppData();
+        const [next, confirmations, preferences] = await Promise.all([
+          loadAppData(),
+          api.listOpenCareConfirmations(),
+          api.getNotificationPreferences()
+        ]);
         dataRef.current = next;
         setData(next);
+        setOpenConfirmations(confirmations);
+        setNotificationPreferences(preferences);
         setServerStatus("online");
         setError(null);
         return true;
@@ -186,6 +216,15 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   );
 
   const reload = useCallback(() => reloadInternal(false), [reloadInternal]);
+
+  const refreshOperationalState = useCallback(async () => {
+    const [confirmations, preferences] = await Promise.all([
+      api.listOpenCareConfirmations(),
+      api.getNotificationPreferences()
+    ]);
+    setOpenConfirmations(confirmations);
+    setNotificationPreferences(preferences);
+  }, []);
 
   useEffect(() => {
     void reloadInternal(false);
@@ -232,6 +271,73 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       }
     },
     [handleError, reloadInternal]
+  );
+
+  const answerCareConfirmation = useCallback(
+    async (id: string, status: "completed" | "cancelled" | "partial", note?: string) =>
+      performWrite(async () => {
+        await api.answerCareConfirmation(id, {
+          status,
+          note,
+          cancellationReason: status === "cancelled" ? note : undefined
+        });
+        await reloadInternal(true);
+        return true;
+      }, false),
+    [performWrite, reloadInternal]
+  );
+
+  const remindCareConfirmationLater = useCallback(
+    async (id: string) =>
+      performWrite(async () => {
+        await api.remindCareConfirmationLater(id);
+        await refreshOperationalState();
+        return true;
+      }, false),
+    [performWrite, refreshOperationalState]
+  );
+
+  const updateNotificationPreferences = useCallback(
+    async (preferences: NotificationPreference[]) =>
+      performWrite(async () => {
+        const next = await api.updateNotificationPreferences(preferences);
+        setNotificationPreferences(next);
+        return true;
+      }, false),
+    [performWrite]
+  );
+
+  const registerPushSubscription = useCallback(
+    async () =>
+      performWrite(async () => {
+        const preferences = notificationPreferences ?? await api.getNotificationPreferences();
+        if (!preferences.pushAvailable || !preferences.vapidPublicKey) {
+          setError("Push-Benachrichtigungen sind serverseitig noch nicht konfiguriert.");
+          return false;
+        }
+        if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+          setError("Dieser Browser unterstützt keine PWA-Push-Benachrichtigungen.");
+          return false;
+        }
+        const registration = await navigator.serviceWorker.ready;
+        const permission = await Notification.requestPermission();
+        if (permission !== "granted") {
+          setError("Push-Benachrichtigungen wurden im Browser nicht erlaubt.");
+          return false;
+        }
+        const existing = await registration.pushManager.getSubscription();
+        const subscription = existing ?? await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(preferences.vapidPublicKey)
+        });
+        await api.savePushSubscription(subscription.toJSON() as {
+          endpoint: string;
+          keys: { p256dh: string; auth: string };
+        });
+        await refreshOperationalState();
+        return true;
+      }, false),
+    [notificationPreferences, performWrite, refreshOperationalState]
   );
 
   const confirmClosedMonthChange = useCallback((monthKeys: string[]) => {
@@ -599,6 +705,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       isLoading,
       isSaving,
       error,
+      openConfirmations,
+      notificationPreferences,
       canWrite:
         serverStatus === "online" &&
         !isLoading &&
@@ -613,6 +721,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       saveEntry,
       removeEntry,
       updateEntryStatus,
+      answerCareConfirmation,
+      remindCareConfirmationLater,
+      updateNotificationPreferences,
+      registerPushSubscription,
       saveHolidayPeriod,
       removeHolidayPeriod,
       saveUnavailablePeriod,
@@ -630,6 +742,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       clearAll
     }),
     [
+      answerCareConfirmation,
       clearAll,
       closeMonth,
       data,
@@ -639,8 +752,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       isSaving,
       loadDemo,
       loadEdgeCaseDemo,
+      notificationPreferences,
+      openConfirmations,
       recordBackupExport,
+      registerPushSubscription,
       reload,
+      remindCareConfirmationLater,
       removeChild,
       removeCareParty,
       removeContactPattern,
@@ -658,6 +775,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       session,
       serverStatus,
       updateEntryStatus,
+      updateNotificationPreferences,
       updateSettings
     ]
   );

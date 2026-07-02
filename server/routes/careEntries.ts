@@ -32,6 +32,9 @@ interface EntryRow {
   start_datetime: string;
   end_datetime: string;
   status: ApiCareEntry["status"];
+  confirmation_note: string | null;
+  confirmed_at: string | null;
+  confirmed_by: string | null;
   care_scope: ApiCareEntry["careScope"];
   cancellation_reason: string | null;
   overnight: number;
@@ -141,6 +144,14 @@ function mapEntry(row: EntryRow): ApiCareEntry {
     endDateTime: row.end_datetime,
     childIds: getChildIds(row.id),
     status: row.status,
+    confirmationState: row.status === "planned" && !row.confirmed_at && Date.parse(row.end_datetime) < Date.now()
+      ? "unconfirmed"
+      : row.confirmed_at
+        ? "confirmed"
+        : undefined,
+    confirmedAt: optional(row.confirmed_at),
+    confirmedBy: optional(row.confirmed_by),
+    confirmationNote: optional(row.confirmation_note),
     careScope: row.care_scope,
     cancellationReason: optional(row.cancellation_reason),
     overnight: bool(row.overnight),
@@ -351,7 +362,8 @@ function persistEntry(
         contact_rule_id = ?, contact_rule_segment_id = ?, contact_rule_occurrence_key = ?,
         responsible_party_id = ?, contact_rule_sync_state = ?,
         start_datetime = ?, end_datetime = ?, status = ?, care_scope = ?,
-        cancellation_reason = ?, overnight = ?, school_handover = ?,
+        cancellation_reason = ?, confirmation_note = ?, confirmed_at = ?, confirmed_by = ?,
+        overnight = ?, school_handover = ?,
         holiday = ?, weekend = ?, additional_care = ?, location = ?, custom_location = ?,
         handover_from = ?, handover_to = ?, notes = ?, evidence_reference = ?,
         has_evidence = ?, duration_minutes = ?, is_contact_time = ?,
@@ -364,6 +376,9 @@ function persistEntry(
       contactRuleSyncState,
       input.startDateTime, input.endDateTime, input.status, input.careScope,
       input.status === "cancelled" ? input.cancellationReason ?? null : null,
+      input.status === "planned" ? null : existing.confirmationNote ?? null,
+      input.status === "planned" ? null : existing.confirmedAt ?? null,
+      input.status === "planned" ? null : existing.confirmedBy ?? null,
       Number(input.overnight), Number(input.schoolHandover), Number(input.holiday),
       Number(input.weekend), Number(input.additionalCare), input.location ?? null,
       input.customLocation ?? null,
@@ -378,10 +393,11 @@ function persistEntry(
         contact_rule_id, contact_rule_segment_id, contact_rule_occurrence_key,
         responsible_party_id, contact_rule_sync_state,
         start_datetime, end_datetime, status, care_scope, cancellation_reason,
+        confirmation_note, confirmed_at, confirmed_by,
         overnight, school_handover, holiday, weekend, additional_care, location,
         custom_location, handover_from, handover_to, notes, evidence_reference, has_evidence,
         duration_minutes, is_contact_time, created_by, updated_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, input.generatedByPatternId ?? null, input.ruleOccurrenceDate ?? null,
       input.contactRuleId ?? null, input.contactRuleSegmentId ?? null,
@@ -389,6 +405,9 @@ function persistEntry(
       input.contactRuleSyncState ?? null,
       input.startDateTime, input.endDateTime, input.status, input.careScope,
       input.status === "cancelled" ? input.cancellationReason ?? null : null,
+      null,
+      null,
+      null,
       Number(input.overnight), Number(input.schoolHandover), Number(input.holiday),
       Number(input.weekend), Number(input.additionalCare), input.location ?? null,
       input.customLocation ?? null,

@@ -153,6 +153,9 @@ export const config = {
   rateLimitExportMax: positiveNumberEnv(process.env.RATE_LIMIT_EXPORT_MAX, 15),
   rateLimitWindowMs: positiveNumberEnv(process.env.RATE_LIMIT_WINDOW_MS, 60_000),
   demoDatasetsEnabled: booleanEnv(process.env.DEMO_DATASETS_ENABLED),
+  webPushSubject: process.env.WEB_PUSH_SUBJECT?.trim() || "mailto:admin@example.invalid",
+  webPushPublicKey: process.env.WEB_PUSH_PUBLIC_KEY?.trim() || undefined,
+  webPushPrivateKey: process.env.WEB_PUSH_PRIVATE_KEY?.trim() || undefined,
   version: packageVersion()
 } as const;
 

@@ -92,6 +92,7 @@ export function EntriesPage({
                 ["all", copy(locale, "entries", "all")],
                 ["completed", statusLabel("completed", locale)],
                 ["planned", statusLabel("planned", locale)],
+                ["partial", statusLabel("partial", locale)],
                 ["cancelled", statusLabel("cancelled", locale)]
               ] as Array<[EntryStatus | "all", string]>
             ).map(([value, label]) => (

@@ -12,6 +12,10 @@ project follows semantic versioning where practical.
   holiday sources.
 - Added explicit holiday-block derivation from all-day imported holiday source
   events without silently changing existing holiday blocks.
+- Added follow-up care confirmations for past planned entries, including
+  `completed`, `partial`, and `cancelled` confirmation outcomes.
+- Added per-user notification preferences and optional privacy-preserving Web
+  Push subscriptions for confirmation reminders.
 
 ## [1.6.2] - 2026-07-02
 

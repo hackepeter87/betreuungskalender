@@ -16,6 +16,7 @@ Depending on use, the application may store:
 - Monthly closure summaries
 - Personal calendar feed token hashes
 - Optional app-user to care-party assignments for shared operation
+- Optional Web Push subscription endpoints for confirmation reminders
 
 The React UI reads and writes domain data only through the Fastify API and its
 SQLite database. Browser local storage is limited to non-sensitive UI
@@ -86,6 +87,12 @@ new scoped tokens can be rotated per all-calendar or care-party scope.
 Care parties are domain records, not authentication principals. Optional
 app-user to care-party assignments restrict non-admin shared users once at
 least one assignment exists, but they do not replace `app_users.role`.
+
+Care confirmation push notifications are deliberately generic. Push payloads
+must not include child names, exact care times, locations, notes, evidence
+references, costs, trips, or other sensitive case details. Store VAPID private
+keys only as deployment secrets such as environment variables; never commit
+them to the repository or write them into release artifacts.
 
 The UI references external evidence by name only; it does not upload or store
 evidence files.

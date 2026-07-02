@@ -298,11 +298,12 @@ export function EntryForm({
           <span>{copy(locale, "entryForm", "statusClassification")}</span>
           <FieldHelpButton fieldId="careEntry.status" />
         </legend>
-        <div className="segmented-control segmented-control--three">
+        <div className="segmented-control segmented-control--four">
           {(
             [
               ["completed", copy(locale, "entryForm", "completed")],
               ["planned", copy(locale, "entryForm", "planned")],
+              ["partial", copy(locale, "entryForm", "partial")],
               ["cancelled", copy(locale, "entryForm", "cancelled")]
             ] as Array<[EntryStatus, string]>
           ).map(([value, label]) => (

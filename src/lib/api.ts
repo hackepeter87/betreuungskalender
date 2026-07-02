@@ -3,6 +3,8 @@ import type {
   ApiAppUser,
   ApiCalendarFeedStatus,
   ApiCalendarFeedScope,
+  ApiCareConfirmationAnswer,
+  ApiCareConfirmationRequest,
   ApiCareEntry,
   ApiCareParty,
   ApiChild,
@@ -16,6 +18,9 @@ import type {
   ApiExternalCalendarBackupEvent,
   ApiExternalCalendarSource,
   ApiExternalCalendarHolidayDeriveResult,
+  ApiNotificationPreferencesResponse,
+  ApiNotificationPreference,
+  ApiPushSubscriptionInput,
   CareScope
 } from "../../shared/api";
 import type {
@@ -32,6 +37,7 @@ import type {
   AuditAction,
   AuditObjectType,
   CareEntry,
+  CareConfirmationRequest,
   CareParty,
   Child,
   ContactRule,
@@ -145,6 +151,10 @@ function mapEntry(entry: ApiCareEntry): CareEntry {
     endDateTime: entry.endDateTime,
     childIds: entry.childIds,
     status: entry.status,
+    confirmationState: entry.confirmationState,
+    confirmedAt: entry.confirmedAt,
+    confirmedBy: entry.confirmedBy,
+    confirmationNote: entry.confirmationNote,
     additionalCare: entry.additionalCare,
     overnight: entry.overnight,
     schoolHandover: entry.schoolHandover,
@@ -171,6 +181,13 @@ function mapEntry(entry: ApiCareEntry): CareEntry {
     updatedBy: entry.updatedBy,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt
+  };
+}
+
+function mapConfirmation(request: ApiCareConfirmationRequest): CareConfirmationRequest {
+  return {
+    ...request,
+    entry: mapEntry(request.entry)
   };
 }
 
@@ -403,6 +420,39 @@ export const api = {
   deleteEntry(id: string) {
     return request<void>(`/api/care-entries/${encodeURIComponent(id)}`, {
       method: "DELETE"
+    });
+  },
+  async listOpenCareConfirmations() {
+    const result = await request<ApiCareConfirmationRequest[]>("/api/care-confirmations/open");
+    return result.map(mapConfirmation);
+  },
+  async answerCareConfirmation(id: string, input: ApiCareConfirmationAnswer) {
+    const result = await request<ApiCareConfirmationRequest>(
+      `/api/care-confirmations/${encodeURIComponent(id)}/answer`,
+      { method: "POST", body: JSON.stringify(input) }
+    );
+    return mapConfirmation(result);
+  },
+  async remindCareConfirmationLater(id: string, nextReminderAt?: string) {
+    const result = await request<ApiCareConfirmationRequest>(
+      `/api/care-confirmations/${encodeURIComponent(id)}/remind-later`,
+      { method: "POST", body: JSON.stringify({ nextReminderAt }) }
+    );
+    return mapConfirmation(result);
+  },
+  getNotificationPreferences() {
+    return request<ApiNotificationPreferencesResponse>("/api/notification-preferences");
+  },
+  updateNotificationPreferences(preferences: ApiNotificationPreference[]) {
+    return request<ApiNotificationPreferencesResponse>("/api/notification-preferences", {
+      method: "PUT",
+      body: JSON.stringify({ preferences })
+    });
+  },
+  savePushSubscription(input: ApiPushSubscriptionInput) {
+    return request<void>("/api/push-subscriptions", {
+      method: "POST",
+      body: JSON.stringify(input)
     });
   },
   createHoliday(input: HolidayWriteInput) {

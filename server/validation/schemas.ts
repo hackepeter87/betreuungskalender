@@ -60,7 +60,7 @@ export const careEntryInputSchema = z
     contactRuleOccurrenceKey: z.string().trim().min(1).max(200).optional(),
     responsiblePartyId: z.string().trim().min(1).max(200).optional(),
     contactRuleSyncState: z.enum(["generated", "manual_override"]).optional(),
-    status: z.enum(["planned", "completed", "cancelled"]),
+    status: z.enum(["planned", "completed", "cancelled", "partial"]),
     careScope: z.enum(careScopes).default("hourly"),
     cancellationReason: z.string().trim().max(4000).optional(),
     overnight: z.boolean().default(false),
@@ -242,6 +242,50 @@ export const contactRuleInputSchema = z
   });
 
 export const settingsInputSchema = z.record(z.string(), z.unknown());
+
+export const careConfirmationAnswerSchema = z
+  .object({
+    status: z.enum(["completed", "cancelled", "partial"]),
+    note: z.string().trim().max(4000).optional(),
+    cancellationReason: z.string().trim().max(4000).optional()
+  })
+  .superRefine((answer, context) => {
+    if (answer.status === "cancelled" && !answer.cancellationReason?.trim() && !answer.note?.trim()) {
+      context.addIssue({
+        code: "custom",
+        path: ["cancellationReason"],
+        message: "Ein ausgefallener Termin benötigt einen kurzen Grund."
+      });
+    }
+  });
+
+export const careConfirmationRemindLaterSchema = z.object({
+  nextReminderAt: isoDateTime.optional()
+});
+
+export const notificationEventTypeSchema = z.enum([
+  "care_confirmation_due",
+  "care_confirmation_reminder"
+]);
+
+export const notificationPreferenceSchema = z.object({
+  eventType: notificationEventTypeSchema,
+  inAppEnabled: z.literal(true).default(true),
+  pushEnabled: z.boolean().default(true),
+  emailEnabled: z.boolean().default(false)
+});
+
+export const notificationPreferencesSchema = z.object({
+  preferences: z.array(notificationPreferenceSchema).min(1).max(8)
+});
+
+export const pushSubscriptionSchema = z.object({
+  endpoint: z.string().trim().url().max(2000),
+  keys: z.object({
+    p256dh: z.string().trim().min(1).max(1000),
+    auth: z.string().trim().min(1).max(1000)
+  })
+});
 
 export const calendarFeedScopeSchema = z.union([
   z.literal("legacy"),
