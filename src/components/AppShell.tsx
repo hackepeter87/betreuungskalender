@@ -319,6 +319,32 @@ export function AppShell({
         </button>
       </aside>
 
+      <nav className="mobile-nav" aria-label={t("nav.mobile")} data-testid="mobile-navigation">
+        {mobileNavItems.map((item) => (
+          <button
+            type="button"
+            key={item.id}
+            data-testid={`mobile-nav-${item.id}`}
+            className={activePage === item.id ? "is-active" : ""}
+            onClick={() => navigate(item.id)}
+          >
+            <Icon name={item.icon} size={19} />
+            <span>{t(item.labelKey)}</span>
+          </button>
+        ))}
+        <button
+          type="button"
+          data-testid="mobile-nav-more"
+          className={showMore || !mobileNavItems.some((item) => item.id === activePage) ? "is-active" : ""}
+          onClick={() => setShowMore((current) => !current)}
+          aria-expanded={showMore}
+          aria-label={t("nav.openMore")}
+        >
+          <Icon name="list" size={19} />
+          <span>{t("nav.more")}</span>
+        </button>
+      </nav>
+
       <main className="main">
         <header className="mobile-header">
           <button className="brand brand--compact" type="button" onClick={() => navigate("dashboard")}>
@@ -446,31 +472,6 @@ export function AppShell({
         </div>
       ) : null}
 
-      <nav className="mobile-nav" aria-label={t("nav.mobile")} data-testid="mobile-navigation">
-        {mobileNavItems.map((item) => (
-          <button
-            type="button"
-            key={item.id}
-            data-testid={`mobile-nav-${item.id}`}
-            className={activePage === item.id ? "is-active" : ""}
-            onClick={() => navigate(item.id)}
-          >
-            <Icon name={item.icon} size={19} />
-            <span>{t(item.labelKey)}</span>
-          </button>
-        ))}
-        <button
-          type="button"
-          data-testid="mobile-nav-more"
-          className={showMore || !mobileNavItems.some((item) => item.id === activePage) ? "is-active" : ""}
-          onClick={() => setShowMore((current) => !current)}
-          aria-expanded={showMore}
-          aria-label={t("nav.openMore")}
-        >
-          <Icon name="list" size={19} />
-          <span>{t("nav.more")}</span>
-        </button>
-      </nav>
     </div>
   );
 }

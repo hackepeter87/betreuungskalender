@@ -4,6 +4,13 @@ import type {
   ContactRuleWeekday
 } from "../../shared/api";
 import { addDays } from "./date";
+import * as rrule from "rrule";
+
+const rruleExports = rrule as typeof rrule & {
+  default?: typeof rrule;
+  rrule?: typeof rrule;
+};
+const { RRule } = rruleExports.default ?? rruleExports.rrule ?? rruleExports;
 
 const weekdayIndexes: Record<ContactRuleWeekday, number> = {
   SU: 0,
@@ -137,6 +144,43 @@ function monthlyDates(
   return [...new Set(result)].sort();
 }
 
+function normalizeRRuleLine(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.toUpperCase().startsWith("RRULE:")
+    ? trimmed.slice("RRULE:".length)
+    : trimmed;
+}
+
+function dateToRRuleDate(date: string): Date {
+  const [year = 0, month = 1, day = 1] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 12));
+}
+
+function dateKeyFromRRuleDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function rruleDates(
+  recurrence: Extract<ContactRuleRecurrence, { kind: "rrule" }>,
+  anchorDate: string,
+  startDate: string,
+  endDate: string
+): Array<{ date: string; ruleIndex: number }> {
+  return recurrence.rrules.flatMap((line, ruleIndex) => {
+    const options = RRule.parseString(normalizeRRuleLine(line));
+    const rule = new RRule({
+      ...options,
+      dtstart: dateToRRuleDate(anchorDate)
+    });
+    return rule
+      .between(dateToRRuleDate(startDate), dateToRRuleDate(endDate), true)
+      .map((date) => ({
+        date: dateKeyFromRRuleDate(date),
+        ruleIndex
+      }));
+  });
+}
+
 export function expandContactRule(input: {
   startDate: string;
   endDate?: string;
@@ -154,18 +198,22 @@ export function expandContactRule(input: {
 
   const dates =
     input.recurrence.kind === "weekly"
-      ? weeklyDates(input.recurrence, input.startDate, rangeStart, rangeEnd)
-      : monthlyDates(input.recurrence, input.startDate, rangeStart, rangeEnd);
+      ? weeklyDates(input.recurrence, input.startDate, rangeStart, rangeEnd).map((date) => ({ date, ruleIndex: 0 }))
+      : input.recurrence.kind === "monthlyByWeekday"
+        ? monthlyDates(input.recurrence, input.startDate, rangeStart, rangeEnd).map((date) => ({ date, ruleIndex: 0 }))
+        : rruleDates(input.recurrence, input.startDate, rangeStart, rangeEnd);
 
-  return dates.flatMap((occurrenceDate) =>
+  return dates.flatMap((occurrence) =>
     input.segments
       .filter((segment) => segment.endDayOffset >= segment.startDayOffset)
       .map((segment) => {
-        const startDate = addDays(occurrenceDate, segment.startDayOffset);
-        const endDate = addDays(occurrenceDate, segment.endDayOffset);
+        const startDate = addDays(occurrence.date, segment.startDayOffset);
+        const endDate = addDays(occurrence.date, segment.endDayOffset);
         return {
-          occurrenceDate,
-          occurrenceKey: `${occurrenceDate}:${segment.id}`,
+          occurrenceDate: occurrence.date,
+          occurrenceKey: input.recurrence.kind === "rrule"
+            ? `${occurrence.date}:r${occurrence.ruleIndex}:${segment.id}`
+            : `${occurrence.date}:${segment.id}`,
           segmentId: segment.id,
           startDateTime: `${startDate}T${segment.startTime}`,
           endDateTime: `${endDate}T${segment.endTime}`

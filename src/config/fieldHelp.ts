@@ -417,21 +417,21 @@ export const fieldHelpById = {
 
   "contactPattern.name": help("contactPattern.name", {
     label: "Name der Regel",
-    shortHelp: "Eindeutige Bezeichnung der 14-Tage-Regel.",
+    shortHelp: "Eindeutige Bezeichnung der wiederkehrenden Umgangsregel.",
     whyRelevant: "Der Name ordnet automatisch erzeugte Soll-Termine ihrer Regel zu.",
     usedFor: "Soll-Termine, Änderungsprotokoll und Verwaltung.",
     inputGuidance: "Verwende eine dauerhaft verständliche Bezeichnung.",
     commonMistakes: "Den Namen nicht für wechselnde Rhythmen wiederverwenden, ohne die Regel zu prüfen.",
     requirementLevel: required,
-    examples: "14-Tage-Regel Freitag bis Sonntag"
+    examples: "Wochenendregel, Mittwochnachmittag, erster und dritter Samstag"
   }),
   "contactPattern.startDate": help("contactPattern.startDate", {
     label: "Startdatum des Rhythmus",
-    shortHelp: "Freitag, an dem der 14-Tage-Rhythmus beginnt.",
-    whyRelevant: "Von diesem Datum werden alle weiteren Soll-Wochenenden berechnet.",
+    shortHelp: "Datum, ab dem die Wiederholung berechnet wird.",
+    whyRelevant: "Von diesem Datum werden alle weiteren geplanten Termine berechnet.",
     usedFor: "Automatische Generierung geplanter Umgangstermine.",
-    inputGuidance: "Wähle einen tatsächlich vereinbarten Startfreitag.",
-    commonMistakes: "Keinen beliebigen Tag oder den Tag der Dateneingabe verwenden.",
+    inputGuidance: "Wähle den ersten Tag, ab dem die Vereinbarung gelten soll.",
+    commonMistakes: "Nicht den Tag der Dateneingabe verwenden, wenn die Vereinbarung später beginnt.",
     requirementLevel: required
   }),
   "contactPattern.frequency": help("contactPattern.frequency", {
@@ -439,13 +439,13 @@ export const fieldHelpById = {
     shortHelp: "Zeitlicher Abstand zwischen den geplanten Terminen.",
     whyRelevant: "Die Frequenz bestimmt den Rhythmus der Soll-Termine.",
     usedFor: "Terminberechnung.",
-    inputGuidance: "Die aktuelle Regel verwendet einen festen 14-Tage-Rhythmus.",
+    inputGuidance: "Wähle täglich, wöchentlich oder monatlich und setze das Intervall passend zur Vereinbarung.",
     commonMistakes: "Einzelne Abweichungen nicht durch Verschieben der gesamten Regel abbilden.",
     requirementLevel: required
   }),
   "contactPattern.fridayStartTime": help("contactPattern.fridayStartTime", {
-    label: "Freitag-Beginn",
-    shortHelp: "Geplante Startzeit jedes Regelwochenendes.",
+    label: "Beginn der Zeitspanne",
+    shortHelp: "Geplante Startzeit dieser regelmäßigen Zeitspanne.",
     whyRelevant: "Die Uhrzeit wird für automatisch erzeugte Soll-Termine verwendet.",
     usedFor: "Soll-Termin und Soll-Ist-Vergleich.",
     inputGuidance: "Trage die regulär geplante Uhrzeit ein.",
@@ -453,8 +453,8 @@ export const fieldHelpById = {
     requirementLevel: required
   }),
   "contactPattern.sundayEndTime": help("contactPattern.sundayEndTime", {
-    label: "Sonntag-Ende",
-    shortHelp: "Geplante Endzeit jedes Regelwochenendes.",
+    label: "Ende der Zeitspanne",
+    shortHelp: "Geplante Endzeit dieser regelmäßigen Zeitspanne.",
     whyRelevant: "Die Uhrzeit vervollständigt den automatisch erzeugten Soll-Zeitraum.",
     usedFor: "Soll-Termin und Soll-Ist-Vergleich.",
     inputGuidance: "Trage die regulär geplante Endzeit ein.",

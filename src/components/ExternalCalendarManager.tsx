@@ -15,6 +15,7 @@ export function ExternalCalendarManager() {
   const [color, setColor] = useState(DEFAULT_COLOR);
   const [message, setMessage] = useState<string | null>(null);
   const [replacingId, setReplacingId] = useState<string | null>(null);
+  const [fileName, setFileName] = useState("");
 
   const readFile = async (file: File) => {
     if (!file.name.toLowerCase().endsWith(".ics")) throw new Error(copy(locale, "externalCalendar", "invalid"));
@@ -29,6 +30,8 @@ export function ExternalCalendarManager() {
         : await api.importExternalCalendar({ name: name.trim(), color, content });
       setMessage(copy(locale, "externalCalendar", "imported", { count: result.importedEvents }));
       setName("");
+      setFileName("");
+      if (inputRef.current) inputRef.current.value = "";
       await reload();
     } catch {
       setMessage(copy(locale, "externalCalendar", "invalid"));
@@ -37,12 +40,33 @@ export function ExternalCalendarManager() {
 
   return <section className="panel settings-section" data-testid="external-calendar-manager">
     <div className="panel__header panel__header--compact"><div><h2>{copy(locale, "externalCalendar", "title")}</h2><p>{copy(locale, "externalCalendar", "description")}</p></div></div>
-    <div className="settings-form-grid">
+    <div className="external-calendar-import-grid">
       <label className="field"><span>{copy(locale, "externalCalendar", "sourceName")}</span><input data-testid="external-calendar-name" value={name} onChange={(event) => setName(event.target.value)} /></label>
-      <label className="field"><span>{copy(locale, "externalCalendar", "color")}</span><input data-testid="external-calendar-color" type="color" value={color} onChange={(event) => setColor(event.target.value)} /></label>
-      <label className="field"><span>{copy(locale, "externalCalendar", "file")}</span><input ref={inputRef} type="file" accept=".ics,text/calendar" data-testid="external-calendar-file" onChange={(event) => { if (replacingId) void importFile(event.target.files?.[0], replacingId).finally(() => setReplacingId(null)); }} /></label>
+      <label className="field external-calendar-color-field"><span>{copy(locale, "externalCalendar", "color")}</span><input data-testid="external-calendar-color" type="color" value={color} onChange={(event) => setColor(event.target.value)} /></label>
+      <div className="field external-calendar-file-field">
+        <span>{copy(locale, "externalCalendar", "file")}</span>
+        <div className="file-picker-row">
+          <button className="button button--secondary" type="button" onClick={() => inputRef.current?.click()}>
+            <Icon name="upload" size={17} />
+            {copy(locale, "externalCalendar", "chooseFile")}
+          </button>
+          <span>{fileName || copy(locale, "externalCalendar", "noFile")}</span>
+        </div>
+        <input
+          ref={inputRef}
+          className="visually-hidden-file"
+          type="file"
+          accept=".ics,text/calendar"
+          data-testid="external-calendar-file"
+          onChange={(event) => {
+            const file = event.target.files?.[0];
+            setFileName(file?.name ?? "");
+            if (replacingId) void importFile(file, replacingId).finally(() => setReplacingId(null));
+          }}
+        />
+      </div>
+      <button className="button button--primary" type="button" data-testid="external-calendar-import" disabled={!canWrite || isSaving || !name.trim() || !inputRef.current?.files?.[0]} onClick={() => void importFile(inputRef.current?.files?.[0])}><Icon name="upload" size={17} />{copy(locale, "externalCalendar", "import")}</button>
     </div>
-    <button className="button button--primary" type="button" data-testid="external-calendar-import" disabled={!canWrite || isSaving || !name.trim()} onClick={() => void importFile(inputRef.current?.files?.[0])}><Icon name="upload" size={17} />{copy(locale, "externalCalendar", "import")}</button>
     {message ? <p className="inline-message" role="status" data-testid="external-calendar-message">{message}</p> : null}
     <div className="child-settings-list">
       {data.externalCalendarSources.map((source) => <div className="child-settings-row child-settings-row--external-source" key={source.id} data-testid={`external-calendar-source-${source.id}`}>

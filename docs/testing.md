@@ -43,8 +43,11 @@ When enabled, admin users can load the edge-case dataset from settings. The
 dataset intentionally replaces the current domain data and contains only
 fictional records that exercise month boundaries, recurring contact rules,
 cancelled entries, additional care, costs, trips, external calendar overlays,
-unavailability warnings, month closures, and audit log display. Do not enable
-this option in production.
+unavailability warnings, month closures, and audit log display. For v1.6.0 and
+later, contact-rule regression checks should include non-14-day weekly rules,
+monthly day rules, monthly ordinal weekday rules, multiple time spans, calendar
+preview, automatic synchronization, and preserved single-occurrence
+exceptions. Do not enable this option in production.
 
 ## Runtime security and CORS
 

@@ -10,6 +10,7 @@ import {
   syncContactRule,
   upsertContactRuleFromPattern
 } from "./services/contactRules.js";
+import { contactRuleInputSchema } from "./validation/schemas.js";
 
 const migrationsDirectory = resolve(process.cwd(), "server/migrations");
 const timestamp = "2026-07-01T10:00:00.000Z";
@@ -133,6 +134,142 @@ test("expands monthly ordinal weekday recurrence including last Friday", () => {
       ["2026-09-25", "2026-09-27T18:00"]
     ]
   );
+});
+
+test("expands RRULE weekly recurrence with interval and multiple weekdays", () => {
+  const entries = expandContactRule({
+    startDate: "2026-07-01",
+    active: true,
+    childIds: ["child-a"],
+    rangeStart: "2026-07-01",
+    rangeEnd: "2026-07-21",
+    recurrence: {
+      kind: "rrule",
+      rrules: ["FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE"]
+    },
+    segments: [
+      {
+        id: "afternoon",
+        startDayOffset: 0,
+        startTime: "15:00",
+        endDayOffset: 0,
+        endTime: "18:00"
+      }
+    ]
+  });
+
+  assert.deepEqual(
+    entries.map((entry) => [entry.occurrenceDate, entry.occurrenceKey]),
+    [
+      ["2026-07-01", "2026-07-01:r0:afternoon"],
+      ["2026-07-13", "2026-07-13:r0:afternoon"],
+      ["2026-07-15", "2026-07-15:r0:afternoon"]
+    ]
+  );
+});
+
+test("expands RRULE monthly day and nth weekday schedule lines", () => {
+  const entries = expandContactRule({
+    startDate: "2026-07-01",
+    active: true,
+    childIds: ["child-a"],
+    rangeStart: "2026-07-01",
+    rangeEnd: "2026-09-30",
+    recurrence: {
+      kind: "rrule",
+      rrules: [
+        "FREQ=MONTHLY;INTERVAL=1;BYMONTHDAY=15",
+        "FREQ=MONTHLY;INTERVAL=1;BYDAY=FR;BYSETPOS=-1"
+      ]
+    },
+    segments: [
+      {
+        id: "day",
+        startDayOffset: 0,
+        startTime: "10:00",
+        endDayOffset: 0,
+        endTime: "18:00"
+      }
+    ]
+  });
+
+  assert.deepEqual(
+    entries.map((entry) => [entry.occurrenceDate, entry.occurrenceKey]),
+    [
+      ["2026-07-15", "2026-07-15:r0:day"],
+      ["2026-07-31", "2026-07-31:r1:day"],
+      ["2026-08-15", "2026-08-15:r0:day"],
+      ["2026-08-28", "2026-08-28:r1:day"],
+      ["2026-09-15", "2026-09-15:r0:day"],
+      ["2026-09-25", "2026-09-25:r1:day"]
+    ]
+  );
+});
+
+test("expands RRULE with count and preserves local dates across DST boundary", () => {
+  const entries = expandContactRule({
+    startDate: "2026-10-23",
+    active: true,
+    childIds: ["child-a"],
+    rangeStart: "2026-10-01",
+    rangeEnd: "2026-11-30",
+    recurrence: {
+      kind: "rrule",
+      rrules: ["FREQ=WEEKLY;COUNT=3;BYDAY=FR"]
+    },
+    segments: [
+      {
+        id: "weekend",
+        startDayOffset: 0,
+        startTime: "16:00",
+        endDayOffset: 2,
+        endTime: "18:00"
+      }
+    ]
+  });
+
+  assert.deepEqual(
+    entries.map((entry) => [entry.startDateTime, entry.endDateTime]),
+    [
+      ["2026-10-23T16:00", "2026-10-25T18:00"],
+      ["2026-10-30T16:00", "2026-11-01T18:00"],
+      ["2026-11-06T16:00", "2026-11-08T18:00"]
+    ]
+  );
+});
+
+test("contact rule validation rejects unsupported or excessive RRULE input", () => {
+  const base = {
+    name: "Flexible Testregel",
+    startDate: "2026-07-01",
+    timezone: "Europe/Berlin",
+    segments: [
+      {
+        id: "span-1",
+        startDayOffset: 0,
+        startTime: "15:00",
+        endDayOffset: 0,
+        endTime: "18:00"
+      }
+    ],
+    syncHorizonMonths: 12,
+    childIds: ["child-a"],
+    active: true
+  };
+
+  for (const rrule of [
+    "FREQ=HOURLY;INTERVAL=1",
+    "FREQ=WEEKLY;COUNT=501;BYDAY=FR",
+    "FREQ=WEEKLY;BYDAY=FR;BYHOUR=9"
+  ]) {
+    assert.equal(contactRuleInputSchema.safeParse({
+      ...base,
+      recurrence: {
+        kind: "rrule",
+        rrules: [rrule]
+      }
+    }).success, false);
+  }
 });
 
 test("sync creates planned entries from a legacy pattern and does not duplicate them", () => {

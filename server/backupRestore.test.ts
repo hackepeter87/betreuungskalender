@@ -21,7 +21,8 @@ const expectedMigrations = [
   "010_native_oidc_sessions",
   "011_contact_rules",
   "012_care_parties",
-  "013_calendar_feed_scopes_and_assignments"
+  "013_calendar_feed_scopes_and_assignments",
+  "014_localized_default_care_party"
 ];
 
 async function withTemporaryDirectory(
@@ -186,7 +187,7 @@ test("care party migration backfills existing active entries", async () => {
     const oldMigrations = join(directory, "old-migrations");
     mkdirSync(oldMigrations);
     for (const file of readdirSync(migrationsDirectory)) {
-      if (!file.endsWith(".sql") || file.startsWith("012_") || file.startsWith("013_")) continue;
+      if (!file.endsWith(".sql") || file.startsWith("012_") || file.startsWith("013_") || file.startsWith("014_")) continue;
       copyFileSync(join(migrationsDirectory, file), join(oldMigrations, file));
     }
 
@@ -202,7 +203,7 @@ test("care party migration backfills existing active entries", async () => {
         WHERE deleted_at IS NULL
       `).get(), {
         id: "party_primary",
-        name: "Primary caregiver",
+        name: "Hauptbetreuung",
         kind: "other"
       });
       assert.deepEqual(database.prepare(`

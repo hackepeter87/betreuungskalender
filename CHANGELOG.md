@@ -6,6 +6,39 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-07-02
+
+### Added
+
+- Added RRULE-compatible recurring contact rules for daily, weekly, and monthly
+  schedules using bounded, validated RFC 5545-style recurrence lines.
+- Added a flexible contact-rule builder with frequency, interval, weekday,
+  monthly day, monthly ordinal, and multiple time-span controls.
+- Added release ADR documentation for the RRULE-compatible contact-rule model.
+
+### Changed
+
+- Replaced the template-first contact-rule screen with a free recurrence
+  workflow that previews generated calendar dates before saving.
+- Contact-rule saving continues to synchronize planned entries automatically
+  while preserving manually changed or cancelled exceptions.
+- Localized the default care-party label from `Primary caregiver` to
+  `Hauptbetreuung` without renaming user-created care parties.
+- Polished Settings user assignments, care-party rows, external holiday
+  calendar import controls, calendar feed actions, and unavailability forms.
+
+### Security
+
+- RRULE input is parsed through the maintained `rrule` library and restricted
+  to supported daily, weekly, and monthly schedules with bounded intervals,
+  counts, and schedule-line counts.
+
+### Testing
+
+- Added unit coverage for weekly intervals, multiple weekdays, monthly day,
+  ordinal weekday, last weekday, count-limited rules, DST-boundary dates, and
+  invalid or excessive RRULE input.
+
 ## [1.5.1] - 2026-07-02
 
 ### Fixed

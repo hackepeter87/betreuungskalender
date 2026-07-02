@@ -138,19 +138,21 @@ Generated planned entries can reference a flexible contact rule with
 `contact_rule_occurrence_key`. `contact_rule_sync_state` distinguishes entries
 that can still be updated by rule synchronization from entries that were
 manually changed and must be preserved. The older `generated_by_pattern_id` and
-`rule_occurrence_date` columns remain for compatibility with existing
-14-day-rule data and migration paths.
+`rule_occurrence_date` columns remain for compatibility with legacy
+contact-pattern data and migration paths.
 
 ## Contact rules
 
 `contact_rules` stores the flexible recurrence model introduced after the
 original `contact_patterns` table. The recurrence and segments are stored as
-validated JSON, using local civil dates and `HH:mm` times. The initial sync
-window defaults to 12 months and creates planned `care_entries` when a rule is
-saved. Existing 14-day `contact_patterns` are mirrored into `contact_rules`
-with a weekly recurrence, two-week interval, Friday anchor, and a Friday-to-
-Sunday segment. `responsible_party_id` is copied from the rule to generated
-planned entries.
+validated JSON, using local civil dates and `HH:mm` times. `v1.6.0` adds an
+RRULE-compatible recurrence shape (`kind: "rrule"`, `rrules: string[]`) for
+daily, weekly, and monthly rules while continuing to read the earlier weekly
+and monthly JSON shapes. The initial sync window defaults to 12 months and
+creates planned `care_entries` when a rule is saved. Existing legacy
+`contact_patterns` are mirrored into `contact_rules` with a weekly recurrence,
+two-week interval, Friday anchor, and a Friday-to-Sunday segment.
+`responsible_party_id` is copied from the rule to generated planned entries.
 
 ## Holidays and unavailable periods
 

@@ -1,5 +1,12 @@
 import { z } from "zod";
+import * as rrule from "rrule";
 import { carePartyKinds, careScopes, unavailableCategories } from "../../shared/api.js";
+
+const rruleExports = rrule as typeof rrule & {
+  default?: typeof rrule;
+  rrule?: typeof rrule;
+};
+const { RRule } = rruleExports.default ?? rruleExports.rrule ?? rruleExports;
 
 const isoDateTime = z.string().refine((value) => !Number.isNaN(Date.parse(value)), {
   message: "Ungültiges Datum oder ungültige Uhrzeit."
@@ -119,10 +126,61 @@ export const contactPatternInputSchema = z
     return new Date(Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1)).getUTCDay() === 5;
   }, {
     path: ["startDate"],
-    message: "Das Startdatum einer 14-Tage-Regel muss ein Freitag sein."
+    message: "Das Startdatum der Umgangsregel muss gültig sein."
   });
 
 const contactRuleWeekdaySchema = z.enum(["MO", "TU", "WE", "TH", "FR", "SA", "SU"]);
+const rruleAllowedKeys = new Set([
+  "FREQ",
+  "INTERVAL",
+  "BYDAY",
+  "BYMONTHDAY",
+  "BYSETPOS",
+  "COUNT",
+  "UNTIL"
+]);
+
+function normalizeRRuleLine(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.toUpperCase().startsWith("RRULE:")
+    ? trimmed.slice("RRULE:".length)
+    : trimmed;
+}
+
+function validateRRuleLine(value: string): boolean {
+  const line = normalizeRRuleLine(value);
+  const keys = new Set<string>();
+  for (const part of line.split(";")) {
+    const [rawKey, rawValue] = part.split("=");
+    const key = rawKey?.trim().toUpperCase();
+    if (!key || rawValue === undefined || keys.has(key) || !rruleAllowedKeys.has(key)) return false;
+    keys.add(key);
+  }
+  try {
+    const options = RRule.parseString(line);
+    if (options.freq === undefined || ![RRule.DAILY, RRule.WEEKLY, RRule.MONTHLY].includes(options.freq)) return false;
+    if (options.interval && (options.interval < 1 || options.interval > 366)) return false;
+    if (options.count && (options.count < 1 || options.count > 500)) return false;
+    if (options.byhour || options.byminute || options.bysecond) return false;
+    if (options.bymonthday) {
+      const days = Array.isArray(options.bymonthday) ? options.bymonthday : [options.bymonthday];
+      if (days.some((day) => day === 0 || day < -31 || day > 31)) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+const contactRuleRRuleLineSchema = z
+  .string()
+  .trim()
+  .min(5)
+  .max(400)
+  .refine(validateRRuleLine, {
+    message: "Die Wiederholungsregel ist ungültig oder wird nicht unterstützt."
+  })
+  .transform(normalizeRRuleLine);
 
 const contactRuleRecurrenceSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -142,6 +200,10 @@ const contactRuleRecurrenceSchema = z.discriminatedUnion("kind", [
       z.literal(-1)
     ])).min(1).max(5),
     weekdays: z.array(contactRuleWeekdaySchema).min(1).max(7)
+  }),
+  z.object({
+    kind: z.literal("rrule"),
+    rrules: z.array(contactRuleRRuleLineSchema).min(1).max(6)
   })
 ]);
 
