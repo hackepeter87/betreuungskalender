@@ -22,7 +22,41 @@ export const REQUIRED_GITIGNORE_RULES = [
   "*.pdf",
   "*.csv",
   "betreuungskalender-backup-*.json",
-  "backup-*.json"
+  "backup-*.json",
+  "*.backup.json",
+  "*.export.json",
+  "playwright-report/",
+  "test-results/",
+  "blob-report/"
+];
+
+export const REQUIRED_DOCKERIGNORE_RULES = [
+  "node_modules",
+  ".git",
+  ".env",
+  ".env.*",
+  "!.env.example",
+  "!deploy/.env.oidc.example",
+  "app.env",
+  "app.env.*",
+  "!deploy/app.env.demo.example",
+  "data",
+  "backups",
+  "exports",
+  "secrets",
+  "test-results",
+  "playwright-report",
+  "blob-report",
+  "*.sqlite",
+  "*.sqlite-*",
+  "*.db",
+  "*.db-*",
+  "*.pdf",
+  "*.csv",
+  "betreuungskalender-backup-*.json",
+  "backup-*.json",
+  "*.backup.json",
+  "*.export.json"
 ];
 
 const ALLOWED_PATHS = new Set([
@@ -46,6 +80,9 @@ const CRITICAL_PROJECT_PATHS = [
   "docs/native-oidc-migration-rollback.md",
   "docs/image-promotion.md",
   "docs/release.md",
+  "deploy/.env.oidc.example",
+  "deploy/compose.yml",
+  "deploy/compose.oidc.yml",
   "deploy/compose.testing.yml",
   "deploy/compose.production.yml",
   "deploy/app.env.demo.example",
@@ -128,13 +165,21 @@ export function isImageOutsideScreenshotDirectory(filePath) {
 }
 
 export function findMissingGitignoreRules(content) {
+  return findMissingRules(content, REQUIRED_GITIGNORE_RULES);
+}
+
+export function findMissingDockerignoreRules(content) {
+  return findMissingRules(content, REQUIRED_DOCKERIGNORE_RULES);
+}
+
+function findMissingRules(content, requiredRules) {
   const rules = new Set(
     content
       .split(/\r?\n/)
       .map((line) => line.trim())
       .filter((line) => line && !line.startsWith("#"))
   );
-  return REQUIRED_GITIGNORE_RULES.filter((rule) => !rules.has(rule));
+  return requiredRules.filter((rule) => !rules.has(rule));
 }
 
 export function isValidSemver(version) {
@@ -315,8 +360,9 @@ function checkReleaseMetadata(cwd, packageJson, version, report) {
   }
 }
 
-function checkDeploymentExamples(cwd, report) {
+function checkDeploymentExamples(cwd, version, report) {
   let envExample;
+  let oidcEnvExample;
   let compose;
   let testingCompose;
   let productionCompose;
@@ -330,6 +376,7 @@ function checkDeploymentExamples(cwd, report) {
   let promoteProductionWorkflow;
   try {
     envExample = readFileSync(resolve(cwd, ".env.example"), "utf8");
+    oidcEnvExample = readFileSync(resolve(cwd, "deploy", ".env.oidc.example"), "utf8");
     compose = readFileSync(resolve(cwd, "deploy", "compose.yml"), "utf8");
     testingCompose = readFileSync(resolve(cwd, "deploy", "compose.testing.yml"), "utf8");
     productionCompose = readFileSync(resolve(cwd, "deploy", "compose.production.yml"), "utf8");
@@ -362,6 +409,34 @@ function checkDeploymentExamples(cwd, report) {
   } catch {
     report.fail("release deployment examples could not be read");
     return;
+  }
+
+  if (version) {
+    const releaseExamples = [
+      [".env.example", envExample],
+      ["deploy/.env.oidc.example", oidcEnvExample]
+    ];
+    const staleReleaseExamples = releaseExamples.flatMap(([path, content]) => {
+      const expectedDirSuffix = `/v${version}`;
+      const actualVersion = parseEnvValue(content, "APP_RELEASE_VERSION");
+      const actualDir = parseEnvValue(content, "APP_RELEASE_DIR");
+      const failures = [];
+      if (actualVersion !== version) {
+        failures.push(`  - ${path}: APP_RELEASE_VERSION=${actualVersion ?? "<missing>"}`);
+      }
+      if (!actualDir?.endsWith(expectedDirSuffix)) {
+        failures.push(`  - ${path}: APP_RELEASE_DIR=${actualDir ?? "<missing>"}`);
+      }
+      return failures;
+    });
+    if (staleReleaseExamples.length) {
+      report.fail(
+        "release environment examples must match package.json version",
+        staleReleaseExamples
+      );
+    } else {
+      report.pass("release environment examples match package.json version");
+    }
   }
 
   const trustProxyAuth = parseEnvValue(envExample, "TRUST_PROXY_AUTH");
@@ -642,6 +717,25 @@ function checkGitignore(cwd, hasGitRepository, report) {
   }
 }
 
+function checkDockerignore(cwd, report) {
+  const dockerignorePath = resolve(cwd, ".dockerignore");
+  if (!existsSync(dockerignorePath)) {
+    report.warn(".dockerignore is missing", [], true);
+    return;
+  }
+
+  const missingRules = findMissingDockerignoreRules(readFileSync(dockerignorePath, "utf8"));
+  if (missingRules.length) {
+    report.warn(
+      ".dockerignore is missing required safety rules",
+      missingRules.map((rule) => `  - ${rule}`),
+      true
+    );
+  } else {
+    report.pass(".dockerignore contains required safety rules");
+  }
+}
+
 function runOptionalChecks(cwd, packageJson, options, report) {
   const requested = [
     ["build", options.build],
@@ -686,9 +780,10 @@ export function main(argv = process.argv.slice(2), cwd = process.cwd()) {
 
   options.version = checkPackageVersion(packageJson, report);
   checkReleaseMetadata(cwd, packageJson, options.version, report);
-  checkDeploymentExamples(cwd, report);
+  checkDeploymentExamples(cwd, options.version, report);
   const hasGitRepository = checkGitRepository(cwd, options, report);
   checkGitignore(cwd, hasGitRepository, report);
+  checkDockerignore(cwd, report);
 
   if (!report.hasFailures()) {
     runOptionalChecks(cwd, packageJson, options, report);

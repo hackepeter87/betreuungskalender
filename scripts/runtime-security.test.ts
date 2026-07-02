@@ -66,6 +66,10 @@ async function stop(process: ChildProcessWithoutNullStreams): Promise<void> {
   if (process.exitCode === null) process.kill("SIGKILL");
 }
 
+function futureSessionExpiry(): string {
+  return new Date(Date.now() + 60 * 60 * 1000).toISOString();
+}
+
 function seedNativeOidcUser(
   database: Database.Database,
   input: {
@@ -79,7 +83,7 @@ function seedNativeOidcUser(
   }
 ): void {
   const now = "2026-07-01T00:00:00.000Z";
-  const expiresAt = "2026-07-02T00:00:00.000Z";
+  const expiresAt = futureSessionExpiry();
   database.prepare(`
     INSERT INTO app_users (
       id, external_subject, email, display_name, role, groups_json,
@@ -556,7 +560,7 @@ test("runtime enforces native OIDC sessions without trusting proxy headers or lo
     oidcSessionTokenForTesting.hashSessionToken("native-missing-user-session-secret"),
     "subject-missing-user",
     "2026-07-01T00:00:00.000Z",
-    "2026-07-02T00:00:00.000Z"
+    futureSessionExpiry()
   );
   seededDatabase.close();
 
