@@ -1780,6 +1780,10 @@ h3 {
   display: block;
 }
 
+.child-settings-row > span:nth-child(2) {
+  min-width: 0;
+}
+
 .child-settings-row strong {
   font-size: 0.79rem;
 }
@@ -1792,6 +1796,10 @@ h3 {
 
 .child-settings-row__actions {
   display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
   gap: 7px;
 }
 
@@ -1800,6 +1808,10 @@ h3 {
   grid-template-columns: repeat(3, 1fr);
   gap: 14px;
   padding: 18px;
+}
+
+.settings-section > .field {
+  padding: 0 18px 12px;
 }
 
 .data-actions {
@@ -2171,19 +2183,28 @@ h3 {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+  min-width: 0;
   color: #475467;
   font-size: 0.69rem;
   font-weight: 700;
+  line-height: 1.25;
   cursor: pointer;
 }
 
 .toggle input {
   position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
   opacity: 0;
 }
 
 .toggle > span:not(.field-label-row) {
   position: relative;
+  flex: 0 0 31px;
   width: 31px;
   height: 18px;
   border-radius: 12px;
@@ -2210,6 +2231,11 @@ h3 {
 
 .toggle input:checked + span:not(.field-label-row)::after {
   transform: translateX(13px);
+}
+
+.toggle input:focus-visible + span:not(.field-label-row) {
+  outline: 3px solid rgb(22 111 103 / 18%);
+  outline-offset: 2px;
 }
 
 .check-row {
@@ -2588,6 +2614,43 @@ h3 {
   .settings-section .panel__header {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .child-settings-list {
+    padding: 0 14px;
+  }
+
+  .child-settings-row--external-source {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: start;
+    gap: 10px 12px;
+  }
+
+  .child-settings-row--external-source .child-settings-row__actions {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: minmax(0, 1fr) auto;
+    width: 100%;
+    padding-left: 54px;
+    justify-content: stretch;
+  }
+
+  .child-settings-row--external-source .toggle {
+    grid-column: 1 / -1;
+    width: 100%;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--surface-soft);
+  }
+
+  .child-settings-row--external-source .button {
+    min-width: 0;
+    justify-content: center;
+  }
+
+  .child-settings-row--external-source .icon-button {
+    justify-self: end;
   }
 
   .data-actions {

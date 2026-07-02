@@ -45,7 +45,7 @@ export function ExternalCalendarManager() {
     <button className="button button--primary" type="button" data-testid="external-calendar-import" disabled={!canWrite || isSaving || !name.trim()} onClick={() => void importFile(inputRef.current?.files?.[0])}><Icon name="upload" size={17} />{copy(locale, "externalCalendar", "import")}</button>
     {message ? <p className="inline-message" role="status" data-testid="external-calendar-message">{message}</p> : null}
     <div className="child-settings-list">
-      {data.externalCalendarSources.map((source) => <div className="child-settings-row" key={source.id} data-testid={`external-calendar-source-${source.id}`}>
+      {data.externalCalendarSources.map((source) => <div className="child-settings-row child-settings-row--external-source" key={source.id} data-testid={`external-calendar-source-${source.id}`}>
         <span className="child-avatar" style={{ backgroundColor: `${source.color}18`, color: source.color }}><Icon name="calendar" size={18} /></span>
         <span><strong>{source.name}</strong><small>{new Date(source.lastImportedAt).toLocaleString(intlLocale)}</small></span>
         <span className="child-settings-row__actions">
