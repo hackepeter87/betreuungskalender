@@ -6,6 +6,19 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.6.2] - 2026-07-02
+
+### Added
+
+- Included care-entry locations in personal iCalendar feed events as
+  `LOCATION`, using custom locations when present and otherwise the configured
+  location label.
+
+### Testing
+
+- Added an end-to-end regression test proving that a child color selected in
+  Settings is persisted and rendered in the month calendar.
+
 ## [1.6.1] - 2026-07-02
 
 ### Fixed

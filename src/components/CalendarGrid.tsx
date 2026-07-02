@@ -148,7 +148,7 @@ export function CalendarGrid({
                   >
                     <span className="calendar-event__colors">
                       {entry.childIds.map((id) => (
-                        <span key={id} style={{ backgroundColor: childMap.get(id)?.color ?? "#94a3b8" }} />
+                        <span key={id} data-testid={`calendar-entry-child-color-${id}`} style={{ backgroundColor: childMap.get(id)?.color ?? "#94a3b8" }} />
                       ))}
                     </span>
                     <span className="calendar-event__label">

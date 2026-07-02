@@ -64,7 +64,7 @@ function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
         <div>
           {CHILD_COLORS.map((option) => (
             <label key={option} className={color === option ? "is-selected" : ""}>
-              <input type="radio" name="color" value={option} checked={color === option} onChange={() => setColor(option)} />
+              <input data-testid={`child-color-option-${option.slice(1)}`} type="radio" name="color" value={option} checked={color === option} onChange={() => setColor(option)} />
               <span style={{ backgroundColor: option }} />
             </label>
           ))}
