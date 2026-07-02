@@ -13,7 +13,7 @@ export const localeMetadata: Record<
 
 const de = {
   "app.name": "Betreuungskalender",
-  "app.tagline": "Fakten lokal dokumentieren.",
+  "app.tagline": "Betreuung übersichtlich festhalten.",
   "app.storageNotice":
     "Fachliche Daten werden im lokalen SQLite-Dienst gespeichert.",
   "nav.main": "Hauptnavigation",
@@ -74,7 +74,7 @@ type TranslationResource = Partial<Record<TranslationKey, string>>;
 
 const en: TranslationResource = {
   "app.name": "Care Calendar",
-  "app.tagline": "Document facts locally.",
+  "app.tagline": "Track care clearly.",
   "app.storageNotice": "Domain data is stored by the local SQLite service.",
   "nav.main": "Main navigation",
   "nav.mobile": "Mobile navigation",
