@@ -22,11 +22,12 @@ import {
 } from "../lib/date";
 import { statusLabels } from "../lib/labels";
 import { useI18n } from "../i18n/I18nProvider";
-import { copy, copyList, type CatalogKey } from "../i18n/catalog";
+import { copy, copyList } from "../i18n/catalog";
 import { useAppStore } from "../store/AppStore";
 import type { CareEntry } from "../types";
 import type {
   ApiContactRuleSegment,
+  ContactRuleMonthlyOrdinal,
   ContactRuleRecurrence,
   ContactRuleWeekday
 } from "../../shared/api";
@@ -38,22 +39,112 @@ function nextFriday(): string {
   return toDateKey(date);
 }
 
-type ContactRuleTemplateId =
-  | "biweekly-weekend"
-  | "weekly-days"
-  | "first-third-weekend"
-  | "last-friday"
-  | "custom";
+type RecurrenceFrequency = "daily" | "weekly" | "monthly";
+type MonthlyMode = "month-day" | "nth-weekday";
 
 const weekdays: ContactRuleWeekday[] = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
+const monthlyOrdinals: ContactRuleMonthlyOrdinal[] = [1, 2, 3, 4, 5, -1];
 
-function templateForRule(rule?: { recurrence: ContactRuleRecurrence; segments: ApiContactRuleSegment[] }): ContactRuleTemplateId {
-  if (!rule) return "biweekly-weekend";
-  if (rule.recurrence.kind === "weekly" && rule.recurrence.intervalWeeks === 2 && rule.recurrence.weekdays.includes("FR")) return "biweekly-weekend";
-  if (rule.recurrence.kind === "monthlyByWeekday" && rule.recurrence.ordinals.includes(1) && rule.recurrence.ordinals.includes(3)) return "first-third-weekend";
-  if (rule.recurrence.kind === "monthlyByWeekday" && rule.recurrence.ordinals.includes(-1)) return "last-friday";
-  if (rule.recurrence.kind === "weekly") return "weekly-days";
-  return "custom";
+function parseRRuleParts(line: string): Record<string, string> {
+  const normalized = line.trim().toUpperCase().startsWith("RRULE:")
+    ? line.trim().slice("RRULE:".length)
+    : line.trim();
+  return Object.fromEntries(
+    normalized
+      .split(";")
+      .map((part) => part.split("="))
+      .filter(([key, value]) => key && value)
+      .map(([key, value]) => [String(key).toUpperCase(), String(value)])
+  );
+}
+
+function weekdaysFromRRule(value = ""): ContactRuleWeekday[] {
+  return value
+    .split(",")
+    .map((item) => item.replace(/^-?\d+/, "") as ContactRuleWeekday)
+    .filter((item): item is ContactRuleWeekday => weekdays.includes(item));
+}
+
+function recurrenceBuilderFromRule(rule?: { recurrence: ContactRuleRecurrence }): {
+  frequency: RecurrenceFrequency;
+  interval: number;
+  selectedWeekdays: ContactRuleWeekday[];
+  monthlyMode: MonthlyMode;
+  selectedOrdinals: ContactRuleMonthlyOrdinal[];
+  monthDay: number;
+} {
+  if (!rule) {
+    return {
+      frequency: "weekly" as RecurrenceFrequency,
+      interval: 2,
+      selectedWeekdays: ["FR"] as ContactRuleWeekday[],
+      monthlyMode: "nth-weekday" as MonthlyMode,
+      selectedOrdinals: [1, 3] as ContactRuleMonthlyOrdinal[],
+      monthDay: 15
+    };
+  }
+  if (rule.recurrence.kind === "weekly") {
+    return {
+      frequency: "weekly" as RecurrenceFrequency,
+      interval: rule.recurrence.intervalWeeks,
+      selectedWeekdays: rule.recurrence.weekdays,
+      monthlyMode: "nth-weekday" as MonthlyMode,
+      selectedOrdinals: [1, 3] as ContactRuleMonthlyOrdinal[],
+      monthDay: 15
+    };
+  }
+  if (rule.recurrence.kind === "monthlyByWeekday") {
+    return {
+      frequency: "monthly" as RecurrenceFrequency,
+      interval: rule.recurrence.intervalMonths,
+      selectedWeekdays: rule.recurrence.weekdays,
+      monthlyMode: "nth-weekday" as MonthlyMode,
+      selectedOrdinals: rule.recurrence.ordinals,
+      monthDay: 15
+    };
+  }
+  const parts = parseRRuleParts(rule.recurrence.rrules[0] ?? "FREQ=WEEKLY;INTERVAL=2;BYDAY=FR");
+  const frequency = parts.FREQ === "DAILY"
+    ? "daily"
+    : parts.FREQ === "MONTHLY"
+      ? "monthly"
+      : "weekly";
+  const byMonthDay = Number((parts.BYMONTHDAY ?? "").split(",")[0]);
+  return {
+    frequency: frequency as RecurrenceFrequency,
+    interval: Math.max(1, Number(parts.INTERVAL ?? 1) || 1),
+    selectedWeekdays: weekdaysFromRRule(parts.BYDAY).length ? weekdaysFromRRule(parts.BYDAY) : ["FR"],
+    monthlyMode: parts.BYMONTHDAY ? "month-day" as MonthlyMode : "nth-weekday" as MonthlyMode,
+    selectedOrdinals: (parts.BYSETPOS ?? "1")
+      .split(",")
+      .map(Number)
+      .filter((value): value is ContactRuleMonthlyOrdinal => monthlyOrdinals.includes(value as ContactRuleMonthlyOrdinal)),
+    monthDay: byMonthDay >= 1 && byMonthDay <= 31 ? byMonthDay : 15
+  };
+}
+
+function ordinalLabel(locale: Parameters<typeof copy>[0], value: ContactRuleMonthlyOrdinal): string {
+  if (value === -1) return copy(locale, "contact", "ordinal_last");
+  return copy(locale, "contact", `ordinal_${value}`);
+}
+
+function buildRRuleLine(input: {
+  frequency: RecurrenceFrequency;
+  interval: number;
+  selectedWeekdays: ContactRuleWeekday[];
+  monthlyMode: MonthlyMode;
+  selectedOrdinals: ContactRuleMonthlyOrdinal[];
+  monthDay: number;
+}): string {
+  const interval = Math.max(1, Math.min(366, Number(input.interval) || 1));
+  if (input.frequency === "daily") return `FREQ=DAILY;INTERVAL=${interval}`;
+  if (input.frequency === "weekly") {
+    return `FREQ=WEEKLY;INTERVAL=${interval};BYDAY=${input.selectedWeekdays.join(",")}`;
+  }
+  if (input.monthlyMode === "month-day") {
+    return `FREQ=MONTHLY;INTERVAL=${interval};BYMONTHDAY=${Math.max(1, Math.min(31, Number(input.monthDay) || 1))}`;
+  }
+  return `FREQ=MONTHLY;INTERVAL=${interval};BYDAY=${input.selectedWeekdays.join(",")};BYSETPOS=${input.selectedOrdinals.join(",")}`;
 }
 
 function weekDatesFor(dateKey: string): string[] {
@@ -127,28 +218,38 @@ export function ContactPage({
     isSaving
   } = useAppStore();
   const { locale, intlLocale } = useI18n();
-  const contactCopy = (key: string) => copy(locale, "contact", key as CatalogKey<"contact">);
-  const templateCopyKey = (template: ContactRuleTemplateId, suffix = "") =>
-    `template_${template.replaceAll("-", "_")}${suffix}`;
   const existingRule =
     data.contactRules.find((rule) => rule.id === focusedRuleId) ?? data.contactRules[0];
   const currentYear = new Date().getFullYear();
   const defaultRange = rangeForYear(currentYear);
-  const existingTemplate = templateForRule(existingRule);
+  const existingBuilder = recurrenceBuilderFromRule(existingRule);
   const existingSegment = existingRule?.segments[0];
   const [ruleId, setRuleId] = useState(existingRule?.id);
-  const [templateId, setTemplateId] = useState<ContactRuleTemplateId>(existingTemplate);
   const [name, setName] = useState(existingRule?.name ?? copy(locale, "contact", "defaultName"));
   const [startDate, setStartDate] = useState(existingRule?.startDate ?? nextFriday());
   const [endDate, setEndDate] = useState(existingRule?.endDate ?? "");
+  const [frequency, setFrequency] = useState<RecurrenceFrequency>(existingBuilder.frequency);
+  const [interval, setInterval] = useState(existingBuilder.interval);
+  const [monthlyMode, setMonthlyMode] = useState<MonthlyMode>(existingBuilder.monthlyMode);
+  const [selectedOrdinals, setSelectedOrdinals] = useState<ContactRuleMonthlyOrdinal[]>(
+    existingBuilder.selectedOrdinals.length ? existingBuilder.selectedOrdinals : [1]
+  );
+  const [monthDay, setMonthDay] = useState(existingBuilder.monthDay);
   const [selectedWeekdays, setSelectedWeekdays] = useState<ContactRuleWeekday[]>(
-    existingRule?.recurrence.kind === "weekly" ? existingRule.recurrence.weekdays : ["WE"]
+    existingBuilder.selectedWeekdays.length ? existingBuilder.selectedWeekdays : (["FR"] as ContactRuleWeekday[])
   );
-  const [fridayStartTime, setFridayStartTime] = useState(
-    existingSegment?.startTime ?? "16:00"
-  );
-  const [sundayEndTime, setSundayEndTime] = useState(
-    existingSegment?.endTime ?? "18:00"
+  const [segments, setSegments] = useState<ApiContactRuleSegment[]>(
+    existingRule?.segments.length
+      ? existingRule.segments
+      : [
+          {
+            id: existingSegment?.id ?? "span-1",
+            startDayOffset: existingSegment?.startDayOffset ?? 0,
+            startTime: existingSegment?.startTime ?? "16:00",
+            endDayOffset: existingSegment?.endDayOffset ?? 2,
+            endTime: existingSegment?.endTime ?? "18:00"
+          }
+        ]
   );
   const [childIds, setChildIds] = useState<string[]>(
     existingRule?.childIds ?? data.children.map((child) => child.id)
@@ -163,37 +264,20 @@ export function ContactPage({
   const [cancelEntry, setCancelEntry] = useState<CareEntry | null>(null);
   const [cancelReason, setCancelReason] = useState("");
   const recurrence = useMemo<ContactRuleRecurrence>(() => {
-    if (templateId === "first-third-weekend") {
-      return {
-        kind: "monthlyByWeekday",
-        intervalMonths: 1,
-        ordinals: [1, 3],
-        weekdays: ["FR"]
-      };
-    }
-    if (templateId === "last-friday") {
-      return {
-        kind: "monthlyByWeekday",
-        intervalMonths: 1,
-        ordinals: [-1],
-        weekdays: ["FR"]
-      };
-    }
     return {
-      kind: "weekly",
-      intervalWeeks: templateId === "biweekly-weekend" ? 2 : 1,
-      weekdays: templateId === "weekly-days" ? selectedWeekdays : ["FR"]
+      kind: "rrule",
+      rrules: [
+        buildRRuleLine({
+          frequency,
+          interval,
+          selectedWeekdays,
+          monthlyMode,
+          selectedOrdinals,
+          monthDay
+        })
+      ]
     };
-  }, [selectedWeekdays, templateId]);
-  const segments = useMemo<ApiContactRuleSegment[]>(() => [
-    {
-      id: templateId === "weekly-days" ? "daytime" : "weekend",
-      startDayOffset: 0,
-      startTime: fridayStartTime,
-      endDayOffset: templateId === "weekly-days" ? 0 : 2,
-      endTime: sundayEndTime
-    }
-  ], [fridayStartTime, sundayEndTime, templateId]);
+  }, [frequency, interval, monthDay, monthlyMode, selectedOrdinals, selectedWeekdays]);
   const previewEntries = useMemo(
     () =>
       expandContactRule({
@@ -238,6 +322,30 @@ export function ContactPage({
   const visiblePreviewItems = previewCalendarItems.slice(0, 6);
   const hiddenPreviewItems = previewCalendarItems.length - visiblePreviewItems.length;
   const weekdayLabels = copyList(locale, "calendar", "weekdays");
+  const updateSegment = (id: string, next: Partial<ApiContactRuleSegment>) => {
+    setSegments((current) =>
+      current.map((segment) =>
+        segment.id === id
+          ? { ...segment, ...next }
+          : segment
+      )
+    );
+  };
+  const addSegment = () => {
+    setSegments((current) => [
+      ...current,
+      {
+        id: `span-${current.length + 1}`,
+        startDayOffset: 0,
+        startTime: "15:00",
+        endDayOffset: 0,
+        endTime: "18:00"
+      }
+    ]);
+  };
+  const removeSegment = (id: string) => {
+    setSegments((current) => current.length > 1 ? current.filter((segment) => segment.id !== id) : current);
+  };
 
   const stats = useMemo(
     () =>
@@ -264,8 +372,12 @@ export function ContactPage({
       setMessage(copy(locale, "contact", "childRequired"));
       return;
     }
-    if (templateId === "weekly-days" && !selectedWeekdays.length) {
+    if ((frequency === "weekly" || (frequency === "monthly" && monthlyMode === "nth-weekday")) && !selectedWeekdays.length) {
       setMessage(copy(locale, "contact", "weekdayRequired"));
+      return;
+    }
+    if (frequency === "monthly" && monthlyMode === "nth-weekday" && !selectedOrdinals.length) {
+      setMessage(copy(locale, "contact", "ordinalRequired"));
       return;
     }
     const saved = await saveContactRule({
@@ -338,40 +450,13 @@ export function ContactPage({
               <FieldHelpLabel fieldId="contactPattern.name">{copy(locale, "contact", "name")}</FieldHelpLabel>
               <input data-testid="contact-pattern-name" value={name} onChange={(event) => setName(event.target.value)} />
             </label>
-            <fieldset className="inline-fieldset">
+            <fieldset className="inline-fieldset recurrence-builder">
               <legend className="field-label-row">
-                <span>{copy(locale, "contact", "template")}</span>
+                <span>{copy(locale, "contact", "recurrence")}</span>
               </legend>
-              <div className="contact-template-grid">
-                {([
-                  "biweekly-weekend",
-                  "weekly-days",
-                  "first-third-weekend",
-                  "last-friday"
-                ] as ContactRuleTemplateId[]).map((template) => (
-                  <button
-                    className={`contact-template-card ${templateId === template ? "contact-template-card--selected" : ""}`}
-                    data-testid={`contact-template-${template}`}
-                    key={template}
-                    onClick={() => {
-                      setTemplateId(template);
-                      if (template !== "weekly-days") setStartDate(nextFriday());
-                      if (template === "weekly-days" && !selectedWeekdays.length) setSelectedWeekdays(["WE"]);
-                    }}
-                    type="button"
-                  >
-                    <strong>{contactCopy(templateCopyKey(template))}</strong>
-                    <span>{contactCopy(templateCopyKey(template, "_hint"))}</span>
-                  </button>
-                ))}
-              </div>
-            </fieldset>
-            <div className="form-grid">
               <label className="field">
                 <FieldHelpLabel fieldId="contactPattern.startDate">
-                  {templateId === "weekly-days"
-                    ? copy(locale, "contact", "startDate")
-                    : copy(locale, "contact", "startDateFriday")}
+                  {copy(locale, "contact", "startDate")}
                 </FieldHelpLabel>
                 <input data-testid="contact-pattern-start-date" type="date" required value={startDate} onChange={(event) => setStartDate(event.target.value)} />
               </label>
@@ -380,15 +465,19 @@ export function ContactPage({
                 <input data-testid="contact-pattern-end-date" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
               </label>
               <label className="field">
-                <FieldHelpLabel fieldId="contactPattern.fridayStartTime" />
-                <input data-testid="contact-pattern-friday-start-time" type="time" required value={fridayStartTime} onChange={(event) => setFridayStartTime(event.target.value)} />
+                <FieldHelpLabel fieldId="contactPattern.frequency">{copy(locale, "contact", "frequency")}</FieldHelpLabel>
+                <select data-testid="contact-recurrence-frequency" value={frequency} onChange={(event) => setFrequency(event.target.value as RecurrenceFrequency)}>
+                  <option value="daily">{copy(locale, "contact", "frequency_daily")}</option>
+                  <option value="weekly">{copy(locale, "contact", "frequency_weekly")}</option>
+                  <option value="monthly">{copy(locale, "contact", "frequency_monthly")}</option>
+                </select>
               </label>
               <label className="field">
-                <FieldHelpLabel fieldId="contactPattern.sundayEndTime" />
-                <input data-testid="contact-pattern-sunday-end-time" type="time" required value={sundayEndTime} onChange={(event) => setSundayEndTime(event.target.value)} />
+                <span>{copy(locale, "contact", "interval")}</span>
+                <input data-testid="contact-recurrence-interval" type="number" min="1" max="366" required value={interval} onChange={(event) => setInterval(Number(event.target.value))} />
               </label>
-            </div>
-            {templateId === "weekly-days" ? (
+            </fieldset>
+            {frequency === "weekly" || (frequency === "monthly" && monthlyMode === "nth-weekday") ? (
               <fieldset className="inline-fieldset">
                 <legend className="field-label-row">
                   <span>{copy(locale, "contact", "weekdays")}</span>
@@ -409,13 +498,93 @@ export function ContactPage({
                           }
                           type="checkbox"
                         />
-                        {contactCopy(`weekday_${weekday}`)}
+                        {copy(locale, "contact", `weekday_${weekday}`)}
                       </label>
                     );
                   })}
                 </div>
               </fieldset>
             ) : null}
+            {frequency === "monthly" ? (
+              <fieldset className="inline-fieldset recurrence-builder">
+                <legend className="field-label-row">
+                  <span>{copy(locale, "contact", "monthlyPattern")}</span>
+                </legend>
+                <label className="field">
+                  <span>{copy(locale, "contact", "monthlyMode")}</span>
+                  <select data-testid="contact-monthly-mode" value={monthlyMode} onChange={(event) => setMonthlyMode(event.target.value as MonthlyMode)}>
+                    <option value="nth-weekday">{copy(locale, "contact", "monthlyMode_nth_weekday")}</option>
+                    <option value="month-day">{copy(locale, "contact", "monthlyMode_month_day")}</option>
+                  </select>
+                </label>
+                {monthlyMode === "month-day" ? (
+                  <label className="field">
+                    <span>{copy(locale, "contact", "monthDay")}</span>
+                    <input data-testid="contact-month-day" type="number" min="1" max="31" value={monthDay} onChange={(event) => setMonthDay(Number(event.target.value))} />
+                  </label>
+                ) : (
+                  <div className="field recurrence-builder__wide">
+                    <span>{copy(locale, "contact", "monthOrdinal")}</span>
+                    <div className="weekday-choice-row weekday-choice-row--ordinals">
+                      {monthlyOrdinals.map((ordinal) => {
+                        const checked = selectedOrdinals.includes(ordinal);
+                        return (
+                          <label className={`weekday-choice ${checked ? "weekday-choice--selected" : ""}`} data-testid={`contact-monthly-ordinal-${ordinal}`} key={ordinal}>
+                            <input
+                              checked={checked}
+                              onChange={() =>
+                                setSelectedOrdinals((current) =>
+                                  checked
+                                    ? current.filter((item) => item !== ordinal)
+                                    : [...current, ordinal]
+                                )
+                              }
+                              type="checkbox"
+                            />
+                            {ordinalLabel(locale, ordinal)}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+              </fieldset>
+            ) : null}
+            <fieldset className="inline-fieldset">
+              <legend className="field-label-row">
+                <span>{copy(locale, "contact", "timeSpans")}</span>
+              </legend>
+              <div className="rule-segment-list">
+                {segments.map((segment, index) => (
+                  <div className="rule-segment-row" key={segment.id}>
+                    <strong>{copy(locale, "contact", "timeSpan", { index: index + 1 })}</strong>
+                    <label className="field">
+                      <span>{copy(locale, "contact", "startDayOffset")}</span>
+                      <input type="number" min="0" max="30" value={segment.startDayOffset} onChange={(event) => updateSegment(segment.id, { startDayOffset: Number(event.target.value) })} />
+                    </label>
+                    <label className="field">
+                      <FieldHelpLabel fieldId="contactPattern.fridayStartTime">{copy(locale, "contact", "startTime")}</FieldHelpLabel>
+                      <input data-testid={index === 0 ? "contact-pattern-friday-start-time" : undefined} type="time" required value={segment.startTime} onChange={(event) => updateSegment(segment.id, { startTime: event.target.value })} />
+                    </label>
+                    <label className="field">
+                      <span>{copy(locale, "contact", "endDayOffset")}</span>
+                      <input type="number" min="0" max="30" value={segment.endDayOffset} onChange={(event) => updateSegment(segment.id, { endDayOffset: Number(event.target.value) })} />
+                    </label>
+                    <label className="field">
+                      <FieldHelpLabel fieldId="contactPattern.sundayEndTime">{copy(locale, "contact", "endTime")}</FieldHelpLabel>
+                      <input data-testid={index === 0 ? "contact-pattern-sunday-end-time" : undefined} type="time" required value={segment.endTime} onChange={(event) => updateSegment(segment.id, { endTime: event.target.value })} />
+                    </label>
+                    <button className="icon-button icon-button--bordered icon-button--danger" type="button" onClick={() => removeSegment(segment.id)} disabled={segments.length === 1} aria-label={copy(locale, "contact", "removeTimeSpan")}>
+                      <Icon name="trash" size={17} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+              <button className="button button--secondary" type="button" onClick={addSegment} disabled={segments.length >= 8}>
+                <Icon name="plus" size={17} />
+                {copy(locale, "contact", "addTimeSpan")}
+              </button>
+            </fieldset>
             <fieldset className="inline-fieldset">
               <legend className="field-label-row">
                 <span>{copy(locale, "contact", "children")}</span>

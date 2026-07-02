@@ -19,7 +19,7 @@ INSERT INTO care_parties (
 )
 SELECT
   'party_primary',
-  'Primary caregiver',
+  'Hauptbetreuung',
   'other',
   'local-dev',
   'local-dev',

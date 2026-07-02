@@ -1,7 +1,7 @@
 {
   "name": "betreuungskalender",
   "private": true,
-  "version": "1.5.1",
+  "version": "1.6.0",
   "type": "module",
   "packageManager": "npm@11.18.0",
   "engines": {
@@ -43,6 +43,7 @@
     "openid-client": "^6.8.4",
     "react": "^19.1.1",
     "react-dom": "^19.1.1",
+    "rrule": "^2.8.1",
     "zod": "^4.1.12"
   },
   "devDependencies": {

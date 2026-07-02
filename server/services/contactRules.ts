@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import * as rrule from "rrule";
 import type {
   ApiContactRule,
   ApiContactRuleSegment,
@@ -10,6 +11,12 @@ import type {
 import { db as defaultDb } from "../db/connection.js";
 import { recordAudit } from "./audit.js";
 import { bool, makeId, nowIso } from "./common.js";
+
+const rruleExports = rrule as typeof rrule & {
+  default?: typeof rrule;
+  rrule?: typeof rrule;
+};
+const { RRule } = rruleExports.default ?? rruleExports.rrule ?? rruleExports;
 
 const weekdayIndexes: Record<ContactRuleWeekday, number> = {
   SU: 0,
@@ -241,6 +248,43 @@ function monthlyDates(
   return orderedUnique(result).sort();
 }
 
+function normalizeRRuleLine(value: string): string {
+  const trimmed = value.trim();
+  return trimmed.toUpperCase().startsWith("RRULE:")
+    ? trimmed.slice("RRULE:".length)
+    : trimmed;
+}
+
+function dateToRRuleDate(date: string): Date {
+  const [year = 0, month = 1, day = 1] = date.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day, 12));
+}
+
+function dateKeyFromRRuleDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+function rruleDates(
+  recurrence: Extract<ContactRuleRecurrence, { kind: "rrule" }>,
+  anchorDate: string,
+  startDate: string,
+  endDate: string
+): Array<{ date: string; ruleIndex: number }> {
+  return recurrence.rrules.flatMap((line, ruleIndex) => {
+    const options = RRule.parseString(normalizeRRuleLine(line));
+    const rule = new RRule({
+      ...options,
+      dtstart: dateToRRuleDate(anchorDate)
+    });
+    return rule
+      .between(dateToRRuleDate(startDate), dateToRRuleDate(endDate), true)
+      .map((date) => ({
+        date: dateKeyFromRRuleDate(date),
+        ruleIndex
+      }));
+  });
+}
+
 export function expandContactRule(input: {
   startDate: string;
   endDate?: string;
@@ -258,18 +302,22 @@ export function expandContactRule(input: {
 
   const occurrenceDates =
     input.recurrence.kind === "weekly"
-      ? weeklyDates(input.recurrence, input.startDate, rangeStart, rangeEnd)
-      : monthlyDates(input.recurrence, input.startDate, rangeStart, rangeEnd);
+      ? weeklyDates(input.recurrence, input.startDate, rangeStart, rangeEnd).map((date) => ({ date, ruleIndex: 0 }))
+      : input.recurrence.kind === "monthlyByWeekday"
+        ? monthlyDates(input.recurrence, input.startDate, rangeStart, rangeEnd).map((date) => ({ date, ruleIndex: 0 }))
+        : rruleDates(input.recurrence, input.startDate, rangeStart, rangeEnd);
 
   const entries: ExpandedContactRuleEntry[] = [];
-  for (const occurrenceDate of occurrenceDates) {
+  for (const occurrence of occurrenceDates) {
     for (const segment of input.segments) {
-      const startDate = addDays(occurrenceDate, segment.startDayOffset);
-      const endDate = addDays(occurrenceDate, segment.endDayOffset);
+      const startDate = addDays(occurrence.date, segment.startDayOffset);
+      const endDate = addDays(occurrence.date, segment.endDayOffset);
       if (endDate < input.rangeStart || startDate > input.rangeEnd) continue;
       entries.push({
-        occurrenceDate,
-        occurrenceKey: `${occurrenceDate}:${segment.id}`,
+        occurrenceDate: occurrence.date,
+        occurrenceKey: input.recurrence.kind === "rrule"
+          ? `${occurrence.date}:r${occurrence.ruleIndex}:${segment.id}`
+          : `${occurrence.date}:${segment.id}`,
         segmentId: segment.id,
         startDateTime: `${startDate}T${segment.startTime}`,
         endDateTime: `${endDate}T${segment.endTime}`

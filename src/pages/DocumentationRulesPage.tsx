@@ -18,7 +18,7 @@ const helpGroups: Array<{
   { prefix: "trip.", title: "Fahrten", description: "Betreuungsbezogene Wege und Erstattungen" },
   { prefix: "cost.", title: "Kosten", description: "Konkrete Einzelposten" },
   { prefix: "holiday.", title: "Ferien", description: "Ferienblöcke, Zuordnung und tatsächliche Betreuung" },
-  { prefix: "contactPattern.", title: "Soll-Ist-Umgangsregel", description: "14-Tage-Rhythmus und Statuspflege" },
+  { prefix: "contactPattern.", title: "Soll-Ist-Umgangsregel", description: "Freie Wiederholung und Statuspflege" },
   { prefix: "unavailable.", title: "Nichtverfügbarkeiten", description: "Dienstliche und sonstige Abwesenheiten" },
   { prefix: "monthClosure.", title: "Monatsabschluss", description: "Prüfung und festgehaltener Datenstand" },
   { prefix: "analytics.", title: "Auswertungen", description: "Zeiträume, Quoten und Kennzahlen" },

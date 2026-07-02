@@ -12,9 +12,10 @@ travel, costs, holidays, and unavailable periods.
 ## Project status
 
 - Latest published release: [v1.5.1](docs/release-notes/v1.5.1.md)
+- Current release candidate: [v1.6.0](docs/release-notes/v1.6.0.md)
 - Current `main`: SQLite/API domain persistence, language packs, external
   read-only calendar overlays, native OIDC authentication, trusted-proxy
-  rollback support, flexible contact rules with calendar synchronization,
+  rollback support, RRULE-compatible contact rules with calendar synchronization,
   care parties, scoped calendar feeds, responsive mobile support,
   backup/restore tooling, release archives, and GHCR release images
 - Roadmap and work tracking: [GitHub milestones and issues](https://github.com/hackepeter87/betreuungskalender/milestones)
@@ -42,8 +43,8 @@ included in repository screenshots.
   reasons, overnight stays, handovers, locations, notes, and evidence references
 - Mobile agenda, tablet/desktop calendar, responsive forms, PWA manifest, and
   touch-friendly help for all input fields
-- Flexible recurring contact rules with presets, calendar preview, automatic
-  planned-entry synchronization, and planned-versus-actual analysis
+- Flexible RRULE-compatible recurring contact rules with calendar preview,
+  automatic planned-entry synchronization, and planned-versus-actual analysis
 - Care parties for domain-level caregiver assignment, separate from app users
 - Additional care, holiday blocks and allocation, and actual holiday statistics
 - Duty-related and other unavailable periods with overlap notices

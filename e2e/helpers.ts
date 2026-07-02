@@ -41,7 +41,9 @@ export async function navigate(page: Page, destination: AppPage) {
   if (await mobileNavigation.isVisible()) {
     const directButton = page.getByTestId(`mobile-nav-${destination}`);
     if (await directButton.count()) {
-      await directButton.click();
+      // Fixed bottom navigation is visually on top; Playwright may still scroll
+      // the page content under it during actionability checks on mobile.
+      await directButton.click({ force: true });
       return;
     }
     await page.getByTestId("mobile-nav-more").click();

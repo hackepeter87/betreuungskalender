@@ -208,6 +208,10 @@ export type ContactRuleRecurrence =
       intervalMonths: number;
       ordinals: ContactRuleMonthlyOrdinal[];
       weekdays: ContactRuleWeekday[];
+    }
+  | {
+      kind: "rrule";
+      rrules: string[];
     };
 
 export interface ApiContactRuleSegment {

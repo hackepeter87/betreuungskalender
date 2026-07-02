@@ -288,7 +288,7 @@ export function normalizeBackupData(value: unknown): AppData {
           .filter(isObject)
           .map((pattern) => ({
             id: String(pattern.id ?? ""),
-            name: String(pattern.name ?? "14-Tage-Regel"),
+            name: String(pattern.name ?? "Umgangsregel"),
             startDate: String(pattern.startDate ?? ""),
             frequency: "biweekly" as const,
             fridayStartTime:

@@ -168,48 +168,54 @@ export function UnavailablePeriodForm({
     <form className="child-form unavailable-form" data-testid="unavailable-form" onSubmit={submit}>
       <section className="form-section">
         <h3>{copy(locale, "unavailable", "periodCategory")}</h3>
-        <div className="datetime-grid">
-          <label className="field">
-            <FieldHelpLabel fieldId="unavailable.startDateTime">{copy(locale, "entryForm", "startDate")}</FieldHelpLabel>
-            <input
-              autoFocus
-              required
-              data-testid="unavailable-start-date"
-              type="date"
-              value={startDate}
-              onChange={(event) => setStartDate(event.target.value)}
-            />
-          </label>
-          <label className="field">
-            <FieldHelpLabel fieldId="unavailable.startDateTime">{copy(locale, "entryForm", "startTime")}</FieldHelpLabel>
-            <input
-              required
-              data-testid="unavailable-start-time"
-              type="time"
-              value={startTime}
-              onChange={(event) => setStartTime(event.target.value)}
-            />
-          </label>
-          <label className="field">
-            <FieldHelpLabel fieldId="unavailable.endDateTime">{copy(locale, "entryForm", "endDate")}</FieldHelpLabel>
-            <input
-              required
-              data-testid="unavailable-end-date"
-              type="date"
-              value={endDate}
-              onChange={(event) => setEndDate(event.target.value)}
-            />
-          </label>
-          <label className="field">
-            <FieldHelpLabel fieldId="unavailable.endDateTime">{copy(locale, "entryForm", "endTime")}</FieldHelpLabel>
-            <input
-              required
-              data-testid="unavailable-end-time"
-              type="time"
-              value={endTime}
-              onChange={(event) => setEndTime(event.target.value)}
-            />
-          </label>
+        <div className="unavailable-time-grid">
+          <div className="unavailable-time-group">
+            <strong>{copy(locale, "unavailable", "startGroup")}</strong>
+            <label className="field">
+              <FieldHelpLabel fieldId="unavailable.startDateTime">{copy(locale, "entryForm", "startDate")}</FieldHelpLabel>
+              <input
+                autoFocus
+                required
+                data-testid="unavailable-start-date"
+                type="date"
+                value={startDate}
+                onChange={(event) => setStartDate(event.target.value)}
+              />
+            </label>
+            <label className="field">
+              <FieldHelpLabel fieldId="unavailable.startDateTime">{copy(locale, "entryForm", "startTime")}</FieldHelpLabel>
+              <input
+                required
+                data-testid="unavailable-start-time"
+                type="time"
+                value={startTime}
+                onChange={(event) => setStartTime(event.target.value)}
+              />
+            </label>
+          </div>
+          <div className="unavailable-time-group">
+            <strong>{copy(locale, "unavailable", "endGroup")}</strong>
+            <label className="field">
+              <FieldHelpLabel fieldId="unavailable.endDateTime">{copy(locale, "entryForm", "endDate")}</FieldHelpLabel>
+              <input
+                required
+                data-testid="unavailable-end-date"
+                type="date"
+                value={endDate}
+                onChange={(event) => setEndDate(event.target.value)}
+              />
+            </label>
+            <label className="field">
+              <FieldHelpLabel fieldId="unavailable.endDateTime">{copy(locale, "entryForm", "endTime")}</FieldHelpLabel>
+              <input
+                required
+                data-testid="unavailable-end-time"
+                type="time"
+                value={endTime}
+                onChange={(event) => setEndTime(event.target.value)}
+              />
+            </label>
+          </div>
         </div>
         <label className="field">
           <FieldHelpLabel fieldId="unavailable.category" />
