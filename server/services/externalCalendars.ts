@@ -1,7 +1,9 @@
 import { createHash, randomUUID } from "node:crypto";
 import ICAL from "ical.js";
+import type { ApiExternalCalendarSourceType } from "../../shared/api.js";
 import { db } from "../db/connection.js";
-import { nowIso } from "./common.js";
+import { markClosedMonthsChanged, recordAudit } from "./audit.js";
+import { assertActiveChildren, makeId, nowIso, syncJunction } from "./common.js";
 
 const MAX_ICS_BYTES = 1_000_000;
 const MAX_ICS_EVENTS = 2_000;
@@ -25,7 +27,18 @@ export interface ParsedExternalCalendarEvent {
   rawHash: string;
 }
 
-export interface ExternalCalendarSourceInput { name: string; color: string; content: string }
+export interface ExternalCalendarSourceInput {
+  name: string;
+  color: string;
+  sourceType: ApiExternalCalendarSourceType;
+  content: string;
+}
+
+export interface ExternalCalendarHolidayDeriveInput {
+  childIds: string[];
+  assignedTo: "father" | "mother" | "shared";
+  userEmail: string;
+}
 
 function text(value: unknown, limit = MAX_TEXT_LENGTH): string | undefined {
   if (typeof value !== "string") return undefined;
@@ -84,8 +97,31 @@ export function parseIcs(content: string): ParsedExternalCalendarEvent[] {
   });
 }
 
+function dateKey(value: string): string {
+  return new Date(value).toISOString().slice(0, 10);
+}
+
+function inclusiveEndDateKey(value: string, allDay: boolean): string {
+  const date = new Date(value);
+  if (allDay) date.setUTCDate(date.getUTCDate() - 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function truncate(value: string, limit: number): string {
+  return value.length > limit ? value.slice(0, limit - 1) : value;
+}
+
 function mapSource(row: Record<string, unknown>) {
-  return { id: String(row.id), name: String(row.name), color: String(row.color), visible: Boolean(row.visible), lastImportedAt: String(row.last_imported_at), createdAt: String(row.created_at), updatedAt: String(row.updated_at) };
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    color: String(row.color),
+    visible: Boolean(row.visible),
+    sourceType: (row.source_type === "holiday" ? "holiday" : "overlay") as ApiExternalCalendarSourceType,
+    lastImportedAt: String(row.last_imported_at),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at)
+  };
 }
 
 export function listExternalCalendarSources() {
@@ -102,6 +138,33 @@ export function listExternalCalendarBackupEvents() {
     FROM external_calendar_events
     ORDER BY start_datetime, id
   `).all() as Array<Record<string, unknown>>;
+}
+
+function getChildIds(id: string): string[] {
+  return (db.prepare(`
+    SELECT child_id AS childId
+    FROM holiday_period_children
+    WHERE holiday_period_id = ? AND deleted_at IS NULL
+    ORDER BY child_id
+  `).all(id) as Array<{ childId: string }>).map((row) => row.childId);
+}
+
+function mapHoliday(row: Record<string, unknown>) {
+  return {
+    id: String(row.id),
+    name: String(row.name),
+    startDate: String(row.start_date),
+    endDate: String(row.end_date),
+    childIds: getChildIds(String(row.id)),
+    assignedTo: row.assigned_to as "father" | "mother" | "shared",
+    notes: row.notes ? String(row.notes) : undefined,
+    sourceExternalCalendarSourceId: row.source_external_calendar_source_id ? String(row.source_external_calendar_source_id) : undefined,
+    sourceExternalCalendarEventId: row.source_external_calendar_event_id ? String(row.source_external_calendar_event_id) : undefined,
+    createdBy: String(row.created_by),
+    updatedBy: String(row.updated_by),
+    createdAt: String(row.created_at),
+    updatedAt: String(row.updated_at)
+  };
 }
 
 function writeEvents(sourceId: string, events: ParsedExternalCalendarEvent[], timestamp: string) {
@@ -126,20 +189,20 @@ export function importExternalCalendar(input: ExternalCalendarSourceInput, sourc
   const id = sourceId ?? randomUUID();
   db.transaction(() => {
     if (sourceId) {
-      const changed = db.prepare("UPDATE external_calendar_sources SET name = ?, color = ?, last_imported_at = ?, updated_at = ? WHERE id = ?").run(input.name, input.color, timestamp, timestamp, id);
+      const changed = db.prepare("UPDATE external_calendar_sources SET name = ?, color = ?, source_type = ?, last_imported_at = ?, updated_at = ? WHERE id = ?").run(input.name, input.color, input.sourceType, timestamp, timestamp, id);
       if (!changed.changes) throw new ExternalCalendarError("external_calendar_not_found", "External calendar source was not found.");
     } else {
-      db.prepare("INSERT INTO external_calendar_sources (id, name, color, visible, last_imported_at, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?, ?)").run(id, input.name, input.color, timestamp, timestamp, timestamp);
+      db.prepare("INSERT INTO external_calendar_sources (id, name, color, visible, source_type, last_imported_at, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?, ?, ?)").run(id, input.name, input.color, input.sourceType, timestamp, timestamp, timestamp);
     }
     writeEvents(id, events, timestamp);
   })();
   return { source: mapSource(db.prepare("SELECT * FROM external_calendar_sources WHERE id = ?").get(id) as Record<string, unknown>), importedEvents: events.length };
 }
 
-export function updateExternalCalendarSource(id: string, input: { name?: string; color?: string; visible?: boolean }) {
+export function updateExternalCalendarSource(id: string, input: { name?: string; color?: string; visible?: boolean; sourceType?: ApiExternalCalendarSourceType }) {
   const current = db.prepare("SELECT * FROM external_calendar_sources WHERE id = ?").get(id) as Record<string, unknown> | undefined;
   if (!current) throw new ExternalCalendarError("external_calendar_not_found", "External calendar source was not found.");
-  db.prepare("UPDATE external_calendar_sources SET name = ?, color = ?, visible = ?, updated_at = ? WHERE id = ?").run(input.name ?? current.name, input.color ?? current.color, input.visible === undefined ? current.visible : Number(input.visible), nowIso(), id);
+  db.prepare("UPDATE external_calendar_sources SET name = ?, color = ?, visible = ?, source_type = ?, updated_at = ? WHERE id = ?").run(input.name ?? current.name, input.color ?? current.color, input.visible === undefined ? current.visible : Number(input.visible), input.sourceType ?? current.source_type ?? "overlay", nowIso(), id);
   return mapSource(db.prepare("SELECT * FROM external_calendar_sources WHERE id = ?").get(id) as Record<string, unknown>);
 }
 
@@ -154,4 +217,107 @@ export function visibleExternalCalendarEvents(from: string, to: string) {
     FROM external_calendar_events e JOIN external_calendar_sources s ON s.id = e.source_id
     WHERE s.visible = 1 AND e.start_datetime < ? AND e.end_datetime > ? ORDER BY e.start_datetime, e.title
   `).all(to, from) as Array<Record<string, unknown>>;
+}
+
+export function deriveHolidayPeriodsFromExternalCalendar(sourceId: string, input: ExternalCalendarHolidayDeriveInput) {
+  const sourceRow = db.prepare("SELECT * FROM external_calendar_sources WHERE id = ?").get(sourceId) as Record<string, unknown> | undefined;
+  if (!sourceRow) throw new ExternalCalendarError("external_calendar_not_found", "External calendar source was not found.");
+  const source = mapSource(sourceRow);
+  if (source.sourceType !== "holiday") {
+    throw new ExternalCalendarError("external_calendar_invalid", "Only holiday calendar sources can derive holiday periods.");
+  }
+
+  const events = db.prepare(`
+    SELECT id, title, description, start_datetime AS startDateTime,
+      end_datetime AS endDateTime, all_day AS allDay
+    FROM external_calendar_events
+    WHERE source_id = ?
+    ORDER BY start_datetime, title
+  `).all(sourceId) as Array<{
+    id: string;
+    title: string;
+    description: string | null;
+    startDateTime: string;
+    endDateTime: string;
+    allDay: number;
+  }>;
+
+  const existing = new Set((db.prepare(`
+    SELECT source_external_calendar_event_id AS eventId
+    FROM holiday_periods
+    WHERE source_external_calendar_source_id = ?
+      AND source_external_calendar_event_id IS NOT NULL
+      AND deleted_at IS NULL
+  `).all(sourceId) as Array<{ eventId: string }>).map((row) => row.eventId));
+
+  const timestamp = nowIso();
+  const createdIds: string[] = [];
+  let skippedExisting = 0;
+  let skippedUnsupported = 0;
+
+  db.transaction(() => {
+    assertActiveChildren(input.childIds);
+    for (const event of events) {
+      if (existing.has(event.id)) {
+        skippedExisting += 1;
+        continue;
+      }
+      if (!event.allDay) {
+        skippedUnsupported += 1;
+        continue;
+      }
+      const startDate = dateKey(event.startDateTime);
+      const endDate = inclusiveEndDateKey(event.endDateTime, true);
+      if (endDate < startDate) {
+        skippedUnsupported += 1;
+        continue;
+      }
+
+      const id = makeId("holiday");
+      const noteParts = [
+        `Aus importierter Ferienquelle "${source.name}" abgeleitet.`,
+        event.description ? truncate(event.description, 3500) : undefined
+      ].filter(Boolean);
+      db.prepare(`
+        INSERT INTO holiday_periods (
+          id, name, start_date, end_date, assigned_to, notes,
+          source_external_calendar_source_id, source_external_calendar_event_id,
+          created_by, updated_by, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        id,
+        truncate(event.title, 200),
+        startDate,
+        endDate,
+        input.assignedTo,
+        noteParts.join("\n\n") || null,
+        sourceId,
+        event.id,
+        input.userEmail,
+        input.userEmail,
+        timestamp,
+        timestamp
+      );
+      syncJunction("holiday_period_children", "holiday_period_id", id, input.childIds, timestamp);
+      const holiday = mapHoliday(db.prepare("SELECT * FROM holiday_periods WHERE id = ?").get(id) as Record<string, unknown>);
+      recordAudit({
+        userEmail: input.userEmail,
+        entityType: "holiday_period",
+        entityId: id,
+        action: "created",
+        newValue: holiday
+      });
+      markClosedMonthsChanged(input.userEmail, "holiday_period", id, startDate, endDate, timestamp);
+      createdIds.push(id);
+    }
+  })();
+
+  const holidays = createdIds.map((id) => mapHoliday(db.prepare("SELECT * FROM holiday_periods WHERE id = ?").get(id) as Record<string, unknown>));
+  return {
+    source,
+    created: holidays.length,
+    skippedExisting,
+    skippedUnsupported,
+    holidays
+  };
 }

@@ -125,6 +125,8 @@ export interface HolidayPeriod {
   childIds: string[];
   assignedTo: "father" | "mother" | "shared";
   notes?: string;
+  sourceExternalCalendarSourceId?: string;
+  sourceExternalCalendarEventId?: string;
   createdBy: string;
   updatedBy: string;
   createdAt: string;
@@ -194,6 +196,7 @@ export interface ExternalCalendarSource {
   name: string;
   color: string;
   visible: boolean;
+  sourceType: "overlay" | "holiday";
   lastImportedAt: string;
   createdAt: string;
   updatedAt: string;

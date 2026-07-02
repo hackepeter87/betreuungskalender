@@ -95,3 +95,56 @@ test("imports, manages, and removes an external calendar through the UI", async 
   const invalidSources = await request.get("/api/external-calendars");
   expect(await invalidSources.json()).toEqual([]);
 });
+
+test("derives holiday blocks from a classified external holiday calendar", async ({
+  page,
+  request
+}) => {
+  const childName = "Ferienimport Kind";
+  await openApp(page);
+  await navigate(page, "settings");
+  await page.getByTestId("settings-add-child").click();
+  const childForm = page.getByTestId("child-form");
+  await childForm.getByTestId("child-name").fill(childName);
+  await childForm.getByTestId("child-submit").click();
+  await expect(childForm).toBeHidden();
+
+  await importExternalCalendar(page, sourceName);
+  const sourcesResponse = await request.get("/api/external-calendars");
+  expect(sourcesResponse.ok()).toBeTruthy();
+  const [source] = await sourcesResponse.json() as Array<{ id: string; sourceType: string }>;
+  expect(source?.sourceType).toBe("overlay");
+
+  await page.getByTestId(`external-calendar-source-type-${source!.id}`).selectOption("holiday");
+  await expect(page.getByTestId(`external-calendar-source-type-${source!.id}`)).toHaveValue("holiday");
+
+  await navigate(page, "holidays");
+  await page.getByTestId("holiday-external-source").selectOption(source!.id);
+  await page.getByTestId("holiday-external-assigned-to").selectOption("shared");
+  await page.getByTestId("holiday-derive-external").click();
+  await expect(page.getByTestId("holiday-external-message")).toContainText("1");
+  await expect(page.getByText("E2E Holiday", { exact: true })).toBeVisible();
+  await expect(page.locator(".holiday-list").getByText(childName, { exact: true })).toBeVisible();
+
+  const firstHolidaysResponse = await request.get("/api/holiday-periods");
+  expect(firstHolidaysResponse.ok()).toBeTruthy();
+  const firstHolidays = await firstHolidaysResponse.json() as Array<{
+    name: string;
+    startDate: string;
+    endDate: string;
+    sourceExternalCalendarSourceId?: string;
+  }>;
+  expect(firstHolidays).toHaveLength(1);
+  expect(firstHolidays[0]).toMatchObject({
+    name: "E2E Holiday",
+    startDate: "2026-07-01",
+    endDate: "2026-07-02",
+    sourceExternalCalendarSourceId: source!.id
+  });
+
+  await page.getByTestId("holiday-derive-external").click();
+  await expect(page.getByTestId("holiday-external-message")).toContainText("0");
+  const secondHolidaysResponse = await request.get("/api/holiday-periods");
+  expect(secondHolidaysResponse.ok()).toBeTruthy();
+  expect(await secondHolidaysResponse.json()).toHaveLength(1);
+});
