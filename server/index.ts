@@ -26,18 +26,28 @@ import { holidayRoutes } from "./routes/holidays.js";
 import { monthClosingRoutes } from "./routes/monthClosings.js";
 import { migrationRoutes } from "./routes/migration.js";
 import { nativeOidcRoutes } from "./routes/nativeOidc.js";
+import { recoveryAdminRoutes } from "./routes/recoveryAdmin.js";
 import { installRateLimitPolicy } from "./rateLimitPolicy.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { unavailablePeriodRoutes } from "./routes/unavailablePeriods.js";
 import { externalCalendarRoutes } from "./routes/externalCalendars.js";
 import { calendarFeedRoutes } from "./routes/calendarFeeds.js";
 import { OidcSessionStore } from "./services/oidcSessions.js";
+import { RecoveryAdminStore } from "./services/recoveryAdmin.js";
 import { findAuthenticatedUserBySubject } from "./services/users.js";
 import { runCareConfirmationSweep } from "./services/careConfirmations.js";
 
 runMigrations();
 
 const nativeOidcSessions = new OidcSessionStore();
+const recoveryAdmin = new RecoveryAdminStore({
+  enabled: config.recoveryAdminEnabled,
+  username: config.recoveryAdminUsername,
+  initialPasswordFile: config.recoveryAdminInitialPasswordFile,
+  initialPassword: config.recoveryAdminInitialPassword,
+  sessionTtlSeconds: config.recoveryAdminSessionTtlSeconds
+});
+recoveryAdmin.ensureConfigured();
 
 const app = Fastify({
   logger: {
@@ -132,7 +142,8 @@ app.decorateRequest("userEmail", "local-dev");
 app.decorateRequest("user", undefined);
 
 const apiAuthHook = createApiAuthHook(config, app.rateLimit(), {
-  nativeSessions: nativeOidcSessions
+  nativeSessions: nativeOidcSessions,
+  findRecoveryUserByToken: (token) => recoveryAdmin.findUserByToken(token)
 });
 // codeql[js/missing-rate-limiting]: createApiAuthHook receives app.rateLimit() and runs that Fastify rate-limit preHandler before authorization.
 app.addHook("preHandler", apiAuthHook);
@@ -225,6 +236,10 @@ function isSpaFallbackRequest(request: FastifyRequest): boolean {
 }
 
 function hasNativeOidcBrowserSession(request: FastifyRequest): boolean {
+  const recoveryUser = recoveryAdmin.findUserByToken(
+    cookieValue(request.headers.cookie, config.recoveryAdminSessionCookieName)
+  );
+  if (recoveryUser) return true;
   const nativeSession = nativeOidcSessions.findByToken(
     cookieValue(request.headers.cookie, config.sessionCookieName)
   );
@@ -268,6 +283,23 @@ app.get("/api/ready", readLimit, async (_request, reply) => {
 });
 
 app.get("/api/session", readLimit, async (request) => {
+  const recoveryUser = recoveryAdmin.findUserByToken(
+    cookieValue(request.headers.cookie, config.recoveryAdminSessionCookieName)
+  );
+  if (recoveryUser) {
+    return {
+      authRequired: config.requireAuth,
+      authenticated: true,
+      user: {
+        id: recoveryUser.id,
+        displayName: recoveryUser.displayName,
+        role: recoveryUser.role,
+        ...(recoveryUser.email ? { email: recoveryUser.email } : {})
+      },
+      logoutUrl: "/auth/recovery/logout",
+      ...(config.demoDatasetsEnabled ? { demoDatasetsEnabled: true } : {})
+    };
+  }
   if (config.authMode === "native-oidc") {
     const nativeSession = nativeOidcSessions.findByToken(
       cookieValue(request.headers.cookie, config.sessionCookieName)
@@ -301,6 +333,7 @@ app.get("/api/session", readLimit, async (request) => {
   };
 });
 
+await app.register(recoveryAdminRoutes, { config, store: recoveryAdmin });
 await app.register(nativeOidcRoutes, { config, sessions: nativeOidcSessions });
 await app.register(childrenRoutes);
 await app.register(carePartyRoutes);

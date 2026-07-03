@@ -18,6 +18,8 @@ type TestAuthConfig = Pick<
   | "oidcReadonlyGroup"
   | "oidcRequireRoleClaim"
   | "sessionCookieName"
+  | "recoveryAdminEnabled"
+  | "recoveryAdminSessionCookieName"
 >;
 
 function authConfig(overrides: Partial<TestAuthConfig> = {}): TestAuthConfig {
@@ -34,6 +36,8 @@ function authConfig(overrides: Partial<TestAuthConfig> = {}): TestAuthConfig {
     oidcReadonlyGroup: "/betreuungskalender/readers",
     oidcRequireRoleClaim: true,
     sessionCookieName: "betreuungskalender_session",
+    recoveryAdminEnabled: false,
+    recoveryAdminSessionCookieName: "betreuungskalender_recovery",
     ...overrides
   };
 }
@@ -181,6 +185,54 @@ test("native OIDC API authentication rejects missing sessions", async () => {
         method: "GET",
         url: "/api/children",
         headers: { cookie: "betreuungskalender_session=missing" }
+      } as never,
+      {} as never
+    ),
+    (error) => {
+      const normalized = error as Error & { code?: string; statusCode?: number };
+      assert.equal(normalized.code, "authentication_required");
+      assert.equal(normalized.statusCode, 401);
+      return true;
+    }
+  );
+});
+
+test("enabled recovery admin sessions can authorize API admin requests", async () => {
+  const hook = createApiAuthHook(authConfig({
+    recoveryAdminEnabled: true
+  }), undefined, {
+    nativeSessions: {
+      findByToken: () => undefined
+    },
+    findRecoveryUserByToken: (token) => token === "recovery-valid"
+      ? user("admin")
+      : undefined
+  });
+  const request = {
+    method: "PUT",
+    url: "/api/app-data",
+    headers: { cookie: "betreuungskalender_recovery=recovery-valid" }
+  } as never;
+
+  await assert.doesNotReject(() => hook.call({} as never, request, {} as never));
+  assert.equal((request as { user?: RequestUser }).user?.role, "admin");
+});
+
+test("disabled recovery admin sessions never grant API access", async () => {
+  const hook = createApiAuthHook(authConfig(), undefined, {
+    nativeSessions: {
+      findByToken: () => undefined
+    },
+    findRecoveryUserByToken: () => user("admin")
+  });
+
+  await assert.rejects(
+    () => hook.call(
+      {} as never,
+      {
+        method: "GET",
+        url: "/api/children",
+        headers: { cookie: "betreuungskalender_recovery=recovery-valid" }
       } as never,
       {} as never
     ),

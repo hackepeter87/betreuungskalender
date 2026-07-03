@@ -46,6 +46,8 @@ discovery source; it is not synchronized or treated as current persistence.
 | `calendar_feed_tokens` | Revocable per-user iCalendar feed token hashes |
 | `native_oidc_login_states` | Short-lived server-side OIDC state, nonce, and PKCE verifier records |
 | `native_oidc_sessions` | Server-side native OIDC session token hashes and expiry metadata |
+| `recovery_admin_credentials` | Optional break-glass recovery admin password hash metadata |
+| `recovery_admin_sessions` | Optional short-lived recovery admin session token hashes |
 | `notification_preferences` | Per-user notification channel choices for supported event types |
 | `push_subscriptions` | Web Push subscription endpoints and public keys per app user |
 
@@ -135,6 +137,23 @@ subject, creation time, optional last-seen time, expiry time, and optional
 revocation time. Session rows do not store OIDC tokens, authorization codes,
 raw claims, client secrets, or role decisions. Current role and permission
 decisions are read from the matching `app_users` row on each API request.
+
+## Recovery admin
+
+`recovery_admin_credentials` and `recovery_admin_sessions` are used only when
+`RECOVERY_ADMIN_ENABLED=true`. Recovery credentials store a scrypt password
+hash, salt, and password-change timestamp for the configured break-glass
+username. The initial bootstrap password from a mounted secret file or
+environment fallback is not persisted and is ignored once a recovery credential
+exists.
+
+Recovery sessions use a separate opaque browser cookie. SQLite stores only the
+session token hash, username, creation time, optional last-seen time, expiry
+time, revocation time, and whether the session is still restricted to password
+change. A password-change-required session cannot authorize normal API
+requests. After the recovery password is set, the recovery user is represented
+as an internal admin `app_users` actor with an external subject shaped like
+`recovery:<username>`.
 
 ## Care entries
 

@@ -79,6 +79,14 @@ claim-based roles, logout, session expiry, runtime verification, and audit
 identity have been verified in production, make a separate release decision
 whether trusted-proxy remains supported or is removed in a later milestone.
 
+Recovery admin is a disabled-by-default break-glass path for identity-provider
+outages. Enable it only through deliberate deployment configuration, preferably
+with `RECOVERY_ADMIN_INITIAL_PASSWORD_FILE` mounted as a secret. The bootstrap
+password only permits setting a new recovery password; normal admin API access
+requires the changed recovery password and a valid short-lived server-side
+recovery session. Do not expose the recovery URL in the normal UI, do not store
+the bootstrap secret in the repository, and disable or rotate it after use.
+
 ## Application hardening
 
 The server uses CSP and common security headers, restrictive CORS, redaction of
@@ -167,7 +175,9 @@ Set `LOG_LEVEL=info` or `warn` in production. Request bodies are not logged by
 default. Authentication and cookie headers are redacted. Native OIDC tokens,
 authorization codes, state, nonce, PKCE verifiers, raw claims, and client
 secrets must not be logged. Native session cookie values and raw session
-tokens must not be logged; store only their hashes server-side. Do not add
+tokens must not be logged; store only their hashes server-side. Recovery admin
+passwords, password hashes, salts, bootstrap secrets, session cookie values,
+and raw recovery tokens must not be logged. Do not add
 names, notes, evidence references, exported data, or full request bodies to
 routine logs.
 

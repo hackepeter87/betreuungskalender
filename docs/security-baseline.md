@@ -48,6 +48,9 @@ incident response.
   server-side state/nonce/verifier storage, and opaque hashed session tokens.
 - Trusted-proxy authentication remains available as a rollback mode but is not
   accepted as a bypass in native OIDC mode.
+- Recovery admin is disabled by default and, when explicitly enabled, uses a
+  short-lived server-side session, scrypt password hash, and one-time bootstrap
+  password-change flow.
 - Care parties are domain records, not authentication principals. Shared
   care-party assignments restrict non-admin users once assignments exist, but
   `app_users.role` remains the authorization role source.
@@ -96,9 +99,10 @@ version, changelog, release notes, and tag state are ready.
 - Trivy filesystem/image scans and ZAP-style DAST checks are deferred optional
   reviews. They need an agreed scan target, runtime budget, update cadence, and
   false-positive handling process before they should block normal releases.
-- Break-glass bootstrap-admin recovery is tracked separately and should be
-  implemented as a controlled operational recovery path, not as a default
-  always-enabled login.
+- Break-glass recovery reduces identity-provider outage risk but adds a
+  high-value local credential. Operators should keep it disabled unless needed,
+  prefer mounted secret files over environment fallbacks, and rotate or remove
+  bootstrap material after first use.
 - External security review is still recommended before wider internet exposure
   beyond a personally operated instance.
 

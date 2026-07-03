@@ -30,6 +30,12 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `OIDC_LOGIN_STATE_TTL_SECONDS` | Native OIDC login transaction lifetime | `600` | Optional for `AUTH_MODE=native-oidc` | `600` | Short-lived state, nonce, and PKCE verifier records limit replay windows |
 | `SESSION_COOKIE_NAME` | Native OIDC opaque session cookie name | `betreuungskalender_session` | Optional for `AUTH_MODE=native-oidc` | `betreuungskalender_session` | Cookie value is opaque and never stores claims or tokens |
 | `SESSION_TTL_SECONDS` | Native OIDC server-side session lifetime | `2419200` | Optional for `AUTH_MODE=native-oidc` | `2419200` | Limits how long an unreused opaque session can remain valid |
+| `RECOVERY_ADMIN_ENABLED` | Enable explicit break-glass recovery admin login | `false` | Optional emergency feature | `false` | Keep disabled unless the operator intentionally needs an identity-provider fallback |
+| `RECOVERY_ADMIN_USERNAME` | Recovery admin username | `breakglass` | Required when recovery is enabled | `breakglass` | Not secret; use a boring operator-known value |
+| `RECOVERY_ADMIN_INITIAL_PASSWORD_FILE` | Mounted file containing the one-time initial recovery password | `/run/secrets/recovery-admin-password` | Required for first recovery use unless env fallback is used | Same | Preferred secret source; file contents must never be committed |
+| `RECOVERY_ADMIN_INITIAL_PASSWORD` | One-time initial recovery password fallback | Empty | Optional fallback only | None | Secret; acceptable for demo or emergency use, not recommended for normal production |
+| `RECOVERY_ADMIN_SESSION_COOKIE_NAME` | Recovery admin opaque session cookie name | `betreuungskalender_recovery` | Optional | `betreuungskalender_recovery` | Separate from native OIDC sessions and server-side only |
+| `RECOVERY_ADMIN_SESSION_TTL_SECONDS` | Recovery admin session lifetime | `900` | Optional | `900` | Keep short because recovery sessions bypass the identity provider |
 | `WEB_PUSH_SUBJECT` | VAPID contact subject for optional Web Push | `mailto:admin@example.invalid` | Required only when Web Push is enabled | `mailto:admin@example.invalid` | Use an operator-controlled contact URI |
 | `WEB_PUSH_PUBLIC_KEY` | VAPID public key for optional Web Push | Generated VAPID public key | Optional | None | Public key may be exposed to browsers |
 | `WEB_PUSH_PRIVATE_KEY` | VAPID private key for optional Web Push | Secret value | Required only when Web Push is enabled | None | Secret; keep only in private environment files |
@@ -174,6 +180,37 @@ For a fresh Keycloak and Podman Compose installation, follow
 [native-oidc-keycloak-podman.md](native-oidc-keycloak-podman.md). Native OIDC
 uses `deploy/compose.yml`; `deploy/compose.oidc.yml` remains the oauth2-proxy
 trusted-header topology.
+
+### Recovery admin
+
+Recovery admin is an explicit break-glass path for cases where native OIDC or
+the identity provider is unavailable. It is disabled by default and is not a
+normal login mode.
+
+```dotenv
+RECOVERY_ADMIN_ENABLED=false
+RECOVERY_ADMIN_USERNAME=breakglass
+RECOVERY_ADMIN_INITIAL_PASSWORD_FILE=/run/secrets/recovery-admin-password
+RECOVERY_ADMIN_INITIAL_PASSWORD=
+RECOVERY_ADMIN_SESSION_TTL_SECONDS=900
+```
+
+When enabled for the first time, the app must either find an existing recovery
+credential in SQLite or read an initial password from
+`RECOVERY_ADMIN_INITIAL_PASSWORD_FILE` or `RECOVERY_ADMIN_INITIAL_PASSWORD`.
+The mounted file is preferred. The environment fallback exists for demo or
+emergency use and should not be the normal production path.
+
+The emergency browser URL is `/auth/recovery`. The initial password grants only
+a short-lived password-change session. Normal admin API access is granted only
+after the operator sets a new recovery password. After that change, the initial
+password source is ignored. Recovery sessions are server-side, short-lived, and
+use a separate opaque cookie.
+
+Do not link the recovery URL in the normal app UI. Remove or rotate the initial
+secret after the first password change, keep the feature disabled when not
+needed, and treat the changed recovery password as a high-value operator
+secret.
 
 ## CORS and same-origin operation
 

@@ -28,7 +28,8 @@ const expectedMigrations = [
   "017_default_responsible_party",
   "018_actual_care_confirmation",
   "019_care_entry_deviations",
-  "020_contact_impediments"
+  "020_contact_impediments",
+  "021_recovery_admin"
 ];
 
 async function withTemporaryDirectory(

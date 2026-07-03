@@ -111,6 +111,7 @@ WEB_PUSH_SUBJECT=mailto:admin@example.invalid
 WEB_PUSH_PUBLIC_KEY=
 WEB_PUSH_PRIVATE_KEY=
 WEB_PUSH_ALLOWED_ENDPOINT_HOSTS=fcm.googleapis.com,updates.push.services.mozilla.com,web.push.apple.com,webpush.push.apple.com
+RECOVERY_ADMIN_ENABLED=false
 ALLOWED_ORIGIN=https://app.example.net
 ```
 
@@ -120,6 +121,32 @@ enabling Push, generate VAPID keys outside the repository and keep the private
 key in the deployment environment only. Keep
 `WEB_PUSH_ALLOWED_ENDPOINT_HOSTS` restricted to browser push-service hosts; do
 not add private infrastructure, loopback hosts, or broad wildcard domains.
+
+Recovery admin is optional and disabled by default. If you deliberately enable
+it as an emergency identity-provider fallback, prefer a mounted secret file over
+placing the initial password in `app.env`:
+
+```yaml
+services:
+  betreuungskalender:
+    volumes:
+      - ./secrets/recovery-admin-password:/run/secrets/recovery-admin-password:ro
+```
+
+The matching private `app.env` values are:
+
+```dotenv
+RECOVERY_ADMIN_ENABLED=true
+RECOVERY_ADMIN_USERNAME=breakglass
+RECOVERY_ADMIN_INITIAL_PASSWORD_FILE=/run/secrets/recovery-admin-password
+RECOVERY_ADMIN_INITIAL_PASSWORD=
+RECOVERY_ADMIN_SESSION_TTL_SECONDS=900
+```
+
+Open `/auth/recovery` only when the identity provider is unavailable. The first
+login forces a password change before admin API access is granted. Remove or
+rotate the mounted bootstrap secret afterwards and disable recovery again when
+it is not needed.
 
 Use `HOST_BIND_ADDRESS=127.0.0.1` when the TLS reverse proxy runs on the same
 host. With rootless Podman behind a proxy on another host or VM, bind to the VM

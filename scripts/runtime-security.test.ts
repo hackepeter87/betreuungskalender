@@ -195,6 +195,13 @@ test("production runtime sends documented security headers and restrictive CORS"
   const missingBody = await missingApi.text();
   assert.doesNotMatch(missingBody, /stack|sqlite|node_modules|server\//i);
   assert.equal(missingApi.headers.get("access-control-allow-origin"), "https://allowed.example.test");
+
+  const recoveryDisabled = await fetch(`http://127.0.0.1:${port}/auth/recovery`);
+  assert.equal(recoveryDisabled.status, 404);
+  assert.deepEqual(await recoveryDisabled.json(), {
+    error: "not_found",
+    message: "Ressource nicht gefunden."
+  });
 });
 
 test("runtime exposes compact session metadata for trusted proxy auth", async (t) => {

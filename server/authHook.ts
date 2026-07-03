@@ -24,11 +24,14 @@ type AuthConfig = Pick<
   | "oidcReadonlyGroup"
   | "oidcRequireRoleClaim"
   | "sessionCookieName"
+  | "recoveryAdminEnabled"
+  | "recoveryAdminSessionCookieName"
 >;
 
 interface NativeAuthOptions {
   nativeSessions?: Pick<OidcSessionStore, "findByToken">;
   findUserByExternalSubject?: (externalSubject: string) => RequestUser | undefined;
+  findRecoveryUserByToken?: (token: string | undefined) => RequestUser | undefined;
 }
 
 function httpError(code: string, statusCode: number, message: string): Error & { code: string; statusCode: number } {
@@ -48,6 +51,24 @@ export function createApiAuthHook(
       request.url === "/api/ready" ||
       request.url === "/api/session"
     ) return;
+    const recoveryUser = config.recoveryAdminEnabled
+      ? options.findRecoveryUserByToken?.(
+          cookieValue(request.headers.cookie, config.recoveryAdminSessionCookieName)
+        )
+      : undefined;
+    if (recoveryUser) {
+      const requiredPermission = requiredPermissionForRequest(request.method, request.url);
+      if (!hasPermission(recoveryUser, requiredPermission)) {
+        throw httpError(
+          "forbidden",
+          403,
+          "Für diese Aktion fehlt die erforderliche Berechtigung."
+        );
+      }
+      request.user = recoveryUser;
+      request.userEmail = recoveryUser.id;
+      return;
+    }
     if (config.authMode === "native-oidc") {
       const sessions = options.nativeSessions;
       const session: OidcSessionRecord | undefined = sessions?.findByToken(
