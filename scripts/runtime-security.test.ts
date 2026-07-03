@@ -465,6 +465,23 @@ test("runtime enforces the OIDC authorization matrix across endpoint classes", a
     headers: readonlyHeaders
   })).status, 200);
 
+  const rawCalendarMarker = "RAW_PRIVATE_ICS_MARKER_DO_NOT_LEAK";
+  const rejectedCalendar = await request("/api/external-calendars/import", {
+    method: "POST",
+    headers: jsonHeaders(adminHeaders),
+    body: JSON.stringify({
+      name: "Rejected private calendar",
+      color: "#2563eb",
+      sourceType: "overlay",
+      content: `BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:${rawCalendarMarker}\r\nSUMMARY:${rawCalendarMarker}\r\nDTSTART:20260501T100000Z\r\nDTEND:20260501T090000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n`
+    })
+  });
+  assert.equal(rejectedCalendar.status, 400);
+  assert.deepEqual(await rejectedCalendar.json(), {
+    error: "external_calendar_invalid"
+  });
+  assert.doesNotMatch(logs, new RegExp(rawCalendarMarker));
+
   assert.equal((await request("/api/app-users", {
     headers: adminHeaders
   })).status, 200);
