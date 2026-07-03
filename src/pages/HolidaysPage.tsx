@@ -64,7 +64,9 @@ function ExternalHolidayDerivationPanel() {
         {holidaySources.length ? (
           <>
             <label className="field">
-              <span>{copy(locale, "holiday", "externalSource")}</span>
+              <FieldHelpLabel fieldId="holiday.externalSource">
+                {copy(locale, "holiday", "externalSource")}
+              </FieldHelpLabel>
               <select data-testid="holiday-external-source" value={sourceId} onChange={(event) => setSourceId(event.target.value)}>
                 {holidaySources.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}
               </select>
@@ -72,6 +74,7 @@ function ExternalHolidayDerivationPanel() {
             <fieldset className="inline-fieldset holiday-derive-form__children">
               <legend className="field-label-row">
                 <span>{copy(locale, "holiday", "children")}</span>
+                <FieldHelpButton fieldId="holiday.externalChildren" />
               </legend>
               <div className="child-choice-grid">
                 {data.children.map((child) => {

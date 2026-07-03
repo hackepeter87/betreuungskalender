@@ -476,7 +476,9 @@ export function ContactPage({
                 </select>
               </label>
               <label className="field">
-                <span>{copy(locale, "contact", "interval")}</span>
+                <FieldHelpLabel fieldId="contactPattern.interval">
+                  {copy(locale, "contact", "interval")}
+                </FieldHelpLabel>
                 <input data-testid="contact-recurrence-interval" type="number" min="1" max="366" required value={interval} onChange={(event) => setInterval(Number(event.target.value))} />
               </label>
             </fieldset>
@@ -484,6 +486,7 @@ export function ContactPage({
               <fieldset className="inline-fieldset">
                 <legend className="field-label-row">
                   <span>{copy(locale, "contact", "weekdays")}</span>
+                  <FieldHelpButton fieldId="contactPattern.weekdays" />
                 </legend>
                 <div className="weekday-choice-row">
                   {weekdays.map((weekday) => {
@@ -512,9 +515,12 @@ export function ContactPage({
               <fieldset className="inline-fieldset recurrence-builder">
                 <legend className="field-label-row">
                   <span>{copy(locale, "contact", "monthlyPattern")}</span>
+                  <FieldHelpButton fieldId="contactPattern.monthlyPattern" />
                 </legend>
                 <label className="field">
-                  <span>{copy(locale, "contact", "monthlyMode")}</span>
+                  <FieldHelpLabel fieldId="contactPattern.monthlyPattern">
+                    {copy(locale, "contact", "monthlyMode")}
+                  </FieldHelpLabel>
                   <select data-testid="contact-monthly-mode" value={monthlyMode} onChange={(event) => setMonthlyMode(event.target.value as MonthlyMode)}>
                     <option value="nth-weekday">{copy(locale, "contact", "monthlyMode_nth_weekday")}</option>
                     <option value="month-day">{copy(locale, "contact", "monthlyMode_month_day")}</option>
@@ -522,12 +528,17 @@ export function ContactPage({
                 </label>
                 {monthlyMode === "month-day" ? (
                   <label className="field">
-                    <span>{copy(locale, "contact", "monthDay")}</span>
+                    <FieldHelpLabel fieldId="contactPattern.monthlyPattern">
+                      {copy(locale, "contact", "monthDay")}
+                    </FieldHelpLabel>
                     <input data-testid="contact-month-day" type="number" min="1" max="31" value={monthDay} onChange={(event) => setMonthDay(Number(event.target.value))} />
                   </label>
                 ) : (
                   <div className="field recurrence-builder__wide">
-                    <span>{copy(locale, "contact", "monthOrdinal")}</span>
+                    <span className="field-label-row">
+                      <span>{copy(locale, "contact", "monthOrdinal")}</span>
+                      <FieldHelpButton fieldId="contactPattern.monthlyPattern" />
+                    </span>
                     <div className="weekday-choice-row weekday-choice-row--ordinals">
                       {monthlyOrdinals.map((ordinal) => {
                         const checked = selectedOrdinals.includes(ordinal);
@@ -562,7 +573,9 @@ export function ContactPage({
                   <div className="rule-segment-row" key={segment.id}>
                     <strong>{copy(locale, "contact", "timeSpan", { index: index + 1 })}</strong>
                     <label className="field">
-                      <span>{copy(locale, "contact", "startDayOffset")}</span>
+                      <FieldHelpLabel fieldId="contactPattern.dayOffset">
+                        {copy(locale, "contact", "startDayOffset")}
+                      </FieldHelpLabel>
                       <input type="number" min="0" max="30" value={segment.startDayOffset} onChange={(event) => updateSegment(segment.id, { startDayOffset: Number(event.target.value) })} />
                     </label>
                     <label className="field">
@@ -570,7 +583,9 @@ export function ContactPage({
                       <input data-testid={index === 0 ? "contact-pattern-friday-start-time" : undefined} type="time" required value={segment.startTime} onChange={(event) => updateSegment(segment.id, { startTime: event.target.value })} />
                     </label>
                     <label className="field">
-                      <span>{copy(locale, "contact", "endDayOffset")}</span>
+                      <FieldHelpLabel fieldId="contactPattern.dayOffset">
+                        {copy(locale, "contact", "endDayOffset")}
+                      </FieldHelpLabel>
                       <input type="number" min="0" max="30" value={segment.endDayOffset} onChange={(event) => updateSegment(segment.id, { endDayOffset: Number(event.target.value) })} />
                     </label>
                     <label className="field">
@@ -618,7 +633,9 @@ export function ContactPage({
             </fieldset>
             {data.careParties.length ? (
               <label className="field">
-                <span>{copy(locale, "contact", "responsibleParty")}</span>
+                <FieldHelpLabel fieldId="contactPattern.responsibleParty">
+                  {copy(locale, "contact", "responsibleParty")}
+                </FieldHelpLabel>
                 <select
                   data-testid="contact-responsible-party"
                   value={responsiblePartyId}

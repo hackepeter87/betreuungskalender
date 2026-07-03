@@ -396,7 +396,9 @@ export function EntryForm({
         ) : null}
         {data.careParties.length ? (
           <label className="field">
-            <span>{copy(locale, "entryForm", "responsibleParty")}</span>
+            <FieldHelpLabel fieldId="careEntry.responsibleParty">
+              {copy(locale, "entryForm", "responsibleParty")}
+            </FieldHelpLabel>
             <select
               data-testid="entry-responsible-party"
               value={responsiblePartyId}
@@ -417,7 +419,7 @@ export function EntryForm({
       <fieldset className="form-section">
         <legend className="field-label-row">
           <span>{copy(locale, "entryForm", "deviationTitle")}</span>
-          <FieldHelpButton fieldId="careEntry.status" />
+          <FieldHelpButton fieldId="careEntry.deviationType" />
         </legend>
         <p className="form-section__hint">{copy(locale, "entryForm", "deviationDescription")}</p>
         <div className="deviation-choice-grid">
@@ -459,7 +461,9 @@ export function EntryForm({
               </div>
             </div>
             <label className="field">
-              <span>{copy(locale, "entryForm", "deviationNote")}</span>
+              <FieldHelpLabel fieldId="careEntry.deviationNote">
+                {copy(locale, "entryForm", "deviationNote")}
+              </FieldHelpLabel>
               <textarea
                 rows={2}
                 value={deviationNote}

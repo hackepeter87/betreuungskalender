@@ -16,6 +16,7 @@
   --teal: #087f7b;
   --teal-strong: #076c69;
   --teal-soft: #e8f5f4;
+  --blue: #2563eb;
   --violet: #6967d9;
   --violet-soft: #eeeeff;
   --amber: #d97706;
@@ -1788,8 +1789,8 @@ h3 {
 }
 
 .child-avatar--neutral {
-  background: color-mix(in srgb, var(--primary) 10%, white);
-  color: var(--primary);
+  background: color-mix(in srgb, var(--teal) 10%, white);
+  color: var(--teal-strong);
 }
 
 .child-settings-row strong,
@@ -1979,6 +1980,20 @@ h3 {
   text-transform: uppercase;
 }
 
+.notification-preferences-row__channel {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.notification-preferences-row__channel .field-help-button {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+}
+
 .toggle--compact {
   justify-content: flex-start;
   min-width: 0;
@@ -2023,7 +2038,7 @@ h3 {
 .confirmation-card__partial summary {
   cursor: pointer;
   font-weight: 800;
-  color: var(--teal-dark);
+  color: var(--teal-strong);
 }
 
 .confirmation-actions {
@@ -3258,7 +3273,7 @@ h3 {
 
 .recurrence-builder {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
   gap: 12px;
 }
 
@@ -5470,12 +5485,17 @@ h3 {
 }
 
 .field-label-row {
-  align-items: center;
+  align-items: flex-start;
   display: flex;
   gap: 0.65rem;
   justify-content: space-between;
   min-width: 0;
   width: 100%;
+}
+
+.field-label-row > span:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .field-help-trigger {

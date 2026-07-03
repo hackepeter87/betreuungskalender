@@ -127,8 +127,14 @@ function NotificationPreferencesSection() {
         <div className="notification-preferences-row notification-preferences-row--head">
           <span>{copy(locale, "notifications", "event")}</span>
           <span>{copy(locale, "notifications", "inApp")}</span>
-          <span>{copy(locale, "notifications", "push")}</span>
-          <span>{copy(locale, "notifications", "email")}</span>
+          <span className="notification-preferences-row__channel">
+            {copy(locale, "notifications", "push")}
+            <FieldHelpButton fieldId="settings.notificationChannels" showRequirement={false} />
+          </span>
+          <span className="notification-preferences-row__channel">
+            {copy(locale, "notifications", "email")}
+            <FieldHelpButton fieldId="settings.notificationChannels" showRequirement={false} />
+          </span>
         </div>
         {preferences.map((preference) => (
           <div className="notification-preferences-row" key={preference.eventType}>
@@ -183,7 +189,9 @@ function CarePartyForm({ party, onDone }: { party?: CareParty; onDone: () => voi
   return (
     <form className="child-form" data-testid="care-party-form" onSubmit={submit}>
       <label className="field">
-        <span>{copy(locale, "settings", "carePartyName")}</span>
+        <FieldHelpLabel fieldId="settings.carePartyName">
+          {copy(locale, "settings", "carePartyName")}
+        </FieldHelpLabel>
         <input
           data-testid="care-party-name"
           autoFocus
@@ -194,7 +202,9 @@ function CarePartyForm({ party, onDone }: { party?: CareParty; onDone: () => voi
         />
       </label>
       <label className="field">
-        <span>{copy(locale, "settings", "carePartyKind")}</span>
+        <FieldHelpLabel fieldId="settings.carePartyKind">
+          {copy(locale, "settings", "carePartyKind")}
+        </FieldHelpLabel>
         <select
           data-testid="care-party-kind"
           value={kind}
@@ -312,7 +322,9 @@ function CalendarFeedManager() {
         </small>
       </div>
       <label className="field">
-        <span>{copy(locale, "calendarFeed", "scopeLabel")}</span>
+        <FieldHelpLabel fieldId="calendarFeed.scope">
+          {copy(locale, "calendarFeed", "scopeLabel")}
+        </FieldHelpLabel>
         <select
           data-testid="calendar-feed-scope"
           value={selectedScope}
@@ -524,7 +536,9 @@ export function SettingsPage() {
         </div>
         <div className="settings-form-grid">
           <label className="field">
-            <span>{t("settings.language.label")}</span>
+            <FieldHelpLabel fieldId="settings.language">
+              {t("settings.language.label")}
+            </FieldHelpLabel>
             <select
               data-testid="settings-language"
               value={locale}
@@ -643,7 +657,9 @@ export function SettingsPage() {
             />
           </label>
           <label className="field">
-            <span>{copy(locale, "settings", "defaultResponsibleParty")}</span>
+            <FieldHelpLabel fieldId="settings.defaultResponsibleParty">
+              {copy(locale, "settings", "defaultResponsibleParty")}
+            </FieldHelpLabel>
             <select
               value={data.settings.defaultResponsiblePartyId ?? ""}
               disabled={!canWrite || isSaving || !data.careParties.length}
