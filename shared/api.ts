@@ -95,10 +95,14 @@ export interface ApiCareEntry {
   contactRuleSegmentId?: string;
   contactRuleOccurrenceKey?: string;
   responsiblePartyId?: string;
+  actualResponsiblePartyId?: string;
   contactRuleSyncState?: "generated" | "manual_override";
   startDateTime: string;
   endDateTime: string;
+  actualStartDateTime?: string;
+  actualEndDateTime?: string;
   childIds: string[];
+  actualChildIds?: string[];
   status: ApiEntryStatus;
   confirmationState?: "unconfirmed" | "confirmed";
   confirmedAt?: string;
@@ -147,6 +151,10 @@ export interface ApiCareConfirmationAnswer {
   status: "completed" | "cancelled" | "partial";
   note?: string;
   cancellationReason?: string;
+  actualStartDateTime?: string;
+  actualEndDateTime?: string;
+  actualChildIds?: string[];
+  actualResponsiblePartyId?: string;
 }
 
 export interface ApiCareConfirmationRemindLater {

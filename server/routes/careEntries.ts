@@ -29,9 +29,12 @@ interface EntryRow {
   contact_rule_segment_id: string | null;
   contact_rule_occurrence_key: string | null;
   responsible_party_id: string | null;
+  actual_responsible_party_id: string | null;
   contact_rule_sync_state: "generated" | "manual_override" | null;
   start_datetime: string;
   end_datetime: string;
+  actual_start_datetime: string | null;
+  actual_end_datetime: string | null;
   status: ApiCareEntry["status"];
   confirmation_note: string | null;
   confirmed_at: string | null;
@@ -93,6 +96,15 @@ function getChildIds(entryId: string): string[] {
   `).all(entryId) as Array<{ childId: string }>).map((row) => row.childId);
 }
 
+function getActualChildIds(entryId: string): string[] {
+  return (db.prepare(`
+    SELECT child_id AS childId
+    FROM care_entry_actual_children
+    WHERE care_entry_id = ? AND deleted_at IS NULL
+    ORDER BY child_id
+  `).all(entryId) as Array<{ childId: string }>).map((row) => row.childId);
+}
+
 function getTrips(entryId: string): ApiTrip[] {
   const rows = db.prepare(`
     SELECT id, purpose, km, own_car, reimbursed, reimbursement_amount, notes, created_by, updated_by
@@ -140,10 +152,14 @@ function mapEntry(row: EntryRow): ApiCareEntry {
     contactRuleSegmentId: optional(row.contact_rule_segment_id),
     contactRuleOccurrenceKey: optional(row.contact_rule_occurrence_key),
     responsiblePartyId: optional(row.responsible_party_id),
+    actualResponsiblePartyId: optional(row.actual_responsible_party_id),
     contactRuleSyncState: optional(row.contact_rule_sync_state),
     startDateTime: row.start_datetime,
     endDateTime: row.end_datetime,
+    actualStartDateTime: optional(row.actual_start_datetime),
+    actualEndDateTime: optional(row.actual_end_datetime),
     childIds: getChildIds(row.id),
+    actualChildIds: getActualChildIds(row.id),
     status: row.status,
     confirmationState: row.status === "planned" && !row.confirmed_at && Date.parse(row.end_datetime) < Date.now()
       ? "unconfirmed"
@@ -366,6 +382,7 @@ function persistEntry(
         responsible_party_id = ?, contact_rule_sync_state = ?,
         start_datetime = ?, end_datetime = ?, status = ?, care_scope = ?,
         cancellation_reason = ?, confirmation_note = ?, confirmed_at = ?, confirmed_by = ?,
+        actual_start_datetime = ?, actual_end_datetime = ?, actual_responsible_party_id = ?,
         overnight = ?, school_handover = ?,
         holiday = ?, weekend = ?, additional_care = ?, location = ?, custom_location = ?,
         handover_from = ?, handover_to = ?, notes = ?, evidence_reference = ?,
@@ -382,6 +399,9 @@ function persistEntry(
       input.status === "planned" ? null : existing.confirmationNote ?? null,
       input.status === "planned" ? null : existing.confirmedAt ?? null,
       input.status === "planned" ? null : existing.confirmedBy ?? null,
+      input.status === "partial" ? existing.actualStartDateTime ?? null : null,
+      input.status === "partial" ? existing.actualEndDateTime ?? null : null,
+      input.status === "partial" ? existing.actualResponsiblePartyId ?? null : null,
       Number(input.overnight), Number(input.schoolHandover), Number(input.holiday),
       Number(input.weekend), Number(input.additionalCare), input.location ?? null,
       input.customLocation ?? null,
@@ -421,6 +441,9 @@ function persistEntry(
   }
 
   syncJunction("care_entry_children", "care_entry_id", id, input.childIds, timestamp);
+  if (existing && input.status !== "partial") {
+    syncJunction("care_entry_actual_children", "care_entry_id", id, [], timestamp);
+  }
   syncTrips(id, input.trips, userEmail, timestamp);
   syncCosts(id, input.costs, userEmail, timestamp);
 
@@ -517,6 +540,8 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
       db.prepare("UPDATE care_entries SET deleted_at = ?, updated_at = ?, updated_by = ? WHERE id = ?")
         .run(timestamp, timestamp, request.userEmail, request.params.id);
       db.prepare("UPDATE care_entry_children SET deleted_at = ?, updated_at = ? WHERE care_entry_id = ? AND deleted_at IS NULL")
+        .run(timestamp, timestamp, request.params.id);
+      db.prepare("UPDATE care_entry_actual_children SET deleted_at = ?, updated_at = ? WHERE care_entry_id = ? AND deleted_at IS NULL")
         .run(timestamp, timestamp, request.params.id);
       db.prepare("UPDATE trips SET deleted_at = ?, updated_by = ?, updated_at = ? WHERE care_entry_id = ? AND deleted_at IS NULL")
         .run(timestamp, request.userEmail, timestamp, request.params.id);

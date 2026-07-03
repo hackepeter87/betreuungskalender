@@ -27,6 +27,7 @@ discovery source; it is not synchronized or treated as current persistence.
 | `care_parties` | Domain caregivers such as parents, grandparents, or other responsible parties |
 | `care_entries` | Planned, completed, partially completed, or cancelled care periods and details |
 | `care_entry_children` | Many-to-many child assignment for care entries |
+| `care_entry_actual_children` | Actual child assignment for partially completed care entries |
 | `care_confirmation_requests` | Follow-up confirmation tasks for past planned care entries |
 | `trips` | Multiple trips belonging to a care entry |
 | `costs` | Multiple cost items belonging to a care entry |
@@ -161,6 +162,13 @@ Confirmed care entries can store `confirmation_note`, `confirmed_at`, and
 as a partial completion note. `confirmed_by` stores the stable `app_users.id`
 of the confirming user.
 
+Partially completed entries keep the planned entry intact and store actual
+completion details separately: `actual_start_datetime`,
+`actual_end_datetime`, `actual_responsible_party_id`, and
+`care_entry_actual_children`. Reports and holiday allocation use these actual
+values for `partial` entries, while planned child assignments and planned times
+remain available for auditability and later comparison.
+
 ## Care confirmations and notifications
 
 `care_confirmation_requests` stores one active confirmation task per care entry
@@ -223,7 +231,8 @@ write-once archive.
 The browser backup envelope contains an application identifier, export
 timestamp, schema version, children, care entries with trips and costs,
 care parties, holidays, contact patterns, unavailable periods, audit entries,
-monthly closures, settings, actor metadata, and backup metadata. Import normalizes
+monthly closures, settings, actor metadata, partial-care actual details, and
+backup metadata. Import normalizes
 older supported schema versions and fills missing actor metadata with the
 importing user or the legacy `local-dev` actor where no authenticated actor is
 available.

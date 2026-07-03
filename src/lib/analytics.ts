@@ -54,6 +54,30 @@ function activeCosts(entry: CareEntry) {
   return entry.costs.filter((cost) => !cost.deletedAt);
 }
 
+export function actualChildIds(entry: CareEntry): string[] {
+  return entry.status === "partial" && entry.actualChildIds?.length
+    ? entry.actualChildIds
+    : entry.childIds;
+}
+
+export function actualStartDateTime(entry: CareEntry): string {
+  return entry.status === "partial" && entry.actualStartDateTime
+    ? entry.actualStartDateTime
+    : entry.startDateTime;
+}
+
+export function actualEndDateTime(entry: CareEntry): string {
+  return entry.status === "partial" && entry.actualEndDateTime
+    ? entry.actualEndDateTime
+    : entry.endDateTime;
+}
+
+export function actualResponsiblePartyId(entry: CareEntry): string | undefined {
+  return entry.status === "partial" && entry.actualResponsiblePartyId
+    ? entry.actualResponsiblePartyId
+    : entry.responsiblePartyId;
+}
+
 export function isEntryComplete(entry: CareEntry): boolean {
   return Boolean(
     !entry.deletedAt &&
@@ -124,14 +148,16 @@ export function unavailableForEntry(
   periods: UnavailablePeriod[],
   options?: { affectsContactOnly?: boolean; dutyRelatedOnly?: boolean }
 ): UnavailablePeriod[] {
+  const startDateTime = actualStartDateTime(entry);
+  const endDateTime = actualEndDateTime(entry);
   return periods.filter(
     (period) =>
       !period.deletedAt &&
       (!options?.affectsContactOnly || period.affectsContact) &&
       (!options?.dutyRelatedOnly || period.dutyRelated) &&
       dateTimeRangesOverlap(
-        entry.startDateTime,
-        entry.endDateTime,
+        startDateTime,
+        endDateTime,
         period.startDateTime,
         period.endDateTime
       )
@@ -139,7 +165,7 @@ export function unavailableForEntry(
 }
 
 function clippedEntryDates(entry: CareEntry, startDate: string, endDate: string): string[] {
-  return entryDateKeys(entry.startDateTime, entry.endDateTime).filter(
+  return entryDateKeys(actualStartDateTime(entry), actualEndDateTime(entry)).filter(
     (dateKey) => dateKey >= startDate && dateKey <= endDate
   );
 }
@@ -150,10 +176,12 @@ function clippedOvernightCount(
   endDate: string
 ): number {
   if (!entry.overnight) return 0;
-  const totalNights = countEntryOvernights(entry.startDateTime, entry.endDateTime);
+  const startDateTime = actualStartDateTime(entry);
+  const endDateTime = actualEndDateTime(entry);
+  const totalNights = countEntryOvernights(startDateTime, endDateTime);
   if (totalNights === 0) return 1;
-  const firstNight = entry.startDateTime.slice(0, 10);
-  const lastNight = addDays(entry.endDateTime.slice(0, 10), -1);
+  const firstNight = startDateTime.slice(0, 10);
+  const lastNight = addDays(endDateTime.slice(0, 10), -1);
   if (!rangesOverlap(firstNight, lastNight, startDate, endDate)) return 0;
   const clippedStart = firstNight > startDate ? firstNight : startDate;
   const clippedEnd = lastNight < endDate ? lastNight : endDate;
@@ -200,13 +228,16 @@ export function calculateHolidayStats(
 
   for (const entry of entries) {
     if (entry.deletedAt || entry.status === "cancelled") continue;
-    if (childId && !entry.childIds.includes(childId)) continue;
-    if (!rangesOverlap(entry.startDateTime.slice(0, 10), entry.endDateTime.slice(0, 10), startDate, endDate)) continue;
-    const responsiblePartyId = entry.responsiblePartyId ?? defaultResponsiblePartyId ?? "__unassigned";
-    for (const dateKey of entryDateKeys(entry.startDateTime, entry.endDateTime)) {
+    const entryChildIds = actualChildIds(entry);
+    if (childId && !entryChildIds.includes(childId)) continue;
+    const startDateTime = actualStartDateTime(entry);
+    const endDateTime = actualEndDateTime(entry);
+    if (!rangesOverlap(startDateTime.slice(0, 10), endDateTime.slice(0, 10), startDate, endDate)) continue;
+    const responsiblePartyId = actualResponsiblePartyId(entry) ?? defaultResponsiblePartyId ?? "__unassigned";
+    for (const dateKey of entryDateKeys(startDateTime, endDateTime)) {
       if (dateKey < startDate || dateKey > endDate) continue;
-      const entryChildIds = childId ? [childId] : entry.childIds;
-      for (const entryChildId of entryChildIds) {
+      const scopedChildIds = childId ? [childId] : entryChildIds;
+      for (const entryChildId of scopedChildIds) {
         if (!holidaySlotMatches(dateKey, entryChildId)) continue;
         const slotKey = `${dateKey}|${entryChildId}`;
         const current = entryAssignments.get(slotKey) ?? new Set<string>();
@@ -330,7 +361,12 @@ function calculateEntityStats(
   childId?: string
 ): PeriodChildStats {
   const relevant = childId
-    ? entries.filter((entry) => entry.childIds.includes(childId))
+    ? entries.filter((entry) =>
+        (entry.status === "completed" || entry.status === "partial"
+          ? actualChildIds(entry)
+          : entry.childIds
+        ).includes(childId)
+      )
     : entries;
   const completed = relevant.filter((entry) => entry.status === "completed" || entry.status === "partial");
   const careDays = new Set<string>();
@@ -348,8 +384,10 @@ function calculateEntityStats(
   for (const entry of completed) {
     const rangeStart = new Date(`${startDate}T00:00:00`).getTime();
     const rangeEnd = new Date(`${addDays(endDate, 1)}T00:00:00`).getTime();
-    const clippedStart = Math.max(new Date(entry.startDateTime).getTime(), rangeStart);
-    const clippedEnd = Math.min(new Date(entry.endDateTime).getTime(), rangeEnd);
+    const startDateTime = actualStartDateTime(entry);
+    const endDateTime = actualEndDateTime(entry);
+    const clippedStart = Math.max(new Date(startDateTime).getTime(), rangeStart);
+    const clippedEnd = Math.min(new Date(endDateTime).getTime(), rangeEnd);
     careHours += Math.max(0, clippedEnd - clippedStart) / 3_600_000;
 
     for (const dateKey of clippedEntryDates(entry, startDate, endDate)) {
@@ -360,11 +398,11 @@ function calculateEntityStats(
       }
     }
 
-    const share = childId ? 1 / Math.max(1, entry.childIds.length) : 1;
+    const share = childId ? 1 / Math.max(1, actualChildIds(entry).length) : 1;
     const entryOvernights = clippedOvernightCount(entry, startDate, endDate);
     overnights += entryOvernights;
     if (entry.schoolHandover) schoolHandovers += 1;
-    if (entry.overnight && isWeekdayOvernight(entry.startDateTime)) {
+    if (entry.overnight && isWeekdayOvernight(startDateTime)) {
       weekdayOvernights += entryOvernights;
     }
 
@@ -424,7 +462,7 @@ export function calculatePeriodStats(
   const costsByCategory = emptyCosts();
 
   for (const entry of entries) {
-    if (entry.status !== "completed") continue;
+    if (entry.status !== "completed" && entry.status !== "partial") continue;
     for (const cost of activeCosts(entry)) costsByCategory[cost.category] += cost.amount;
   }
 

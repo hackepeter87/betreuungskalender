@@ -10,7 +10,8 @@ import type {
 import { db } from "../db/connection.js";
 import { config } from "../config.js";
 import { markClosedMonthsChanged, recordAudit, recordFieldChanges } from "./audit.js";
-import { bool, makeId, nowIso } from "./common.js";
+import { assertActiveCareParty } from "./careParties.js";
+import { assertActiveChildren, bool, makeId, nowIso, syncJunction } from "./common.js";
 
 const notificationEvents: ApiNotificationEventType[] = [
   "care_confirmation_due",
@@ -53,9 +54,12 @@ interface EntryRow {
   contact_rule_segment_id: string | null;
   contact_rule_occurrence_key: string | null;
   responsible_party_id: string | null;
+  actual_responsible_party_id: string | null;
   contact_rule_sync_state: "generated" | "manual_override" | null;
   start_datetime: string;
   end_datetime: string;
+  actual_start_datetime: string | null;
+  actual_end_datetime: string | null;
   status: "planned" | "completed" | "cancelled" | "partial";
   confirmation_note: string | null;
   confirmed_at: string | null;
@@ -109,6 +113,15 @@ function childIds(entryId: string): string[] {
   `).all(entryId) as Array<{ childId: string }>).map((row) => row.childId);
 }
 
+function actualChildIds(entryId: string): string[] {
+  return (db.prepare(`
+    SELECT child_id AS childId
+    FROM care_entry_actual_children
+    WHERE care_entry_id = ? AND deleted_at IS NULL
+    ORDER BY child_id
+  `).all(entryId) as Array<{ childId: string }>).map((row) => row.childId);
+}
+
 function mapEntry(row: EntryRow): ApiCareConfirmationRequest["entry"] {
   const unconfirmed = row.status === "planned" && !row.confirmed_at && Date.parse(row.end_datetime) < Date.now();
   return {
@@ -119,10 +132,14 @@ function mapEntry(row: EntryRow): ApiCareConfirmationRequest["entry"] {
     contactRuleSegmentId: optional(row.contact_rule_segment_id),
     contactRuleOccurrenceKey: optional(row.contact_rule_occurrence_key),
     responsiblePartyId: optional(row.responsible_party_id),
+    actualResponsiblePartyId: optional(row.actual_responsible_party_id),
     contactRuleSyncState: optional(row.contact_rule_sync_state),
     startDateTime: row.start_datetime,
     endDateTime: row.end_datetime,
+    actualStartDateTime: optional(row.actual_start_datetime),
+    actualEndDateTime: optional(row.actual_end_datetime),
     childIds: childIds(row.id),
+    actualChildIds: actualChildIds(row.id),
     status: row.status,
     ...(unconfirmed ? { confirmationState: "unconfirmed" as const } : row.confirmed_at ? { confirmationState: "confirmed" as const } : {}),
     confirmedAt: optional(row.confirmed_at),
@@ -482,11 +499,28 @@ export function answerCareConfirmation(
   if (!before) return undefined;
   const timestamp = nowIso();
   const note = answer.note?.trim() || answer.cancellationReason?.trim() || null;
+  const actualStartDateTime = answer.status === "partial"
+    ? answer.actualStartDateTime ?? before.start_datetime
+    : null;
+  const actualEndDateTime = answer.status === "partial"
+    ? answer.actualEndDateTime ?? before.end_datetime
+    : null;
+  const actualResponsiblePartyId = answer.status === "partial"
+    ? answer.actualResponsiblePartyId ?? before.responsible_party_id
+    : null;
+  const resolvedActualChildIds = answer.status === "partial"
+    ? [...new Set(answer.actualChildIds ?? childIds(before.id))]
+    : [];
+  if (answer.status === "partial") {
+    assertActiveChildren(resolvedActualChildIds);
+    assertActiveCareParty(actualResponsiblePartyId ?? undefined);
+  }
   db.transaction(() => {
     db.prepare(`
       UPDATE care_entries
       SET status = ?, confirmation_note = ?, confirmed_at = ?, confirmed_by = ?,
-        cancellation_reason = ?, updated_by = ?, updated_at = ?
+        cancellation_reason = ?, actual_start_datetime = ?, actual_end_datetime = ?,
+        actual_responsible_party_id = ?, updated_by = ?, updated_at = ?
       WHERE id = ?
     `).run(
       answer.status,
@@ -494,10 +528,14 @@ export function answerCareConfirmation(
       timestamp,
       userId,
       answer.status === "cancelled" ? answer.cancellationReason?.trim() || answer.note?.trim() || null : null,
+      actualStartDateTime,
+      actualEndDateTime,
+      actualResponsiblePartyId,
       userId,
       timestamp,
       before.id
     );
+    syncJunction("care_entry_actual_children", "care_entry_id", before.id, resolvedActualChildIds, timestamp);
     db.prepare(`
       UPDATE care_confirmation_requests
       SET status = 'answered', answered_at = ?, updated_at = ?

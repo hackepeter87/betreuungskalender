@@ -100,7 +100,11 @@ export interface CareEntry {
   contactRuleSegmentId?: string;
   contactRuleOccurrenceKey?: string;
   responsiblePartyId?: string;
+  actualResponsiblePartyId?: string;
   contactRuleSyncState?: "generated" | "manual_override";
+  actualStartDateTime?: string;
+  actualEndDateTime?: string;
+  actualChildIds?: string[];
   overnight: boolean;
   schoolHandover: boolean;
   holiday: boolean;

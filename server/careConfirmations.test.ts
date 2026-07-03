@@ -28,9 +28,11 @@ function resetDatabase(): void {
     db.prepare("DELETE FROM care_confirmation_requests").run();
     db.prepare("DELETE FROM notification_preferences").run();
     db.prepare("DELETE FROM push_subscriptions").run();
+    db.prepare("DELETE FROM care_entry_actual_children").run();
     db.prepare("DELETE FROM care_entry_children").run();
     db.prepare("DELETE FROM care_entries").run();
     db.prepare("DELETE FROM children").run();
+    db.prepare("DELETE FROM care_parties").run();
     db.prepare("DELETE FROM audit_log").run();
     db.prepare("DELETE FROM monthly_closings").run();
     db.prepare("DELETE FROM app_users WHERE id <> 'local-dev'").run();
@@ -39,12 +41,13 @@ function resetDatabase(): void {
 
 function insertPastPlannedEntry(id = "entry-confirmation-a"): void {
   const timestamp = "2026-07-01T10:00:00.000Z";
-  db.prepare(`
+  const childInsert = db.prepare(`
     INSERT INTO children (
       id, name, birth_month, birth_year, color, created_by, updated_by,
       created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  `);
+  childInsert.run(
     "child-confirmation-a",
     "Testkind",
     4,
@@ -55,13 +58,37 @@ function insertPastPlannedEntry(id = "entry-confirmation-a"): void {
     timestamp,
     timestamp
   );
+  childInsert.run(
+    "child-confirmation-b",
+    "Testkind 2",
+    8,
+    2020,
+    "#6967d9",
+    "local-dev",
+    "local-dev",
+    timestamp,
+    timestamp
+  );
+  db.prepare(`
+    INSERT INTO care_parties (
+      id, name, kind, created_by, updated_by, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    "party-confirmation-a",
+    "Hauptbetreuung",
+    "other",
+    "local-dev",
+    "local-dev",
+    timestamp,
+    timestamp
+  );
   db.prepare(`
     INSERT INTO care_entries (
       id, start_datetime, end_datetime, status, care_scope,
       overnight, school_handover, holiday, weekend, additional_care,
-      duration_minutes, is_contact_time, created_by, updated_by,
+      responsible_party_id, duration_minutes, is_contact_time, created_by, updated_by,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     "2026-07-02T16:00:00.000Z",
@@ -73,6 +100,7 @@ function insertPastPlannedEntry(id = "entry-confirmation-a"): void {
     0,
     0,
     0,
+    "party-confirmation-a",
     120,
     0,
     "local-dev",
@@ -80,11 +108,13 @@ function insertPastPlannedEntry(id = "entry-confirmation-a"): void {
     timestamp,
     timestamp
   );
-  db.prepare(`
+  const childLinkInsert = db.prepare(`
     INSERT INTO care_entry_children (
       care_entry_id, child_id, created_at, updated_at
     ) VALUES (?, ?, ?, ?)
-  `).run(id, "child-confirmation-a", timestamp, timestamp);
+  `);
+  childLinkInsert.run(id, "child-confirmation-a", timestamp, timestamp);
+  childLinkInsert.run(id, "child-confirmation-b", timestamp, timestamp);
 }
 
 beforeEach(resetDatabase);
@@ -118,11 +148,17 @@ test("answers a confirmation request and stores partial status with audit metada
 
   const answered = answerCareConfirmation(request.id, "local-dev", {
     status: "partial",
-    note: "Fiktive Teilbestätigung"
+    note: "Fiktive Teilbestätigung",
+    actualChildIds: ["child-confirmation-a"],
+    actualStartDateTime: "2026-07-02T17:00:00.000Z",
+    actualEndDateTime: "2026-07-02T18:00:00.000Z",
+    actualResponsiblePartyId: "party-confirmation-a"
   });
   const entry = db.prepare(`
     SELECT status, confirmation_note AS confirmationNote, confirmed_by AS confirmedBy,
-      confirmed_at AS confirmedAt
+      confirmed_at AS confirmedAt, actual_start_datetime AS actualStartDateTime,
+      actual_end_datetime AS actualEndDateTime,
+      actual_responsible_party_id AS actualResponsiblePartyId
     FROM care_entries
     WHERE id = ?
   `).get("entry-confirmation-a") as {
@@ -130,7 +166,16 @@ test("answers a confirmation request and stores partial status with audit metada
     confirmationNote: string;
     confirmedBy: string;
     confirmedAt: string;
+    actualStartDateTime: string;
+    actualEndDateTime: string;
+    actualResponsiblePartyId: string;
   };
+  const actualChildren = db.prepare(`
+    SELECT child_id AS childId
+    FROM care_entry_actual_children
+    WHERE care_entry_id = ? AND deleted_at IS NULL
+    ORDER BY child_id
+  `).all("entry-confirmation-a") as Array<{ childId: string }>;
   const openCount = db.prepare(`
     SELECT COUNT(*) AS count FROM care_confirmation_requests
     WHERE status IN ('open', 'snoozed')
@@ -141,6 +186,12 @@ test("answers a confirmation request and stores partial status with audit metada
   assert.equal(entry.confirmationNote, "Fiktive Teilbestätigung");
   assert.equal(entry.confirmedBy, "local-dev");
   assert.match(entry.confirmedAt, /^\d{4}-\d{2}-\d{2}T/);
+  assert.equal(entry.actualStartDateTime, "2026-07-02T17:00:00.000Z");
+  assert.equal(entry.actualEndDateTime, "2026-07-02T18:00:00.000Z");
+  assert.equal(entry.actualResponsiblePartyId, "party-confirmation-a");
+  assert.deepEqual(actualChildren, [{ childId: "child-confirmation-a" }]);
+  assert.deepEqual(answered?.entry.actualChildIds, ["child-confirmation-a"]);
+  assert.equal(answered?.entry.actualStartDateTime, "2026-07-02T17:00:00.000Z");
   assert.equal(openCount.count, 0);
 });
 

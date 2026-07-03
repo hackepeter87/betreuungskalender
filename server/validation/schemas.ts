@@ -247,7 +247,11 @@ export const careConfirmationAnswerSchema = z
   .object({
     status: z.enum(["completed", "cancelled", "partial"]),
     note: z.string().trim().max(4000).optional(),
-    cancellationReason: z.string().trim().max(4000).optional()
+    cancellationReason: z.string().trim().max(4000).optional(),
+    actualStartDateTime: isoDateTime.optional(),
+    actualEndDateTime: isoDateTime.optional(),
+    actualChildIds: z.array(z.string().trim().min(1)).optional(),
+    actualResponsiblePartyId: z.string().trim().min(1).max(200).optional()
   })
   .superRefine((answer, context) => {
     if (answer.status === "cancelled" && !answer.cancellationReason?.trim() && !answer.note?.trim()) {
@@ -256,6 +260,22 @@ export const careConfirmationAnswerSchema = z
         path: ["cancellationReason"],
         message: "Ein ausgefallener Termin benötigt einen kurzen Grund."
       });
+    }
+    if (answer.status === "partial") {
+      if (answer.actualChildIds && answer.actualChildIds.length === 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["actualChildIds"],
+          message: "Bei teilweiser Durchführung muss mindestens ein tatsächlich betreutes Kind ausgewählt werden."
+        });
+      }
+      if (answer.actualStartDateTime && answer.actualEndDateTime && Date.parse(answer.actualEndDateTime) <= Date.parse(answer.actualStartDateTime)) {
+        context.addIssue({
+          code: "custom",
+          path: ["actualEndDateTime"],
+          message: "Das tatsächliche Ende muss nach dem tatsächlichen Beginn liegen."
+        });
+      }
     }
   });
 

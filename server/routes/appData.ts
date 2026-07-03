@@ -59,6 +59,7 @@ function stringArray(record: DataRecord, key: string): string[] {
 
 export function clearDomainData(): void {
   for (const table of [
+    "care_entry_actual_children",
     "care_entry_children",
     "holiday_period_children",
     "contact_rule_children",
@@ -206,6 +207,22 @@ export function insertEntry(record: DataRecord, timestamp: string, userEmail: st
   const durationMinutes = Math.round(
     (Date.parse(input.endDateTime) - Date.parse(input.startDateTime)) / 60000
   );
+  const importedActualChildIds = stringArray(record, "actualChildIds");
+  const actualStartDateTime = input.status === "partial"
+    ? optionalText(record, "actualStartDateTime") ?? input.startDateTime
+    : null;
+  const actualEndDateTime = input.status === "partial"
+    ? optionalText(record, "actualEndDateTime") ?? input.endDateTime
+    : null;
+  if (actualStartDateTime && actualEndDateTime && Date.parse(actualEndDateTime) <= Date.parse(actualStartDateTime)) {
+    throw new Error("Tatsächliches Ende eines teilweise bestätigten Betreuungseintrags muss nach dem Beginn liegen.");
+  }
+  const actualResponsiblePartyId = input.status === "partial"
+    ? optionalText(record, "actualResponsiblePartyId") ?? input.responsiblePartyId ?? null
+    : null;
+  const actualChildIds = input.status === "partial"
+    ? importedActualChildIds.length ? importedActualChildIds : input.childIds
+    : [];
   db.prepare(`
     INSERT INTO care_entries (
       id, generated_by_pattern_id, rule_occurrence_date,
@@ -213,11 +230,12 @@ export function insertEntry(record: DataRecord, timestamp: string, userEmail: st
       responsible_party_id, contact_rule_sync_state,
       start_datetime, end_datetime, status, care_scope, cancellation_reason,
       confirmation_note, confirmed_at, confirmed_by,
+      actual_start_datetime, actual_end_datetime, actual_responsible_party_id,
       overnight, school_handover, holiday, weekend, additional_care, location,
       custom_location, handover_from, handover_to, notes, evidence_reference,
       has_evidence, duration_minutes, is_contact_time, created_by, updated_by,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     input.generatedByPatternId ?? null,
@@ -235,6 +253,9 @@ export function insertEntry(record: DataRecord, timestamp: string, userEmail: st
     optionalText(record, "confirmationNote"),
     optionalText(record, "confirmedAt"),
     optionalText(record, "confirmedBy"),
+    actualStartDateTime,
+    actualEndDateTime,
+    actualResponsiblePartyId,
     Number(input.overnight),
     Number(input.schoolHandover),
     Number(input.holiday),
@@ -260,6 +281,12 @@ export function insertEntry(record: DataRecord, timestamp: string, userEmail: st
     ) VALUES (?, ?, ?, ?)
   `);
   for (const childId of input.childIds) junction.run(id, childId, createdAt, updatedAt);
+  const actualJunction = db.prepare(`
+    INSERT INTO care_entry_actual_children (
+      care_entry_id, child_id, created_at, updated_at
+    ) VALUES (?, ?, ?, ?)
+  `);
+  for (const childId of actualChildIds) actualJunction.run(id, childId, createdAt, updatedAt);
   const tripInsert = db.prepare(`
     INSERT INTO trips (
       id, care_entry_id, purpose, km, own_car, reimbursed,
