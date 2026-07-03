@@ -14,6 +14,13 @@ export const careScopes = [
 
 export type CareScope = (typeof careScopes)[number];
 export type ApiEntryStatus = "planned" | "completed" | "cancelled" | "partial";
+export type ApiCareDeviationType =
+  | "cancelled"
+  | "partial"
+  | "rescheduled"
+  | "swapped"
+  | "externally_blocked"
+  | "other";
 export type ApiCareConfirmationStatus = "open" | "answered" | "snoozed";
 export type ApiNotificationEventType = "care_confirmation_due" | "care_confirmation_reminder";
 
@@ -99,11 +106,15 @@ export interface ApiCareEntry {
   contactRuleSyncState?: "generated" | "manual_override";
   startDateTime: string;
   endDateTime: string;
+  plannedStartDateTime?: string;
+  plannedEndDateTime?: string;
   actualStartDateTime?: string;
   actualEndDateTime?: string;
   childIds: string[];
   actualChildIds?: string[];
   status: ApiEntryStatus;
+  deviationType?: ApiCareDeviationType;
+  deviationNote?: string;
   confirmationState?: "unconfirmed" | "confirmed";
   confirmedAt?: string;
   confirmedBy?: string;

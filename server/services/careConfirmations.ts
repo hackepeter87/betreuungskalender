@@ -58,9 +58,13 @@ interface EntryRow {
   contact_rule_sync_state: "generated" | "manual_override" | null;
   start_datetime: string;
   end_datetime: string;
+  planned_start_datetime: string | null;
+  planned_end_datetime: string | null;
   actual_start_datetime: string | null;
   actual_end_datetime: string | null;
   status: "planned" | "completed" | "cancelled" | "partial";
+  deviation_type: "cancelled" | "partial" | "rescheduled" | "swapped" | "externally_blocked" | "other" | null;
+  deviation_note: string | null;
   confirmation_note: string | null;
   confirmed_at: string | null;
   confirmed_by: string | null;
@@ -136,11 +140,15 @@ function mapEntry(row: EntryRow): ApiCareConfirmationRequest["entry"] {
     contactRuleSyncState: optional(row.contact_rule_sync_state),
     startDateTime: row.start_datetime,
     endDateTime: row.end_datetime,
+    plannedStartDateTime: optional(row.planned_start_datetime),
+    plannedEndDateTime: optional(row.planned_end_datetime),
     actualStartDateTime: optional(row.actual_start_datetime),
     actualEndDateTime: optional(row.actual_end_datetime),
     childIds: childIds(row.id),
     actualChildIds: actualChildIds(row.id),
     status: row.status,
+    deviationType: optional(row.deviation_type),
+    deviationNote: optional(row.deviation_note),
     ...(unconfirmed ? { confirmationState: "unconfirmed" as const } : row.confirmed_at ? { confirmationState: "confirmed" as const } : {}),
     confirmedAt: optional(row.confirmed_at),
     confirmedBy: optional(row.confirmed_by),
@@ -519,6 +527,7 @@ export function answerCareConfirmation(
     db.prepare(`
       UPDATE care_entries
       SET status = ?, confirmation_note = ?, confirmed_at = ?, confirmed_by = ?,
+        planned_start_datetime = ?, planned_end_datetime = ?, deviation_type = ?, deviation_note = ?,
         cancellation_reason = ?, actual_start_datetime = ?, actual_end_datetime = ?,
         actual_responsible_party_id = ?, updated_by = ?, updated_at = ?
       WHERE id = ?
@@ -527,6 +536,10 @@ export function answerCareConfirmation(
       note,
       timestamp,
       userId,
+      answer.status === "completed" ? null : before.planned_start_datetime ?? before.start_datetime,
+      answer.status === "completed" ? null : before.planned_end_datetime ?? before.end_datetime,
+      answer.status === "completed" ? null : answer.status,
+      answer.status === "completed" ? null : note,
       answer.status === "cancelled" ? answer.cancellationReason?.trim() || answer.note?.trim() || null : null,
       actualStartDateTime,
       actualEndDateTime,

@@ -1,7 +1,8 @@
 import { useMemo } from "react";
-import { enumerateDateKeys, formatShortDate, formatTime } from "../lib/date";
+import { enumerateDateKeys, formatDate, formatShortDate, formatTime } from "../lib/date";
 import { unavailableForEntry } from "../lib/analytics";
 import {
+  deviationLabel,
   locationLabels,
   statusLabels,
   unavailableCategoryLabels
@@ -208,7 +209,18 @@ export function CalendarAgenda({
                       {entry.overnight ? <span><Icon name="moon" size={14} />{copy(locale, "agenda", "overnight")}</span> : null}
                       {entry.additionalCare ? <span><Icon name="plus" size={14} />{copy(locale, "agenda", "additionalCare")}</span> : null}
                       {entry.holiday ? <span><Icon name="sun" size={14} />{copy(locale, "agenda", "holiday")}</span> : null}
+                      {entry.deviationType ? <span><Icon name="history" size={14} />{deviationLabel(entry.deviationType, locale)}</span> : null}
                     </span>
+                    {entry.plannedStartDateTime && entry.plannedEndDateTime ? (
+                      <span className="agenda-card__warning agenda-card__warning--neutral">
+                        <Icon name="calendar" size={15} />
+                        {copy(locale, "agenda", "originalPlan", {
+                          date: formatDate(entry.plannedStartDateTime, intlLocale),
+                          start: formatTime(entry.plannedStartDateTime, intlLocale),
+                          end: formatTime(entry.plannedEndDateTime, intlLocale)
+                        })}
+                      </span>
+                    ) : null}
                     {hasOverlap ? (
                       <span className="agenda-card__warning">
                         <Icon name="alert" size={15} />

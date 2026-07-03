@@ -1,4 +1,5 @@
 import type {
+  CareDeviationType,
   CareLocation,
   CostCategory,
   EntryStatus,
@@ -80,16 +81,27 @@ export const unavailableCategoryLabels: Record<UnavailableCategory, string> = {
   other: catalog.de.labels.other
 };
 
+export const deviationLabels: Record<CareDeviationType, string> = {
+  cancelled: catalog.de.entryForm.deviationCancelled,
+  partial: catalog.de.entryForm.deviationPartial,
+  rescheduled: catalog.de.entryForm.deviationRescheduled,
+  swapped: catalog.de.entryForm.deviationSwapped,
+  externally_blocked: catalog.de.entryForm.deviationExternallyBlocked,
+  other: catalog.de.entryForm.deviationOther
+};
+
 const localizedLabels = {
   de: {
     status: statusLabels,
     costCategory: costCategoryLabels,
-    unavailableCategory: unavailableCategoryLabels
+    unavailableCategory: unavailableCategoryLabels,
+    deviation: deviationLabels
   },
   en: {
     status: { completed: catalog.en.labels.completed, planned: catalog.en.labels.planned, cancelled: catalog.en.labels.cancelled, partial: catalog.en.labels.partial },
     costCategory: { food: catalog.en.labels.food, leisure: catalog.en.labels.leisure, school: catalog.en.labels.school, clothing: catalog.en.labels.clothing, travel: catalog.en.labels.travel, other: catalog.en.labels.other },
-    unavailableCategory: { duty: catalog.en.labels.duty, training_course: catalog.en.labels.trainingCourse, exercise: catalog.en.labels.exercise, guard_duty: catalog.en.labels.guardDuty, standby: catalog.en.labels.standby, deployment: catalog.en.labels.deployment, business_trip: catalog.en.labels.businessTrip, illness: catalog.en.labels.illness, private_unavailability: catalog.en.labels.privateUnavailability, vacation_without_children: catalog.en.labels.vacationWithoutChildren, other: catalog.en.labels.other }
+    unavailableCategory: { duty: catalog.en.labels.duty, training_course: catalog.en.labels.trainingCourse, exercise: catalog.en.labels.exercise, guard_duty: catalog.en.labels.guardDuty, standby: catalog.en.labels.standby, deployment: catalog.en.labels.deployment, business_trip: catalog.en.labels.businessTrip, illness: catalog.en.labels.illness, private_unavailability: catalog.en.labels.privateUnavailability, vacation_without_children: catalog.en.labels.vacationWithoutChildren, other: catalog.en.labels.other },
+    deviation: { cancelled: catalog.en.entryForm.deviationCancelled, partial: catalog.en.entryForm.deviationPartial, rescheduled: catalog.en.entryForm.deviationRescheduled, swapped: catalog.en.entryForm.deviationSwapped, externally_blocked: catalog.en.entryForm.deviationExternallyBlocked, other: catalog.en.entryForm.deviationOther }
   }
 } satisfies Record<
   AppLocale,
@@ -97,6 +109,7 @@ const localizedLabels = {
     status: Record<EntryStatus, string>;
     costCategory: Record<CostCategory, string>;
     unavailableCategory: Record<UnavailableCategory, string>;
+    deviation: Record<CareDeviationType, string>;
   }
 >;
 
@@ -116,6 +129,10 @@ export function unavailableCategoryLabel(
   locale: AppLocale
 ): string {
   return localizedLabels[locale].unavailableCategory[category];
+}
+
+export function deviationLabel(deviation: CareDeviationType, locale: AppLocale): string {
+  return localizedLabels[locale].deviation[deviation];
 }
 
 export function locationLabel(location: CareLocation, locale: AppLocale): string {

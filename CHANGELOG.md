@@ -14,6 +14,9 @@ project follows semantic versioning where practical.
 - Added actual-care fields for partially completed entries so confirmations can
   record actual children, time ranges, and responsible care parties separately
   from the original plan.
+- Added care-entry deviation metadata for rescheduled, swapped, externally
+  blocked, cancelled, partial, and other factual deviations while preserving
+  the original planned period.
 
 ### Changed
 
@@ -22,6 +25,8 @@ project follows semantic versioning where practical.
   father/mother/shared holiday assignments.
 - Changed holiday and period statistics to use actual children, actual times,
   and actual care parties for partially completed care entries.
+- Updated entry, agenda, and report surfaces to show documented deviations and
+  the original planned period where applicable.
 - Updated holiday management copy so holiday blocks are described as planning
   frames while actual holiday credit comes from normal care entries.
 

@@ -17,6 +17,14 @@ const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, {
 });
 
 const childIds = z.array(z.string().min(1)).min(1, "Mindestens ein Kind ist erforderlich.");
+const careDeviationTypeSchema = z.enum([
+  "cancelled",
+  "partial",
+  "rescheduled",
+  "swapped",
+  "externally_blocked",
+  "other"
+]);
 
 export const childInputSchema = z.object({
   name: z.string().trim().min(1, "Name ist erforderlich.").max(200),
@@ -52,6 +60,8 @@ export const careEntryInputSchema = z
   .object({
     startDateTime: isoDateTime,
     endDateTime: isoDateTime,
+    plannedStartDateTime: isoDateTime.optional(),
+    plannedEndDateTime: isoDateTime.optional(),
     childIds,
     generatedByPatternId: z.string().trim().min(1).max(200).optional(),
     ruleOccurrenceDate: dateKey.optional(),
@@ -61,6 +71,8 @@ export const careEntryInputSchema = z
     responsiblePartyId: z.string().trim().min(1).max(200).optional(),
     contactRuleSyncState: z.enum(["generated", "manual_override"]).optional(),
     status: z.enum(["planned", "completed", "cancelled", "partial"]),
+    deviationType: careDeviationTypeSchema.optional(),
+    deviationNote: z.string().trim().max(4000).optional(),
     careScope: z.enum(careScopes).default("hourly"),
     cancellationReason: z.string().trim().max(4000).optional(),
     overnight: z.boolean().default(false),
@@ -93,6 +105,13 @@ export const careEntryInputSchema = z
         code: "custom",
         path: ["cancellationReason"],
         message: "Ein ausgefallener Termin benötigt einen Ausfallgrund."
+      });
+    }
+    if (entry.plannedStartDateTime && entry.plannedEndDateTime && Date.parse(entry.plannedEndDateTime) <= Date.parse(entry.plannedStartDateTime)) {
+      context.addIssue({
+        code: "custom",
+        path: ["plannedEndDateTime"],
+        message: "Das ursprüngliche Soll-Ende muss nach dem Soll-Beginn liegen."
       });
     }
   });

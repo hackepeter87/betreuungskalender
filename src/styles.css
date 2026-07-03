@@ -2303,8 +2303,15 @@ h3 {
   gap: 8px;
 }
 
+.deviation-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .choice-card {
   display: flex;
+  min-width: 0;
   min-height: 44px;
   align-items: center;
   gap: 9px;
@@ -2317,6 +2324,27 @@ h3 {
   cursor: pointer;
 }
 
+.choice-card--stacked {
+  min-height: 86px;
+  align-items: flex-start;
+  flex-direction: column;
+  justify-content: center;
+  padding: 12px;
+  line-height: 1.35;
+}
+
+.choice-card--stacked strong,
+.choice-card--stacked span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.choice-card--stacked span {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
 .choice-card--selected {
   border-color: #8fc9c6;
   background: var(--teal-soft);
@@ -2325,6 +2353,20 @@ h3 {
 .choice-card input {
   position: absolute;
   opacity: 0;
+}
+
+.form-section__hint {
+  margin: -2px 0 12px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.deviation-details {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .form-grid,
@@ -2914,7 +2956,8 @@ h3 {
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .child-choice-grid {
+  .child-choice-grid,
+  .deviation-choice-grid {
     grid-template-columns: 1fr;
   }
 
@@ -5196,6 +5239,11 @@ h3 {
 .rule-entry__overlap {
   grid-column: 1 / -1;
   margin-top: -4px;
+}
+
+.agenda-card__warning--neutral {
+  background: #f2f5f9;
+  color: var(--muted);
 }
 
 .notice--recommendation {

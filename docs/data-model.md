@@ -162,6 +162,14 @@ Confirmed care entries can store `confirmation_note`, `confirmed_at`, and
 as a partial completion note. `confirmed_by` stores the stable `app_users.id`
 of the confirming user.
 
+Entries that differ from the original plan can store transparent deviation
+metadata directly on `care_entries`: `planned_start_datetime`,
+`planned_end_datetime`, `deviation_type`, and `deviation_note`. Supported
+deviation types cover cancellation, partial completion, rescheduling, swapped
+or compensation dates, externally blocked care, and other factual deviations.
+This keeps the original planned period traceable without introducing a second
+opaque planning table.
+
 Partially completed entries keep the planned entry intact and store actual
 completion details separately: `actual_start_datetime`,
 `actual_end_datetime`, `actual_responsible_party_id`, and

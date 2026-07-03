@@ -158,7 +158,11 @@ test("answers a confirmation request and stores partial status with audit metada
     SELECT status, confirmation_note AS confirmationNote, confirmed_by AS confirmedBy,
       confirmed_at AS confirmedAt, actual_start_datetime AS actualStartDateTime,
       actual_end_datetime AS actualEndDateTime,
-      actual_responsible_party_id AS actualResponsiblePartyId
+      actual_responsible_party_id AS actualResponsiblePartyId,
+      planned_start_datetime AS plannedStartDateTime,
+      planned_end_datetime AS plannedEndDateTime,
+      deviation_type AS deviationType,
+      deviation_note AS deviationNote
     FROM care_entries
     WHERE id = ?
   `).get("entry-confirmation-a") as {
@@ -169,6 +173,10 @@ test("answers a confirmation request and stores partial status with audit metada
     actualStartDateTime: string;
     actualEndDateTime: string;
     actualResponsiblePartyId: string;
+    plannedStartDateTime: string;
+    plannedEndDateTime: string;
+    deviationType: string;
+    deviationNote: string;
   };
   const actualChildren = db.prepare(`
     SELECT child_id AS childId
@@ -189,6 +197,10 @@ test("answers a confirmation request and stores partial status with audit metada
   assert.equal(entry.actualStartDateTime, "2026-07-02T17:00:00.000Z");
   assert.equal(entry.actualEndDateTime, "2026-07-02T18:00:00.000Z");
   assert.equal(entry.actualResponsiblePartyId, "party-confirmation-a");
+  assert.equal(entry.plannedStartDateTime, "2026-07-02T16:00:00.000Z");
+  assert.equal(entry.plannedEndDateTime, "2026-07-02T18:00:00.000Z");
+  assert.equal(entry.deviationType, "partial");
+  assert.equal(entry.deviationNote, "Fiktive Teilbestätigung");
   assert.deepEqual(actualChildren, [{ childId: "child-confirmation-a" }]);
   assert.deepEqual(answered?.entry.actualChildIds, ["child-confirmation-a"]);
   assert.equal(answered?.entry.actualStartDateTime, "2026-07-02T17:00:00.000Z");

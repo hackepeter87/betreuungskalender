@@ -6,6 +6,7 @@ import {
 import { formatDate, formatDateTime, formatTime } from "./date";
 import {
   costCategoryLabel,
+  deviationLabel,
   statusLabel,
   unavailableCategoryLabel
 } from "./labels";
@@ -155,13 +156,19 @@ export async function exportPdfReport(
       const entryKm = entry.trips
         .filter((trip) => !trip.deletedAt)
         .reduce((sum, trip) => sum + trip.km, 0);
+      const deviation = entry.deviationType
+        ? `\n${deviationLabel(entry.deviationType, options.locale)}`
+        : "";
+      const originalPlan = entry.plannedStartDateTime && entry.plannedEndDateTime
+        ? `\n${messages.originalPlan}: ${formatDate(entry.plannedStartDateTime, intlLocale)} ${formatTime(entry.plannedStartDateTime, intlLocale)}-${formatTime(entry.plannedEndDateTime, intlLocale)}`
+        : "";
       return [
         `${formatDate(entry.startDateTime, intlLocale)} ${formatTime(entry.startDateTime, intlLocale)}\n${messages.through} ${formatDate(entry.endDateTime, intlLocale)} ${formatTime(entry.endDateTime, intlLocale)}`,
         namesForEntry(data, entry.childIds),
-        `${statusLabel(entry.status, options.locale)}${entry.additionalCare ? `\n${messages.additionalCare}` : ""}${entry.generatedByPatternId ? `\n${messages.plannedDate}` : ""}`,
+        `${statusLabel(entry.status, options.locale)}${entry.additionalCare ? `\n${messages.additionalCare}` : ""}${entry.generatedByPatternId ? `\n${messages.plannedDate}` : ""}${deviation}${originalPlan}`,
         `${entry.overnight ? messages.overnight : messages.dayCare}${entry.schoolHandover ? `\n${messages.schoolHandover}` : ""}${entry.holiday ? `\n${messages.holiday}` : ""}`,
         `${entryKm.toFixed(1)} km\n${euro.format(entryCosts)}`,
-        entry.cancellationReason || entry.notes || "–"
+        entry.deviationNote || entry.cancellationReason || entry.notes || "–"
       ];
     }),
     theme: "grid",

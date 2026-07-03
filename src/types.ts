@@ -1,8 +1,9 @@
-import type { ApiCareParty, ApiContactRule } from "../shared/api";
+import type { ApiCareDeviationType, ApiCareParty, ApiContactRule } from "../shared/api";
 
 export const SCHEMA_VERSION = 6 as const;
 
 export type EntryStatus = "planned" | "completed" | "cancelled" | "partial";
+export type CareDeviationType = ApiCareDeviationType;
 export type NotificationEventType = "care_confirmation_due" | "care_confirmation_reminder";
 export type CareLocation =
   | "commuterApartment"
@@ -87,8 +88,12 @@ export interface CareEntry {
   date: string;
   startDateTime: string;
   endDateTime: string;
+  plannedStartDateTime?: string;
+  plannedEndDateTime?: string;
   childIds: string[];
   status: EntryStatus;
+  deviationType?: CareDeviationType;
+  deviationNote?: string;
   confirmationState?: "unconfirmed" | "confirmed";
   confirmedAt?: string;
   confirmedBy?: string;

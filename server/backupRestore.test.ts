@@ -26,7 +26,8 @@ const expectedMigrations = [
   "015_external_calendar_holiday_sources",
   "016_care_confirmations_notifications",
   "017_default_responsible_party",
-  "018_actual_care_confirmation"
+  "018_actual_care_confirmation",
+  "019_care_entry_deviations"
 ];
 
 async function withTemporaryDirectory(
@@ -191,7 +192,7 @@ test("care party migration backfills existing active entries", async () => {
     const oldMigrations = join(directory, "old-migrations");
     mkdirSync(oldMigrations);
     for (const file of readdirSync(migrationsDirectory)) {
-      if (!file.endsWith(".sql") || file.startsWith("012_") || file.startsWith("013_") || file.startsWith("014_") || file.startsWith("017_") || file.startsWith("018_")) continue;
+      if (!file.endsWith(".sql") || file.startsWith("012_") || file.startsWith("013_") || file.startsWith("014_") || file.startsWith("017_") || file.startsWith("018_") || file.startsWith("019_")) continue;
       copyFileSync(join(migrationsDirectory, file), join(oldMigrations, file));
     }
 

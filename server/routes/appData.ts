@@ -57,6 +57,24 @@ function stringArray(record: DataRecord, key: string): string[] {
     : [];
 }
 
+const careDeviationTypes = new Set([
+  "cancelled",
+  "partial",
+  "rescheduled",
+  "swapped",
+  "externally_blocked",
+  "other"
+]);
+
+function optionalDeviationType(record: DataRecord): string | null {
+  const value = optionalText(record, "deviationType");
+  if (!value) return null;
+  if (!careDeviationTypes.has(value)) {
+    throw new Error("Unbekannte Abweichungsart im Betreuungseintrag.");
+  }
+  return value;
+}
+
 export function clearDomainData(): void {
   for (const table of [
     "care_entry_actual_children",
@@ -223,19 +241,32 @@ export function insertEntry(record: DataRecord, timestamp: string, userEmail: st
   const actualChildIds = input.status === "partial"
     ? importedActualChildIds.length ? importedActualChildIds : input.childIds
     : [];
+  const deviationType =
+    optionalDeviationType(record) ??
+    (input.status === "cancelled" ? "cancelled" : input.status === "partial" ? "partial" : null);
+  const plannedStartDateTime = deviationType
+    ? optionalText(record, "plannedStartDateTime") ?? input.startDateTime
+    : null;
+  const plannedEndDateTime = deviationType
+    ? optionalText(record, "plannedEndDateTime") ?? input.endDateTime
+    : null;
+  if (plannedStartDateTime && plannedEndDateTime && Date.parse(plannedEndDateTime) <= Date.parse(plannedStartDateTime)) {
+    throw new Error("Ursprüngliches Soll-Ende eines abweichenden Betreuungseintrags muss nach dem Beginn liegen.");
+  }
   db.prepare(`
     INSERT INTO care_entries (
       id, generated_by_pattern_id, rule_occurrence_date,
       contact_rule_id, contact_rule_segment_id, contact_rule_occurrence_key,
       responsible_party_id, contact_rule_sync_state,
-      start_datetime, end_datetime, status, care_scope, cancellation_reason,
+      start_datetime, end_datetime, planned_start_datetime, planned_end_datetime,
+      status, deviation_type, deviation_note, care_scope, cancellation_reason,
       confirmation_note, confirmed_at, confirmed_by,
       actual_start_datetime, actual_end_datetime, actual_responsible_party_id,
       overnight, school_handover, holiday, weekend, additional_care, location,
       custom_location, handover_from, handover_to, notes, evidence_reference,
       has_evidence, duration_minutes, is_contact_time, created_by, updated_by,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     input.generatedByPatternId ?? null,
@@ -247,7 +278,11 @@ export function insertEntry(record: DataRecord, timestamp: string, userEmail: st
     input.contactRuleSyncState ?? null,
     input.startDateTime,
     input.endDateTime,
+    plannedStartDateTime,
+    plannedEndDateTime,
     input.status,
+    deviationType,
+    optionalText(record, "deviationNote"),
     input.careScope,
     input.status === "cancelled" ? input.cancellationReason ?? null : null,
     optionalText(record, "confirmationNote"),

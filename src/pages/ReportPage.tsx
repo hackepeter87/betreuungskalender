@@ -15,6 +15,7 @@ import {
 import { formatDate, formatDateTime, formatTime, toMonthKey } from "../lib/date";
 import {
   costCategoryLabel,
+  deviationLabel,
   statusLabel,
   unavailableCategoryLabel
 } from "../lib/labels";
@@ -314,6 +315,13 @@ export function ReportPage() {
                       {entry.generatedByPatternId ? messages.plannedDate : entry.additionalCare ? messages.additionalCare : messages.singleDate}
                       {entry.overnight ? <><br />{messages.overnight}</> : null}
                       {entry.holiday ? <><br />{messages.holiday}</> : null}
+                      {entry.deviationType ? <><br />{deviationLabel(entry.deviationType, locale)}</> : null}
+                      {entry.plannedStartDateTime && entry.plannedEndDateTime ? (
+                        <>
+                          <br />
+                          {messages.originalPlan}: {formatDate(entry.plannedStartDateTime, intlLocale)} {formatTime(entry.plannedStartDateTime, intlLocale)}-{formatTime(entry.plannedEndDateTime, intlLocale)}
+                        </>
+                      ) : null}
                     </td>
                     <td
                       data-label={messages.trips}
@@ -329,7 +337,7 @@ export function ReportPage() {
                     >
                       {euro.format(entry.costs.filter((cost) => !cost.deletedAt).reduce((sum, cost) => sum + cost.amount, 0))}
                     </td>
-                    <td data-label={messages.notesOrReason}>{entry.cancellationReason || entry.notes || "–"}</td>
+                    <td data-label={messages.notesOrReason}>{entry.deviationNote || entry.cancellationReason || entry.notes || "–"}</td>
                   </tr>
                 ))}
               </tbody>

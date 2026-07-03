@@ -33,9 +33,13 @@ interface EntryRow {
   contact_rule_sync_state: "generated" | "manual_override" | null;
   start_datetime: string;
   end_datetime: string;
+  planned_start_datetime: string | null;
+  planned_end_datetime: string | null;
   actual_start_datetime: string | null;
   actual_end_datetime: string | null;
   status: ApiCareEntry["status"];
+  deviation_type: ApiCareEntry["deviationType"] | null;
+  deviation_note: string | null;
   confirmation_note: string | null;
   confirmed_at: string | null;
   confirmed_by: string | null;
@@ -156,11 +160,15 @@ function mapEntry(row: EntryRow): ApiCareEntry {
     contactRuleSyncState: optional(row.contact_rule_sync_state),
     startDateTime: row.start_datetime,
     endDateTime: row.end_datetime,
+    plannedStartDateTime: optional(row.planned_start_datetime),
+    plannedEndDateTime: optional(row.planned_end_datetime),
     actualStartDateTime: optional(row.actual_start_datetime),
     actualEndDateTime: optional(row.actual_end_datetime),
     childIds: getChildIds(row.id),
     actualChildIds: getActualChildIds(row.id),
     status: row.status,
+    deviationType: optional(row.deviation_type),
+    deviationNote: optional(row.deviation_note),
     confirmationState: row.status === "planned" && !row.confirmed_at && Date.parse(row.end_datetime) < Date.now()
       ? "unconfirmed"
       : row.confirmed_at
@@ -375,12 +383,20 @@ function persistEntry(
     const contactRuleOccurrenceKey = input.contactRuleOccurrenceKey ?? existing.contactRuleOccurrenceKey ?? null;
     const responsiblePartyId = effectiveResponsiblePartyId ?? null;
     const contactRuleSyncState = contactRuleId ? "manual_override" : input.contactRuleSyncState ?? null;
+    const deviationType = input.deviationType ?? (input.status === "cancelled" ? "cancelled" : input.status === "partial" ? "partial" : null);
+    const plannedStartDateTime = deviationType
+      ? input.plannedStartDateTime ?? existing.plannedStartDateTime ?? existing.startDateTime
+      : null;
+    const plannedEndDateTime = deviationType
+      ? input.plannedEndDateTime ?? existing.plannedEndDateTime ?? existing.endDateTime
+      : null;
     db.prepare(`
       UPDATE care_entries SET
         generated_by_pattern_id = ?, rule_occurrence_date = ?,
         contact_rule_id = ?, contact_rule_segment_id = ?, contact_rule_occurrence_key = ?,
         responsible_party_id = ?, contact_rule_sync_state = ?,
-        start_datetime = ?, end_datetime = ?, status = ?, care_scope = ?,
+        start_datetime = ?, end_datetime = ?, planned_start_datetime = ?, planned_end_datetime = ?,
+        status = ?, deviation_type = ?, deviation_note = ?, care_scope = ?,
         cancellation_reason = ?, confirmation_note = ?, confirmed_at = ?, confirmed_by = ?,
         actual_start_datetime = ?, actual_end_datetime = ?, actual_responsible_party_id = ?,
         overnight = ?, school_handover = ?,
@@ -394,7 +410,8 @@ function persistEntry(
       contactRuleId, contactRuleSegmentId,
       contactRuleOccurrenceKey, responsiblePartyId,
       contactRuleSyncState,
-      input.startDateTime, input.endDateTime, input.status, input.careScope,
+      input.startDateTime, input.endDateTime, plannedStartDateTime, plannedEndDateTime,
+      input.status, deviationType, input.deviationNote?.trim() || null, input.careScope,
       input.status === "cancelled" ? input.cancellationReason ?? null : null,
       input.status === "planned" ? null : existing.confirmationNote ?? null,
       input.status === "planned" ? null : existing.confirmedAt ?? null,
@@ -415,18 +432,25 @@ function persistEntry(
         id, generated_by_pattern_id, rule_occurrence_date,
         contact_rule_id, contact_rule_segment_id, contact_rule_occurrence_key,
         responsible_party_id, contact_rule_sync_state,
-        start_datetime, end_datetime, status, care_scope, cancellation_reason,
+        start_datetime, end_datetime, planned_start_datetime, planned_end_datetime,
+        status, deviation_type, deviation_note, care_scope, cancellation_reason,
         confirmation_note, confirmed_at, confirmed_by,
         overnight, school_handover, holiday, weekend, additional_care, location,
         custom_location, handover_from, handover_to, notes, evidence_reference, has_evidence,
         duration_minutes, is_contact_time, created_by, updated_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, input.generatedByPatternId ?? null, input.ruleOccurrenceDate ?? null,
       input.contactRuleId ?? null, input.contactRuleSegmentId ?? null,
       input.contactRuleOccurrenceKey ?? null, effectiveResponsiblePartyId ?? null,
       input.contactRuleSyncState ?? null,
-      input.startDateTime, input.endDateTime, input.status, input.careScope,
+      input.startDateTime, input.endDateTime,
+      input.deviationType ? input.plannedStartDateTime ?? input.startDateTime : null,
+      input.deviationType ? input.plannedEndDateTime ?? input.endDateTime : null,
+      input.status,
+      input.deviationType ?? (input.status === "cancelled" ? "cancelled" : input.status === "partial" ? "partial" : null),
+      input.deviationNote?.trim() || null,
+      input.careScope,
       input.status === "cancelled" ? input.cancellationReason ?? null : null,
       null,
       null,
