@@ -364,6 +364,10 @@ function persistEntry(
   existing?: ApiCareEntry,
   user?: RequestUser
 ): void {
+  if (existing) {
+    assertCanUseCareParty(user, existing.responsiblePartyId);
+    if (existing.actualResponsiblePartyId) assertCanUseCareParty(user, existing.actualResponsiblePartyId);
+  }
   const effectiveResponsiblePartyId =
     input.responsiblePartyId ?? existing?.responsiblePartyId ?? getDefaultResponsiblePartyId();
   assertActiveChildren(input.childIds);
@@ -572,6 +576,12 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string } }>("/api/care-entries/:id", writeLimit, async (request, reply) => {
     const existing = getEntry(request.params.id);
     if (!existing) return reply.code(404).send({ error: "not_found" });
+    try {
+      assertCanUseCareParty(request.user, existing.responsiblePartyId);
+      if (existing.actualResponsiblePartyId) assertCanUseCareParty(request.user, existing.actualResponsiblePartyId);
+    } catch (error) {
+      return reply.code(400).send({ error: "invalid_relation", message: error instanceof Error ? error.message : String(error) });
+    }
     const timestamp = nowIso();
     db.transaction(() => {
       db.prepare("UPDATE care_entries SET deleted_at = ?, updated_at = ?, updated_by = ? WHERE id = ?")

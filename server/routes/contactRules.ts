@@ -81,6 +81,7 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
     let syncSummary;
     try {
       db.transaction(() => {
+        assertCanUseCareParty(request.user, before.responsiblePartyId);
         const rule = {
           ...parsed.data,
           responsiblePartyId: parsed.data.responsiblePartyId ?? before.responsiblePartyId ?? getDefaultResponsiblePartyId()
@@ -121,6 +122,14 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string } }>("/api/contact-rules/:id", writeLimit, async (request, reply) => {
     const before = getContactRule(request.params.id);
     if (!before) return reply.code(404).send({ error: "not_found" });
+    try {
+      assertCanUseCareParty(request.user, before.responsiblePartyId);
+    } catch (error) {
+      return reply.code(400).send({
+        error: "invalid_relation",
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
     const timestamp = nowIso();
     db.transaction(() => {
       db.prepare(`

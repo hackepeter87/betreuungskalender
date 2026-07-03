@@ -8,8 +8,10 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import test from "node:test";
 import type {
   ApiAuditEntry,
+  ApiCareEntry,
   ApiCareParty,
   ApiChild,
+  ApiContactRule,
   ApiSession,
   ApiUnavailablePeriod
 } from "../shared/api.js";
@@ -357,4 +359,199 @@ test("shared care-party assignments restrict unavailable period care context", a
     headers: alphaHeaders
   });
   assert.equal(afterDeniedDelete.some((period) => period.id === created.id), true);
+});
+
+test("shared care-party assignments restrict care entries and contact rules by existing owner", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "betreuungskalender-care-party-owner-"));
+  const port = await freePort();
+  let logs = "";
+  const runtime = spawn(
+    process.execPath,
+    [resolve(projectRoot, "node_modules/tsx/dist/cli.mjs"), "server/index.ts"],
+    {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        NODE_ENV: "production",
+        HOST: "127.0.0.1",
+        PORT: String(port),
+        DATABASE_PATH: join(root, "app.sqlite"),
+        BACKUP_DIR: join(root, "backups"),
+        REQUIRE_AUTH: "true",
+        TRUST_PROXY_AUTH: "true",
+        OIDC_REQUIRE_ROLE_CLAIM: "true",
+        RATE_LIMIT_MAX: "200",
+        RATE_LIMIT_WRITE_MAX: "200",
+        LOG_LEVEL: "warn"
+      }
+    }
+  );
+  runtime.stdout.on("data", (chunk) => { logs += chunk; });
+  runtime.stderr.on("data", (chunk) => { logs += chunk; });
+
+  t.after(async () => {
+    await stop(runtime);
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const baseUrl = `http://127.0.0.1:${port}`;
+  await waitForHealth(`${baseUrl}/api/health`, () => logs);
+
+  const alphaUserId = await sessionUserId(baseUrl, alphaHeaders);
+  const betaUserId = await sessionUserId(baseUrl, betaHeaders);
+  await sessionUserId(baseUrl, adminHeaders);
+  await jsonRequest<ApiChild[]>(baseUrl, "/api/children", {
+    method: "GET",
+    headers: alphaHeaders
+  });
+  await jsonRequest<ApiChild[]>(baseUrl, "/api/children", {
+    method: "GET",
+    headers: betaHeaders
+  });
+  await jsonRequest<ApiChild[]>(baseUrl, "/api/children", {
+    method: "GET",
+    headers: adminHeaders
+  });
+
+  const child = await jsonRequest<ApiChild>(baseUrl, "/api/children", {
+    method: "POST",
+    headers: adminHeaders,
+    body: JSON.stringify({
+      name: "Demo Kind",
+      birthMonth: 7,
+      birthYear: 2018,
+      color: "#087f7b"
+    })
+  });
+  const alphaParty = await jsonRequest<ApiCareParty>(baseUrl, "/api/care-parties", {
+    method: "POST",
+    headers: adminHeaders,
+    body: JSON.stringify({ name: "Alpha Betreuung", kind: "other" })
+  });
+  const betaParty = await jsonRequest<ApiCareParty>(baseUrl, "/api/care-parties", {
+    method: "POST",
+    headers: adminHeaders,
+    body: JSON.stringify({ name: "Beta Betreuung", kind: "other" })
+  });
+
+  await jsonRequest(baseUrl, `/api/user-care-party-assignments/${alphaUserId}`, {
+    method: "PUT",
+    headers: adminHeaders,
+    body: JSON.stringify({ carePartyIds: [alphaParty.id] })
+  });
+  await jsonRequest(baseUrl, `/api/user-care-party-assignments/${betaUserId}`, {
+    method: "PUT",
+    headers: adminHeaders,
+    body: JSON.stringify({ carePartyIds: [betaParty.id] })
+  });
+
+  const alphaEntryInput = {
+    startDateTime: "2026-07-04T08:00:00.000Z",
+    endDateTime: "2026-07-04T17:00:00.000Z",
+    childIds: [child.id],
+    responsiblePartyId: alphaParty.id,
+    status: "planned",
+    careScope: "full_day",
+    overnight: false,
+    schoolHandover: false,
+    holiday: false,
+    weekend: false,
+    additionalCare: false,
+    hasEvidence: false,
+    trips: [],
+    costs: []
+  };
+  const alphaEntry = await jsonRequest<ApiCareEntry>(baseUrl, "/api/care-entries", {
+    method: "POST",
+    headers: alphaHeaders,
+    body: JSON.stringify(alphaEntryInput)
+  });
+
+  await expectStatus(baseUrl, `/api/care-entries/${alphaEntry.id}`, 400, {
+    method: "PUT",
+    headers: betaHeaders,
+    body: JSON.stringify({
+      ...alphaEntryInput,
+      responsiblePartyId: betaParty.id,
+      location: "Nicht erlaubter Änderungsversuch"
+    })
+  });
+  await expectStatus(baseUrl, `/api/care-entries/${alphaEntry.id}`, 400, {
+    method: "DELETE",
+    headers: betaHeaders
+  });
+  const afterDeniedEntryDelete = await jsonRequest<ApiCareEntry>(
+    baseUrl,
+    `/api/care-entries/${alphaEntry.id}`,
+    { method: "GET", headers: alphaHeaders }
+  );
+  assert.equal(afterDeniedEntryDelete.responsiblePartyId, alphaParty.id);
+  const alphaUpdatedEntry = await jsonRequest<ApiCareEntry>(baseUrl, `/api/care-entries/${alphaEntry.id}`, {
+    method: "PUT",
+    headers: alphaHeaders,
+    body: JSON.stringify({
+      ...alphaEntryInput,
+      location: "Erlaubte Änderung"
+    })
+  });
+  assert.equal(alphaUpdatedEntry.location, "Erlaubte Änderung");
+  assert.equal(alphaUpdatedEntry.responsiblePartyId, alphaParty.id);
+
+  const alphaRuleInput = {
+    name: "Alpha Umgang",
+    startDate: "2026-07-03",
+    timezone: "Europe/Berlin",
+    recurrence: {
+      kind: "rrule",
+      rrules: ["FREQ=WEEKLY;INTERVAL=1;BYDAY=FR"]
+    },
+    segments: [{
+      id: "weekend",
+      startDayOffset: 0,
+      startTime: "16:00",
+      endDayOffset: 2,
+      endTime: "18:00"
+    }],
+    syncHorizonMonths: 1,
+    responsiblePartyId: alphaParty.id,
+    childIds: [child.id],
+    active: true
+  };
+  const alphaRule = await jsonRequest<ApiContactRule>(baseUrl, "/api/contact-rules", {
+    method: "POST",
+    headers: alphaHeaders,
+    body: JSON.stringify(alphaRuleInput)
+  });
+
+  await expectStatus(baseUrl, `/api/contact-rules/${alphaRule.id}`, 400, {
+    method: "PUT",
+    headers: betaHeaders,
+    body: JSON.stringify({
+      ...alphaRuleInput,
+      name: "Nicht erlaubter Regelwechsel",
+      responsiblePartyId: betaParty.id
+    })
+  });
+  await expectStatus(baseUrl, `/api/contact-rules/${alphaRule.id}`, 400, {
+    method: "DELETE",
+    headers: betaHeaders
+  });
+  const afterDeniedRuleDelete = await jsonRequest<ApiContactRule[]>(baseUrl, "/api/contact-rules", {
+    method: "GET",
+    headers: alphaHeaders
+  });
+  assert.equal(
+    afterDeniedRuleDelete.some((rule) => rule.id === alphaRule.id && rule.responsiblePartyId === alphaParty.id),
+    true
+  );
+  const alphaUpdatedRule = await jsonRequest<ApiContactRule>(baseUrl, `/api/contact-rules/${alphaRule.id}`, {
+    method: "PUT",
+    headers: alphaHeaders,
+    body: JSON.stringify({
+      ...alphaRuleInput,
+      name: "Alpha Umgang angepasst"
+    })
+  });
+  assert.equal(alphaUpdatedRule.name, "Alpha Umgang angepasst");
+  assert.equal(alphaUpdatedRule.responsiblePartyId, alphaParty.id);
 });

@@ -91,6 +91,7 @@ export function clearDomainData(): void {
   for (const table of [
     "care_entry_actual_children",
     "care_entry_children",
+    "care_confirmation_requests",
     "holiday_period_children",
     "unavailable_period_children",
     "contact_rule_children",
@@ -106,6 +107,8 @@ export function clearDomainData(): void {
     "care_parties",
     "external_calendar_events",
     "external_calendar_sources",
+    "push_subscriptions",
+    "notification_preferences",
     "calendar_feed_tokens",
     "monthly_closings",
     "settings",
