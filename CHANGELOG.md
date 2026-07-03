@@ -6,6 +6,20 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+### Added
+
+- Added an explicit default responsible care party setting used by care entries
+  and contact rules when no other care party is selected.
+- Added calendar-visible holiday periods in the month grid and agenda.
+
+### Changed
+
+- Changed holiday allocation statistics to derive care-party shares from care
+  entries that overlap recorded holiday periods instead of relying on new
+  father/mother/shared holiday assignments.
+- Updated holiday management copy so holiday blocks are described as planning
+  frames while actual holiday credit comes from normal care entries.
+
 ## [1.7.0] - 2026-07-03
 
 ### Added

@@ -86,7 +86,10 @@ export function EntryForm({
     : { date: defaultDate, time: "19:00" };
   const [childIds, setChildIds] = useState<string[]>(entry?.childIds ?? []);
   const [responsiblePartyId, setResponsiblePartyId] = useState(
-    entry?.responsiblePartyId ?? data.careParties[0]?.id ?? ""
+    entry?.responsiblePartyId ??
+      data.settings.defaultResponsiblePartyId ??
+      data.careParties[0]?.id ??
+      ""
   );
   const [status, setStatus] = useState<EntryStatus>(entry?.status ?? "completed");
   const [additionalCare, setAdditionalCare] = useState(

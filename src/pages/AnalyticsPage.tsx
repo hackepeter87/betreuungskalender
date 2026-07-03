@@ -213,6 +213,12 @@ export function AnalyticsPage({ monthKey }: { monthKey: string }) {
             <div><dt>{copy(locale, "analytics", "motherDays")}</dt><dd>{stats.holidays.motherDays}</dd></div>
             <div><dt>{copy(locale, "analytics", "fatherQuote")}</dt><dd>{stats.holidays.fatherQuote} %</dd></div>
             <div><dt>{copy(locale, "analytics", "dutyUnavailability")}</dt><dd>{stats.holidays.unavailablePeriods}</dd></div>
+            {stats.holidays.byCareParty.map((share) => (
+              <div key={share.carePartyId}><dt>{share.name}</dt><dd>{share.days} / {share.quote} %</dd></div>
+            ))}
+            {stats.holidays.unassignedDays > 0 ? (
+              <div><dt>{copy(locale, "holiday", "unassignedDays")}</dt><dd>{stats.holidays.unassignedDays}</dd></div>
+            ) : null}
           </dl>
         </section>
       </div>

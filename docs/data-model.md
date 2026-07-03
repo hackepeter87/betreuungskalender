@@ -30,7 +30,7 @@ discovery source; it is not synchronized or treated as current persistence.
 | `care_confirmation_requests` | Follow-up confirmation tasks for past planned care entries |
 | `trips` | Multiple trips belonging to a care entry |
 | `costs` | Multiple cost items belonging to a care entry |
-| `holiday_periods` | Named holiday blocks and assignment |
+| `holiday_periods` | Named holiday periods used as calendar/reporting frames |
 | `holiday_period_children` | Child assignment for holiday blocks |
 | `contact_patterns` | Biweekly Friday-to-Sunday target schedules |
 | `contact_pattern_children` | Child assignment for target schedules |
@@ -140,10 +140,13 @@ decisions are read from the matching `app_users` row on each API request.
 Care entries contain start/end, status, care scope, overnight and holiday
 flags, additional care, location, handover, notes, evidence reference,
 calculated duration, contact-time classification, and an optional
-`responsible_party_id`. Supported stored statuses are `planned`, `completed`,
-`partial`, and `cancelled`. The API can additionally expose a derived
-`unconfirmed` confirmation state for planned entries whose end time is already
-in the past. Children, trips, and costs are persisted transactionally.
+`responsible_party_id`. If a new entry or contact rule does not provide a
+responsible party, the server uses the configured
+`defaultResponsiblePartyId` setting when an active care party is available.
+Supported stored statuses are `planned`, `completed`, `partial`, and
+`cancelled`. The API can additionally expose a derived `unconfirmed`
+confirmation state for planned entries whose end time is already in the past.
+Children, trips, and costs are persisted transactionally.
 
 Generated planned entries can reference a flexible contact rule with
 `contact_rule_id`, `contact_rule_segment_id`, and
@@ -196,10 +199,18 @@ two-week interval, Friday anchor, and a Friday-to-Sunday segment.
 
 ## Holidays and unavailable periods
 
-Holiday blocks document a period and assignment to father, mother, or shared.
+Holiday blocks document official or agreed holiday periods for one or more
+children. They are calendar-visible planning frames, not the source of care
+credit. The legacy `assigned_to` value is retained for backup and migration
+compatibility, but new UI flows treat holiday credit as normal care entries
+whose dates overlap a holiday block and whose `responsible_party_id` identifies
+the credited care party. This allows long holidays to be split into several
+regular care entries, for example one week with one care party and later weeks
+with another.
+
 Unavailable periods record category, duty relationship, effects on contact or
-holiday planning, location, notes, and evidence reference. Neither structure
-automatically changes actual care entries.
+holiday planning, location, notes, and evidence reference. Neither holiday
+blocks nor unavailable periods automatically change actual care entries.
 
 ## Monthly closure
 

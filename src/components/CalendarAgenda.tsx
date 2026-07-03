@@ -1,12 +1,12 @@
 import { useMemo } from "react";
-import { formatShortDate, formatTime } from "../lib/date";
+import { enumerateDateKeys, formatShortDate, formatTime } from "../lib/date";
 import { unavailableForEntry } from "../lib/analytics";
 import {
   locationLabels,
   statusLabels,
   unavailableCategoryLabels
 } from "../lib/labels";
-import type { CareEntry, Child, ExternalCalendarEvent, UnavailablePeriod } from "../types";
+import type { CareEntry, Child, ExternalCalendarEvent, HolidayPeriod, UnavailablePeriod } from "../types";
 import { Icon } from "./Icon";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
@@ -33,6 +33,7 @@ export function CalendarAgenda({
   entries,
   unavailablePeriods,
   externalEvents = [],
+  holidayPeriods = [],
   children,
   onSelectDate,
   onSelectEntry,
@@ -42,6 +43,7 @@ export function CalendarAgenda({
   entries: CareEntry[];
   unavailablePeriods: UnavailablePeriod[];
   externalEvents?: ExternalCalendarEvent[];
+  holidayPeriods?: HolidayPeriod[];
   children: Child[];
   onSelectDate: (date: string) => void;
   onSelectEntry: (entry: CareEntry) => void;
@@ -56,11 +58,11 @@ export function CalendarAgenda({
   const grouped = useMemo(() => {
     const groups = new Map<
       string,
-      { entries: CareEntry[]; unavailable: UnavailablePeriod[]; external: ExternalCalendarEvent[] }
+      { entries: CareEntry[]; unavailable: UnavailablePeriod[]; external: ExternalCalendarEvent[]; holidays: HolidayPeriod[] }
     >();
     for (const entry of entries.slice().sort((a, b) => a.startDateTime.localeCompare(b.startDateTime))) {
       const date = entry.startDateTime.slice(0, 10);
-      const group = groups.get(date) ?? { entries: [], unavailable: [], external: [] };
+      const group = groups.get(date) ?? { entries: [], unavailable: [], external: [], holidays: [] };
       group.entries.push(entry);
       groups.set(date, group);
     }
@@ -69,18 +71,25 @@ export function CalendarAgenda({
       .slice()
       .sort((a, b) => a.startDateTime.localeCompare(b.startDateTime))) {
       const date = period.startDateTime.slice(0, 10);
-      const group = groups.get(date) ?? { entries: [], unavailable: [], external: [] };
+      const group = groups.get(date) ?? { entries: [], unavailable: [], external: [], holidays: [] };
       group.unavailable.push(period);
       groups.set(date, group);
     }
     for (const event of externalEvents) {
       const date = event.startDateTime.slice(0, 10);
-      const group = groups.get(date) ?? { entries: [], unavailable: [], external: [] };
+      const group = groups.get(date) ?? { entries: [], unavailable: [], external: [], holidays: [] };
       group.external.push(event);
       groups.set(date, group);
     }
+    for (const period of holidayPeriods.filter((item) => !item.deletedAt)) {
+      for (const date of enumerateDateKeys(period.startDate, period.endDate)) {
+        const group = groups.get(date) ?? { entries: [], unavailable: [], external: [], holidays: [] };
+        group.holidays.push(period);
+        groups.set(date, group);
+      }
+    }
     return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [entries, unavailablePeriods, externalEvents]);
+  }, [entries, unavailablePeriods, externalEvents, holidayPeriods]);
 
   if (!grouped.length) {
     return (
@@ -103,7 +112,7 @@ export function CalendarAgenda({
           <header className="agenda-day__header">
             <div>
               <strong>{formatShortDate(date, intlLocale)}</strong>
-              <small>{copy(locale, "agenda", "documentationCount", { count: group.entries.length + group.unavailable.length })}</small>
+              <small>{copy(locale, "agenda", "documentationCount", { count: group.entries.length + group.unavailable.length + group.holidays.length })}</small>
             </div>
             <button
               className="icon-button icon-button--bordered"
@@ -119,6 +128,19 @@ export function CalendarAgenda({
             {group.external.map((event) => (
               <article className="agenda-card agenda-card--external" key={`external-${event.id}`} style={{ borderColor: event.sourceColor }} data-testid={`external-calendar-event-${event.id}`}>
                 <span className="agenda-card__main"><span className="agenda-card__topline"><strong>{event.title}</strong><span className="status-label status-label--external">{copy(locale, "externalCalendar", "readOnly")}</span></span><span className="agenda-card__details"><span><Icon name="calendar" size={15} />{event.sourceName}</span>{!event.allDay ? <span><Icon name="clock" size={15} />{formatTime(event.startDateTime, intlLocale)}–{formatTime(event.endDateTime, intlLocale)}</span> : null}</span></span>
+              </article>
+            ))}
+            {group.holidays.map((period) => (
+              <article className="agenda-card agenda-card--holiday" key={`holiday-${period.id}`} data-testid={`agenda-holiday-${period.id}`}>
+                <span className="agenda-card__main">
+                  <span className="agenda-card__topline">
+                    <strong>{period.name}</strong>
+                    <span className="status-label status-label--external">{copy(locale, "agenda", "holidayPeriod")}</span>
+                  </span>
+                  <span className="agenda-card__details">
+                    <span><Icon name="sun" size={15} />{formatShortDate(period.startDate, intlLocale)}–{formatShortDate(period.endDate, intlLocale)}</span>
+                  </span>
+                </span>
               </article>
             ))}
             {group.unavailable.map((period) => (

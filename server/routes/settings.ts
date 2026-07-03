@@ -3,6 +3,7 @@ import { config } from "../config.js";
 import { db } from "../db/connection.js";
 import { recordFieldChanges } from "../services/audit.js";
 import { nowIso } from "../services/common.js";
+import { getStoredSettings } from "../services/settings.js";
 import { settingsInputSchema } from "../validation/schemas.js";
 
 const readLimit = {
@@ -12,30 +13,13 @@ const writeLimit = {
   config: { rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
 };
 
-const defaults: Record<string, unknown> = {
-  kilometerRate: 0.3,
-  defaultLocation: "commuterApartment",
-  defaultHandoverFrom: "mother",
-  defaultHandoverTo: "mother"
-};
-
-function getSettings(): Record<string, unknown> {
-  const rows = db.prepare(`
-    SELECT key, value_json AS valueJson
-    FROM settings
-    WHERE deleted_at IS NULL
-  `).all() as Array<{ key: string; valueJson: string }>;
-  const stored = Object.fromEntries(rows.map((row) => [row.key, JSON.parse(row.valueJson) as unknown]));
-  return { ...defaults, ...stored };
-}
-
 export async function settingsRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/settings", readLimit, async () => getSettings());
+  app.get("/api/settings", readLimit, async () => getStoredSettings());
 
   app.put("/api/settings", writeLimit, async (request, reply) => {
     const parsed = settingsInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
-    const before = getSettings();
+    const before = getStoredSettings();
     const timestamp = nowIso();
     db.transaction(() => {
       const upsert = db.prepare(`
@@ -65,6 +49,6 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
         { ...before, ...parsed.data }
       );
     })();
-    return getSettings();
+    return getStoredSettings();
   });
 }

@@ -255,7 +255,10 @@ export function ContactPage({
     existingRule?.childIds ?? data.children.map((child) => child.id)
   );
   const [responsiblePartyId, setResponsiblePartyId] = useState(
-    existingRule?.responsiblePartyId ?? data.careParties[0]?.id ?? ""
+    existingRule?.responsiblePartyId ??
+      data.settings.defaultResponsiblePartyId ??
+      data.careParties[0]?.id ??
+      ""
   );
   const [active, setActive] = useState(existingRule?.active ?? true);
   const [generationStart, setGenerationStart] = useState(defaultRange.startDate);

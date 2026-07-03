@@ -271,6 +271,7 @@ export interface AppSettings {
   defaultLocation: CareLocation;
   defaultHandoverFrom: HandoverParty;
   defaultHandoverTo: HandoverParty;
+  defaultResponsiblePartyId?: string;
   rhythmStartDate?: string;
 }
 
@@ -405,6 +406,13 @@ export interface HolidayStats {
   halfTarget: number;
   differenceFromHalf: number;
   unavailablePeriods: number;
+  byCareParty: Array<{
+    carePartyId: string;
+    name: string;
+    days: number;
+    quote: number;
+  }>;
+  unassignedDays: number;
 }
 
 export interface PeriodChildStats {

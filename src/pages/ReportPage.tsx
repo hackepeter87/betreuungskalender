@@ -19,6 +19,7 @@ import {
   unavailableCategoryLabel
 } from "../lib/labels";
 import { useI18n } from "../i18n/I18nProvider";
+import { copy } from "../i18n/catalog";
 import { reportMessages } from "../i18n/reportMessages";
 import { reportClosureDescription } from "../lib/monthClosure";
 import { exportPdfReport, makeReportId } from "../lib/report";
@@ -211,6 +212,12 @@ export function ReportPage() {
               <div><dt>{messages.mother}</dt><dd>{stats.holidays.motherDays}</dd></div>
               <div><dt>{messages.fatherQuote}</dt><dd>{stats.holidays.fatherQuote} %</dd></div>
               <div><dt>{messages.dutyUnavailability}</dt><dd>{stats.holidays.unavailablePeriods}</dd></div>
+              {stats.holidays.byCareParty.map((share) => (
+                <div key={share.carePartyId}><dt>{share.name}</dt><dd>{share.days} / {share.quote} %</dd></div>
+              ))}
+              {stats.holidays.unassignedDays > 0 ? (
+                <div><dt>{copy(locale, "holiday", "unassignedDays")}</dt><dd>{stats.holidays.unassignedDays}</dd></div>
+              ) : null}
             </dl>
           </div>
           <div>

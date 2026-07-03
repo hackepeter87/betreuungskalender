@@ -120,7 +120,7 @@ test("derives holiday blocks from a classified external holiday calendar", async
 
   await navigate(page, "holidays");
   await page.getByTestId("holiday-external-source").selectOption(source!.id);
-  await page.getByTestId("holiday-external-assigned-to").selectOption("shared");
+  await expect(page.getByTestId("holiday-external-assigned-to")).toHaveCount(0);
   await page.getByTestId("holiday-derive-external").click();
   await expect(page.getByTestId("holiday-external-message")).toContainText("1");
   await expect(page.getByText("E2E Holiday", { exact: true })).toBeVisible();

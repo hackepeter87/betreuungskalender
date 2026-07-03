@@ -1058,6 +1058,12 @@ h3 {
   background: #eef2ff;
 }
 
+.calendar-event--holiday {
+  border-color: #f5c56b;
+  background: #fff7e6;
+  color: #7a4b00;
+}
+
 .calendar-event--rule {
   border-left-width: 3px;
 }
@@ -4153,6 +4159,10 @@ h3 {
 
 .agenda-card--cancelled {
   background: #fffafa;
+}
+
+.agenda-card--holiday {
+  background: #fff8e8;
 }
 
 .agenda-card__colors {

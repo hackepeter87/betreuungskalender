@@ -11,6 +11,7 @@ import {
 import { assertCanUseCareParty } from "../services/carePartyAccess.js";
 import { assertActiveCareParty } from "../services/careParties.js";
 import { assertActiveChildren, bool, makeId, nowIso, syncJunction } from "../services/common.js";
+import { getDefaultResponsiblePartyId } from "../services/settings.js";
 import { careEntryInputSchema } from "../validation/schemas.js";
 
 const readLimit = {
@@ -339,9 +340,11 @@ function persistEntry(
   existing?: ApiCareEntry,
   user?: RequestUser
 ): void {
+  const effectiveResponsiblePartyId =
+    input.responsiblePartyId ?? existing?.responsiblePartyId ?? getDefaultResponsiblePartyId();
   assertActiveChildren(input.childIds);
-  assertActiveCareParty(input.responsiblePartyId);
-  assertCanUseCareParty(user, input.responsiblePartyId);
+  assertActiveCareParty(effectiveResponsiblePartyId);
+  assertCanUseCareParty(user, effectiveResponsiblePartyId);
   const timestamp = nowIso();
   const durationMinutes = Math.round(
     (Date.parse(input.endDateTime) - Date.parse(input.startDateTime)) / 60000
@@ -354,7 +357,7 @@ function persistEntry(
     const contactRuleId = input.contactRuleId ?? existing.contactRuleId ?? null;
     const contactRuleSegmentId = input.contactRuleSegmentId ?? existing.contactRuleSegmentId ?? null;
     const contactRuleOccurrenceKey = input.contactRuleOccurrenceKey ?? existing.contactRuleOccurrenceKey ?? null;
-    const responsiblePartyId = input.responsiblePartyId ?? existing.responsiblePartyId ?? null;
+    const responsiblePartyId = effectiveResponsiblePartyId ?? null;
     const contactRuleSyncState = contactRuleId ? "manual_override" : input.contactRuleSyncState ?? null;
     db.prepare(`
       UPDATE care_entries SET
@@ -401,7 +404,7 @@ function persistEntry(
     `).run(
       id, input.generatedByPatternId ?? null, input.ruleOccurrenceDate ?? null,
       input.contactRuleId ?? null, input.contactRuleSegmentId ?? null,
-      input.contactRuleOccurrenceKey ?? null, input.responsiblePartyId ?? null,
+      input.contactRuleOccurrenceKey ?? null, effectiveResponsiblePartyId ?? null,
       input.contactRuleSyncState ?? null,
       input.startDateTime, input.endDateTime, input.status, input.careScope,
       input.status === "cancelled" ? input.cancellationReason ?? null : null,

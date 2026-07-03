@@ -1,8 +1,8 @@
 import { useMemo } from "react";
 import { unavailableForEntry } from "../lib/analytics";
-import { entryDateKeys, formatTime, getCalendarDays } from "../lib/date";
+import { entryDateKeys, enumerateDateKeys, formatTime, getCalendarDays } from "../lib/date";
 import { statusLabel, unavailableCategoryLabels } from "../lib/labels";
-import type { CareEntry, Child, ExternalCalendarEvent, UnavailablePeriod } from "../types";
+import type { CareEntry, Child, ExternalCalendarEvent, HolidayPeriod, UnavailablePeriod } from "../types";
 import { Icon } from "./Icon";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy, copyList } from "../i18n/catalog";
@@ -13,6 +13,7 @@ export function CalendarGrid({
   children,
   unavailablePeriods = [],
   externalEvents = [],
+  holidayPeriods = [],
   onSelectDate,
   onSelectEntry,
   onSelectUnavailable,
@@ -23,6 +24,7 @@ export function CalendarGrid({
   children: Child[];
   unavailablePeriods?: UnavailablePeriod[];
   externalEvents?: ExternalCalendarEvent[];
+  holidayPeriods?: HolidayPeriod[];
   onSelectDate: (dateKey: string) => void;
   onSelectEntry: (entry: CareEntry) => void;
   onSelectUnavailable?: (period: UnavailablePeriod) => void;
@@ -60,6 +62,16 @@ export function CalendarGrid({
     for (const event of externalEvents) for (const dateKey of entryDateKeys(event.startDateTime, event.endDateTime)) map.set(dateKey, [...(map.get(dateKey) ?? []), event]);
     return map;
   }, [externalEvents]);
+  const holidaysByDate = useMemo(() => {
+    const map = new Map<string, HolidayPeriod[]>();
+    for (const period of holidayPeriods) {
+      if (period.deletedAt) continue;
+      for (const dateKey of enumerateDateKeys(period.startDate, period.endDate)) {
+        map.set(dateKey, [...(map.get(dateKey) ?? []), period]);
+      }
+    }
+    return map;
+  }, [holidayPeriods]);
 
   return (
     <div className="calendar-wrap">
@@ -71,7 +83,8 @@ export function CalendarGrid({
           const dayEntries = entriesByDate.get(day.dateKey) ?? [];
           const dayUnavailable = unavailableByDate.get(day.dateKey) ?? [];
           const dayExternal = externalByDate.get(day.dateKey) ?? [];
-          const visibleCount = dayEntries.length + dayUnavailable.length + dayExternal.length;
+          const dayHolidays = holidaysByDate.get(day.dateKey) ?? [];
+          const visibleCount = dayEntries.length + dayUnavailable.length + dayExternal.length + dayHolidays.length;
           return (
             <div
               className={[
@@ -96,6 +109,11 @@ export function CalendarGrid({
                 {dayExternal.slice(0, 1).map((event) => (
                   <span className="calendar-event calendar-event--external" key={`external-${event.id}`} title={`${event.sourceName}: ${event.title}`} style={{ borderColor: event.sourceColor }} data-testid={`external-calendar-event-${event.id}`}>
                     <Icon name="calendar" size={13} /><span className="calendar-event__label">{event.title}</span>
+                  </span>
+                ))}
+                {dayHolidays.slice(0, 1).map((period) => (
+                  <span className="calendar-event calendar-event--holiday" key={`holiday-${period.id}`} title={period.name} data-testid={`calendar-holiday-${period.id}`}>
+                    <Icon name="sun" size={13} /><span className="calendar-event__label">{period.name}</span>
                   </span>
                 ))}
                 {dayUnavailable.slice(0, 1).map((period) => (

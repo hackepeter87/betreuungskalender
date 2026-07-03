@@ -10,6 +10,7 @@ import {
   syncContactRule,
   upsertContactRule
 } from "../services/contactRules.js";
+import { getDefaultResponsiblePartyId } from "../services/settings.js";
 import { contactRuleInputSchema } from "../validation/schemas.js";
 
 const readLimit = {
@@ -38,12 +39,16 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
     let syncSummary;
     try {
       db.transaction(() => {
+        const rule = {
+          ...parsed.data,
+          responsiblePartyId: parsed.data.responsiblePartyId ?? getDefaultResponsiblePartyId()
+        };
         assertActiveChildren(parsed.data.childIds);
-        assertActiveCareParty(parsed.data.responsiblePartyId);
-        assertCanUseCareParty(request.user, parsed.data.responsiblePartyId);
+        assertActiveCareParty(rule.responsiblePartyId);
+        assertCanUseCareParty(request.user, rule.responsiblePartyId);
         const saved = upsertContactRule({
           id,
-          rule: parsed.data,
+          rule,
           createdBy: request.userEmail,
           updatedBy: request.userEmail,
           createdAt: timestamp,
@@ -76,13 +81,17 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
     let syncSummary;
     try {
       db.transaction(() => {
+        const rule = {
+          ...parsed.data,
+          responsiblePartyId: parsed.data.responsiblePartyId ?? before.responsiblePartyId ?? getDefaultResponsiblePartyId()
+        };
         assertActiveChildren(parsed.data.childIds);
-        assertActiveCareParty(parsed.data.responsiblePartyId);
-        assertCanUseCareParty(request.user, parsed.data.responsiblePartyId);
+        assertActiveCareParty(rule.responsiblePartyId);
+        assertCanUseCareParty(request.user, rule.responsiblePartyId);
         const saved = upsertContactRule({
           id: request.params.id,
           rule: {
-            ...parsed.data,
+            ...rule,
             sourceContactPatternId: before.sourceContactPatternId
           },
           createdBy: before.createdBy,
