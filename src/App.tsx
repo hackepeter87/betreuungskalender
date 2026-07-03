@@ -37,7 +37,7 @@ interface EntryDialogState {
 
 export function App() {
   const { locale } = useI18n();
-  const { isLoading, serverStatus } = useAppStore();
+  const { data, isLoading, serverStatus, openConfirmations } = useAppStore();
   const [activePage, setActivePage] = useState<PageId>("dashboard");
   const [monthKey, setMonthKey] = useState(() => toMonthKey(new Date()));
   const [entryDialog, setEntryDialog] = useState<EntryDialogState | null>(null);
@@ -67,6 +67,23 @@ export function App() {
       migrationChecked.current = false;
     });
   }, [isLoading, serverStatus]);
+
+  useEffect(() => {
+    if (isLoading) return;
+    const params = new URLSearchParams(window.location.search);
+    const confirmationId = params.get("confirmation");
+    if (!confirmationId) return;
+    const confirmation = openConfirmations.find((item) => item.id === confirmationId);
+    const entry = confirmation
+      ? data.entries.find((item) => item.id === confirmation.careEntryId) ?? confirmation.entry
+      : undefined;
+    if (!entry) return;
+    setActivePage("dashboard");
+    setEntryDialog({ entry });
+    params.delete("confirmation");
+    const nextQuery = params.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`);
+  }, [data.entries, isLoading, openConfirmations]);
 
   const openNewEntry = (date?: string, additionalCare = false) =>
     setEntryDialog({ date, additionalCare });

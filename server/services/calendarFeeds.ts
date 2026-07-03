@@ -34,7 +34,7 @@ interface FeedEntryRow {
   id: string;
   start_datetime: string;
   end_datetime: string;
-  status: "planned" | "completed";
+  status: "planned" | "completed" | "partial";
   location: string | null;
   custom_location: string | null;
   updated_at: string;
@@ -195,7 +195,7 @@ function feedEntriesForToken(token: TokenRow): FeedEntryRow[] {
       SELECT id, start_datetime, end_datetime, status, location, custom_location, updated_at
       FROM care_entries
       WHERE deleted_at IS NULL
-        AND status IN ('planned', 'completed')
+        AND status IN ('planned', 'completed', 'partial')
         AND created_by = ?
       ORDER BY start_datetime, id
     `).all(token.user_id) as FeedEntryRow[];
@@ -205,7 +205,7 @@ function feedEntriesForToken(token: TokenRow): FeedEntryRow[] {
       SELECT id, start_datetime, end_datetime, status, location, custom_location, updated_at
       FROM care_entries
       WHERE deleted_at IS NULL
-        AND status IN ('planned', 'completed')
+        AND status IN ('planned', 'completed', 'partial')
         AND responsible_party_id = ?
       ORDER BY start_datetime, id
     `).all(token.scope_party_id) as FeedEntryRow[];
@@ -216,7 +216,7 @@ function feedEntriesForToken(token: TokenRow): FeedEntryRow[] {
       SELECT id, start_datetime, end_datetime, status, location, custom_location, updated_at
       FROM care_entries
       WHERE deleted_at IS NULL
-        AND status IN ('planned', 'completed')
+        AND status IN ('planned', 'completed', 'partial')
         AND responsible_party_id IN (${placeholders})
       ORDER BY start_datetime, id
     `).all(...assignedIds) as FeedEntryRow[];
@@ -225,7 +225,7 @@ function feedEntriesForToken(token: TokenRow): FeedEntryRow[] {
     SELECT id, start_datetime, end_datetime, status, location, custom_location, updated_at
     FROM care_entries
     WHERE deleted_at IS NULL
-      AND status IN ('planned', 'completed')
+      AND status IN ('planned', 'completed', 'partial')
     ORDER BY start_datetime, id
   `).all() as FeedEntryRow[];
 }
@@ -306,7 +306,7 @@ export function buildPersonalCalendarFeed(input: {
       `SUMMARY:${escapeText(title)}`,
       ...(location ? [`LOCATION:${escapeText(location)}`] : []),
       `LAST-MODIFIED:${utcDateTimeValue(entry.updated_at)}`,
-      `CATEGORIES:${entry.status === "planned" ? "Geplant" : "Durchgeführt"}`,
+      `CATEGORIES:${entry.status === "planned" ? "Geplant" : entry.status === "partial" ? "Teilweise" : "Durchgeführt"}`,
       "END:VEVENT"
     );
   }

@@ -23,7 +23,8 @@ const expectedMigrations = [
   "012_care_parties",
   "013_calendar_feed_scopes_and_assignments",
   "014_localized_default_care_party",
-  "015_external_calendar_holiday_sources"
+  "015_external_calendar_holiday_sources",
+  "016_care_confirmations_notifications"
 ];
 
 async function withTemporaryDirectory(

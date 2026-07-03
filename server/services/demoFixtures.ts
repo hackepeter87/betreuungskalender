@@ -10,7 +10,7 @@ function entry(input: {
   startDateTime: string;
   endDateTime: string;
   childIds: string[];
-  status: "planned" | "completed" | "cancelled";
+  status: "planned" | "completed" | "cancelled" | "partial";
   careScope: string;
   cancellationReason?: string;
   overnight?: boolean;

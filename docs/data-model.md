@@ -25,8 +25,9 @@ discovery source; it is not synchronized or treated as current persistence.
 | `schema_migrations` | Applied migration identifiers and timestamps |
 | `children` | Child aliases, birth month/year, and calendar color |
 | `care_parties` | Domain caregivers such as parents, grandparents, or other responsible parties |
-| `care_entries` | Planned, completed, or cancelled care periods and details |
+| `care_entries` | Planned, completed, partially completed, or cancelled care periods and details |
 | `care_entry_children` | Many-to-many child assignment for care entries |
+| `care_confirmation_requests` | Follow-up confirmation tasks for past planned care entries |
 | `trips` | Multiple trips belonging to a care entry |
 | `costs` | Multiple cost items belonging to a care entry |
 | `holiday_periods` | Named holiday blocks and assignment |
@@ -44,6 +45,8 @@ discovery source; it is not synchronized or treated as current persistence.
 | `calendar_feed_tokens` | Revocable per-user iCalendar feed token hashes |
 | `native_oidc_login_states` | Short-lived server-side OIDC state, nonce, and PKCE verifier records |
 | `native_oidc_sessions` | Server-side native OIDC session token hashes and expiry metadata |
+| `notification_preferences` | Per-user notification channel choices for supported event types |
+| `push_subscriptions` | Web Push subscription endpoints and public keys per app user |
 
 ## Soft delete
 
@@ -137,8 +140,10 @@ decisions are read from the matching `app_users` row on each API request.
 Care entries contain start/end, status, care scope, overnight and holiday
 flags, additional care, location, handover, notes, evidence reference,
 calculated duration, contact-time classification, and an optional
-`responsible_party_id`. Children, trips, and costs are persisted
-transactionally.
+`responsible_party_id`. Supported stored statuses are `planned`, `completed`,
+`partial`, and `cancelled`. The API can additionally expose a derived
+`unconfirmed` confirmation state for planned entries whose end time is already
+in the past. Children, trips, and costs are persisted transactionally.
 
 Generated planned entries can reference a flexible contact rule with
 `contact_rule_id`, `contact_rule_segment_id`, and
@@ -147,6 +152,34 @@ that can still be updated by rule synchronization from entries that were
 manually changed and must be preserved. The older `generated_by_pattern_id` and
 `rule_occurrence_date` columns remain for compatibility with legacy
 contact-pattern data and migration paths.
+
+Confirmed care entries can store `confirmation_note`, `confirmed_at`, and
+`confirmed_by`. The note is optional and meant for short factual context such
+as a partial completion note. `confirmed_by` stores the stable `app_users.id`
+of the confirming user.
+
+## Care confirmations and notifications
+
+`care_confirmation_requests` stores one active confirmation task per care entry
+and target user. A request is created for a planned past care entry when the
+entry has not yet been confirmed. Its status is `open`, `snoozed`, or
+`answered`; snoozed requests store `next_reminder_at`. Answering a request
+updates the linked care entry to `completed`, `partial`, or `cancelled`, records
+confirmation metadata, and closes the request so it is not sent again.
+
+Notification preferences are intentionally small. `notification_preferences`
+stores per-user choices for the supported confirmation events:
+`care_confirmation_due` and `care_confirmation_reminder`. In-app notification is
+always available, Web Push can be enabled when the server has VAPID keys, and
+email is stored as a user preference for a later mail transport implementation.
+
+`push_subscriptions` stores browser-provided Web Push endpoint data for an
+authenticated app user: endpoint URL, `p256dh`, `auth`, optional user agent, and
+soft-delete metadata. To avoid server-side request forgery through crafted
+subscription URLs, the server only accepts HTTPS endpoints whose host is listed
+in `WEB_PUSH_ALLOWED_ENDPOINT_HOSTS`. The server sends privacy-preserving push
+payloads that do not include child names, exact care times, notes, evidence
+references, or other case details.
 
 ## Contact rules
 

@@ -34,7 +34,7 @@ function isEntry(value: unknown): value is CareEntry {
     typeof value.endDateTime === "string" &&
     Array.isArray(value.childIds) &&
     value.childIds.every((id) => typeof id === "string") &&
-    ["planned", "completed", "cancelled"].includes(String(value.status))
+    ["planned", "completed", "cancelled", "partial"].includes(String(value.status))
   );
 }
 

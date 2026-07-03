@@ -13,7 +13,9 @@ export const careScopes = [
 ] as const;
 
 export type CareScope = (typeof careScopes)[number];
-export type ApiEntryStatus = "planned" | "completed" | "cancelled";
+export type ApiEntryStatus = "planned" | "completed" | "cancelled" | "partial";
+export type ApiCareConfirmationStatus = "open" | "answered" | "snoozed";
+export type ApiNotificationEventType = "care_confirmation_due" | "care_confirmation_reminder";
 
 export const unavailableCategories = [
   "duty",
@@ -98,6 +100,10 @@ export interface ApiCareEntry {
   endDateTime: string;
   childIds: string[];
   status: ApiEntryStatus;
+  confirmationState?: "unconfirmed" | "confirmed";
+  confirmedAt?: string;
+  confirmedBy?: string;
+  confirmationNote?: string;
   careScope: CareScope;
   cancellationReason?: string;
   overnight: boolean;
@@ -120,6 +126,54 @@ export interface ApiCareEntry {
   updatedAt: string;
   trips: ApiTrip[];
   costs: ApiCost[];
+}
+
+export interface ApiCareConfirmationRequest {
+  id: string;
+  careEntryId: string;
+  userId: string;
+  dueAt: string;
+  sentAt?: string;
+  answeredAt?: string;
+  status: ApiCareConfirmationStatus;
+  reminderCount: number;
+  nextReminderAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  entry: ApiCareEntry;
+}
+
+export interface ApiCareConfirmationAnswer {
+  status: "completed" | "cancelled" | "partial";
+  note?: string;
+  cancellationReason?: string;
+}
+
+export interface ApiCareConfirmationRemindLater {
+  nextReminderAt?: string;
+}
+
+export interface ApiNotificationPreference {
+  eventType: ApiNotificationEventType;
+  inAppEnabled: boolean;
+  pushEnabled: boolean;
+  emailEnabled: boolean;
+}
+
+export interface ApiNotificationPreferencesResponse {
+  preferences: ApiNotificationPreference[];
+  pushAvailable: boolean;
+  pushConfigured: boolean;
+  vapidPublicKey?: string;
+  activePushSubscriptions: number;
+}
+
+export interface ApiPushSubscriptionInput {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
 }
 
 export interface ApiMonthlyClosing {

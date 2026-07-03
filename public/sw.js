@@ -63,3 +63,49 @@ self.addEventListener("fetch", (event) => {
     )
   );
 });
+
+self.addEventListener("push", (event) => {
+  let payload = {
+    title: "Betreuung bestätigen",
+    body: "Wurde eine geplante Betreuung durchgeführt?",
+    url: "/"
+  };
+  try {
+    if (event.data) payload = { ...payload, ...event.data.json() };
+  } catch {
+    // Keep the privacy-safe default notification payload.
+  }
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      icon: "/icons/app-icon-192.png",
+      badge: "/icons/favicon-32.png",
+      data: { url: payload.url }
+    })
+  );
+});
+
+function notificationTargetUrl(value) {
+  try {
+    const url = new URL(value || "/", self.location.origin);
+    return url.origin === self.location.origin ? url.href : new URL("/", self.location.origin).href;
+  } catch {
+    return new URL("/", self.location.origin).href;
+  }
+}
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  const url = notificationTargetUrl(event.notification.data?.url);
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
+      for (const client of clients) {
+        if ("focus" in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+      return self.clients.openWindow(url);
+    })
+  );
+});

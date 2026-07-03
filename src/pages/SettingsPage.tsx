@@ -20,7 +20,7 @@ import {
   type ApiCarePartyKind,
   type ApiUserCarePartyAssignment
 } from "../../shared/api";
-import type { CareLocation, CareParty, Child, HandoverParty } from "../types";
+import type { CareLocation, CareParty, Child, HandoverParty, NotificationEventType, NotificationPreference } from "../types";
 
 function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
   const { saveChild, canWrite, isSaving } = useAppStore();
@@ -83,6 +83,87 @@ function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
 
 function carePartyKindLabel(kind: ApiCarePartyKind, locale: "de" | "en") {
   return copy(locale, "settings", `carePartyKind_${kind}` as CatalogKey<"settings">);
+}
+
+function notificationEventLabel(eventType: NotificationEventType, locale: "de" | "en") {
+  return eventType === "care_confirmation_due"
+    ? copy(locale, "notifications", "careConfirmationDue")
+    : copy(locale, "notifications", "careConfirmationReminder");
+}
+
+function NotificationPreferencesSection() {
+  const { locale } = useI18n();
+  const {
+    notificationPreferences,
+    updateNotificationPreferences,
+    registerPushSubscription,
+    canWrite,
+    isSaving
+  } = useAppStore();
+  const preferences = notificationPreferences?.preferences ?? [];
+
+  const patchPreference = (eventType: NotificationEventType, patch: Partial<NotificationPreference>) => {
+    const next = preferences.map((preference) =>
+      preference.eventType === eventType
+        ? { ...preference, ...patch, inAppEnabled: true }
+        : preference
+    );
+    void updateNotificationPreferences(next);
+  };
+
+  return (
+    <section className="panel settings-section" data-testid="notification-preferences">
+      <div className="panel__header">
+        <div>
+          <h2>{copy(locale, "notifications", "title")}</h2>
+          <p>{copy(locale, "notifications", "description")}</p>
+        </div>
+        <button className="button button--secondary" type="button" disabled={!canWrite || isSaving || !notificationPreferences?.pushAvailable} onClick={() => void registerPushSubscription()}>
+          <Icon name="bell" size={17} />
+          {copy(locale, "notifications", "enablePush")}
+        </button>
+      </div>
+      <div className="notification-preferences-table">
+        <div className="notification-preferences-row notification-preferences-row--head">
+          <span>{copy(locale, "notifications", "event")}</span>
+          <span>{copy(locale, "notifications", "inApp")}</span>
+          <span>{copy(locale, "notifications", "push")}</span>
+          <span>{copy(locale, "notifications", "email")}</span>
+        </div>
+        {preferences.map((preference) => (
+          <div className="notification-preferences-row" key={preference.eventType}>
+            <strong>{notificationEventLabel(preference.eventType, locale)}</strong>
+            <span className="status-pill status-pill--ok">{copy(locale, "common", "yes")}</span>
+            <label className="toggle toggle--compact">
+              <input
+                type="checkbox"
+                checked={preference.pushEnabled}
+                disabled={!canWrite || isSaving}
+                onChange={(event) => patchPreference(preference.eventType, { pushEnabled: event.target.checked })}
+              />
+              <span />
+            </label>
+            <label className="toggle toggle--compact">
+              <input
+                type="checkbox"
+                checked={preference.emailEnabled}
+                disabled={!canWrite || isSaving}
+                onChange={(event) => patchPreference(preference.eventType, { emailEnabled: event.target.checked })}
+              />
+              <span />
+            </label>
+          </div>
+        ))}
+      </div>
+      <p className="settings-note">
+        {notificationPreferences?.pushAvailable
+          ? copy(locale, "notifications", "pushActive", { count: notificationPreferences.activePushSubscriptions })
+          : copy(locale, "notifications", "pushUnavailable")}
+        {" "}
+        {copy(locale, "notifications", "emailHint")}
+      </p>
+    </section>
+  );
 }
 
 function CarePartyForm({ party, onDone }: { party?: CareParty; onDone: () => void }) {
@@ -461,6 +542,8 @@ export function SettingsPage() {
           </label>
         </div>
       </section>
+
+      <NotificationPreferencesSection />
 
       <UserCarePartyAssignmentManager />
 

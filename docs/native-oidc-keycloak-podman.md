@@ -108,6 +108,10 @@ OIDC_REQUIRE_ROLE_CLAIM=true
 
 SESSION_COOKIE_NAME=betreuungskalender_session
 SESSION_TTL_SECONDS=2419200
+WEB_PUSH_SUBJECT=mailto:admin@example.invalid
+WEB_PUSH_PUBLIC_KEY=
+WEB_PUSH_PRIVATE_KEY=
+WEB_PUSH_ALLOWED_ENDPOINT_HOSTS=fcm.googleapis.com,updates.push.services.mozilla.com,web.push.apple.com,webpush.push.apple.com
 ALLOWED_ORIGIN=https://app.example.net
 LOG_LEVEL=info
 ```
@@ -118,6 +122,13 @@ client. The post-logout redirect URI must also be registered on the Keycloak
 client; otherwise Keycloak may reject provider logout after the app session is
 cleared. `OIDC_CLIENT_SECRET` is a secret and belongs only in the private
 `.env` or a reviewed secret-management mechanism.
+
+Web Push is optional for care confirmation reminders. Leave
+`WEB_PUSH_PUBLIC_KEY` and `WEB_PUSH_PRIVATE_KEY` empty for in-app reminders
+only. If Push is enabled, generate VAPID keys outside the repository and keep
+the private key in the private `.env` or secret store. Keep the allowed
+endpoint hosts restricted to browser push services so users cannot make the
+server send outbound requests to arbitrary internal URLs.
 
 Do not set `TRUST_PROXY_AUTH=true` in native mode. The application rejects that
 combination because native OIDC must not accept forged proxy identity headers

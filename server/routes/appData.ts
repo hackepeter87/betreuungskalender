@@ -160,7 +160,7 @@ export function insertEntry(record: DataRecord, timestamp: string, userEmail: st
     contactRuleOccurrenceKey: optionalText(record, "contactRuleOccurrenceKey") ?? undefined,
     responsiblePartyId: optionalText(record, "responsiblePartyId") ?? undefined,
     contactRuleSyncState: optionalText(record, "contactRuleSyncState") ?? undefined,
-    status: record.status,
+      status: record.status,
     careScope: deriveCareScope(record),
     cancellationReason: optionalText(record, "cancellationReason") ?? undefined,
     overnight: booleanValue(record, "overnight"),
@@ -212,11 +212,12 @@ export function insertEntry(record: DataRecord, timestamp: string, userEmail: st
       contact_rule_id, contact_rule_segment_id, contact_rule_occurrence_key,
       responsible_party_id, contact_rule_sync_state,
       start_datetime, end_datetime, status, care_scope, cancellation_reason,
+      confirmation_note, confirmed_at, confirmed_by,
       overnight, school_handover, holiday, weekend, additional_care, location,
       custom_location, handover_from, handover_to, notes, evidence_reference,
       has_evidence, duration_minutes, is_contact_time, created_by, updated_by,
       created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     input.generatedByPatternId ?? null,
@@ -231,6 +232,9 @@ export function insertEntry(record: DataRecord, timestamp: string, userEmail: st
     input.status,
     input.careScope,
     input.status === "cancelled" ? input.cancellationReason ?? null : null,
+    optionalText(record, "confirmationNote"),
+    optionalText(record, "confirmedAt"),
+    optionalText(record, "confirmedBy"),
     Number(input.overnight),
     Number(input.schoolHandover),
     Number(input.holiday),

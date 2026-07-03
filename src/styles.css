@@ -1053,6 +1053,11 @@ h3 {
   text-decoration: line-through;
 }
 
+.calendar-event--partial {
+  border-color: #a5b4fc;
+  background: #eef2ff;
+}
+
 .calendar-event--rule {
   border-left-width: 3px;
 }
@@ -1465,6 +1470,11 @@ h3 {
 .status-label--cancelled {
   background: var(--coral-soft);
   color: #a23d48;
+}
+
+.status-label--partial {
+  background: #eef2ff;
+  color: #3730a3;
 }
 
 .entry-row__chevron {
@@ -1940,6 +1950,89 @@ h3 {
 .settings-note {
   margin: 0;
   padding: 0 18px;
+}
+
+.notification-preferences-table {
+  display: grid;
+  border-top: 1px solid var(--line);
+}
+
+.notification-preferences-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px 90px 90px;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.notification-preferences-row--head {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.toggle--compact {
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+.confirmation-panel {
+  border-color: rgba(13, 148, 136, 0.32);
+}
+
+.confirmation-list {
+  display: grid;
+  gap: 14px;
+  padding: 18px;
+}
+
+.confirmation-card {
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.confirmation-card__link {
+  justify-content: flex-start;
+  padding-inline: 0;
+}
+
+.confirmation-card textarea {
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+}
+
+.confirmation-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.confirmation-actions .button {
+  min-width: 0;
+  white-space: normal;
+}
+
+@media (max-width: 720px) {
+  .notification-preferences-row {
+    grid-template-columns: minmax(0, 1fr) repeat(3, 56px);
+    gap: 8px;
+    padding: 12px 14px;
+  }
+
+  .notification-preferences-row--head {
+    font-size: 0.62rem;
+  }
+
+  .confirmation-actions {
+    grid-template-columns: 1fr;
+  }
 }
 
 .assignment-list {

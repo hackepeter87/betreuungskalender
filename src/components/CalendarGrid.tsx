@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { unavailableForEntry } from "../lib/analytics";
 import { entryDateKeys, formatTime, getCalendarDays } from "../lib/date";
-import { unavailableCategoryLabels } from "../lib/labels";
+import { statusLabel, unavailableCategoryLabels } from "../lib/labels";
 import type { CareEntry, Child, ExternalCalendarEvent, UnavailablePeriod } from "../types";
 import { Icon } from "./Icon";
 import { useI18n } from "../i18n/I18nProvider";
@@ -144,7 +144,7 @@ export function CalendarGrid({
                     onClick={() => onSelectEntry(entry)}
                     title={hasOverlap
                       ? copy(locale, "agenda", "overlap")
-                      : `${entry.status === "completed" ? copy(locale, "calendar", "completed") : entry.status === "planned" ? copy(locale, "calendar", "planned") : copy(locale, "calendar", "cancelled")} · ${ruleStateLabel ? `${ruleStateLabel} · ` : ""}${formatTime(entry.startDateTime, intlLocale)}`}
+                      : `${statusLabel(entry.status, locale)} · ${ruleStateLabel ? `${ruleStateLabel} · ` : ""}${formatTime(entry.startDateTime, intlLocale)}`}
                   >
                     <span className="calendar-event__colors">
                       {entry.childIds.map((id) => (

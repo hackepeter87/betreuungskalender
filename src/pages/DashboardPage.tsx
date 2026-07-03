@@ -34,10 +34,19 @@ export function DashboardPage({
   onOpenCalendar: () => void;
 }) {
   const { locale, intlLocale } = useI18n();
-  const { data, closeMonth, canWrite, isSaving } = useAppStore();
+  const {
+    data,
+    closeMonth,
+    canWrite,
+    isSaving,
+    openConfirmations,
+    answerCareConfirmation,
+    remindCareConfirmationLater
+  } = useAppStore();
   const [showClosure, setShowClosure] = useState(false);
   const [closureConfirmed, setClosureConfirmed] = useState(false);
   const [externalEvents, setExternalEvents] = useState<ExternalCalendarEvent[]>([]);
+  const [confirmationNotes, setConfirmationNotes] = useState<Record<string, string>>({});
   const stats = useMemo(() => calculateMonthlyStats(data, monthKey), [data, monthKey]);
   const monthEntries = useMemo(
     () => entriesForMonth(data.entries, monthKey),
@@ -105,7 +114,7 @@ export function DashboardPage({
   ];
   const mobileMetrics: Array<{ label: string; value: string; detail: string; icon: IconName; tone: string }> = [
     { label: copy(locale, "dashboard", "overnights"), value: String(stats.overnights), detail: copy(locale, "dashboard", "selectedMonth"), icon: "moon", tone: "violet" },
-    { label: copy(locale, "dashboard", "additionalCare"), value: String(monthEntries.filter((entry) => entry.status === "completed" && entry.additionalCare).length), detail: copy(locale, "dashboard", "completedDates"), icon: "plus", tone: "teal" },
+    { label: copy(locale, "dashboard", "additionalCare"), value: String(monthEntries.filter((entry) => (entry.status === "completed" || entry.status === "partial") && entry.additionalCare).length), detail: copy(locale, "dashboard", "completedDates"), icon: "plus", tone: "teal" },
     { label: copy(locale, "dashboard", "openDates"), value: String(monthEntries.filter((entry) => entry.status === "planned" && entry.generatedByPatternId).length), detail: copy(locale, "dashboard", "plannedDates"), icon: "calendar", tone: "amber" },
     { label: copy(locale, "dashboard", "dataQuality"), value: String(dataQuality.totalIssues), detail: dataQuality.totalIssues ? copy(locale, "dashboard", "openHints") : copy(locale, "dashboard", "noHints"), icon: dataQuality.totalIssues ? "alert" : "check", tone: dataQuality.totalIssues ? "coral" : "teal" },
     { label: copy(locale, "dashboard", "lastBackup"), value: backupAgeDays === null ? "–" : backupAgeDays === 0 ? copy(locale, "common", "today") : `${backupAgeDays} ${locale === "en" ? "d" : "T."}`, detail: backupIsCurrent ? copy(locale, "dashboard", "backupCurrent") : copy(locale, "dashboard", "backupRequired"), icon: backupIsCurrent ? "backup" : "alert", tone: backupIsCurrent ? "teal" : "coral" }
@@ -236,6 +245,52 @@ export function DashboardPage({
         </section>
 
         <aside className="dashboard-sidebar">
+          {openConfirmations.length ? (
+            <section className="panel confirmation-panel" data-testid="open-confirmations">
+              <div className="panel__header panel__header--compact">
+                <div>
+                  <h2>{copy(locale, "confirmation", "title")}</h2>
+                  <p>{copy(locale, "confirmation", "description")}</p>
+                </div>
+              </div>
+              <div className="confirmation-list">
+                {openConfirmations.slice(0, 4).map((request) => {
+                  const entry = data.entries.find((item) => item.id === request.careEntryId) ?? request.entry;
+                  const note = confirmationNotes[request.id] ?? "";
+                  return (
+                    <article className="confirmation-card" key={request.id} data-testid="confirmation-card">
+                      <button className="button button--quiet confirmation-card__link" type="button" onClick={() => onEditEntry(entry)}>
+                        <Icon name="calendar" size={16} />
+                        {copy(locale, "confirmation", "dueYesterday")}
+                      </button>
+                      <small>{formatDate(entry.endDateTime.slice(0, 10), intlLocale)}</small>
+                      <textarea
+                        rows={2}
+                        value={note}
+                        placeholder={copy(locale, "confirmation", "notePlaceholder")}
+                        onChange={(event) => setConfirmationNotes((current) => ({ ...current, [request.id]: event.target.value }))}
+                      />
+                      <div className="confirmation-actions">
+                        <button className="button button--primary" type="button" disabled={!canWrite || isSaving} onClick={() => void answerCareConfirmation(request.id, "completed", note)}>
+                          {copy(locale, "confirmation", "completed")}
+                        </button>
+                        <button className="button button--secondary" type="button" disabled={!canWrite || isSaving} onClick={() => void answerCareConfirmation(request.id, "partial", note)}>
+                          {copy(locale, "confirmation", "partial")}
+                        </button>
+                        <button className="button button--danger-quiet" type="button" disabled={!canWrite || isSaving} onClick={() => void answerCareConfirmation(request.id, "cancelled", note || copy(locale, "confirmation", "cancelled"))}>
+                          {copy(locale, "confirmation", "cancelled")}
+                        </button>
+                        <button className="button button--quiet" type="button" disabled={!canWrite || isSaving} onClick={() => void remindCareConfirmationLater(request.id)}>
+                          {copy(locale, "confirmation", "remindLater")}
+                        </button>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            </section>
+          ) : null}
+
           <section className="panel">
             <div className="panel__header panel__header--compact">
               <div>

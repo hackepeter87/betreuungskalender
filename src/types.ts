@@ -2,7 +2,8 @@ import type { ApiCareParty, ApiContactRule } from "../shared/api";
 
 export const SCHEMA_VERSION = 6 as const;
 
-export type EntryStatus = "planned" | "completed" | "cancelled";
+export type EntryStatus = "planned" | "completed" | "cancelled" | "partial";
+export type NotificationEventType = "care_confirmation_due" | "care_confirmation_reminder";
 export type CareLocation =
   | "commuterApartment"
   | "mainResidence"
@@ -88,6 +89,10 @@ export interface CareEntry {
   endDateTime: string;
   childIds: string[];
   status: EntryStatus;
+  confirmationState?: "unconfirmed" | "confirmed";
+  confirmedAt?: string;
+  confirmedBy?: string;
+  confirmationNote?: string;
   additionalCare: boolean;
   generatedByPatternId?: string;
   ruleOccurrenceDate?: string;
@@ -132,6 +137,36 @@ export interface HolidayPeriod {
   createdAt: string;
   updatedAt: string;
   deletedAt?: string;
+}
+
+export interface CareConfirmationRequest {
+  id: string;
+  careEntryId: string;
+  userId: string;
+  dueAt: string;
+  sentAt?: string;
+  answeredAt?: string;
+  status: "open" | "answered" | "snoozed";
+  reminderCount: number;
+  nextReminderAt?: string;
+  createdAt: string;
+  updatedAt: string;
+  entry: CareEntry;
+}
+
+export interface NotificationPreference {
+  eventType: NotificationEventType;
+  inAppEnabled: boolean;
+  pushEnabled: boolean;
+  emailEnabled: boolean;
+}
+
+export interface NotificationPreferencesResponse {
+  preferences: NotificationPreference[];
+  pushAvailable: boolean;
+  pushConfigured: boolean;
+  vapidPublicKey?: string;
+  activePushSubscriptions: number;
 }
 
 export interface ContactPattern {

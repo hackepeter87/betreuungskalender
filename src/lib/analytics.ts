@@ -246,7 +246,7 @@ export function calculateContactStats(
   return {
     scheduled: scheduled.length,
     pending: scheduled.filter((entry) => entry.status === "planned").length,
-    completed: scheduled.filter((entry) => entry.status === "completed").length,
+    completed: scheduled.filter((entry) => entry.status === "completed" || entry.status === "partial").length,
     cancelled: cancelled.length,
     cancelledDutyRelated,
     cancelledOther: cancelled.length - cancelledDutyRelated,
@@ -257,7 +257,7 @@ export function calculateContactStats(
         }).length > 0
     ).length,
     additional: relevant.filter(
-      (entry) => entry.additionalCare && entry.status === "completed"
+      (entry) => entry.additionalCare && (entry.status === "completed" || entry.status === "partial")
     ).length
   };
 }
@@ -272,7 +272,7 @@ function calculateEntityStats(
   const relevant = childId
     ? entries.filter((entry) => entry.childIds.includes(childId))
     : entries;
-  const completed = relevant.filter((entry) => entry.status === "completed");
+  const completed = relevant.filter((entry) => entry.status === "completed" || entry.status === "partial");
   const careDays = new Set<string>();
   const weekendDays = new Set<string>();
   const weekends = new Set<string>();

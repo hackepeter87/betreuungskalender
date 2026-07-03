@@ -14,6 +14,7 @@ import { runMigrations } from "./db/migrate.js";
 import { sanitizeRequestUrl } from "./logging.js";
 import { auditRoutes } from "./routes/audit.js";
 import { appDataRoutes } from "./routes/appData.js";
+import { careConfirmationRoutes } from "./routes/careConfirmations.js";
 import { appUserRoutes } from "./routes/appUsers.js";
 import { careEntryRoutes } from "./routes/careEntries.js";
 import { carePartyRoutes } from "./routes/careParties.js";
@@ -32,6 +33,7 @@ import { externalCalendarRoutes } from "./routes/externalCalendars.js";
 import { calendarFeedRoutes } from "./routes/calendarFeeds.js";
 import { OidcSessionStore } from "./services/oidcSessions.js";
 import { findAuthenticatedUserBySubject } from "./services/users.js";
+import { runCareConfirmationSweep } from "./services/careConfirmations.js";
 
 runMigrations();
 
@@ -303,6 +305,7 @@ await app.register(nativeOidcRoutes, { config, sessions: nativeOidcSessions });
 await app.register(childrenRoutes);
 await app.register(carePartyRoutes);
 await app.register(careEntryRoutes);
+await app.register(careConfirmationRoutes);
 await app.register(holidayRoutes);
 await app.register(contactPatternRoutes);
 await app.register(contactRuleRoutes);
@@ -316,6 +319,16 @@ await app.register(auditRoutes);
 await app.register(appUserRoutes);
 await app.register(appDataRoutes);
 await app.register(demoDataRoutes);
+
+const confirmationSweep = setInterval(() => {
+  void runCareConfirmationSweep().catch((error) => {
+    app.log.warn({ error }, "care confirmation sweep failed");
+  });
+}, 15 * 60 * 1000);
+confirmationSweep.unref();
+void runCareConfirmationSweep().catch((error) => {
+  app.log.warn({ error }, "initial care confirmation sweep failed");
+});
 
 const frontendRoot = resolve(process.cwd(), "dist");
 if (existsSync(frontendRoot)) {
