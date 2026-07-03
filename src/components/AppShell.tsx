@@ -4,6 +4,9 @@ import type { TranslationKey } from "../i18n/resources";
 import { logoutSession } from "../lib/api";
 import { useAppStore } from "../store/AppStore";
 import type { ApiSession } from "../../shared/api";
+import type { CareEntry } from "../types";
+import { copy } from "../i18n/catalog";
+import { CareConfirmationCenter } from "./CareConfirmationCenter";
 import type { IconName } from "./Icon";
 import { Icon } from "./Icon";
 
@@ -222,15 +225,89 @@ function MobileAuthMenu({
   return null;
 }
 
+function NotificationBell({
+  testIdPrefix,
+  onOpenEntry
+}: {
+  testIdPrefix: "sidebar" | "mobile";
+  onOpenEntry: (entry: CareEntry) => void;
+}) {
+  const { locale } = useI18n();
+  const { openConfirmations } = useAppStore();
+  const [open, setOpen] = useState(false);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const count = openConfirmations.length;
+
+  useEffect(() => {
+    if (!open) return;
+    const closeOnOutsideClick = (event: MouseEvent) => {
+      if (!popoverRef.current?.contains(event.target as Node)) setOpen(false);
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpen(false);
+    };
+    document.addEventListener("mousedown", closeOnOutsideClick);
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.removeEventListener("mousedown", closeOnOutsideClick);
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [open]);
+
+  return (
+    <div className="notification-center" ref={popoverRef}>
+      <button
+        className={`notification-center__trigger${count ? " has-notifications" : ""}`}
+        type="button"
+        data-testid={`${testIdPrefix}-notification-center-trigger`}
+        aria-label={copy(locale, "confirmation", "notificationCenterAria", { count })}
+        aria-expanded={open}
+        aria-haspopup="dialog"
+        onClick={() => setOpen((current) => !current)}
+      >
+        <Icon name="bell" size={20} />
+        {count ? <span className="notification-center__badge" data-testid={`${testIdPrefix}-notification-center-badge`}>{count > 9 ? "9+" : count}</span> : null}
+      </button>
+      {open ? (
+        <section
+          className="notification-center__popover"
+          role="dialog"
+          aria-label={copy(locale, "confirmation", "notificationCenter")}
+          data-testid={`${testIdPrefix}-notification-center-popover`}
+        >
+          <header className="notification-center__header">
+            <div>
+              <strong>{copy(locale, "confirmation", "notificationCenter")}</strong>
+              <p>{copy(locale, "confirmation", count ? "notificationCenterDescription" : "empty")}</p>
+            </div>
+            <button className="icon-button" type="button" onClick={() => setOpen(false)} aria-label={copy(locale, "common", "cancel")}>
+              <Icon name="close" size={18} />
+            </button>
+          </header>
+          <CareConfirmationCenter
+            compact
+            onOpenEntry={(entry) => {
+              setOpen(false);
+              onOpenEntry(entry);
+            }}
+          />
+        </section>
+      ) : null}
+    </div>
+  );
+}
+
 export function AppShell({
   activePage,
   onNavigate,
   onNewEntry,
+  onOpenEntry,
   children
 }: {
   activePage: PageId;
   onNavigate: (page: PageId) => void;
   onNewEntry: () => void;
+  onOpenEntry: (entry: CareEntry) => void;
   children: ReactNode;
 }) {
   const { t } = useI18n();
@@ -308,6 +385,8 @@ export function AppShell({
           t={t}
         />
 
+        <NotificationBell testIdPrefix="sidebar" onOpenEntry={onOpenEntry} />
+
         <button
           className={`sidebar__settings ${activePage === "settings" ? "is-active" : ""}`}
           type="button"
@@ -352,6 +431,7 @@ export function AppShell({
             <strong>{t("app.name")}</strong>
           </button>
           <div className="mobile-header__actions">
+            <NotificationBell testIdPrefix="mobile" onOpenEntry={onOpenEntry} />
             <MobileAuthMenu
               session={session}
               loggingOut={loggingOut}

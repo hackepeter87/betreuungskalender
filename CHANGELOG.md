@@ -8,6 +8,8 @@ project follows semantic versioning where practical.
 
 ### Added
 
+- Added a persistent in-app notification center with sidebar and mobile header
+  bell access for open care-confirmation tasks.
 - Added an explicit default responsible care party setting used by care entries
   and contact rules when no other care party is selected.
 - Added calendar-visible holiday periods in the month grid and agenda.
