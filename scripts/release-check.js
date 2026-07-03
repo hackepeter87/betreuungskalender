@@ -15,12 +15,24 @@ export const REQUIRED_GITIGNORE_RULES = [
   "/backups/",
   "/exports/",
   "/secrets/",
+  "/logs/",
+  "/tmp/",
+  "oauth2-proxy.cfg",
   "*.sqlite",
   "*.sqlite-*",
   "*.db",
   "*.db-*",
+  "*.ics",
+  "*.log",
+  "*.pem",
+  "*.key",
+  "*.p12",
+  "*.pfx",
   "*.pdf",
   "*.csv",
+  "*.tar.gz",
+  "*.tgz",
+  "*.zip",
   "betreuungskalender-backup-*.json",
   "backup-*.json",
   "*.backup.json",
@@ -44,6 +56,9 @@ export const REQUIRED_DOCKERIGNORE_RULES = [
   "backups",
   "exports",
   "secrets",
+  "logs",
+  "tmp",
+  "oauth2-proxy.cfg",
   "test-results",
   "playwright-report",
   "blob-report",
@@ -51,8 +66,17 @@ export const REQUIRED_DOCKERIGNORE_RULES = [
   "*.sqlite-*",
   "*.db",
   "*.db-*",
+  "*.ics",
+  "*.log",
+  "*.pem",
+  "*.key",
+  "*.p12",
+  "*.pfx",
   "*.pdf",
   "*.csv",
+  "*.tar.gz",
+  "*.tgz",
+  "*.zip",
   "betreuungskalender-backup-*.json",
   "backup-*.json",
   "*.backup.json",
@@ -63,6 +87,8 @@ const ALLOWED_PATHS = new Set([
   ".env.example",
   "deploy/.env.oidc.example",
   "deploy/app.env.demo.example",
+  "e2e/fixtures/external-calendar.ics",
+  "e2e/fixtures/external-calendar-replacement.ics",
   "scripts/backup.js",
   "scripts/release-check.js",
   "src/lib/export.ts",
@@ -127,9 +153,14 @@ export function classifySensitiveArtifact(filePath) {
     lower.startsWith("data/") ||
     lower.startsWith("backups/") ||
     lower.startsWith("exports/") ||
-    lower.startsWith("secrets/")
+    lower.startsWith("secrets/") ||
+    lower.startsWith("logs/") ||
+    lower.startsWith("tmp/")
   ) {
-    return "file in a local data, backup, export, or secrets directory";
+    return "file in a local data, backup, export, secrets, logs, or tmp directory";
+  }
+  if (fileName === "oauth2-proxy.cfg") {
+    return "oauth2-proxy configuration file";
   }
   if (/\.sqlite(?:$|-)/i.test(lower)) {
     return "SQLite database or sidecar file";
@@ -137,11 +168,27 @@ export function classifySensitiveArtifact(filePath) {
   if (/\.db(?:$|-)/i.test(lower)) {
     return "database or sidecar file";
   }
+  if (/\.ics$/i.test(lower)) {
+    return "local calendar file";
+  }
+  if (
+    fileName === "id_rsa" ||
+    fileName === "id_ed25519" ||
+    /\.(?:pem|key|p12|pfx)$/i.test(lower)
+  ) {
+    return "private key, certificate, or token material";
+  }
+  if (/\.log$/i.test(lower)) {
+    return "log file";
+  }
   if (/\.pdf$/i.test(lower)) {
     return "PDF export";
   }
   if (/\.csv$/i.test(lower)) {
     return "CSV export";
+  }
+  if (/\.(?:tar\.gz|tgz|zip)$/i.test(lower)) {
+    return "local archive artifact";
   }
   if (
     /^betreuungskalender-backup-.*\.json$/i.test(fileName) ||

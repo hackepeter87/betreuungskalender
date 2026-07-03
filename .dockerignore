@@ -11,6 +11,9 @@ data
 backups
 exports
 secrets
+logs
+tmp
+oauth2-proxy.cfg
 test-results
 playwright-report
 blob-report
@@ -18,8 +21,17 @@ blob-report
 *.sqlite-*
 *.db
 *.db-*
+*.ics
+*.log
+*.pem
+*.key
+*.p12
+*.pfx
 *.pdf
 *.csv
+*.tar.gz
+*.tgz
+*.zip
 betreuungskalender-backup-*.json
 backup-*.json
 *.backup.json
