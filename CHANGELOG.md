@@ -6,6 +6,21 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-07-03
+
+### Security
+
+- Hardened shared-care authorization boundaries so non-admin users can only
+  update or delete care entries and contact rules for care parties they are
+  assigned to.
+- Added regression coverage for shared-care parent separation across care
+  entries and contact rules.
+
+### Fixed
+
+- Fixed the test/demo data reset path so confirmation and notification records
+  are cleared before dependent care entries and app users are removed.
+
 ## [1.7.3] - 2026-07-03
 
 ### Changed
