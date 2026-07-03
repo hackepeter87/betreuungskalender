@@ -163,7 +163,12 @@ export function App() {
 
   return (
     <>
-      <AppShell activePage={activePage} onNavigate={setActivePage} onNewEntry={() => openNewEntry()}>
+      <AppShell
+        activePage={activePage}
+        onNavigate={setActivePage}
+        onNewEntry={() => openNewEntry()}
+        onOpenEntry={openEditEntry}
+      >
         {page}
       </AppShell>
       {entryDialog ? (

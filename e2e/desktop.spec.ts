@@ -137,6 +137,76 @@ test("shows authenticated user and logout action when session metadata is availa
   );
 });
 
+test("shows open care confirmations in the notification center", async ({ page }) => {
+  const end = new Date(Date.now() - 86_400_000);
+  end.setHours(18, 0, 0, 0);
+  const start = new Date(end);
+  start.setHours(16, 0, 0, 0);
+  const date = end.toISOString().slice(0, 10);
+  const entry = {
+    id: "entry_notification_e2e",
+    date,
+    startDateTime: start.toISOString().slice(0, 16),
+    endDateTime: end.toISOString().slice(0, 16),
+    childIds: ["child_notification_e2e"],
+    status: "planned",
+    confirmationState: "unconfirmed",
+    additionalCare: false,
+    overnight: false,
+    schoolHandover: false,
+    holiday: false,
+    weekend: false,
+    location: "other",
+    handoverFrom: "father",
+    handoverTo: "mother",
+    hasEvidence: false,
+    trips: [],
+    costs: [],
+    createdBy: "e2e",
+    updatedBy: "e2e",
+    createdAt: start.toISOString(),
+    updatedAt: start.toISOString()
+  };
+
+  await page.addInitScript((confirmationEntry) => {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      if (new URL(url, window.location.href).pathname === "/api/care-confirmations/open") {
+        return Promise.resolve(new Response(JSON.stringify([{
+          id: "confirm_notification_e2e",
+          careEntryId: confirmationEntry.id,
+          userId: "local-dev",
+          dueAt: new Date().toISOString(),
+          status: "open",
+          reminderCount: 0,
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+          entry: confirmationEntry
+        }]), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }));
+      }
+      return originalFetch(input, init);
+    };
+  }, entry);
+
+  await openApp(page);
+  await expect(page.getByTestId("sidebar-notification-center-badge")).toHaveText("1");
+  await page.getByTestId("sidebar-notification-center-trigger").click();
+  const popover = page.getByTestId("sidebar-notification-center-popover");
+  await expect(popover).toBeVisible();
+  await expect(popover).toContainText("Offene Bestätigungen");
+  await expect(popover.getByTestId("confirmation-card")).toHaveCount(1);
+  await popover.getByText("Geplante Betreuung nachträglich bestätigen").click();
+  await expect(page.getByRole("dialog", { name: "Betreuungseintrag bearbeiten" })).toBeVisible();
+});
+
 test("shows native OIDC login action when authentication is required", async ({
   page
 }) => {
