@@ -378,6 +378,7 @@ test("runtime enforces the OIDC authorization matrix across endpoint classes", a
     { expectedRole: "admin", headers: adminHeaders },
     { expectedRole: "parent", headers: fallbackHeaders }
   ] as const;
+  let adminUserId = "";
   for (const { expectedRole, headers } of sessionCases) {
     const response = await request("/api/session", { headers });
     assert.equal(response.status, 200);
@@ -392,7 +393,9 @@ test("runtime enforces the OIDC authorization matrix across endpoint classes", a
     assert.equal(body.user.role, expectedRole);
     assert.equal(body.user.email, headers["x-auth-request-email"]);
     assert.equal(body.logoutUrl, "/oauth2/sign_out");
+    if (expectedRole === "admin") adminUserId = body.user.id;
   }
+  assert.ok(adminUserId);
 
   for (const headers of [readonlyHeaders, parentHeaders, adminHeaders, fallbackHeaders]) {
     assert.equal((await request("/api/children", { headers })).status, 200);
@@ -431,12 +434,40 @@ test("runtime enforces the OIDC authorization matrix across endpoint classes", a
       method: "DELETE",
       headers
     })).status, 403);
+    assert.equal((await request("/api/app-users", {
+      headers
+    })).status, 403);
+    assert.equal((await request("/api/user-care-party-assignments", {
+      headers
+    })).status, 403);
+    assert.equal((await request("/api/user-care-party-assignments/user_parent", {
+      method: "PUT",
+      headers: jsonHeaders(headers),
+      body: JSON.stringify({ carePartyIds: [] })
+    })).status, 403);
     assert.equal((await request("/api/migration/legacy-detected", {
       method: "POST",
       headers: jsonHeaders(headers),
       body: JSON.stringify({ fingerprint: "synthetic-fingerprint" })
     })).status, 403);
   }
+
+  assert.equal((await request("/api/app-users", {
+    headers: adminHeaders
+  })).status, 200);
+  assert.equal((await request("/api/user-care-party-assignments", {
+    headers: adminHeaders
+  })).status, 200);
+  const adminAssignment = await request(`/api/user-care-party-assignments/${adminUserId}`, {
+    method: "PUT",
+    headers: jsonHeaders(adminHeaders),
+    body: JSON.stringify({ carePartyIds: [] })
+  });
+  assert.equal(adminAssignment.status, 200);
+  assert.deepEqual(await adminAssignment.json(), {
+    userId: adminUserId,
+    carePartyIds: []
+  });
 
   assert.equal((await request("/api/migration/legacy-detected", {
     method: "POST",

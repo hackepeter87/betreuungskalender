@@ -88,6 +88,26 @@ Care parties are domain records, not authentication principals. Optional
 app-user to care-party assignments restrict non-admin shared users once at
 least one assignment exists, but they do not replace `app_users.role`.
 
+## Access-control baseline
+
+Server-side authorization is enforced for `/api/*` routes before route
+handlers run. UI visibility is only a convenience layer and must not be treated
+as the security boundary.
+
+| Request class | Unauthenticated | Readonly | Parent | Admin |
+| --- | --- | --- | --- | --- |
+| `/api/health`, `/api/ready`, `/api/session` | Allowed for health or session discovery | Allowed | Allowed | Allowed |
+| Protected domain reads, such as children, entries, care parties, rules, holidays, reports, and settings reads | `401` | Allowed | Allowed | Allowed |
+| Normal domain writes, such as children, entries, care parties, rules, holidays, unavailability, settings writes, and confirmation actions | `401` | `403` | Allowed | Allowed |
+| Administrative app-data operations, legacy migration endpoints, app-user administration, care-party assignments, and demo-data loading | `401` | `403` | `403` | Allowed |
+| Calendar feed token endpoint | Token scoped to the feed only | Token scoped to the feed only | Token scoped to the feed only | Token scoped to the feed only |
+
+`readonly` users are intended for review-only access. `parent` users can manage
+normal care documentation but cannot administer imports, resets, migrations,
+users, or care-party assignments. `admin` users can perform those
+administrative actions when request input is valid. Calendar feed bearer tokens
+never authenticate general API routes.
+
 Care confirmation push notifications are deliberately generic. Push payloads
 must not include child names, exact care times, locations, notes, evidence
 references, costs, trips, or other sensitive case details. Store VAPID private
