@@ -86,6 +86,9 @@ proxy identity headers, production-safe error responses, prepared SQLite
 statements, validation, and an unprivileged container user. It does not use
 external analytics, tracking services, or CDN runtime dependencies.
 
+The current review baseline, implemented controls, residual risks, and deferred
+security work are summarized in [security-baseline.md](security-baseline.md).
+
 Calendar feed tokens grant access only to the read-only `.ics` endpoint. They
 are not accepted for `/api/*` routes. Feed output excludes notes, evidence
 references, trips, costs, audit metadata, deleted entries, and cancelled
