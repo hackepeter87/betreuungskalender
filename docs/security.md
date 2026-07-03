@@ -103,6 +103,28 @@ Care parties are domain records, not authentication principals. Optional
 app-user to care-party assignments restrict non-admin shared users once at
 least one assignment exists, but they do not replace `app_users.role`.
 
+## Local security baseline checks
+
+Run the local security baseline before security-sensitive changes and
+release-adjacent work:
+
+```bash
+npm run security:check
+```
+
+The command combines the dependency audit, production-style runtime security
+assertions, and release artifact validation:
+
+- `npm audit --audit-level=high`
+- `npm run test:security-runtime`
+- `npm run release:check`
+
+This intentionally reuses existing local checks instead of adding a heavyweight
+scanner to every developer workflow. Trivy filesystem/image scans and ZAP-style
+DAST checks remain deferred optional reviews until a stable scan target, runtime
+budget, and false-positive handling process are agreed. They should not block
+normal patch releases without a separate decision.
+
 ## Access-control baseline
 
 Server-side authorization is enforced for `/api/*` routes before route

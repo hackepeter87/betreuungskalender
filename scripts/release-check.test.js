@@ -196,6 +196,15 @@ test("requires release notes to identify the matching tag", () => {
   );
 });
 
+test("defines the local security baseline script", () => {
+  const packageJson = JSON.parse(readFileSync(resolve("package.json"), "utf8"));
+  const script = packageJson.scripts["security:check"];
+
+  assert.match(script, /npm audit --audit-level=high/);
+  assert.match(script, /npm run test:security-runtime/);
+  assert.match(script, /npm run release:check/);
+});
+
 test("reads environment values from release examples", () => {
   assert.equal(parseEnvValue("TRUST_PROXY_AUTH=false\n", "TRUST_PROXY_AUTH"), "false");
   assert.equal(parseEnvValue("  TRUST_PROXY_AUTH=true\n", "TRUST_PROXY_AUTH"), "true");

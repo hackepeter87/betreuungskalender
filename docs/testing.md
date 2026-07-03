@@ -15,6 +15,16 @@ npm run test:e2e
 git diff --check
 ```
 
+For security-sensitive changes or release-adjacent review, run the bundled
+local security baseline as well:
+
+```bash
+npm run security:check
+```
+
+It combines `npm audit --audit-level=high`,
+`npm run test:security-runtime`, and `npm run release:check`.
+
 ## Release smoke automation
 
 Playwright covers desktop, iPhone, and iPad projects. The synthetic calendar
