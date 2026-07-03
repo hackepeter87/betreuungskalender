@@ -163,6 +163,7 @@ export function AnalyticsPage({ monthKey }: { monthKey: string }) {
             <div><dt>{copy(locale, "analytics", "completed")}</dt><dd>{stats.contact.completed}</dd></div>
             <div><dt>{copy(locale, "analytics", "cancelledDuty")}</dt><dd>{stats.contact.cancelledDutyRelated}</dd></div>
             <div><dt>{copy(locale, "analytics", "cancelledOther")}</dt><dd>{stats.contact.cancelledOther}</dd></div>
+            <div><dt>{copy(locale, "analytics", "externallyBlocked")}</dt><dd>{stats.contact.externallyBlocked}</dd></div>
             <div><dt>{copy(locale, "analytics", "overlaps")}</dt><dd>{stats.contact.unavailableOverlaps}</dd></div>
             <div><dt>{copy(locale, "analytics", "additional")}</dt><dd>{stats.contact.additional}</dd></div>
           </dl>

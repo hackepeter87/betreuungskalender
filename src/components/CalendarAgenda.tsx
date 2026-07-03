@@ -146,7 +146,7 @@ export function CalendarAgenda({
             ))}
             {group.unavailable.map((period) => (
               <button
-                className={`agenda-card agenda-card--unavailable ${period.dutyRelated ? "is-duty" : ""}`}
+                className={`agenda-card agenda-card--unavailable ${period.dutyRelated ? "is-duty" : ""} ${period.scope === "external_contact_block" ? "is-external-block" : ""}`}
                 type="button"
                 key={`unavailable-${period.id}`}
                 onClick={() => onSelectUnavailable(period)}
@@ -156,7 +156,11 @@ export function CalendarAgenda({
                   <span className="agenda-card__topline">
                     <strong>{unavailableCategoryLabels[period.category]}</strong>
                     <span className="status-label status-label--unavailable">
-                      {period.dutyRelated ? copy(locale, "agenda", "dutyRelated") : copy(locale, "agenda", "unavailable")}
+                      {period.scope === "external_contact_block"
+                        ? copy(locale, "agenda", "externalBlock")
+                        : period.dutyRelated
+                          ? copy(locale, "agenda", "dutyRelated")
+                          : copy(locale, "agenda", "unavailable")}
                     </span>
                   </span>
                   <span className="agenda-card__details">

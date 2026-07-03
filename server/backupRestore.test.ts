@@ -27,7 +27,8 @@ const expectedMigrations = [
   "016_care_confirmations_notifications",
   "017_default_responsible_party",
   "018_actual_care_confirmation",
-  "019_care_entry_deviations"
+  "019_care_entry_deviations",
+  "020_contact_impediments"
 ];
 
 async function withTemporaryDirectory(
@@ -192,7 +193,7 @@ test("care party migration backfills existing active entries", async () => {
     const oldMigrations = join(directory, "old-migrations");
     mkdirSync(oldMigrations);
     for (const file of readdirSync(migrationsDirectory)) {
-      if (!file.endsWith(".sql") || file.startsWith("012_") || file.startsWith("013_") || file.startsWith("014_") || file.startsWith("017_") || file.startsWith("018_") || file.startsWith("019_")) continue;
+      if (!file.endsWith(".sql") || file.startsWith("012_") || file.startsWith("013_") || file.startsWith("014_") || file.startsWith("017_") || file.startsWith("018_") || file.startsWith("019_") || file.startsWith("020_")) continue;
       copyFileSync(join(migrationsDirectory, file), join(oldMigrations, file));
     }
 

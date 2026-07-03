@@ -147,6 +147,7 @@ export async function childrenRoutes(app: FastifyInstance): Promise<void> {
       for (const table of [
         ["care_entry_children", "care_entry_id", "care_entries"],
         ["holiday_period_children", "holiday_period_id", "holiday_periods"],
+        ["unavailable_period_children", "unavailable_period_id", "unavailable_periods"],
         ["contact_pattern_children", "contact_pattern_id", "contact_patterns"]
       ] as const) {
         db.prepare(`

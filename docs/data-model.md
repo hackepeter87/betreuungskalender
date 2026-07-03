@@ -225,8 +225,12 @@ regular care entries, for example one week with one care party and later weeks
 with another.
 
 Unavailable periods record category, duty relationship, effects on contact or
-holiday planning, location, notes, and evidence reference. Neither holiday
-blocks nor unavailable periods automatically change actual care entries.
+holiday planning, location, notes, and evidence reference. The `scope` field
+separates the care party's own unavailability from externally blocked contact
+periods where contact was wanted or possible but prevented by another
+child-related arrangement. External contact blocks can reference affected
+children and the care party whose contact was blocked. Neither holiday blocks
+nor unavailable periods automatically change actual care entries.
 
 ## Monthly closure
 

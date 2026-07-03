@@ -80,6 +80,7 @@ export function clearDomainData(): void {
     "care_entry_actual_children",
     "care_entry_children",
     "holiday_period_children",
+    "unavailable_period_children",
     "contact_rule_children",
     "contact_pattern_children",
     "trips",
@@ -89,8 +90,8 @@ export function clearDomainData(): void {
     "contact_rules",
     "contact_patterns",
     "app_user_care_party_assignments",
-    "care_parties",
     "unavailable_periods",
+    "care_parties",
     "external_calendar_events",
     "external_calendar_sources",
     "calendar_feed_tokens",
@@ -491,6 +492,9 @@ export function insertUnavailable(record: DataRecord, timestamp: string, userEma
     startDateTime: record.startDateTime,
     endDateTime: record.endDateTime,
     category: record.category,
+    scope: text(record, "scope", "own_unavailability"),
+    responsiblePartyId: optionalText(record, "responsiblePartyId") ?? undefined,
+    childIds: stringArray(record, "childIds"),
     dutyRelated: booleanValue(record, "dutyRelated"),
     affectsContact: booleanValue(record, "affectsContact"),
     affectsHolidays: booleanValue(record, "affectsHolidays"),
@@ -503,14 +507,16 @@ export function insertUnavailable(record: DataRecord, timestamp: string, userEma
   if (!id) throw new Error("Nichtverfügbarkeit ohne ID kann nicht importiert werden.");
   db.prepare(`
     INSERT INTO unavailable_periods (
-      id, start_datetime, end_datetime, category, duty_related,
+      id, start_datetime, end_datetime, scope, responsible_party_id, category, duty_related,
       affects_contact, affects_holidays, location, notes, has_evidence,
       evidence_reference, created_by, updated_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     input.startDateTime,
     input.endDateTime,
+    input.scope,
+    input.responsiblePartyId ?? null,
     input.category,
     Number(input.dutyRelated),
     Number(input.affectsContact),
@@ -524,6 +530,14 @@ export function insertUnavailable(record: DataRecord, timestamp: string, userEma
     text(record, "createdAt", timestamp),
     text(record, "updatedAt", timestamp)
   );
+  const childInsert = db.prepare(`
+    INSERT INTO unavailable_period_children (
+      unavailable_period_id, child_id, created_at, updated_at
+    ) VALUES (?, ?, ?, ?)
+  `);
+  for (const childId of input.childIds) {
+    childInsert.run(id, childId, timestamp, timestamp);
+  }
 }
 
 export function importData(data: ReturnType<typeof appDataImportSchema.parse>, userEmail: string): void {

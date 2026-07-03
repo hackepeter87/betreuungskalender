@@ -28,6 +28,7 @@ export const reportMessages = {
     completed: "Durchgeführt",
     cancelledDuty: "Dienstlich ausgefallen",
     cancelledOther: "Sonstig ausgefallen",
+    externallyBlocked: "Extern verhindert",
     overlaps: "Überschneidungen",
     additionalDates: "Zusätzliche Termine",
     holidayAllocation: "Ferienaufteilung",
@@ -47,6 +48,8 @@ export const reportMessages = {
     unavailabilityNote:
       "Dokumentierte Nichtverfügbarkeiten werden gesondert ausgewiesen und nicht automatisch als nicht wahrgenommene Betreuung bewertet.",
     category: "Kategorie",
+    scope: "Art",
+    careParty: "Betreuende Person",
     dutyRelated: "Dienstlich",
     affects: "Betrifft",
     location: "Ort",
@@ -119,6 +122,7 @@ export const reportMessages = {
     completed: "Completed",
     cancelledDuty: "Cancelled due to duty",
     cancelledOther: "Other cancellations",
+    externallyBlocked: "Externally blocked",
     overlaps: "Overlaps",
     additionalDates: "Additional dates",
     holidayAllocation: "Holiday allocation",
@@ -138,6 +142,8 @@ export const reportMessages = {
     unavailabilityNote:
       "Documented unavailability is shown separately and is not automatically assessed as missed care.",
     category: "Category",
+    scope: "Type",
+    careParty: "Care party",
     dutyRelated: "Duty-related",
     affects: "Affects",
     location: "Location",

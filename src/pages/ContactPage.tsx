@@ -732,12 +732,13 @@ export function ContactPage({
         </section>
       </div>
 
-      <section className="summary-strip summary-strip--six">
+      <section className="summary-strip summary-strip--seven">
         <div><small>{copy(locale, "contact", "scheduled")}</small><strong>{stats.scheduled}</strong></div>
         <div><small>{copy(locale, "contact", "pending")}</small><strong>{stats.pending}</strong></div>
         <div><small>{copy(locale, "contact", "completed")}</small><strong>{stats.completed}</strong></div>
         <div><small>{copy(locale, "contact", "cancelledDuty")}</small><strong>{stats.cancelledDutyRelated}</strong></div>
         <div><small>{copy(locale, "contact", "cancelledOther")}</small><strong>{stats.cancelledOther}</strong></div>
+        <div><small>{copy(locale, "contact", "externallyBlocked")}</small><strong>{stats.externallyBlocked}</strong></div>
         <div><small>{copy(locale, "contact", "additional")}</small><strong>{stats.additional}</strong></div>
       </section>
 

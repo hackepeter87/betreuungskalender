@@ -5,7 +5,7 @@ import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
 import { rangesOverlap, toDateKey } from "../lib/date";
 import { useAppStore } from "../store/AppStore";
-import type { UnavailableCategory, UnavailablePeriod } from "../types";
+import type { UnavailableCategory, UnavailablePeriod, UnavailableScope } from "../types";
 import { FieldHelpButton, FieldHelpLabel } from "./FieldHelp";
 import { Icon } from "./Icon";
 
@@ -61,8 +61,15 @@ export function UnavailablePeriodForm({
   const [startTime, setStartTime] = useState(initialStart.time || "08:00");
   const [endDate, setEndDate] = useState(initialEnd.date || initialDate || today);
   const [endTime, setEndTime] = useState(initialEnd.time || "17:00");
+  const [scope, setScope] = useState<UnavailableScope>(
+    period?.scope ?? "own_unavailability"
+  );
+  const [responsiblePartyId, setResponsiblePartyId] = useState(
+    period?.responsiblePartyId ?? ""
+  );
+  const [childIds, setChildIds] = useState<string[]>(period?.childIds ?? []);
   const [category, setCategory] = useState<UnavailableCategory>(
-    period?.category ?? "duty"
+    period?.category ?? (scope === "external_contact_block" ? "other" : "duty")
   );
   const [dutyRelated, setDutyRelated] = useState(period?.dutyRelated ?? true);
   const [affectsContact, setAffectsContact] = useState(
@@ -78,6 +85,26 @@ export function UnavailablePeriodForm({
     period?.evidenceReference ?? ""
   );
   const [error, setError] = useState("");
+  const isExternalBlock = scope === "external_contact_block";
+
+  const chooseScope = (nextScope: UnavailableScope) => {
+    setScope(nextScope);
+    if (nextScope === "external_contact_block") {
+      setDutyRelated(false);
+      setAffectsContact(true);
+      if (category === "duty") setCategory("other");
+    } else {
+      setResponsiblePartyId("");
+    }
+  };
+
+  const toggleChild = (childId: string) => {
+    setChildIds((current) =>
+      current.includes(childId)
+        ? current.filter((id) => id !== childId)
+        : [...current, childId]
+    );
+  };
 
   const derivedImpact = useMemo(() => {
     if (!startDate || !startTime || !endDate || !endTime) {
@@ -120,12 +147,12 @@ export function UnavailablePeriodForm({
     if (category === "other" && !notes.trim()) {
       messages.push(copy(locale, "unavailable", "otherNoteRecommendation"));
     }
-    if (dutyRelated && !evidenceReference.trim()) {
+    if (!isExternalBlock && dutyRelated && !evidenceReference.trim()) {
       messages.push(
         copy(locale, "unavailable", "dutyEvidenceRecommendation")
       );
     }
-    if (derivedImpact.plannedContactCount > 0 && !affectsContact) {
+    if (!isExternalBlock && derivedImpact.plannedContactCount > 0 && !affectsContact) {
       messages.push(
         copy(locale, "unavailable", "contactImpactRecommendation", {
           count: derivedImpact.plannedContactCount
@@ -148,6 +175,7 @@ export function UnavailablePeriodForm({
     derivedImpact.plannedContactCount,
     dutyRelated,
     evidenceReference,
+    isExternalBlock,
     locale,
     notes
   ]);
@@ -169,9 +197,12 @@ export function UnavailablePeriodForm({
       id: period?.id,
       startDateTime,
       endDateTime,
+      scope,
+      responsiblePartyId: isExternalBlock && responsiblePartyId ? responsiblePartyId : undefined,
+      childIds: isExternalBlock ? childIds : [],
       category,
-      dutyRelated,
-      affectsContact,
+      dutyRelated: isExternalBlock ? false : dutyRelated,
+      affectsContact: isExternalBlock ? true : affectsContact,
       affectsHolidays,
       location: location.trim() || undefined,
       notes: notes.trim() || undefined,
@@ -185,6 +216,26 @@ export function UnavailablePeriodForm({
     <form className="child-form unavailable-form" data-testid="unavailable-form" onSubmit={submit}>
       <section className="form-section">
         <h3>{copy(locale, "unavailable", "periodCategory")}</h3>
+        <div className="scope-choice-grid" role="group" aria-label={copy(locale, "unavailable", "scopeLabel")}>
+          <button
+            className={`choice-card choice-card--stacked ${scope === "own_unavailability" ? "choice-card--selected" : ""}`}
+            type="button"
+            onClick={() => chooseScope("own_unavailability")}
+            data-testid="unavailable-scope-own"
+          >
+            <strong>{copy(locale, "unavailable", "scopeOwn")}</strong>
+            <span>{copy(locale, "unavailable", "scopeOwnDescription")}</span>
+          </button>
+          <button
+            className={`choice-card choice-card--stacked ${isExternalBlock ? "choice-card--selected" : ""}`}
+            type="button"
+            onClick={() => chooseScope("external_contact_block")}
+            data-testid="unavailable-scope-external"
+          >
+            <strong>{copy(locale, "unavailable", "scopeExternal")}</strong>
+            <span>{copy(locale, "unavailable", "scopeExternalDescription")}</span>
+          </button>
+        </div>
         <div className="unavailable-time-grid">
           <div className="unavailable-time-group">
             <div className="unavailable-time-group__header">
@@ -259,6 +310,42 @@ export function UnavailablePeriodForm({
             ))}
           </select>
         </label>
+        {isExternalBlock ? (
+          <div className="external-block-fields">
+            <label className="field">
+              <span>{copy(locale, "unavailable", "blockedCareParty")}</span>
+              <select
+                value={responsiblePartyId}
+                onChange={(event) => setResponsiblePartyId(event.target.value)}
+                data-testid="unavailable-responsible-party"
+              >
+                <option value="">{copy(locale, "unavailable", "blockedCarePartyNone")}</option>
+                {data.careParties.map((party) => (
+                  <option key={party.id} value={party.id}>{party.name}</option>
+                ))}
+              </select>
+            </label>
+            {data.children.length ? (
+              <div className="field">
+                <span>{copy(locale, "unavailable", "blockedChildren")}</span>
+                <div className="child-choice-grid">
+                  {data.children.map((child) => (
+                    <button
+                      className={`choice-card ${childIds.includes(child.id) ? "choice-card--selected" : ""}`}
+                      type="button"
+                      key={child.id}
+                      onClick={() => toggleChild(child.id)}
+                    >
+                      <span className="child-dot" style={{ background: child.color }} />
+                      {child.name}
+                    </button>
+                  ))}
+                </div>
+                <small className="field-hint">{copy(locale, "unavailable", "blockedChildrenHint")}</small>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
       </section>
 
       <section className="form-section">
@@ -299,7 +386,8 @@ export function UnavailablePeriodForm({
                 type="checkbox"
                 aria-label={copy(locale, "unavailable", "dutyRelated")}
                 data-testid="unavailable-duty-related"
-                checked={dutyRelated}
+                checked={isExternalBlock ? false : dutyRelated}
+                disabled={isExternalBlock}
                 onChange={(event) => setDutyRelated(event.target.checked)}
               />
               <span />
@@ -315,7 +403,8 @@ export function UnavailablePeriodForm({
                 type="checkbox"
                 aria-label={copy(locale, "unavailable", "affectsContact")}
                 data-testid="unavailable-affects-contact"
-                checked={affectsContact}
+                checked={isExternalBlock ? true : affectsContact}
+                disabled={isExternalBlock}
                 onChange={(event) => setAffectsContact(event.target.checked)}
               />
               <span />

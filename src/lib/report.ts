@@ -8,7 +8,8 @@ import {
   costCategoryLabel,
   deviationLabel,
   statusLabel,
-  unavailableCategoryLabel
+  unavailableCategoryLabel,
+  unavailableScopeLabel
 } from "./labels";
 import { reportClosureDescription } from "./monthClosure";
 import type { AppData } from "../types";
@@ -112,12 +113,13 @@ export async function exportPdfReport(
 
   autoTable(doc, {
     startY: 88,
-    head: [[messages.plannedDates, messages.completed, messages.cancelledDuty, messages.cancelledOther, messages.overlaps, messages.additional, messages.tripKm, messages.costs]],
+    head: [[messages.plannedDates, messages.completed, messages.cancelledDuty, messages.cancelledOther, messages.externallyBlocked, messages.overlaps, messages.additional, messages.tripKm, messages.costs]],
     body: [[
       stats.contact.scheduled,
       stats.contact.completed,
       stats.contact.cancelledDutyRelated,
       stats.contact.cancelledOther,
+      stats.contact.externallyBlocked,
       stats.contact.unavailableOverlaps,
       stats.contact.additional,
       stats.tripKm.toFixed(1),
@@ -212,10 +214,17 @@ export async function exportPdfReport(
   );
   autoTable(doc, {
     startY: 32,
-    head: [[messages.period, messages.category, messages.dutyRelated, messages.affects, messages.location, messages.evidenceReference, messages.note]],
+    head: [[messages.period, messages.scope, messages.category, messages.careParty, messages.children, messages.dutyRelated, messages.affects, messages.location, messages.evidenceReference, messages.note]],
     body: unavailablePeriods.map((period) => [
       `${formatDate(period.startDateTime, intlLocale)} ${formatTime(period.startDateTime, intlLocale)}\n${messages.through} ${formatDate(period.endDateTime, intlLocale)} ${formatTime(period.endDateTime, intlLocale)}`,
+      unavailableScopeLabel(period.scope, options.locale),
       unavailableCategoryLabel(period.category, options.locale),
+      period.responsiblePartyId
+        ? data.careParties.find((party) => party.id === period.responsiblePartyId)?.name ?? period.responsiblePartyId
+        : "–",
+      period.childIds.length
+        ? period.childIds.map((id) => data.children.find((child) => child.id === id)?.name ?? id).join(", ")
+        : "–",
       period.dutyRelated ? messages.yes : messages.no,
       [
         period.affectsContact ? messages.contact : "",

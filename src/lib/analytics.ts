@@ -146,15 +146,18 @@ export function dateTimeRangesOverlap(
 export function unavailableForEntry(
   entry: CareEntry,
   periods: UnavailablePeriod[],
-  options?: { affectsContactOnly?: boolean; dutyRelatedOnly?: boolean }
+  options?: { affectsContactOnly?: boolean; dutyRelatedOnly?: boolean; externalBlockedOnly?: boolean }
 ): UnavailablePeriod[] {
   const startDateTime = actualStartDateTime(entry);
   const endDateTime = actualEndDateTime(entry);
+  const entryChildIds = actualChildIds(entry);
   return periods.filter(
     (period) =>
       !period.deletedAt &&
       (!options?.affectsContactOnly || period.affectsContact) &&
       (!options?.dutyRelatedOnly || period.dutyRelated) &&
+      (!options?.externalBlockedOnly || period.scope === "external_contact_block") &&
+      (!(period.childIds?.length ?? 0) || period.childIds.some((childId) => entryChildIds.includes(childId))) &&
       dateTimeRangesOverlap(
         startDateTime,
         endDateTime,
@@ -334,6 +337,13 @@ export function calculateContactStats(
         dutyRelatedOnly: true
       }).length > 0
   ).length;
+  const externallyBlocked = scheduled.filter(
+    (entry) =>
+      unavailableForEntry(entry, unavailablePeriods, {
+        affectsContactOnly: true,
+        externalBlockedOnly: true
+      }).length > 0
+  ).length;
   return {
     scheduled: scheduled.length,
     pending: scheduled.filter((entry) => entry.status === "planned").length,
@@ -341,6 +351,7 @@ export function calculateContactStats(
     cancelled: cancelled.length,
     cancelledDutyRelated,
     cancelledOther: cancelled.length - cancelledDutyRelated,
+    externallyBlocked,
     unavailableOverlaps: scheduled.filter(
       (entry) =>
         unavailableForEntry(entry, unavailablePeriods, {

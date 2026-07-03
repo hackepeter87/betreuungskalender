@@ -368,6 +368,9 @@ export const unavailablePeriodInputSchema = z
   .object({
     startDateTime: isoDateTime,
     endDateTime: isoDateTime,
+    scope: z.enum(["own_unavailability", "external_contact_block"]).default("own_unavailability"),
+    responsiblePartyId: z.string().trim().min(1).optional(),
+    childIds: z.array(z.string().trim().min(1)).default([]),
     category: z.enum(unavailableCategories),
     dutyRelated: z.boolean().default(false),
     affectsContact: z.boolean().default(false),
@@ -382,6 +385,18 @@ export const unavailablePeriodInputSchema = z
     {
       path: ["endDateTime"],
       message: "Das Ende muss nach dem Beginn liegen."
+    }
+  )
+  .transform((period) => ({
+    ...period,
+    dutyRelated: period.scope === "external_contact_block" ? false : period.dutyRelated,
+    affectsContact: period.scope === "external_contact_block" ? true : period.affectsContact
+  }))
+  .refine(
+    (period) => period.scope !== "own_unavailability" || !period.responsiblePartyId,
+    {
+      path: ["responsiblePartyId"],
+      message: "Eine betreuende Person ist nur bei extern verhinderten Umgangszeiträumen vorgesehen."
     }
   );
 
@@ -407,12 +422,16 @@ export const externalCalendarHolidayDeriveSchema = z.object({
 });
 
 export function unavailablePeriodWarnings(input: {
+  scope?: string;
   category: string;
   dutyRelated: boolean;
   notes?: string;
   evidenceReference?: string;
 }): string[] {
   const warnings: string[] = [];
+  if (input.scope === "external_contact_block" && !input.notes?.trim()) {
+    warnings.push("Bei extern verhindertem Umgang wird eine kurze neutrale Notiz empfohlen.");
+  }
   if (input.category === "other" && !input.notes?.trim()) {
     warnings.push("Bei der Kategorie Sonstiges wird eine Notiz empfohlen.");
   }

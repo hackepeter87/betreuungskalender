@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateHolidayStats } from "../src/lib/analytics";
-import type { CareEntry, CareParty, HolidayPeriod } from "../src/types";
+import { calculateContactStats, calculateHolidayStats } from "../src/lib/analytics";
+import type { CareEntry, CareParty, HolidayPeriod, UnavailablePeriod } from "../src/types";
 
 const parties: CareParty[] = [
   {
@@ -59,6 +59,26 @@ function entry(overrides: Partial<CareEntry>): CareEntry {
     hasEvidence: false,
     trips: [],
     costs: [],
+    createdBy: "test",
+    updatedBy: "test",
+    createdAt: "2026-07-01T00:00:00.000Z",
+    updatedAt: "2026-07-01T00:00:00.000Z",
+    ...overrides
+  };
+}
+
+function unavailable(overrides: Partial<UnavailablePeriod>): UnavailablePeriod {
+  return {
+    id: "unavailable",
+    startDateTime: "2026-07-01T08:00:00.000Z",
+    endDateTime: "2026-07-01T18:00:00.000Z",
+    scope: "own_unavailability",
+    childIds: [],
+    category: "other",
+    dutyRelated: false,
+    affectsContact: true,
+    affectsHolidays: false,
+    hasEvidence: false,
     createdBy: "test",
     updatedBy: "test",
     createdAt: "2026-07-01T00:00:00.000Z",
@@ -164,4 +184,50 @@ test("holiday stats use actual children, time, and care party for partial care",
   );
   assert.equal(stats.fatherDays, 1);
   assert.equal(stats.motherDays, 0);
+});
+
+test("contact stats distinguish external contact blocks from own duty unavailability", () => {
+  const scheduled = entry({
+    id: "planned-contact",
+    generatedByPatternId: "rule-1",
+    status: "planned",
+    childIds: ["child-a"],
+    startDateTime: "2026-07-01T08:00:00.000Z",
+    endDateTime: "2026-07-01T18:00:00.000Z"
+  });
+  const dutyCancelled = entry({
+    id: "cancelled-duty",
+    generatedByPatternId: "rule-1",
+    status: "cancelled",
+    childIds: ["child-a"],
+    startDateTime: "2026-07-02T08:00:00.000Z",
+    endDateTime: "2026-07-02T18:00:00.000Z"
+  });
+
+  const stats = calculateContactStats(
+    [scheduled, dutyCancelled],
+    [
+      unavailable({
+        id: "external-block",
+        scope: "external_contact_block",
+        responsiblePartyId: "party-father",
+        childIds: ["child-a"],
+        startDateTime: "2026-07-01T07:00:00.000Z",
+        endDateTime: "2026-07-01T19:00:00.000Z"
+      }),
+      unavailable({
+        id: "duty-overlap",
+        scope: "own_unavailability",
+        dutyRelated: true,
+        startDateTime: "2026-07-02T07:00:00.000Z",
+        endDateTime: "2026-07-02T19:00:00.000Z"
+      })
+    ],
+    "2026-07-01",
+    "2026-07-03"
+  );
+
+  assert.equal(stats.externallyBlocked, 1);
+  assert.equal(stats.cancelledDutyRelated, 1);
+  assert.equal(stats.unavailableOverlaps, 2);
 });

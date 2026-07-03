@@ -1,9 +1,10 @@
-import type { ApiCareDeviationType, ApiCareParty, ApiContactRule } from "../shared/api";
+import type { ApiCareDeviationType, ApiCareParty, ApiContactRule, ApiUnavailableScope } from "../shared/api";
 
 export const SCHEMA_VERSION = 6 as const;
 
 export type EntryStatus = "planned" | "completed" | "cancelled" | "partial";
 export type CareDeviationType = ApiCareDeviationType;
+export type UnavailableScope = ApiUnavailableScope;
 export type NotificationEventType = "care_confirmation_due" | "care_confirmation_reminder";
 export type CareLocation =
   | "commuterApartment"
@@ -220,6 +221,9 @@ export interface UnavailablePeriod {
   id: string;
   startDateTime: string;
   endDateTime: string;
+  scope: ApiUnavailableScope;
+  responsiblePartyId?: string;
+  childIds: string[];
   category: UnavailableCategory;
   dutyRelated: boolean;
   affectsContact: boolean;
@@ -403,6 +407,7 @@ export interface ContactStats {
   cancelled: number;
   cancelledDutyRelated: number;
   cancelledOther: number;
+  externallyBlocked: number;
   unavailableOverlaps: number;
   additional: number;
 }

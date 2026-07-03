@@ -17,6 +17,8 @@ project follows semantic versioning where practical.
 - Added care-entry deviation metadata for rescheduled, swapped, externally
   blocked, cancelled, partial, and other factual deviations while preserving
   the original planned period.
+- Added externally blocked contact periods as a neutral unavailability scope
+  with optional child and care-party references.
 
 ### Changed
 
@@ -27,6 +29,9 @@ project follows semantic versioning where practical.
   and actual care parties for partially completed care entries.
 - Updated entry, agenda, and report surfaces to show documented deviations and
   the original planned period where applicable.
+- Updated contact, analytics, calendar, CSV, and PDF report surfaces to
+  distinguish externally blocked contact from the care party's own
+  unavailability.
 - Updated holiday management copy so holiday blocks are described as planning
   frames while actual holiday credit comes from normal care entries.
 

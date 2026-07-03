@@ -118,7 +118,7 @@ export function CalendarGrid({
                 ))}
                 {dayUnavailable.slice(0, 1).map((period) => (
                   <button
-                    className={`calendar-event calendar-event--unavailable ${period.dutyRelated ? "is-duty" : ""}`}
+                    className={`calendar-event calendar-event--unavailable ${period.dutyRelated ? "is-duty" : ""} ${period.scope === "external_contact_block" ? "is-external-block" : ""}`}
                     type="button"
                     key={`unavailable-${period.id}`}
                     data-testid={`calendar-unavailable-${period.id}`}
@@ -127,7 +127,11 @@ export function CalendarGrid({
                   >
                     <span className="calendar-event__unavailable-icon"><Icon name="briefcase" size={13} /></span>
                     <span className="calendar-event__label">
-                      {period.dutyRelated ? copy(locale, "calendar", "dutyAbsence") : copy(locale, "calendar", "unavailability")}
+                      {period.scope === "external_contact_block"
+                        ? copy(locale, "calendar", "externalBlock")
+                        : period.dutyRelated
+                          ? copy(locale, "calendar", "dutyAbsence")
+                          : copy(locale, "calendar", "unavailability")}
                     </span>
                   </button>
                 ))}

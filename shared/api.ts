@@ -39,6 +39,7 @@ export const unavailableCategories = [
 ] as const;
 
 export type ApiUnavailableCategory = (typeof unavailableCategories)[number];
+export type ApiUnavailableScope = "own_unavailability" | "external_contact_block";
 
 export const carePartyKinds = [
   "father",
@@ -329,6 +330,9 @@ export interface ApiUnavailablePeriod {
   id: string;
   startDateTime: string;
   endDateTime: string;
+  scope: ApiUnavailableScope;
+  responsiblePartyId?: string;
+  childIds: string[];
   category: ApiUnavailableCategory;
   dutyRelated: boolean;
   affectsContact: boolean;
