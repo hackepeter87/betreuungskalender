@@ -92,6 +92,13 @@ references, trips, costs, audit metadata, deleted entries, and cancelled
 entries. Existing legacy feed tokens retain their original user-created scope;
 new scoped tokens can be rotated per all-calendar or care-party scope.
 
+External calendar imports are local file imports and are treated as untrusted
+input. The server parses ICS files with `ical.js`, rejects oversized calendars,
+excessive event counts, unsupported recurrence rules, invalid date ranges, and
+overlong text fields, and returns only generic error codes for rejected files.
+Imported summary, description, and location values are stored as data and must
+not be logged or rendered as trusted HTML.
+
 Care parties are domain records, not authentication principals. Optional
 app-user to care-party assignments restrict non-admin shared users once at
 least one assignment exists, but they do not replace `app_users.role`.
