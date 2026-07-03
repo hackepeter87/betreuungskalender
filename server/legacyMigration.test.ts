@@ -100,6 +100,35 @@ function insertExisting(status = "completed"): void {
   insertEntry({ ...data.entries[0]!, status }, data.updatedAt, "test@example.invalid");
 }
 
+function insertDefaultCareParty(id = "party-primary"): void {
+  const timestamp = "2026-01-01T10:00:00.000Z";
+  db.prepare(`
+    INSERT INTO care_parties (
+      id, name, kind, created_by, updated_by, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    "Hauptbetreuung",
+    "other",
+    "test@example.invalid",
+    "test@example.invalid",
+    timestamp,
+    timestamp
+  );
+  db.prepare(`
+    INSERT INTO settings (
+      key, value_json, created_by, updated_by, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?)
+  `).run(
+    "defaultResponsiblePartyId",
+    JSON.stringify(id),
+    "test@example.invalid",
+    "test@example.invalid",
+    timestamp,
+    timestamp
+  );
+}
+
 beforeEach(resetDatabase);
 
 after(() => {
@@ -130,6 +159,47 @@ test("leere SQLite-Datenbank zeigt korrekte Vorschau und übernimmt Daten", asyn
   });
   assert.equal(report.imported.entries, 1);
   assert.equal(getLegacyDatabaseSummary().entries, 1);
+});
+
+test("importierte Einträge und alte Umgangsmuster nutzen die Hauptbetreuung als Fallback", async () => {
+  insertDefaultCareParty();
+  const data = fixture({
+    contactPatterns: [{
+      id: "legacy-pattern-1",
+      name: "Alte Umgangsregel",
+      startDate: "2026-01-09",
+      frequency: "biweekly",
+      fridayStartTime: "16:00",
+      sundayEndTime: "18:00",
+      childIds: ["legacy-child-1"],
+      active: true,
+      createdAt: "2026-01-01T10:00:00.000Z",
+      updatedAt: "2026-01-01T10:00:00.000Z"
+    }]
+  });
+
+  await executeLegacyMigration({
+    data,
+    mode: "add",
+    duplicatePolicy: "skip",
+    fingerprint: "fixture-default-party",
+    userEmail: "test@example.invalid"
+  });
+
+  assert.deepEqual(db.prepare(`
+    SELECT responsible_party_id AS responsiblePartyId
+    FROM care_entries
+    WHERE id = ?
+  `).get("legacy-entry-1"), {
+    responsiblePartyId: "party-primary"
+  });
+  assert.deepEqual(db.prepare(`
+    SELECT responsible_party_id AS responsiblePartyId
+    FROM contact_rules
+    WHERE id = ?
+  `).get("legacy-pattern-1"), {
+    responsiblePartyId: "party-primary"
+  });
 });
 
 test("bestehende SQLite-Daten werden nicht automatisch überschrieben", () => {

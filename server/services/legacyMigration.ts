@@ -20,6 +20,7 @@ import {
 import { recordAudit, markClosedMonthsChanged } from "./audit.js";
 import { createSqliteBackup } from "./backup.js";
 import { makeId, nowIso } from "./common.js";
+import { getDefaultResponsiblePartyId } from "./settings.js";
 import { appDataImportSchema } from "../validation/schemas.js";
 
 type MigrationData = ReturnType<typeof appDataImportSchema.parse>;
@@ -457,6 +458,7 @@ function additiveImport(
     childMap.set(oldId, id);
     imported.children += 1;
   }
+  const fallbackResponsiblePartyId = getDefaultResponsiblePartyId();
 
   const patternMap = new Map<string, string>();
   for (const pattern of data.contactPatterns.filter((item) => !item.deletedAt)) {
@@ -465,7 +467,7 @@ function additiveImport(
       ...pattern,
       id,
       childIds: strings(pattern, "childIds").map((childId) => childMap.get(childId) ?? childId)
-    }, timestamp, userEmail);
+    }, timestamp, userEmail, fallbackResponsiblePartyId);
     patternMap.set(text(pattern, "id"), id);
     imported.contactPatterns += 1;
   }
@@ -489,7 +491,7 @@ function additiveImport(
       childIds: strings(entry, "childIds").map((childId) => childMap.get(childId) ?? childId),
       trips,
       costs
-    }, timestamp, userEmail);
+    }, timestamp, userEmail, fallbackResponsiblePartyId);
     imported.entries += 1;
     imported.trips += trips.length;
     imported.costs += costs.length;

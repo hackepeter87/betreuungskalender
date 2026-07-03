@@ -3,6 +3,7 @@ import { db } from "../db/connection.js";
 import { recordAudit } from "../services/audit.js";
 import { nowIso } from "../services/common.js";
 import { upsertContactRule, upsertContactRuleFromPattern } from "../services/contactRules.js";
+import { getDefaultResponsiblePartyId } from "../services/settings.js";
 import {
   appDataImportSchema,
   carePartyInputSchema,
@@ -55,6 +56,17 @@ function stringArray(record: DataRecord, key: string): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
     : [];
+}
+
+function importedDefaultResponsiblePartyId(data: { settings?: Record<string, unknown> }): string | undefined {
+  const configured = data.settings?.defaultResponsiblePartyId;
+  if (typeof configured === "string" && configured.trim()) {
+    const active = db.prepare(`
+      SELECT 1 FROM care_parties WHERE id = ? AND deleted_at IS NULL
+    `).get(configured);
+    if (active) return configured;
+  }
+  return getDefaultResponsiblePartyId();
 }
 
 const careDeviationTypes = new Set([
@@ -167,7 +179,12 @@ function deriveCareScope(record: DataRecord): string {
   return "hourly";
 }
 
-export function insertEntry(record: DataRecord, timestamp: string, userEmail: string): void {
+export function insertEntry(
+  record: DataRecord,
+  timestamp: string,
+  userEmail: string,
+  fallbackResponsiblePartyId?: string
+): void {
   if (record.deletedAt) return;
   const input = careEntryInputSchema.parse({
     startDateTime: record.startDateTime,
@@ -178,7 +195,7 @@ export function insertEntry(record: DataRecord, timestamp: string, userEmail: st
     contactRuleId: optionalText(record, "contactRuleId") ?? undefined,
     contactRuleSegmentId: optionalText(record, "contactRuleSegmentId") ?? undefined,
     contactRuleOccurrenceKey: optionalText(record, "contactRuleOccurrenceKey") ?? undefined,
-    responsiblePartyId: optionalText(record, "responsiblePartyId") ?? undefined,
+    responsiblePartyId: optionalText(record, "responsiblePartyId") ?? fallbackResponsiblePartyId,
     contactRuleSyncState: optionalText(record, "contactRuleSyncState") ?? undefined,
       status: record.status,
     careScope: deriveCareScope(record),
@@ -407,7 +424,12 @@ export function insertHoliday(record: DataRecord, timestamp: string, userEmail: 
   for (const childId of input.childIds) junction.run(id, childId, timestamp, timestamp);
 }
 
-export function insertPattern(record: DataRecord, timestamp: string, userEmail: string): void {
+export function insertPattern(
+  record: DataRecord,
+  timestamp: string,
+  userEmail: string,
+  fallbackResponsiblePartyId?: string
+): void {
   const input = contactPatternInputSchema.parse({
     name: record.name,
     startDate: record.startDate,
@@ -450,6 +472,7 @@ export function insertPattern(record: DataRecord, timestamp: string, userEmail: 
     fridayStartTime: input.fridayStartTime,
     sundayEndTime: input.sundayEndTime,
     childIds: input.childIds,
+    responsiblePartyId: fallbackResponsiblePartyId,
     active: input.active,
     createdBy: text(record, "createdBy", userEmail),
     updatedBy: text(record, "updatedBy", userEmail),
@@ -458,7 +481,12 @@ export function insertPattern(record: DataRecord, timestamp: string, userEmail: 
   });
 }
 
-export function insertContactRule(record: DataRecord, timestamp: string, userEmail: string): void {
+export function insertContactRule(
+  record: DataRecord,
+  timestamp: string,
+  userEmail: string,
+  fallbackResponsiblePartyId?: string
+): void {
   const input = contactRuleInputSchema.parse({
     name: record.name,
     startDate: record.startDate,
@@ -467,7 +495,7 @@ export function insertContactRule(record: DataRecord, timestamp: string, userEma
     recurrence: record.recurrence,
     segments: record.segments,
     syncHorizonMonths: numberValue(record, "syncHorizonMonths", 12),
-    responsiblePartyId: optionalText(record, "responsiblePartyId") ?? undefined,
+    responsiblePartyId: optionalText(record, "responsiblePartyId") ?? fallbackResponsiblePartyId,
     childIds: stringArray(record, "childIds"),
     active: booleanValue(record, "active", true)
   });
@@ -545,10 +573,11 @@ export function importData(data: ReturnType<typeof appDataImportSchema.parse>, u
   clearDomainData();
   for (const child of data.children) insertChild(child, timestamp, userEmail);
   for (const party of data.careParties) insertCareParty(party, timestamp, userEmail);
-  for (const entry of data.entries) insertEntry(entry, timestamp, userEmail);
+  const fallbackResponsiblePartyId = importedDefaultResponsiblePartyId(data);
+  for (const entry of data.entries) insertEntry(entry, timestamp, userEmail, fallbackResponsiblePartyId);
   for (const holiday of data.holidayPeriods) insertHoliday(holiday, timestamp, userEmail);
-  for (const pattern of data.contactPatterns) insertPattern(pattern, timestamp, userEmail);
-  for (const rule of data.contactRules) insertContactRule(rule, timestamp, userEmail);
+  for (const pattern of data.contactPatterns) insertPattern(pattern, timestamp, userEmail, fallbackResponsiblePartyId);
+  for (const rule of data.contactRules) insertContactRule(rule, timestamp, userEmail, fallbackResponsiblePartyId);
   for (const period of data.unavailablePeriods) insertUnavailable(period, timestamp, userEmail);
   const sourceInsert = db.prepare(`INSERT INTO external_calendar_sources (id, name, color, visible, source_type, last_imported_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
   for (const source of data.externalCalendarSources) {
