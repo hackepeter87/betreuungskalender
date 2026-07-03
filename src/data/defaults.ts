@@ -113,6 +113,10 @@ export function createDemoData(): AppData {
     ...createEmptyData(),
     children,
     careParties,
+    settings: {
+      ...createEmptyData().settings,
+      defaultResponsiblePartyId: careParties[0]?.id
+    },
     entries: [
       makeEntry(-8, children.map((child) => child.id), "completed", true, "Reguläre Betreuung"),
       makeEntry(-3, [children[0].id], "completed", false, "Abholung nach der Schule"),

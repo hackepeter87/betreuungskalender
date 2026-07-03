@@ -1,8 +1,10 @@
-import type { ApiCareParty, ApiContactRule } from "../shared/api";
+import type { ApiCareDeviationType, ApiCareParty, ApiContactRule, ApiUnavailableScope } from "../shared/api";
 
 export const SCHEMA_VERSION = 6 as const;
 
 export type EntryStatus = "planned" | "completed" | "cancelled" | "partial";
+export type CareDeviationType = ApiCareDeviationType;
+export type UnavailableScope = ApiUnavailableScope;
 export type NotificationEventType = "care_confirmation_due" | "care_confirmation_reminder";
 export type CareLocation =
   | "commuterApartment"
@@ -87,8 +89,12 @@ export interface CareEntry {
   date: string;
   startDateTime: string;
   endDateTime: string;
+  plannedStartDateTime?: string;
+  plannedEndDateTime?: string;
   childIds: string[];
   status: EntryStatus;
+  deviationType?: CareDeviationType;
+  deviationNote?: string;
   confirmationState?: "unconfirmed" | "confirmed";
   confirmedAt?: string;
   confirmedBy?: string;
@@ -100,7 +106,11 @@ export interface CareEntry {
   contactRuleSegmentId?: string;
   contactRuleOccurrenceKey?: string;
   responsiblePartyId?: string;
+  actualResponsiblePartyId?: string;
   contactRuleSyncState?: "generated" | "manual_override";
+  actualStartDateTime?: string;
+  actualEndDateTime?: string;
+  actualChildIds?: string[];
   overnight: boolean;
   schoolHandover: boolean;
   holiday: boolean;
@@ -211,6 +221,9 @@ export interface UnavailablePeriod {
   id: string;
   startDateTime: string;
   endDateTime: string;
+  scope: ApiUnavailableScope;
+  responsiblePartyId?: string;
+  childIds: string[];
   category: UnavailableCategory;
   dutyRelated: boolean;
   affectsContact: boolean;
@@ -271,6 +284,7 @@ export interface AppSettings {
   defaultLocation: CareLocation;
   defaultHandoverFrom: HandoverParty;
   defaultHandoverTo: HandoverParty;
+  defaultResponsiblePartyId?: string;
   rhythmStartDate?: string;
 }
 
@@ -393,6 +407,7 @@ export interface ContactStats {
   cancelled: number;
   cancelledDutyRelated: number;
   cancelledOther: number;
+  externallyBlocked: number;
   unavailableOverlaps: number;
   additional: number;
 }
@@ -405,6 +420,13 @@ export interface HolidayStats {
   halfTarget: number;
   differenceFromHalf: number;
   unavailablePeriods: number;
+  byCareParty: Array<{
+    carePartyId: string;
+    name: string;
+    days: number;
+    quote: number;
+  }>;
+  unassignedDays: number;
 }
 
 export interface PeriodChildStats {

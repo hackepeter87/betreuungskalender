@@ -15,10 +15,13 @@ import {
 import { formatDate, formatDateTime, formatTime, toMonthKey } from "../lib/date";
 import {
   costCategoryLabel,
+  deviationLabel,
   statusLabel,
-  unavailableCategoryLabel
+  unavailableCategoryLabel,
+  unavailableScopeLabel
 } from "../lib/labels";
 import { useI18n } from "../i18n/I18nProvider";
+import { copy } from "../i18n/catalog";
 import { reportMessages } from "../i18n/reportMessages";
 import { reportClosureDescription } from "../lib/monthClosure";
 import { exportPdfReport, makeReportId } from "../lib/report";
@@ -199,6 +202,7 @@ export function ReportPage() {
               <div><dt>{messages.completed}</dt><dd>{stats.contact.completed}</dd></div>
               <div><dt>{messages.cancelledDuty}</dt><dd>{stats.contact.cancelledDutyRelated}</dd></div>
               <div><dt>{messages.cancelledOther}</dt><dd>{stats.contact.cancelledOther}</dd></div>
+              <div><dt>{messages.externallyBlocked}</dt><dd>{stats.contact.externallyBlocked}</dd></div>
               <div><dt>{messages.overlaps}</dt><dd>{stats.contact.unavailableOverlaps}</dd></div>
               <div><dt>{messages.additionalDates}</dt><dd>{stats.contact.additional}</dd></div>
             </dl>
@@ -211,6 +215,12 @@ export function ReportPage() {
               <div><dt>{messages.mother}</dt><dd>{stats.holidays.motherDays}</dd></div>
               <div><dt>{messages.fatherQuote}</dt><dd>{stats.holidays.fatherQuote} %</dd></div>
               <div><dt>{messages.dutyUnavailability}</dt><dd>{stats.holidays.unavailablePeriods}</dd></div>
+              {stats.holidays.byCareParty.map((share) => (
+                <div key={share.carePartyId}><dt>{share.name}</dt><dd>{share.days} / {share.quote} %</dd></div>
+              ))}
+              {stats.holidays.unassignedDays > 0 ? (
+                <div><dt>{copy(locale, "holiday", "unassignedDays")}</dt><dd>{stats.holidays.unassignedDays}</dd></div>
+              ) : null}
             </dl>
           </div>
           <div>
@@ -245,7 +255,10 @@ export function ReportPage() {
               <thead>
                 <tr>
                   <th>{messages.period}</th>
+                  <th>{messages.scope}</th>
                   <th>{messages.category}</th>
+                  <th>{messages.careParty}</th>
+                  <th>{messages.children}</th>
                   <th>{messages.dutyRelated}</th>
                   <th>{messages.affects}</th>
                   <th>{messages.location}</th>
@@ -261,7 +274,18 @@ export function ReportPage() {
                       <br />
                       {messages.through} {formatDate(period.endDateTime, intlLocale)} {formatTime(period.endDateTime, intlLocale)}
                     </td>
+                    <td data-label={messages.scope}>{unavailableScopeLabel(period.scope, locale)}</td>
                     <td data-label={messages.category}>{unavailableCategoryLabel(period.category, locale)}</td>
+                    <td data-label={messages.careParty}>
+                      {period.responsiblePartyId
+                        ? data.careParties.find((party) => party.id === period.responsiblePartyId)?.name ?? period.responsiblePartyId
+                        : "–"}
+                    </td>
+                    <td data-label={messages.children}>
+                      {period.childIds.length
+                        ? period.childIds.map((id) => data.children.find((child) => child.id === id)?.name ?? id).join(", ")
+                        : "–"}
+                    </td>
                     <td data-label={messages.dutyRelated}>{period.dutyRelated ? messages.yes : messages.no}</td>
                     <td data-label={messages.affects}>
                       {[
@@ -307,6 +331,13 @@ export function ReportPage() {
                       {entry.generatedByPatternId ? messages.plannedDate : entry.additionalCare ? messages.additionalCare : messages.singleDate}
                       {entry.overnight ? <><br />{messages.overnight}</> : null}
                       {entry.holiday ? <><br />{messages.holiday}</> : null}
+                      {entry.deviationType ? <><br />{deviationLabel(entry.deviationType, locale)}</> : null}
+                      {entry.plannedStartDateTime && entry.plannedEndDateTime ? (
+                        <>
+                          <br />
+                          {messages.originalPlan}: {formatDate(entry.plannedStartDateTime, intlLocale)} {formatTime(entry.plannedStartDateTime, intlLocale)}-{formatTime(entry.plannedEndDateTime, intlLocale)}
+                        </>
+                      ) : null}
                     </td>
                     <td
                       data-label={messages.trips}
@@ -322,7 +353,7 @@ export function ReportPage() {
                     >
                       {euro.format(entry.costs.filter((cost) => !cost.deletedAt).reduce((sum, cost) => sum + cost.amount, 0))}
                     </td>
-                    <td data-label={messages.notesOrReason}>{entry.cancellationReason || entry.notes || "–"}</td>
+                    <td data-label={messages.notesOrReason}>{entry.deviationNote || entry.cancellationReason || entry.notes || "–"}</td>
                   </tr>
                 ))}
               </tbody>

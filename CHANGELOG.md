@@ -6,6 +6,35 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+### Added
+
+- Added an explicit default responsible care party setting used by care entries
+  and contact rules when no other care party is selected.
+- Added calendar-visible holiday periods in the month grid and agenda.
+- Added actual-care fields for partially completed entries so confirmations can
+  record actual children, time ranges, and responsible care parties separately
+  from the original plan.
+- Added care-entry deviation metadata for rescheduled, swapped, externally
+  blocked, cancelled, partial, and other factual deviations while preserving
+  the original planned period.
+- Added externally blocked contact periods as a neutral unavailability scope
+  with optional child and care-party references.
+
+### Changed
+
+- Changed holiday allocation statistics to derive care-party shares from care
+  entries that overlap recorded holiday periods instead of relying on new
+  father/mother/shared holiday assignments.
+- Changed holiday and period statistics to use actual children, actual times,
+  and actual care parties for partially completed care entries.
+- Updated entry, agenda, and report surfaces to show documented deviations and
+  the original planned period where applicable.
+- Updated contact, analytics, calendar, CSV, and PDF report surfaces to
+  distinguish externally blocked contact from the care party's own
+  unavailability.
+- Updated holiday management copy so holiday blocks are described as planning
+  frames while actual holiday credit comes from normal care entries.
+
 ## [1.7.0] - 2026-07-03
 
 ### Added

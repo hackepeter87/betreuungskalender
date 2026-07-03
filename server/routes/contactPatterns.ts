@@ -4,6 +4,7 @@ import { db } from "../db/connection.js";
 import { recordAudit, recordFieldChanges } from "../services/audit.js";
 import { assertActiveChildren, bool, makeId, nowIso, syncJunction } from "../services/common.js";
 import { syncContactRule, upsertContactRuleFromPattern, type ContactRulePatternInput } from "../services/contactRules.js";
+import { getDefaultResponsiblePartyId } from "../services/settings.js";
 import { contactPatternInputSchema } from "../validation/schemas.js";
 
 const readLimit = {
@@ -61,6 +62,7 @@ function patternInputFromRow(pattern: ReturnType<typeof mapPattern>): ContactRul
     fridayStartTime: pattern.fridayStartTime,
     sundayEndTime: pattern.sundayEndTime,
     childIds: pattern.childIds,
+    responsiblePartyId: getDefaultResponsiblePartyId(),
     active: pattern.active,
     createdBy: pattern.createdBy,
     updatedBy: pattern.updatedBy,

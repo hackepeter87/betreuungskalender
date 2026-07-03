@@ -7,7 +7,8 @@ import {
   recordAudit,
   recordFieldChanges
 } from "../services/audit.js";
-import { bool, makeId, nowIso } from "../services/common.js";
+import { assertActiveCareParty } from "../services/careParties.js";
+import { assertActiveChildren, bool, makeId, nowIso, syncJunction } from "../services/common.js";
 import {
   unavailablePeriodInputSchema,
   unavailablePeriodWarnings
@@ -24,6 +25,8 @@ interface UnavailableRow {
   id: string;
   start_datetime: string;
   end_datetime: string;
+  scope: ApiUnavailablePeriod["scope"];
+  responsible_party_id: string | null;
   category: ApiUnavailablePeriod["category"];
   duty_related: number;
   affects_contact: number;
@@ -38,11 +41,23 @@ interface UnavailableRow {
   updated_at: string;
 }
 
+function childIdsForPeriod(id: string): string[] {
+  return (db.prepare(`
+    SELECT child_id AS childId
+    FROM unavailable_period_children
+    WHERE unavailable_period_id = ? AND deleted_at IS NULL
+    ORDER BY child_id
+  `).all(id) as Array<{ childId: string }>).map((row) => row.childId);
+}
+
 function mapPeriod(row: UnavailableRow): ApiUnavailablePeriod {
   const period = {
     id: row.id,
     startDateTime: row.start_datetime,
     endDateTime: row.end_datetime,
+    scope: row.scope,
+    responsiblePartyId: row.responsible_party_id ?? undefined,
+    childIds: childIdsForPeriod(row.id),
     category: row.category,
     dutyRelated: bool(row.duty_related),
     affectsContact: bool(row.affects_contact),
@@ -60,6 +75,14 @@ function mapPeriod(row: UnavailableRow): ApiUnavailablePeriod {
     ...period,
     warnings: unavailablePeriodWarnings(period)
   };
+}
+
+function validateRelations(input: {
+  childIds: string[];
+  responsiblePartyId?: string;
+}): void {
+  if (input.childIds.length) assertActiveChildren(input.childIds);
+  assertActiveCareParty(input.responsiblePartyId);
 }
 
 function getPeriod(id: string): ApiUnavailablePeriod | undefined {
@@ -102,19 +125,29 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
         issues: parsed.error.issues
       });
     }
+    try {
+      validateRelations(parsed.data);
+    } catch (error) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
     const id = makeId("unavailable");
     const timestamp = nowIso();
     db.transaction(() => {
       db.prepare(`
         INSERT INTO unavailable_periods (
-          id, start_datetime, end_datetime, category, duty_related,
+          id, start_datetime, end_datetime, scope, responsible_party_id, category, duty_related,
           affects_contact, affects_holidays, location, notes, has_evidence,
           evidence_reference, created_by, updated_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         id,
         parsed.data.startDateTime,
         parsed.data.endDateTime,
+        parsed.data.scope,
+        parsed.data.responsiblePartyId ?? null,
         parsed.data.category,
         Number(parsed.data.dutyRelated),
         Number(parsed.data.affectsContact),
@@ -128,6 +161,7 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
         timestamp,
         timestamp
       );
+      syncJunction("unavailable_period_children", "unavailable_period_id", id, parsed.data.childIds, timestamp);
       recordAudit({
         userEmail: request.userEmail,
         entityType: "unavailable_period",
@@ -160,11 +194,19 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
           issues: parsed.error.issues
         });
       }
+      try {
+        validateRelations(parsed.data);
+      } catch (error) {
+        return reply.code(400).send({
+          error: "validation_error",
+          message: error instanceof Error ? error.message : String(error)
+        });
+      }
       const timestamp = nowIso();
       db.transaction(() => {
         db.prepare(`
           UPDATE unavailable_periods SET
-            start_datetime = ?, end_datetime = ?, category = ?,
+            start_datetime = ?, end_datetime = ?, scope = ?, responsible_party_id = ?, category = ?,
             duty_related = ?, affects_contact = ?, affects_holidays = ?,
             location = ?, notes = ?, has_evidence = ?, evidence_reference = ?,
             updated_by = ?, updated_at = ?, deleted_at = NULL
@@ -172,6 +214,8 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
         `).run(
           parsed.data.startDateTime,
           parsed.data.endDateTime,
+          parsed.data.scope,
+          parsed.data.responsiblePartyId ?? null,
           parsed.data.category,
           Number(parsed.data.dutyRelated),
           Number(parsed.data.affectsContact),
@@ -183,6 +227,13 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
           request.userEmail,
           timestamp,
           request.params.id
+        );
+        syncJunction(
+          "unavailable_period_children",
+          "unavailable_period_id",
+          request.params.id,
+          parsed.data.childIds,
+          timestamp
         );
         const after = getPeriod(request.params.id);
         if (after) {
@@ -227,6 +278,11 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
           SET deleted_at = ?, updated_at = ?, updated_by = ?
           WHERE id = ?
         `).run(timestamp, timestamp, request.userEmail, request.params.id);
+        db.prepare(`
+          UPDATE unavailable_period_children
+          SET deleted_at = ?, updated_at = ?
+          WHERE unavailable_period_id = ? AND deleted_at IS NULL
+        `).run(timestamp, timestamp, request.params.id);
         recordAudit({
           userEmail: request.userEmail,
           entityType: "unavailable_period",

@@ -10,7 +10,7 @@ import { UnavailablePeriodForm } from "../components/UnavailablePeriodForm";
 import { unavailablePeriodsForRange } from "../lib/analytics";
 import { actorDisplayName } from "../lib/actors";
 import { formatDate, formatDateTime, formatTime, toMonthKey } from "../lib/date";
-import { unavailableCategoryLabels } from "../lib/labels";
+import { unavailableCategoryLabel, unavailableScopeLabel } from "../lib/labels";
 import { useAppStore } from "../store/AppStore";
 import type { UnavailablePeriod } from "../types";
 import { useI18n } from "../i18n/I18nProvider";
@@ -89,17 +89,33 @@ export function UnavailablePeriodsPage() {
         <div className="unavailable-list">
           {periods.map((period) => (
             <article className="unavailable-row" key={period.id}>
-              <span className={`unavailable-row__type ${period.dutyRelated ? "is-duty" : ""}`}>
+              <span className={`unavailable-row__type ${period.dutyRelated ? "is-duty" : ""} ${period.scope === "external_contact_block" ? "is-external-block" : ""}`}>
                 <Icon name="briefcase" size={17} />
-                {period.dutyRelated ? copy(locale, "unavailable", "dutyRelated") : copy(locale, "unavailable", "other")}
+                {period.scope === "external_contact_block"
+                  ? unavailableScopeLabel(period.scope, locale)
+                  : period.dutyRelated
+                    ? copy(locale, "unavailable", "dutyRelated")
+                    : copy(locale, "unavailable", "other")}
               </span>
               <span>
-                <strong>{unavailableCategoryLabels[period.category]}</strong>
+                <strong>{unavailableCategoryLabel(period.category, locale)}</strong>
                 <small>
                   {formatDate(period.startDateTime, intlLocale)} {formatTime(period.startDateTime, intlLocale)}
                   {` ${copy(locale, "common", "to")} `}
                   {formatDate(period.endDateTime, intlLocale)} {formatTime(period.endDateTime, intlLocale)}
                 </small>
+                {period.scope === "external_contact_block" ? (
+                  <small>
+                    {[
+                      period.responsiblePartyId
+                        ? data.careParties.find((party) => party.id === period.responsiblePartyId)?.name
+                        : "",
+                      period.childIds.length
+                        ? period.childIds.map((id) => data.children.find((child) => child.id === id)?.name ?? id).join(", ")
+                        : copy(locale, "unavailable", "blockedChildrenHint")
+                    ].filter(Boolean).join(" · ")}
+                  </small>
+                ) : null}
                 <small>
                   {copy(locale, "common", "updatedBy", {
                     actor: actorDisplayName(data, period.updatedBy),

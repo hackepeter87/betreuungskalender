@@ -1,5 +1,5 @@
 import { formatDate, formatDateTime, formatTime } from "../lib/date";
-import { locationLabels, statusLabels } from "../lib/labels";
+import { deviationLabel, locationLabels, statusLabels } from "../lib/labels";
 import type { CareEntry, Child } from "../types";
 import { Icon } from "./Icon";
 import { useI18n } from "../i18n/I18nProvider";
@@ -22,6 +22,9 @@ export function EntryRow({
     .map((id) => childMap.get(id))
     .filter((child): child is Child => Boolean(child));
   const activeTrips = entry.trips.filter((trip) => !trip.deletedAt);
+  const plannedRange = entry.plannedStartDateTime && entry.plannedEndDateTime
+    ? `${formatDate(entry.plannedStartDateTime, intlLocale)} ${formatTime(entry.plannedStartDateTime, intlLocale)}-${formatTime(entry.plannedEndDateTime, intlLocale)}`
+    : undefined;
 
   return (
     <button className="entry-row" type="button" onClick={onClick}>
@@ -51,6 +54,8 @@ export function EntryRow({
         {entry.overnight ? <span><Icon name="moon" size={15} /> {copy(locale, "agenda", "overnight")}</span> : null}
         {entry.schoolHandover ? <span><Icon name="check" size={15} /> {copy(locale, "app", "school")}</span> : null}
         {entry.additionalCare ? <span><Icon name="plus" size={15} /> {copy(locale, "agenda", "additionalCare")}</span> : null}
+        {entry.deviationType ? <span><Icon name="history" size={15} /> {deviationLabel(entry.deviationType, locale)}</span> : null}
+        {plannedRange ? <span><Icon name="calendar" size={15} /> {plannedRange}</span> : null}
         {activeTrips.length ? <span><Icon name="car" size={15} /> {activeTrips.reduce((sum, trip) => sum + trip.km, 0).toFixed(1)} km</span> : null}
       </span>
       <span className={`status-label status-label--${entry.status}`}>{statusLabels[entry.status]}</span>

@@ -6,8 +6,10 @@ import {
 import { formatDate, formatDateTime, formatTime } from "./date";
 import {
   costCategoryLabel,
+  deviationLabel,
   statusLabel,
-  unavailableCategoryLabel
+  unavailableCategoryLabel,
+  unavailableScopeLabel
 } from "./labels";
 import { reportClosureDescription } from "./monthClosure";
 import type { AppData } from "../types";
@@ -111,12 +113,13 @@ export async function exportPdfReport(
 
   autoTable(doc, {
     startY: 88,
-    head: [[messages.plannedDates, messages.completed, messages.cancelledDuty, messages.cancelledOther, messages.overlaps, messages.additional, messages.tripKm, messages.costs]],
+    head: [[messages.plannedDates, messages.completed, messages.cancelledDuty, messages.cancelledOther, messages.externallyBlocked, messages.overlaps, messages.additional, messages.tripKm, messages.costs]],
     body: [[
       stats.contact.scheduled,
       stats.contact.completed,
       stats.contact.cancelledDutyRelated,
       stats.contact.cancelledOther,
+      stats.contact.externallyBlocked,
       stats.contact.unavailableOverlaps,
       stats.contact.additional,
       stats.tripKm.toFixed(1),
@@ -155,13 +158,19 @@ export async function exportPdfReport(
       const entryKm = entry.trips
         .filter((trip) => !trip.deletedAt)
         .reduce((sum, trip) => sum + trip.km, 0);
+      const deviation = entry.deviationType
+        ? `\n${deviationLabel(entry.deviationType, options.locale)}`
+        : "";
+      const originalPlan = entry.plannedStartDateTime && entry.plannedEndDateTime
+        ? `\n${messages.originalPlan}: ${formatDate(entry.plannedStartDateTime, intlLocale)} ${formatTime(entry.plannedStartDateTime, intlLocale)}-${formatTime(entry.plannedEndDateTime, intlLocale)}`
+        : "";
       return [
         `${formatDate(entry.startDateTime, intlLocale)} ${formatTime(entry.startDateTime, intlLocale)}\n${messages.through} ${formatDate(entry.endDateTime, intlLocale)} ${formatTime(entry.endDateTime, intlLocale)}`,
         namesForEntry(data, entry.childIds),
-        `${statusLabel(entry.status, options.locale)}${entry.additionalCare ? `\n${messages.additionalCare}` : ""}${entry.generatedByPatternId ? `\n${messages.plannedDate}` : ""}`,
+        `${statusLabel(entry.status, options.locale)}${entry.additionalCare ? `\n${messages.additionalCare}` : ""}${entry.generatedByPatternId ? `\n${messages.plannedDate}` : ""}${deviation}${originalPlan}`,
         `${entry.overnight ? messages.overnight : messages.dayCare}${entry.schoolHandover ? `\n${messages.schoolHandover}` : ""}${entry.holiday ? `\n${messages.holiday}` : ""}`,
         `${entryKm.toFixed(1)} km\n${euro.format(entryCosts)}`,
-        entry.cancellationReason || entry.notes || "–"
+        entry.deviationNote || entry.cancellationReason || entry.notes || "–"
       ];
     }),
     theme: "grid",
@@ -205,10 +214,17 @@ export async function exportPdfReport(
   );
   autoTable(doc, {
     startY: 32,
-    head: [[messages.period, messages.category, messages.dutyRelated, messages.affects, messages.location, messages.evidenceReference, messages.note]],
+    head: [[messages.period, messages.scope, messages.category, messages.careParty, messages.children, messages.dutyRelated, messages.affects, messages.location, messages.evidenceReference, messages.note]],
     body: unavailablePeriods.map((period) => [
       `${formatDate(period.startDateTime, intlLocale)} ${formatTime(period.startDateTime, intlLocale)}\n${messages.through} ${formatDate(period.endDateTime, intlLocale)} ${formatTime(period.endDateTime, intlLocale)}`,
+      unavailableScopeLabel(period.scope, options.locale),
       unavailableCategoryLabel(period.category, options.locale),
+      period.responsiblePartyId
+        ? data.careParties.find((party) => party.id === period.responsiblePartyId)?.name ?? period.responsiblePartyId
+        : "–",
+      period.childIds.length
+        ? period.childIds.map((id) => data.children.find((child) => child.id === id)?.name ?? id).join(", ")
+        : "–",
       period.dutyRelated ? messages.yes : messages.no,
       [
         period.affectsContact ? messages.contact : "",

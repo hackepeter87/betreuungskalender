@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent } from "react";
-import { addDays, isWeekendDate, makeId, toDateKey } from "../lib/date";
+import { addDays, formatDateTime, isWeekendDate, makeId, toDateKey } from "../lib/date";
 import {
   costCategoryLabel,
   handoverLabel,
@@ -12,6 +12,7 @@ import { copy } from "../i18n/catalog";
 import { useAppStore } from "../store/AppStore";
 import type {
   CareEntry,
+  CareDeviationType,
   CareLocation,
   Cost,
   CostCategory,
@@ -46,6 +47,40 @@ function dateTimeParts(value: string): { date: string; time: string } {
 
 const locationOptions: CareLocation[] = ["commuterApartment", "mainResidence", "mother", "school", "ogs", "other"];
 const handoverOptions: HandoverParty[] = ["mother", "father", "school", "ogs", "thirdParty"];
+type DeviationChoice = "none" | CareDeviationType;
+const deviationChoices: DeviationChoice[] = [
+  "none",
+  "cancelled",
+  "partial",
+  "rescheduled",
+  "swapped",
+  "externally_blocked",
+  "other"
+];
+
+function deviationLabel(locale: "de" | "en", value: DeviationChoice): string {
+  switch (value) {
+    case "none": return copy(locale, "entryForm", "deviationNone");
+    case "rescheduled": return copy(locale, "entryForm", "deviationRescheduled");
+    case "swapped": return copy(locale, "entryForm", "deviationSwapped");
+    case "externally_blocked": return copy(locale, "entryForm", "deviationExternallyBlocked");
+    case "other": return copy(locale, "entryForm", "deviationOther");
+    case "cancelled": return copy(locale, "entryForm", "deviationCancelled");
+    case "partial": return copy(locale, "entryForm", "deviationPartial");
+  }
+}
+
+function deviationDescription(locale: "de" | "en", value: DeviationChoice): string {
+  switch (value) {
+    case "none": return copy(locale, "entryForm", "deviationNoneDescription");
+    case "rescheduled": return copy(locale, "entryForm", "deviationRescheduledDescription");
+    case "swapped": return copy(locale, "entryForm", "deviationSwappedDescription");
+    case "externally_blocked": return copy(locale, "entryForm", "deviationExternallyBlockedDescription");
+    case "other": return copy(locale, "entryForm", "deviationOtherDescription");
+    case "cancelled": return copy(locale, "entryForm", "deviationCancelledDescription");
+    case "partial": return copy(locale, "entryForm", "deviationPartialDescription");
+  }
+}
 
 function newTrip(): Trip {
   return {
@@ -75,7 +110,7 @@ export function EntryForm({
   onSaved,
   onCancel
 }: EntryFormProps) {
-  const { locale } = useI18n();
+  const { locale, intlLocale } = useI18n();
   const { data, saveEntry, removeEntry, canWrite, isSaving } = useAppStore();
   const defaultDate = initialDate ?? toDateKey(new Date());
   const initialStart = entry
@@ -86,9 +121,16 @@ export function EntryForm({
     : { date: defaultDate, time: "19:00" };
   const [childIds, setChildIds] = useState<string[]>(entry?.childIds ?? []);
   const [responsiblePartyId, setResponsiblePartyId] = useState(
-    entry?.responsiblePartyId ?? data.careParties[0]?.id ?? ""
+    entry?.responsiblePartyId ??
+      data.settings.defaultResponsiblePartyId ??
+      data.careParties[0]?.id ??
+      ""
   );
   const [status, setStatus] = useState<EntryStatus>(entry?.status ?? "completed");
+  const [deviationType, setDeviationType] = useState<DeviationChoice>(
+    entry?.deviationType ?? (entry?.status === "cancelled" ? "cancelled" : "none")
+  );
+  const [deviationNote, setDeviationNote] = useState(entry?.deviationNote ?? "");
   const [additionalCare, setAdditionalCare] = useState(
     entry?.additionalCare ?? initialAdditionalCare ?? false
   );
@@ -128,6 +170,8 @@ export function EntryForm({
 
   const startDateTime = `${startDate}T${startTime}`;
   const endDateTime = `${endDate}T${endTime}`;
+  const originalPlanStart = entry?.plannedStartDateTime ?? entry?.startDateTime ?? startDateTime;
+  const originalPlanEnd = entry?.plannedEndDateTime ?? entry?.endDateTime ?? endDateTime;
   const selectedNames = useMemo(
     () =>
       data.children
@@ -169,6 +213,21 @@ export function EntryForm({
     if (status === "cancelled" && !cancellationReason.trim()) {
       nextErrors.cancellationReason = copy(locale, "entryForm", "cancellationReasonRequired");
     }
+    const effectiveDeviationType: CareDeviationType | undefined =
+      deviationType === "none"
+        ? status === "cancelled"
+          ? "cancelled"
+          : status === "partial"
+            ? "partial"
+            : undefined
+        : deviationType;
+    if (
+      ["rescheduled", "swapped", "externally_blocked", "other"].includes(effectiveDeviationType ?? "") &&
+      !deviationNote.trim() &&
+      !cancellationReason.trim()
+    ) {
+      nextErrors.deviationNote = copy(locale, "entryForm", "deviationNoteRequired");
+    }
     for (const trip of trips) {
       if (!Number.isFinite(trip.km) || trip.km <= 0) {
         nextErrors[`trip-${trip.id}`] = copy(locale, "entryForm", "kmPositive");
@@ -192,6 +251,10 @@ export function EntryForm({
       endDateTime,
       childIds,
       status,
+      deviationType: effectiveDeviationType,
+      deviationNote: effectiveDeviationType ? deviationNote.trim() || undefined : undefined,
+      plannedStartDateTime: effectiveDeviationType ? originalPlanStart : undefined,
+      plannedEndDateTime: effectiveDeviationType ? originalPlanEnd : undefined,
       additionalCare: entry?.generatedByPatternId ? false : additionalCare,
       generatedByPatternId: entry?.generatedByPatternId,
       ruleOccurrenceDate: entry?.ruleOccurrenceDate,
@@ -209,7 +272,7 @@ export function EntryForm({
       handoverFrom,
       handoverTo,
       cancellationReason:
-        status === "cancelled" ? cancellationReason.trim() : undefined,
+        status === "cancelled" ? cancellationReason.trim() || deviationNote.trim() : undefined,
       notes: notes.trim() || undefined,
       hasEvidence,
       evidenceReference: hasEvidence ? evidenceReference.trim() || undefined : undefined,
@@ -349,6 +412,70 @@ export function EntryForm({
           </label>
         ) : null}
       </fieldset>
+
+      {entry ? (
+      <fieldset className="form-section">
+        <legend className="field-label-row">
+          <span>{copy(locale, "entryForm", "deviationTitle")}</span>
+          <FieldHelpButton fieldId="careEntry.status" />
+        </legend>
+        <p className="form-section__hint">{copy(locale, "entryForm", "deviationDescription")}</p>
+        <div className="deviation-choice-grid">
+          {deviationChoices.map((value) => (
+            <label
+              className={`choice-card choice-card--stacked ${deviationType === value ? "choice-card--selected" : ""}`}
+              key={value}
+            >
+              <input
+                type="radio"
+                name="deviationType"
+                value={value}
+                checked={deviationType === value}
+                onChange={() => {
+                  setDeviationType(value);
+                  setFieldErrors((errors) => ({ ...errors, deviationNote: "" }));
+                  if (value === "cancelled" || value === "externally_blocked") setStatus("cancelled");
+                  if (value === "partial") setStatus("partial");
+                }}
+              />
+              <strong>{deviationLabel(locale, value)}</strong>
+              <span>{deviationDescription(locale, value)}</span>
+            </label>
+          ))}
+        </div>
+        {deviationType !== "none" ? (
+          <div className="deviation-details">
+            <div className="notice">
+              <Icon name="history" />
+              <div>
+                <strong>{copy(locale, "entryForm", "originalPlan")}</strong>
+                <p>
+                  {formatDateTime(originalPlanStart, intlLocale)}
+                  {" "}
+                  {copy(locale, "common", "to")}
+                  {" "}
+                  {formatDateTime(originalPlanEnd, intlLocale)}
+                </p>
+              </div>
+            </div>
+            <label className="field">
+              <span>{copy(locale, "entryForm", "deviationNote")}</span>
+              <textarea
+                rows={2}
+                value={deviationNote}
+                aria-invalid={Boolean(fieldErrors.deviationNote)}
+                onChange={(event) => {
+                  setDeviationNote(event.target.value);
+                  setFieldErrors((errors) => ({ ...errors, deviationNote: "" }));
+                }}
+                placeholder={copy(locale, "entryForm", "deviationNotePlaceholder")}
+              />
+              {fieldErrors.deviationNote ? <span className="field-error">{fieldErrors.deviationNote}</span> : null}
+            </label>
+          </div>
+        ) : null}
+      </fieldset>
+      ) : null}
 
       <details className="form-section form-section--collapsible" open>
         <summary className="form-section__summary">{copy(locale, "entryForm", "period")}</summary>

@@ -643,6 +643,28 @@ export function SettingsPage() {
             />
           </label>
           <label className="field">
+            <span>{copy(locale, "settings", "defaultResponsibleParty")}</span>
+            <select
+              value={data.settings.defaultResponsiblePartyId ?? ""}
+              disabled={!canWrite || isSaving || !data.careParties.length}
+              onChange={(event) =>
+                void updateSettings({
+                  defaultResponsiblePartyId: event.target.value || undefined
+                })
+              }
+            >
+              {data.careParties.length ? null : (
+                <option value="">{copy(locale, "settings", "noCareParties")}</option>
+              )}
+              {data.careParties.map((party) => (
+                <option key={party.id} value={party.id}>
+                  {party.name}
+                </option>
+              ))}
+            </select>
+            <small>{copy(locale, "settings", "defaultResponsiblePartyDescription")}</small>
+          </label>
+          <label className="field">
             <FieldHelpLabel fieldId="settings.defaultLocation" />
             <select value={data.settings.defaultLocation} disabled={!canWrite || isSaving} onChange={(event) => void updateSettings({ defaultLocation: event.target.value as CareLocation })}>
               {(["commuterApartment", "mainResidence", "mother", "school", "ogs", "other"] as const).map((value) => <option key={value} value={value}>{locationLabel(value, locale)}</option>)}

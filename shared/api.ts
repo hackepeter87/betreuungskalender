@@ -14,6 +14,13 @@ export const careScopes = [
 
 export type CareScope = (typeof careScopes)[number];
 export type ApiEntryStatus = "planned" | "completed" | "cancelled" | "partial";
+export type ApiCareDeviationType =
+  | "cancelled"
+  | "partial"
+  | "rescheduled"
+  | "swapped"
+  | "externally_blocked"
+  | "other";
 export type ApiCareConfirmationStatus = "open" | "answered" | "snoozed";
 export type ApiNotificationEventType = "care_confirmation_due" | "care_confirmation_reminder";
 
@@ -32,6 +39,7 @@ export const unavailableCategories = [
 ] as const;
 
 export type ApiUnavailableCategory = (typeof unavailableCategories)[number];
+export type ApiUnavailableScope = "own_unavailability" | "external_contact_block";
 
 export const carePartyKinds = [
   "father",
@@ -95,11 +103,19 @@ export interface ApiCareEntry {
   contactRuleSegmentId?: string;
   contactRuleOccurrenceKey?: string;
   responsiblePartyId?: string;
+  actualResponsiblePartyId?: string;
   contactRuleSyncState?: "generated" | "manual_override";
   startDateTime: string;
   endDateTime: string;
+  plannedStartDateTime?: string;
+  plannedEndDateTime?: string;
+  actualStartDateTime?: string;
+  actualEndDateTime?: string;
   childIds: string[];
+  actualChildIds?: string[];
   status: ApiEntryStatus;
+  deviationType?: ApiCareDeviationType;
+  deviationNote?: string;
   confirmationState?: "unconfirmed" | "confirmed";
   confirmedAt?: string;
   confirmedBy?: string;
@@ -147,6 +163,10 @@ export interface ApiCareConfirmationAnswer {
   status: "completed" | "cancelled" | "partial";
   note?: string;
   cancellationReason?: string;
+  actualStartDateTime?: string;
+  actualEndDateTime?: string;
+  actualChildIds?: string[];
+  actualResponsiblePartyId?: string;
 }
 
 export interface ApiCareConfirmationRemindLater {
@@ -310,6 +330,9 @@ export interface ApiUnavailablePeriod {
   id: string;
   startDateTime: string;
   endDateTime: string;
+  scope: ApiUnavailableScope;
+  responsiblePartyId?: string;
+  childIds: string[];
   category: ApiUnavailableCategory;
   dutyRelated: boolean;
   affectsContact: boolean;

@@ -7,7 +7,8 @@ import {
   statusLabels,
   tripPurposeLabels
   ,
-  unavailableCategoryLabels
+  unavailableCategoryLabels,
+  unavailableScopeLabels
 } from "./labels";
 import type { AppData } from "../types";
 
@@ -210,8 +211,11 @@ export function exportUnavailablePeriodsCsv(data: AppData): void {
   const rows: unknown[][] = [
     [
       "ID",
+      "Art",
       "Beginn",
       "Ende",
+      "Betreuende Person",
+      "Kinder",
       "Kategorie",
       "Dienstlich veranlasst",
       "Betrifft Umgang",
@@ -230,8 +234,11 @@ export function exportUnavailablePeriodsCsv(data: AppData): void {
   for (const period of data.unavailablePeriods) {
     rows.push([
       period.id,
+      unavailableScopeLabels[period.scope],
       period.startDateTime,
       period.endDateTime,
+      period.responsiblePartyId ? data.careParties.find((party) => party.id === period.responsiblePartyId)?.name : "",
+      childNames(data, period.childIds),
       unavailableCategoryLabels[period.category],
       period.dutyRelated,
       period.affectsContact,

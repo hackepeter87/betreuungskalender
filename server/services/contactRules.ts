@@ -56,6 +56,7 @@ export interface ContactRulePatternInput {
   fridayStartTime: string;
   sundayEndTime: string;
   childIds: string[];
+  responsiblePartyId?: string;
   active: boolean;
   createdBy: string;
   updatedBy: string;
@@ -399,15 +400,16 @@ export function upsertContactRuleFromPattern(
   database.prepare(`
     INSERT INTO contact_rules (
       id, name, start_date, timezone, recurrence_json, segments_json,
-      sync_horizon_months, active, source_contact_pattern_id,
+      sync_horizon_months, responsible_party_id, active, source_contact_pattern_id,
       created_by, updated_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(id) DO UPDATE SET
       name = excluded.name,
       start_date = excluded.start_date,
       timezone = excluded.timezone,
       recurrence_json = excluded.recurrence_json,
       segments_json = excluded.segments_json,
+      responsible_party_id = excluded.responsible_party_id,
       active = excluded.active,
       source_contact_pattern_id = excluded.source_contact_pattern_id,
       updated_by = excluded.updated_by,
@@ -421,6 +423,7 @@ export function upsertContactRuleFromPattern(
     JSON.stringify(recurrence),
     JSON.stringify(segments),
     12,
+    pattern.responsiblePartyId ?? null,
     Number(pattern.active),
     pattern.id,
     pattern.createdBy,

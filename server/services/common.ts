@@ -28,8 +28,8 @@ export function assertActiveChildren(childIds: string[]): void {
 }
 
 export function syncJunction(
-  table: "care_entry_children" | "holiday_period_children" | "contact_pattern_children",
-  ownerColumn: "care_entry_id" | "holiday_period_id" | "contact_pattern_id",
+  table: "care_entry_children" | "care_entry_actual_children" | "holiday_period_children" | "contact_pattern_children" | "unavailable_period_children",
+  ownerColumn: "care_entry_id" | "holiday_period_id" | "contact_pattern_id" | "unavailable_period_id",
   ownerId: string,
   childIds: string[],
   timestamp: string

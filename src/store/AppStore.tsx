@@ -17,7 +17,7 @@ import {
   loadSession,
   SERVER_UNAVAILABLE_MESSAGE
 } from "../lib/api";
-import type { ApiSession } from "../../shared/api";
+import type { ApiCareConfirmationAnswer, ApiSession } from "../../shared/api";
 import { generatePatternEntries } from "../lib/contact";
 import { buildMonthlyClosureSummary, monthKeysForRange } from "../lib/monthClosure";
 import type {
@@ -87,7 +87,7 @@ interface AppStoreValue {
   answerCareConfirmation: (
     id: string,
     status: "completed" | "cancelled" | "partial",
-    note?: string
+    noteOrAnswer?: string | Omit<ApiCareConfirmationAnswer, "status">
   ) => Promise<boolean>;
   remindCareConfirmationLater: (id: string) => Promise<boolean>;
   updateNotificationPreferences: (preferences: NotificationPreference[]) => Promise<boolean>;
@@ -274,12 +274,25 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   );
 
   const answerCareConfirmation = useCallback(
-    async (id: string, status: "completed" | "cancelled" | "partial", note?: string) =>
+    async (
+      id: string,
+      status: "completed" | "cancelled" | "partial",
+      noteOrAnswer?: string | Omit<ApiCareConfirmationAnswer, "status">
+    ) =>
       performWrite(async () => {
+        const input =
+          typeof noteOrAnswer === "object"
+            ? { status, ...noteOrAnswer }
+            : {
+                status,
+                note: noteOrAnswer,
+                cancellationReason: status === "cancelled" ? noteOrAnswer : undefined
+              };
         await api.answerCareConfirmation(id, {
-          status,
-          note,
-          cancellationReason: status === "cancelled" ? note : undefined
+          ...input,
+          cancellationReason: status === "cancelled"
+            ? input.cancellationReason ?? input.note
+            : input.cancellationReason
         });
         await reloadInternal(true);
         return true;

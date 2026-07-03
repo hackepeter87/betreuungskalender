@@ -11,7 +11,6 @@ import { calculateHolidayStats } from "../lib/analytics";
 import { actorDisplayName } from "../lib/actors";
 import { api } from "../lib/api";
 import { formatDate, formatDateTime, toMonthKey } from "../lib/date";
-import { holidayAssignmentLabel } from "../lib/labels";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
 import { useAppStore } from "../store/AppStore";
@@ -22,7 +21,6 @@ function ExternalHolidayDerivationPanel() {
   const { data, reload, canWrite, isSaving } = useAppStore();
   const holidaySources = data.externalCalendarSources.filter((source) => source.sourceType === "holiday");
   const [sourceId, setSourceId] = useState(holidaySources[0]?.id ?? "");
-  const [assignedTo, setAssignedTo] = useState<HolidayPeriod["assignedTo"]>("shared");
   const [childIds, setChildIds] = useState<string[]>(data.children.map((child) => child.id));
   const [message, setMessage] = useState<string | null>(null);
 
@@ -45,7 +43,7 @@ function ExternalHolidayDerivationPanel() {
     if (!sourceId || !childIds.length) return;
     const result = await api.deriveHolidaysFromExternalCalendar(sourceId, {
       childIds,
-      assignedTo
+      assignedTo: "shared"
     });
     await reload();
     setMessage(copy(locale, "holiday", "derivedFromExternal", {
@@ -69,12 +67,6 @@ function ExternalHolidayDerivationPanel() {
               <span>{copy(locale, "holiday", "externalSource")}</span>
               <select data-testid="holiday-external-source" value={sourceId} onChange={(event) => setSourceId(event.target.value)}>
                 {holidaySources.map((source) => <option key={source.id} value={source.id}>{source.name}</option>)}
-              </select>
-            </label>
-            <label className="field">
-              <span>{copy(locale, "holiday", "assignedTo")}</span>
-              <select data-testid="holiday-external-assigned-to" value={assignedTo} onChange={(event) => setAssignedTo(event.target.value as HolidayPeriod["assignedTo"])}>
-                {(["father", "mother", "shared"] as HolidayPeriod["assignedTo"][]).map((value) => <option key={value} value={value}>{holidayAssignmentLabel(value, locale)}</option>)}
               </select>
             </label>
             <fieldset className="inline-fieldset holiday-derive-form__children">
@@ -124,9 +116,6 @@ function HolidayForm({
   const [name, setName] = useState(period?.name ?? copy(locale, "holiday", "defaultName"));
   const [startDate, setStartDate] = useState(period?.startDate ?? "");
   const [endDate, setEndDate] = useState(period?.endDate ?? "");
-  const [assignedTo, setAssignedTo] = useState<HolidayPeriod["assignedTo"]>(
-    period?.assignedTo ?? "father"
-  );
   const [childIds, setChildIds] = useState<string[]>(
     period?.childIds ?? data.children.map((child) => child.id)
   );
@@ -149,7 +138,7 @@ function HolidayForm({
       startDate,
       endDate,
       childIds,
-      assignedTo,
+      assignedTo: period?.assignedTo ?? "shared",
       notes: notes.trim() || undefined
     });
     if (saved) onDone();
@@ -171,12 +160,6 @@ function HolidayForm({
           <input data-testid="holiday-end-date" type="date" required value={endDate} onChange={(event) => setEndDate(event.target.value)} />
         </label>
       </div>
-      <label className="field">
-        <FieldHelpLabel fieldId="holiday.assignedTo" />
-        <select value={assignedTo} onChange={(event) => setAssignedTo(event.target.value as HolidayPeriod["assignedTo"])}>
-          {(["father", "mother", "shared"] as HolidayPeriod["assignedTo"][]).map((value) => <option key={value} value={value}>{holidayAssignmentLabel(value, locale)}</option>)}
-        </select>
-      </label>
       <fieldset className="inline-fieldset">
         <legend className="field-label-row">
           <span>{copy(locale, "holiday", "children")}</span>
@@ -235,9 +218,12 @@ export function HolidaysPage() {
         selection.startDate,
         selection.endDate,
         undefined,
-        data.unavailablePeriods
+        data.unavailablePeriods,
+        data.entries,
+        data.careParties,
+        data.settings.defaultResponsiblePartyId
       ),
-    [data.holidayPeriods, data.unavailablePeriods, selection.endDate, selection.startDate]
+    [data.careParties, data.entries, data.holidayPeriods, data.settings.defaultResponsiblePartyId, data.unavailablePeriods, selection.endDate, selection.startDate]
   );
 
   const periods = useMemo(
@@ -283,6 +269,31 @@ export function HolidaysPage() {
         <div><small>{copy(locale, "holiday", "halfDifference")}</small><strong>{stats.halfTarget} / {stats.differenceFromHalf > 0 ? "+" : ""}{stats.differenceFromHalf}</strong></div>
       </section>
 
+      {stats.byCareParty.length ? (
+        <section className="panel panel--subtle">
+          <div className="panel__header panel__header--compact">
+            <div>
+              <h2>{copy(locale, "holiday", "carePartyShares")}</h2>
+              <p>{copy(locale, "holiday", "carePartySharesDescription")}</p>
+            </div>
+          </div>
+          <div className="stats-grid">
+            {stats.byCareParty.map((share) => (
+              <div key={share.carePartyId}>
+                <small>{share.name}</small>
+                <strong>{share.days} / {share.quote} %</strong>
+              </div>
+            ))}
+            {stats.unassignedDays > 0 ? (
+              <div>
+                <small>{copy(locale, "holiday", "unassignedDays")}</small>
+                <strong>{stats.unassignedDays}</strong>
+              </div>
+            ) : null}
+          </div>
+        </section>
+      ) : null}
+
       {stats.unavailablePeriods > 0 ? (
         <section className="notice notice--recommendation">
           <Icon name="briefcase" />
@@ -305,8 +316,8 @@ export function HolidaysPage() {
         <div className="holiday-list">
           {periods.map((period) => (
             <article className="holiday-row" key={period.id}>
-              <span className={`holiday-row__assignment holiday-row__assignment--${period.assignedTo}`}>
-                {holidayAssignmentLabel(period.assignedTo, locale)}
+              <span className="holiday-row__assignment holiday-row__assignment--shared">
+                {copy(locale, "agenda", "holidayPeriod")}
               </span>
               <span>
                 <strong>{period.name}</strong>

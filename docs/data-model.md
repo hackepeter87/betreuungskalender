@@ -27,10 +27,11 @@ discovery source; it is not synchronized or treated as current persistence.
 | `care_parties` | Domain caregivers such as parents, grandparents, or other responsible parties |
 | `care_entries` | Planned, completed, partially completed, or cancelled care periods and details |
 | `care_entry_children` | Many-to-many child assignment for care entries |
+| `care_entry_actual_children` | Actual child assignment for partially completed care entries |
 | `care_confirmation_requests` | Follow-up confirmation tasks for past planned care entries |
 | `trips` | Multiple trips belonging to a care entry |
 | `costs` | Multiple cost items belonging to a care entry |
-| `holiday_periods` | Named holiday blocks and assignment |
+| `holiday_periods` | Named holiday periods used as calendar/reporting frames |
 | `holiday_period_children` | Child assignment for holiday blocks |
 | `contact_patterns` | Biweekly Friday-to-Sunday target schedules |
 | `contact_pattern_children` | Child assignment for target schedules |
@@ -140,10 +141,13 @@ decisions are read from the matching `app_users` row on each API request.
 Care entries contain start/end, status, care scope, overnight and holiday
 flags, additional care, location, handover, notes, evidence reference,
 calculated duration, contact-time classification, and an optional
-`responsible_party_id`. Supported stored statuses are `planned`, `completed`,
-`partial`, and `cancelled`. The API can additionally expose a derived
-`unconfirmed` confirmation state for planned entries whose end time is already
-in the past. Children, trips, and costs are persisted transactionally.
+`responsible_party_id`. If a new entry or contact rule does not provide a
+responsible party, the server uses the configured
+`defaultResponsiblePartyId` setting when an active care party is available.
+Supported stored statuses are `planned`, `completed`, `partial`, and
+`cancelled`. The API can additionally expose a derived `unconfirmed`
+confirmation state for planned entries whose end time is already in the past.
+Children, trips, and costs are persisted transactionally.
 
 Generated planned entries can reference a flexible contact rule with
 `contact_rule_id`, `contact_rule_segment_id`, and
@@ -157,6 +161,21 @@ Confirmed care entries can store `confirmation_note`, `confirmed_at`, and
 `confirmed_by`. The note is optional and meant for short factual context such
 as a partial completion note. `confirmed_by` stores the stable `app_users.id`
 of the confirming user.
+
+Entries that differ from the original plan can store transparent deviation
+metadata directly on `care_entries`: `planned_start_datetime`,
+`planned_end_datetime`, `deviation_type`, and `deviation_note`. Supported
+deviation types cover cancellation, partial completion, rescheduling, swapped
+or compensation dates, externally blocked care, and other factual deviations.
+This keeps the original planned period traceable without introducing a second
+opaque planning table.
+
+Partially completed entries keep the planned entry intact and store actual
+completion details separately: `actual_start_datetime`,
+`actual_end_datetime`, `actual_responsible_party_id`, and
+`care_entry_actual_children`. Reports and holiday allocation use these actual
+values for `partial` entries, while planned child assignments and planned times
+remain available for auditability and later comparison.
 
 ## Care confirmations and notifications
 
@@ -196,10 +215,22 @@ two-week interval, Friday anchor, and a Friday-to-Sunday segment.
 
 ## Holidays and unavailable periods
 
-Holiday blocks document a period and assignment to father, mother, or shared.
+Holiday blocks document official or agreed holiday periods for one or more
+children. They are calendar-visible planning frames, not the source of care
+credit. The legacy `assigned_to` value is retained for backup and migration
+compatibility, but new UI flows treat holiday credit as normal care entries
+whose dates overlap a holiday block and whose `responsible_party_id` identifies
+the credited care party. This allows long holidays to be split into several
+regular care entries, for example one week with one care party and later weeks
+with another.
+
 Unavailable periods record category, duty relationship, effects on contact or
-holiday planning, location, notes, and evidence reference. Neither structure
-automatically changes actual care entries.
+holiday planning, location, notes, and evidence reference. The `scope` field
+separates the care party's own unavailability from externally blocked contact
+periods where contact was wanted or possible but prevented by another
+child-related arrangement. External contact blocks can reference affected
+children and the care party whose contact was blocked. Neither holiday blocks
+nor unavailable periods automatically change actual care entries.
 
 ## Monthly closure
 
@@ -212,7 +243,8 @@ write-once archive.
 The browser backup envelope contains an application identifier, export
 timestamp, schema version, children, care entries with trips and costs,
 care parties, holidays, contact patterns, unavailable periods, audit entries,
-monthly closures, settings, actor metadata, and backup metadata. Import normalizes
+monthly closures, settings, actor metadata, partial-care actual details, and
+backup metadata. Import normalizes
 older supported schema versions and fills missing actor metadata with the
 importing user or the legacy `local-dev` actor where no authenticated actor is
 available.

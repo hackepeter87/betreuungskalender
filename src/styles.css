@@ -1058,6 +1058,12 @@ h3 {
   background: #eef2ff;
 }
 
+.calendar-event--holiday {
+  border-color: #f5c56b;
+  background: #fff7e6;
+  color: #7a4b00;
+}
+
 .calendar-event--rule {
   border-left-width: 3px;
 }
@@ -2008,6 +2014,18 @@ h3 {
   resize: vertical;
 }
 
+.confirmation-card__partial {
+  display: grid;
+  gap: 12px;
+  padding: 10px 0;
+}
+
+.confirmation-card__partial summary {
+  cursor: pointer;
+  font-weight: 800;
+  color: var(--teal-dark);
+}
+
 .confirmation-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2285,8 +2303,15 @@ h3 {
   gap: 8px;
 }
 
+.deviation-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
 .choice-card {
   display: flex;
+  min-width: 0;
   min-height: 44px;
   align-items: center;
   gap: 9px;
@@ -2299,6 +2324,27 @@ h3 {
   cursor: pointer;
 }
 
+.choice-card--stacked {
+  min-height: 86px;
+  align-items: flex-start;
+  flex-direction: column;
+  justify-content: center;
+  padding: 12px;
+  line-height: 1.35;
+}
+
+.choice-card--stacked strong,
+.choice-card--stacked span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.choice-card--stacked span {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
 .choice-card--selected {
   border-color: #8fc9c6;
   background: var(--teal-soft);
@@ -2307,6 +2353,20 @@ h3 {
 .choice-card input {
   position: absolute;
   opacity: 0;
+}
+
+.form-section__hint {
+  margin: -2px 0 12px;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.deviation-details {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
 }
 
 .form-grid,
@@ -2896,7 +2956,8 @@ h3 {
     grid-template-columns: repeat(2, 1fr);
   }
 
-  .child-choice-grid {
+  .child-choice-grid,
+  .deviation-choice-grid {
     grid-template-columns: 1fr;
   }
 
@@ -3128,6 +3189,22 @@ h3 {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
+}
+
+.scope-choice-grid,
+.external-block-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
+}
+
+.scope-choice-grid {
+  margin-bottom: 12px;
+}
+
+.external-block-fields {
+  margin-top: 12px;
 }
 
 .unavailable-time-group {
@@ -4036,6 +4113,10 @@ h3 {
   grid-template-columns: repeat(6, 1fr);
 }
 
+.summary-strip--seven {
+  grid-template-columns: repeat(7, 1fr);
+}
+
 .analytics-export-actions {
   display: flex;
   justify-content: flex-end;
@@ -4153,6 +4234,10 @@ h3 {
 
 .agenda-card--cancelled {
   background: #fffafa;
+}
+
+.agenda-card--holiday {
+  background: #fff8e8;
 }
 
 .agenda-card__colors {
@@ -4891,11 +4976,13 @@ h3 {
     line-height: 1.45;
   }
 
+  .summary-strip--seven,
   .summary-strip--six,
   .summary-strip--five {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .summary-strip--seven div,
   .summary-strip--six div,
   .summary-strip--five div {
     min-height: 88px;
@@ -4903,11 +4990,13 @@ h3 {
     border-bottom: 1px solid var(--line);
   }
 
+  .summary-strip--seven div:nth-child(even),
   .summary-strip--six div:nth-child(even),
   .summary-strip--five div:nth-child(even) {
     border-right: 0;
   }
 
+  .summary-strip--seven div:last-child,
   .summary-strip--six div:nth-last-child(-n + 2),
   .summary-strip--five div:last-child {
     border-bottom: 0;
@@ -5120,6 +5209,12 @@ h3 {
   border-color: #8175bb;
 }
 
+.calendar-event--unavailable.is-external-block {
+  border-color: #f2c98f;
+  background: #fff7e8;
+  color: #8a560f;
+}
+
 .calendar-event__unavailable-icon {
   display: inline-flex;
   height: 100%;
@@ -5144,6 +5239,11 @@ h3 {
 
 .agenda-card--unavailable.is-duty {
   border-left-color: #554b8c;
+}
+
+.agenda-card--unavailable.is-external-block {
+  border-left-color: #d97706;
+  background: #fff7e8;
 }
 
 .agenda-card__unavailable-icon {
@@ -5174,6 +5274,11 @@ h3 {
 .rule-entry__overlap {
   grid-column: 1 / -1;
   margin-top: -4px;
+}
+
+.agenda-card__warning--neutral {
+  background: #f2f5f9;
+  color: var(--muted);
 }
 
 .notice--recommendation {
@@ -5284,6 +5389,11 @@ h3 {
   color: #554b8c;
 }
 
+.unavailable-row__type.is-external-block {
+  background: #fff0d5;
+  color: #8a560f;
+}
+
 .unavailable-row__actions {
   display: flex;
   gap: 7px;
@@ -5308,7 +5418,9 @@ h3 {
   }
 
   .unavailable-time-grid,
-  .unavailable-time-group {
+  .unavailable-time-group,
+  .scope-choice-grid,
+  .external-block-fields {
     grid-template-columns: 1fr;
   }
 

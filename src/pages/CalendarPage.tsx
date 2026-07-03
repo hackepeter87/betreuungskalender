@@ -112,6 +112,7 @@ export function CalendarPage({
           entries={entries}
           unavailablePeriods={unavailablePeriods}
           externalEvents={externalEvents}
+          holidayPeriods={data.holidayPeriods}
           children={data.children}
           onSelectDate={(date) => onNewEntry(date || undefined)}
           onSelectEntry={onEditEntry}
@@ -126,6 +127,7 @@ export function CalendarPage({
               entries={entries}
               unavailablePeriods={unavailablePeriods}
               externalEvents={externalEvents}
+              holidayPeriods={data.holidayPeriods}
               children={data.children}
               onSelectDate={onNewEntry}
               onSelectEntry={onEditEntry}

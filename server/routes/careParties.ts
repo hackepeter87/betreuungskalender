@@ -26,8 +26,11 @@ function assignedUsageCount(id: string): number {
       ) + (
         SELECT COUNT(*) FROM contact_rules
         WHERE responsible_party_id = ? AND deleted_at IS NULL
+      ) + (
+        SELECT COUNT(*) FROM unavailable_periods
+        WHERE responsible_party_id = ? AND deleted_at IS NULL
       ) AS count
-  `).get(id, id) as { count: number };
+  `).get(id, id, id) as { count: number };
   return row.count;
 }
 

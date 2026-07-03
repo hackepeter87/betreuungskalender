@@ -218,6 +218,19 @@ export function normalizeBackupData(value: unknown): AppData {
             id: String(period.id ?? ""),
             startDateTime: String(period.startDateTime ?? ""),
             endDateTime: String(period.endDateTime ?? ""),
+            scope:
+              period.scope === "external_contact_block"
+                ? "external_contact_block"
+                : "own_unavailability",
+            responsiblePartyId:
+              typeof period.responsiblePartyId === "string"
+                ? period.responsiblePartyId
+                : undefined,
+            childIds: Array.isArray(period.childIds)
+              ? period.childIds.filter(
+                  (childId): childId is string => typeof childId === "string"
+                )
+              : [],
             category:
               period.category === "duty" ||
               period.category === "training_course" ||
