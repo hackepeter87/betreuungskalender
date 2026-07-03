@@ -6,6 +6,8 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.7.2] - 2026-07-03
+
 ### Added
 
 - Added a persistent in-app notification center with sidebar and mobile header
