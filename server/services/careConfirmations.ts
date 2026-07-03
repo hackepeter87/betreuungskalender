@@ -7,9 +7,11 @@ import type {
   ApiNotificationPreferencesResponse,
   ApiPushSubscriptionInput
 } from "../../shared/api.js";
+import type { RequestUser } from "../auth.js";
 import { db } from "../db/connection.js";
 import { config } from "../config.js";
 import { markClosedMonthsChanged, recordAudit, recordFieldChanges } from "./audit.js";
+import { assertCanUseCareParty } from "./carePartyAccess.js";
 import { assertActiveCareParty } from "./careParties.js";
 import { assertActiveChildren, bool, makeId, nowIso, syncJunction } from "./common.js";
 
@@ -493,9 +495,10 @@ export async function listOpenCareConfirmations(userId: string): Promise<ApiCare
 
 export function answerCareConfirmation(
   requestId: string,
-  userId: string,
+  userOrId: RequestUser | string,
   answer: ApiCareConfirmationAnswer
 ): ApiCareConfirmationRequest | undefined {
+  const userId = typeof userOrId === "string" ? userOrId : userOrId.id;
   const request = db.prepare(`
     SELECT *
     FROM care_confirmation_requests
@@ -522,6 +525,9 @@ export function answerCareConfirmation(
   if (answer.status === "partial") {
     assertActiveChildren(resolvedActualChildIds);
     assertActiveCareParty(actualResponsiblePartyId ?? undefined);
+    if (typeof userOrId !== "string" && actualResponsiblePartyId) {
+      assertCanUseCareParty(userOrId, actualResponsiblePartyId);
+    }
   }
   db.transaction(() => {
     db.prepare(`

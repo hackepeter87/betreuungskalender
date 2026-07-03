@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after, beforeEach } from "node:test";
+import type { RequestUser } from "./auth.js";
 
 const temporaryDirectory = mkdtempSync(join(tmpdir(), "betreuungskalender-confirmations-"));
 process.env.DATABASE_PATH = join(temporaryDirectory, "test.sqlite");
@@ -32,6 +33,7 @@ function resetDatabase(): void {
     db.prepare("DELETE FROM care_entry_children").run();
     db.prepare("DELETE FROM care_entries").run();
     db.prepare("DELETE FROM children").run();
+    db.prepare("DELETE FROM app_user_care_party_assignments").run();
     db.prepare("DELETE FROM care_parties").run();
     db.prepare("DELETE FROM audit_log").run();
     db.prepare("DELETE FROM monthly_closings").run();
@@ -115,6 +117,69 @@ function insertPastPlannedEntry(id = "entry-confirmation-a"): void {
   `);
   childLinkInsert.run(id, "child-confirmation-a", timestamp, timestamp);
   childLinkInsert.run(id, "child-confirmation-b", timestamp, timestamp);
+}
+
+function insertAppUser(user: RequestUser): void {
+  db.prepare(`
+    INSERT INTO app_users (
+      id, external_subject, email, display_name, role, groups_json,
+      created_at, updated_at, last_seen_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    user.id,
+    user.externalSubject,
+    user.email ?? null,
+    user.displayName,
+    user.role,
+    JSON.stringify(user.groups),
+    "2026-07-01T10:00:00.000Z",
+    "2026-07-01T10:00:00.000Z",
+    "2026-07-01T10:00:00.000Z"
+  );
+}
+
+function parentUser(id = "user-parent-confirmation"): RequestUser {
+  return {
+    id,
+    externalSubject: `subject-${id}`,
+    email: `${id}@example.invalid`,
+    displayName: "Parent Confirmation",
+    groups: ["/betreuungskalender/parents"],
+    role: "parent",
+    permissions: ["read", "write"]
+  };
+}
+
+function insertCareParty(id: string, name: string): void {
+  db.prepare(`
+    INSERT INTO care_parties (
+      id, name, kind, created_by, updated_by, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    id,
+    name,
+    "other",
+    "local-dev",
+    "local-dev",
+    "2026-07-01T10:00:00.000Z",
+    "2026-07-01T10:00:00.000Z"
+  );
+}
+
+function assignCareParty(userId: string, carePartyId: string): void {
+  db.prepare(`
+    INSERT INTO app_user_care_party_assignments (
+      id, user_id, care_party_id, created_by, updated_by, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    `assignment-${userId}-${carePartyId}`,
+    userId,
+    carePartyId,
+    "local-dev",
+    "local-dev",
+    "2026-07-01T10:00:00.000Z",
+    "2026-07-01T10:00:00.000Z"
+  );
 }
 
 beforeEach(resetDatabase);
@@ -205,6 +270,31 @@ test("answers a confirmation request and stores partial status with audit metada
   assert.deepEqual(answered?.entry.actualChildIds, ["child-confirmation-a"]);
   assert.equal(answered?.entry.actualStartDateTime, "2026-07-02T17:00:00.000Z");
   assert.equal(openCount.count, 0);
+});
+
+test("partial confirmation rejects actual care parties outside the assigned shared context", () => {
+  insertPastPlannedEntry();
+  insertCareParty("party-confirmation-b", "Nicht zugeordnet");
+  const user = parentUser();
+  insertAppUser(user);
+  assignCareParty(user.id, "party-confirmation-a");
+  createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z"));
+  const request = db.prepare(`
+    SELECT id FROM care_confirmation_requests
+    WHERE care_entry_id = ? AND user_id = ?
+  `).get("entry-confirmation-a", user.id) as { id: string };
+
+  assert.throws(
+    () => answerCareConfirmation(request.id, user, {
+      status: "partial",
+      note: "Fiktiver Fremdversuch",
+      actualChildIds: ["child-confirmation-a"],
+      actualStartDateTime: "2026-07-02T17:00:00.000Z",
+      actualEndDateTime: "2026-07-02T18:00:00.000Z",
+      actualResponsiblePartyId: "party-confirmation-b"
+    }),
+    /nicht freigegeben/
+  );
 });
 
 test("notification preferences default to in-app and push while email stays opt-in", () => {

@@ -7,6 +7,7 @@ import {
   recordAudit,
   recordFieldChanges
 } from "../services/audit.js";
+import { assertCanUseCareParty } from "../services/carePartyAccess.js";
 import { assertActiveCareParty } from "../services/careParties.js";
 import { assertActiveChildren, bool, makeId, nowIso, syncJunction } from "../services/common.js";
 import {
@@ -85,6 +86,13 @@ function validateRelations(input: {
   assertActiveCareParty(input.responsiblePartyId);
 }
 
+function assertOptionalCarePartyAccess(
+  user: Parameters<typeof assertCanUseCareParty>[0],
+  responsiblePartyId?: string
+): void {
+  if (responsiblePartyId) assertCanUseCareParty(user, responsiblePartyId);
+}
+
 function getPeriod(id: string): ApiUnavailablePeriod | undefined {
   const row = db.prepare(`
     SELECT * FROM unavailable_periods
@@ -127,6 +135,7 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
     }
     try {
       validateRelations(parsed.data);
+      assertOptionalCarePartyAccess(request.user, parsed.data.responsiblePartyId);
     } catch (error) {
       return reply.code(400).send({
         error: "validation_error",
@@ -196,6 +205,8 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
       }
       try {
         validateRelations(parsed.data);
+        assertOptionalCarePartyAccess(request.user, before.responsiblePartyId);
+        assertOptionalCarePartyAccess(request.user, parsed.data.responsiblePartyId);
       } catch (error) {
         return reply.code(400).send({
           error: "validation_error",
@@ -271,6 +282,14 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
     async (request, reply) => {
       const before = getPeriod(request.params.id);
       if (!before) return reply.code(404).send({ error: "not_found" });
+      try {
+        assertOptionalCarePartyAccess(request.user, before.responsiblePartyId);
+      } catch (error) {
+        return reply.code(400).send({
+          error: "validation_error",
+          message: error instanceof Error ? error.message : String(error)
+        });
+      }
       const timestamp = nowIso();
       db.transaction(() => {
         db.prepare(`

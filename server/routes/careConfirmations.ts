@@ -31,7 +31,16 @@ export async function careConfirmationRoutes(app: FastifyInstance): Promise<void
   app.post<{ Params: { id: string } }>("/api/care-confirmations/:id/answer", writeLimit, async (request, reply) => {
     const parsed = careConfirmationAnswerSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
-    const result = answerCareConfirmation(request.params.id, request.userEmail, parsed.data);
+    if (!request.user) return reply.code(401).send({ error: "authentication_required" });
+    let result: ReturnType<typeof answerCareConfirmation>;
+    try {
+      result = answerCareConfirmation(request.params.id, request.user, parsed.data);
+    } catch (error) {
+      return reply.code(400).send({
+        error: "invalid_relation",
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
     return result ?? reply.code(404).send({ error: "not_found" });
   });
 

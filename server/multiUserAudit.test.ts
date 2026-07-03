@@ -6,7 +6,13 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import test from "node:test";
-import type { ApiAuditEntry, ApiChild } from "../shared/api.js";
+import type {
+  ApiAuditEntry,
+  ApiCareParty,
+  ApiChild,
+  ApiSession,
+  ApiUnavailablePeriod
+} from "../shared/api.js";
 
 const projectRoot = resolve(import.meta.dirname, "..");
 
@@ -62,6 +68,13 @@ const betaHeaders = {
   "x-auth-request-groups": "/betreuungskalender/parents"
 };
 
+const adminHeaders = {
+  "x-auth-request-user": "subject-admin",
+  "x-auth-request-email": "admin@example.invalid",
+  "x-auth-request-preferred-username": "Admin User",
+  "x-auth-request-groups": "/betreuungskalender/admins"
+};
+
 async function jsonRequest<T>(
   baseUrl: string,
   path: string,
@@ -78,6 +91,35 @@ async function jsonRequest<T>(
     assert.fail(`${response.status} ${await response.text()}`);
   }
   return await response.json() as T;
+}
+
+async function expectStatus(
+  baseUrl: string,
+  path: string,
+  expectedStatus: number,
+  init: RequestInit
+): Promise<void> {
+  const response = await fetch(`${baseUrl}${path}`, {
+    ...init,
+    headers: {
+      "content-type": "application/json",
+      ...init.headers
+    }
+  });
+  assert.equal(response.status, expectedStatus, await response.text());
+}
+
+async function sessionUserId(
+  baseUrl: string,
+  headers: Record<string, string>
+): Promise<string> {
+  const session = await jsonRequest<ApiSession>(baseUrl, "/api/session", {
+    method: "GET",
+    headers
+  });
+  assert.equal(session.authenticated, true);
+  assert.ok(session.user?.id);
+  return session.user.id;
 }
 
 test("trusted OIDC users create distinct actor metadata and audit entries", async (t) => {
@@ -196,4 +238,123 @@ test("trusted OIDC users create distinct actor metadata and audit entries", asyn
       }
     ]
   );
+});
+
+test("shared care-party assignments restrict unavailable period care context", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "betreuungskalender-care-party-access-"));
+  const port = await freePort();
+  let logs = "";
+  const runtime = spawn(
+    process.execPath,
+    [resolve(projectRoot, "node_modules/tsx/dist/cli.mjs"), "server/index.ts"],
+    {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        NODE_ENV: "production",
+        HOST: "127.0.0.1",
+        PORT: String(port),
+        DATABASE_PATH: join(root, "app.sqlite"),
+        BACKUP_DIR: join(root, "backups"),
+        REQUIRE_AUTH: "true",
+        TRUST_PROXY_AUTH: "true",
+        OIDC_REQUIRE_ROLE_CLAIM: "true",
+        RATE_LIMIT_MAX: "200",
+        RATE_LIMIT_WRITE_MAX: "200",
+        LOG_LEVEL: "warn"
+      }
+    }
+  );
+  runtime.stdout.on("data", (chunk) => { logs += chunk; });
+  runtime.stderr.on("data", (chunk) => { logs += chunk; });
+
+  t.after(async () => {
+    await stop(runtime);
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const baseUrl = `http://127.0.0.1:${port}`;
+  await waitForHealth(`${baseUrl}/api/health`, () => logs);
+
+  const alphaUserId = await sessionUserId(baseUrl, alphaHeaders);
+  const betaUserId = await sessionUserId(baseUrl, betaHeaders);
+  await sessionUserId(baseUrl, adminHeaders);
+  await jsonRequest<ApiChild[]>(baseUrl, "/api/children", {
+    method: "GET",
+    headers: alphaHeaders
+  });
+  await jsonRequest<ApiChild[]>(baseUrl, "/api/children", {
+    method: "GET",
+    headers: betaHeaders
+  });
+  await jsonRequest<ApiChild[]>(baseUrl, "/api/children", {
+    method: "GET",
+    headers: adminHeaders
+  });
+
+  const alphaParty = await jsonRequest<ApiCareParty>(baseUrl, "/api/care-parties", {
+    method: "POST",
+    headers: adminHeaders,
+    body: JSON.stringify({ name: "Alpha Betreuung", kind: "other" })
+  });
+  const betaParty = await jsonRequest<ApiCareParty>(baseUrl, "/api/care-parties", {
+    method: "POST",
+    headers: adminHeaders,
+    body: JSON.stringify({ name: "Beta Betreuung", kind: "other" })
+  });
+
+  await jsonRequest(baseUrl, `/api/user-care-party-assignments/${alphaUserId}`, {
+    method: "PUT",
+    headers: adminHeaders,
+    body: JSON.stringify({ carePartyIds: [alphaParty.id] })
+  });
+  await jsonRequest(baseUrl, `/api/user-care-party-assignments/${betaUserId}`, {
+    method: "PUT",
+    headers: adminHeaders,
+    body: JSON.stringify({ carePartyIds: [betaParty.id] })
+  });
+
+  const periodInput = {
+    startDateTime: "2026-07-04T08:00:00.000Z",
+    endDateTime: "2026-07-04T17:00:00.000Z",
+    scope: "external_contact_block",
+    responsiblePartyId: alphaParty.id,
+    childIds: [],
+    category: "other",
+    dutyRelated: false,
+    affectsContact: true,
+    affectsHolidays: false,
+    location: "Fiktiver Ort"
+  };
+
+  const created = await jsonRequest<ApiUnavailablePeriod>(baseUrl, "/api/unavailable-periods", {
+    method: "POST",
+    headers: alphaHeaders,
+    body: JSON.stringify(periodInput)
+  });
+  assert.equal(created.responsiblePartyId, alphaParty.id);
+
+  await expectStatus(baseUrl, "/api/unavailable-periods", 400, {
+    method: "POST",
+    headers: betaHeaders,
+    body: JSON.stringify(periodInput)
+  });
+  await expectStatus(baseUrl, `/api/unavailable-periods/${created.id}`, 400, {
+    method: "PUT",
+    headers: betaHeaders,
+    body: JSON.stringify({
+      ...periodInput,
+      location: "Fiktiver Änderungsversuch"
+    })
+  });
+  await expectStatus(baseUrl, `/api/unavailable-periods/${created.id}`, 400, {
+    method: "DELETE",
+    headers: betaHeaders
+  });
+
+  const afterDeniedDelete = await jsonRequest<ApiUnavailablePeriod[]>(baseUrl, "/api/unavailable-periods", {
+    method: "GET",
+    headers: alphaHeaders
+  });
+  assert.equal(afterDeniedDelete.some((period) => period.id === created.id), true);
 });
