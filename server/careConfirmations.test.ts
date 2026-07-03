@@ -17,6 +17,7 @@ const {
   createDueCareConfirmationRequests,
   getNotificationPreferences,
   listOpenCareConfirmations,
+  savePushSubscription,
   updateNotificationPreferences
 } = await import("./services/careConfirmations.js");
 
@@ -180,4 +181,25 @@ test("notification preferences default to in-app and push while email stays opt-
 
   assert.equal(due?.pushEnabled, false);
   assert.equal(due?.emailEnabled, true);
+});
+
+test("push subscriptions only allow configured public push service endpoints", () => {
+  assert.throws(
+    () => savePushSubscription("local-dev", {
+      endpoint: "https://127.0.0.1/internal",
+      keys: { p256dh: "fictional-public-key", auth: "fictional-auth-secret" }
+    }),
+    /Push-Endpunkt/
+  );
+
+  savePushSubscription("local-dev", {
+    endpoint: "https://fcm.googleapis.com/fcm/send/fictional-subscription",
+    keys: { p256dh: "fictional-public-key", auth: "fictional-auth-secret" }
+  });
+  const stored = db.prepare(`
+    SELECT COUNT(*) AS count FROM push_subscriptions
+    WHERE user_id = ? AND deleted_at IS NULL
+  `).get("local-dev") as { count: number };
+
+  assert.equal(stored.count, 1);
 });

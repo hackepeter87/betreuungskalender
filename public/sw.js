@@ -85,9 +85,18 @@ self.addEventListener("push", (event) => {
   );
 });
 
+function notificationTargetUrl(value) {
+  try {
+    const url = new URL(value || "/", self.location.origin);
+    return url.origin === self.location.origin ? url.href : new URL("/", self.location.origin).href;
+  } catch {
+    return new URL("/", self.location.origin).href;
+  }
+}
+
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  const url = new URL(event.notification.data?.url || "/", self.location.origin).href;
+  const url = notificationTargetUrl(event.notification.data?.url);
   event.waitUntil(
     self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((clients) => {
       for (const client of clients) {

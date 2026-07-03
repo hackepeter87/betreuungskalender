@@ -175,9 +175,11 @@ email is stored as a user preference for a later mail transport implementation.
 
 `push_subscriptions` stores browser-provided Web Push endpoint data for an
 authenticated app user: endpoint URL, `p256dh`, `auth`, optional user agent, and
-soft-delete metadata. The server sends privacy-preserving push payloads that do
-not include child names, exact care times, notes, evidence references, or other
-case details.
+soft-delete metadata. To avoid server-side request forgery through crafted
+subscription URLs, the server only accepts HTTPS endpoints whose host is listed
+in `WEB_PUSH_ALLOWED_ENDPOINT_HOSTS`. The server sends privacy-preserving push
+payloads that do not include child names, exact care times, notes, evidence
+references, or other case details.
 
 ## Contact rules
 

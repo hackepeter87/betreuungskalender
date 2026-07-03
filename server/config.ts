@@ -24,6 +24,14 @@ function textEnv(value: string | undefined, fallback: string): string {
   return normalized ? normalized : fallback;
 }
 
+function csvEnv(value: string | undefined, fallback: string[]): string[] {
+  const source = value?.trim() ? value : fallback.join(",");
+  return source
+    .split(",")
+    .map((item) => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
 function authModeEnv(
   value: string | undefined,
   fallback: "local" | "trusted-proxy"
@@ -156,6 +164,12 @@ export const config = {
   webPushSubject: process.env.WEB_PUSH_SUBJECT?.trim() || "mailto:admin@example.invalid",
   webPushPublicKey: process.env.WEB_PUSH_PUBLIC_KEY?.trim() || undefined,
   webPushPrivateKey: process.env.WEB_PUSH_PRIVATE_KEY?.trim() || undefined,
+  webPushAllowedEndpointHosts: csvEnv(process.env.WEB_PUSH_ALLOWED_ENDPOINT_HOSTS, [
+    "fcm.googleapis.com",
+    "updates.push.services.mozilla.com",
+    "web.push.apple.com",
+    "webpush.push.apple.com"
+  ]),
   version: packageVersion()
 } as const;
 

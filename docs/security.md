@@ -92,7 +92,11 @@ Care confirmation push notifications are deliberately generic. Push payloads
 must not include child names, exact care times, locations, notes, evidence
 references, costs, trips, or other sensitive case details. Store VAPID private
 keys only as deployment secrets such as environment variables; never commit
-them to the repository or write them into release artifacts.
+them to the repository or write them into release artifacts. Push subscription
+endpoints are user-controlled input, so the server only accepts HTTPS endpoints
+whose host is configured in `WEB_PUSH_ALLOWED_ENDPOINT_HOSTS`. Keep that list
+limited to real browser push providers and do not add internal, loopback, or
+wildcard domains.
 
 The UI references external evidence by name only; it does not upload or store
 evidence files.

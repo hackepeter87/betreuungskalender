@@ -26,6 +26,25 @@ if (pushConfigured) {
   );
 }
 
+function httpError(code: string, statusCode: number, message: string): Error & { code: string; statusCode: number } {
+  return Object.assign(new Error(message), { code, statusCode });
+}
+
+function isAllowedPushEndpoint(endpoint: string): boolean {
+  try {
+    const url = new URL(endpoint);
+    const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
+    return (
+      url.protocol === "https:" &&
+      !url.username &&
+      !url.password &&
+      config.webPushAllowedEndpointHosts.includes(hostname)
+    );
+  } catch {
+    return false;
+  }
+}
+
 interface EntryRow {
   id: string;
   generated_by_pattern_id: string | null;
@@ -307,6 +326,13 @@ function preferenceAllowsPush(userId: string, eventType: ApiNotificationEventTyp
 }
 
 export function savePushSubscription(userId: string, input: ApiPushSubscriptionInput, userAgent?: string): void {
+  if (!isAllowedPushEndpoint(input.endpoint)) {
+    throw httpError(
+      "invalid_push_endpoint",
+      400,
+      "Der Push-Endpunkt ist nicht zugelassen."
+    );
+  }
   const timestamp = nowIso();
   db.prepare(`
     INSERT INTO push_subscriptions (
@@ -361,6 +387,10 @@ async function sendPushForRequest(row: RequestRow, eventType: ApiNotificationEve
   });
   let delivered = false;
   for (const subscription of pushSubscriptionsForUser(row.user_id)) {
+    if (!isAllowedPushEndpoint(subscription.endpoint)) {
+      deletePushSubscription(row.user_id, subscription.id);
+      continue;
+    }
     const pushSubscription: PushSubscription = {
       endpoint: subscription.endpoint,
       keys: {
