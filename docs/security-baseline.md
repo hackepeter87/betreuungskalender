@@ -96,9 +96,10 @@ version, changelog, release notes, and tag state are ready.
 - Web Push confirms care entries with privacy-preserving messages, but browser
   push providers still receive subscription metadata. Email notification
   delivery is deferred until a concrete mail transport and threat model exist.
-- Trivy filesystem/image scans and ZAP-style DAST checks are deferred optional
-  reviews. They need an agreed scan target, runtime budget, update cadence, and
-  false-positive handling process before they should block normal releases.
+- ZAP-style DAST is optional review work, not default CI. It may run only
+  against a local or staging test instance with fictional data, as described in
+  [security-review.md](security-review.md). It must not target production or
+  real private deployments.
 - Break-glass recovery reduces identity-provider outage risk but adds a
   high-value local credential. Operators should keep it disabled unless needed,
   prefer mounted secret files over environment fallbacks, and rotate or remove
@@ -114,5 +115,5 @@ version, changelog, release notes, and tag state are ready.
 - Re-check release artifact deny rules when new file formats, exports, or
   deployment config files are introduced.
 - Review notification payloads before adding new reminder types.
-- Revisit DAST and image scanning once the deployment topology and acceptable
-  scan budget are stable.
+- Revisit whether local or staging DAST findings should become release gates
+  after at least one documented test-instance scan has been reviewed.

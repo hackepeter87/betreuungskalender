@@ -131,10 +131,10 @@ assertions, and release artifact validation:
 - `npm run release:check`
 
 This intentionally reuses existing local checks instead of adding a heavyweight
-scanner to every developer workflow. Trivy filesystem/image scans and ZAP-style
-DAST checks remain deferred optional reviews until a stable scan target, runtime
-budget, and false-positive handling process are agreed. They should not block
-normal patch releases without a separate decision.
+scanner to every developer workflow. ZAP-style DAST is documented as an
+optional local or staging review against fictional data only; it is not part of
+default CI and must not be pointed at production. See
+[security-review.md](security-review.md).
 
 ## Access-control baseline
 
