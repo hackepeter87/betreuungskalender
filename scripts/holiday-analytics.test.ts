@@ -134,7 +134,7 @@ test("holiday stats count care entries inside holiday periods by care party", ()
   assert.equal(stats.unassignedDays, 0);
 });
 
-test("holiday stats keep legacy assignment only when no care entries exist", () => {
+test("holiday stats use default responsible care party when no care entries exist", () => {
   const stats = calculateHolidayStats(
     [holiday()],
     "2026-07-01",
@@ -148,8 +148,11 @@ test("holiday stats keep legacy assignment only when no care entries exist", () 
 
   assert.equal(stats.totalDays, 6);
   assert.equal(stats.fatherDays, 0);
-  assert.equal(stats.motherDays, 6);
-  assert.deepEqual(stats.byCareParty, []);
+  assert.equal(stats.motherDays, 0);
+  assert.deepEqual(
+    stats.byCareParty.map((share) => [share.carePartyId, share.days, share.quote]),
+    [["party-main", 6, 100]]
+  );
 });
 
 test("holiday stats use actual children, time, and care party for partial care", () => {

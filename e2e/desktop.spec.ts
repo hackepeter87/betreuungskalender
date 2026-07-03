@@ -939,3 +939,96 @@ test("downloads a complete JSON backup without raw calendar payloads", async ({
   expect(raw).not.toContain("DATABASE_PATH");
   expect(raw).not.toContain("process.env");
 });
+
+test("records partial actual care details from the entry form", async ({
+  page,
+  request
+}) => {
+  const childAResponse = await request.post("/api/children", {
+    data: {
+      name: "Teilkind A",
+      birthMonth: 5,
+      birthYear: 2018,
+      color: "#0f8b8d"
+    }
+  });
+  expect(childAResponse.ok()).toBeTruthy();
+  const childBResponse = await request.post("/api/children", {
+    data: {
+      name: "Teilkind B",
+      birthMonth: 9,
+      birthYear: 2020,
+      color: "#6d5dfc"
+    }
+  });
+  expect(childBResponse.ok()).toBeTruthy();
+  await openApp(page);
+
+  const childrenResponse = await request.get("/api/children");
+  expect(childrenResponse.ok()).toBeTruthy();
+  const children = await childrenResponse.json() as Array<{ id: string; name: string }>;
+  const childA = children.find((child) => child.name === "Teilkind A");
+  const childB = children.find((child) => child.name === "Teilkind B");
+  expect(childA?.id).toBeTruthy();
+  expect(childB?.id).toBeTruthy();
+  const actualDate = dateInCurrentMonth(6);
+
+  const createResponse = await request.post("/api/care-entries", {
+    data: {
+      startDateTime: `${actualDate}T08:00:00.000Z`,
+      endDateTime: `${actualDate}T18:00:00.000Z`,
+      childIds: [childA!.id, childB!.id],
+      status: "planned",
+      overnight: false,
+      schoolHandover: false,
+      holiday: false,
+      weekend: false,
+      additionalCare: false,
+      location: "mainResidence",
+      handoverFrom: "mother",
+      handoverTo: "mother",
+      hasEvidence: false,
+      trips: [],
+      costs: []
+    }
+  });
+  expect(createResponse.ok()).toBeTruthy();
+  const created = await createResponse.json() as { id: string };
+  await page.reload();
+  await expect(page.getByTestId("app-loading")).toBeHidden();
+
+  await navigate(page, "entries");
+  await page.getByTestId(`entry-row-${created.id}`).click();
+  const form = page.getByTestId("entry-form");
+  await form.getByRole("radio", { name: "Teilweise", exact: true }).check({ force: true });
+  await expect(form.getByText("Teilweise Durchführung erfassen")).toBeVisible();
+  await form.getByTestId("entry-actual-child-choice")
+    .filter({ hasText: "Teilkind B" })
+    .getByTestId("entry-actual-child-option")
+    .uncheck({ force: true });
+  await form.getByTestId("entry-actual-start-time").fill("10:00");
+  await form.getByTestId("entry-actual-end-time").fill("15:00");
+  await form.getByTestId("entry-submit").click();
+  await expect(form).toBeHidden();
+
+  const entriesResponse = await request.get("/api/care-entries");
+  expect(entriesResponse.ok()).toBeTruthy();
+  const entries = await entriesResponse.json() as Array<{
+    id: string;
+    status: string;
+    actualChildIds?: string[];
+    actualStartDateTime?: string;
+    actualEndDateTime?: string;
+    plannedStartDateTime?: string;
+    plannedEndDateTime?: string;
+  }>;
+  const changed = entries.find((entry) => entry.id === created.id);
+  expect(changed).toEqual(expect.objectContaining({
+    status: "partial",
+    actualChildIds: [childA!.id],
+    actualStartDateTime: `${actualDate}T10:00`,
+    actualEndDateTime: `${actualDate}T15:00`,
+    plannedStartDateTime: `${actualDate}T08:00:00.000Z`,
+    plannedEndDateTime: `${actualDate}T18:00:00.000Z`
+  }));
+});

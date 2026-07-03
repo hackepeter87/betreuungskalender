@@ -27,7 +27,7 @@ export function EntryRow({
     : undefined;
 
   return (
-    <button className="entry-row" type="button" onClick={onClick}>
+    <button className="entry-row" type="button" data-testid={`entry-row-${entry.id}`} onClick={onClick}>
       <span className={`status-rail status-rail--${entry.status}`} />
       <span className="entry-row__date">
         <strong>{formatDate(entry.startDateTime, intlLocale)}</strong>

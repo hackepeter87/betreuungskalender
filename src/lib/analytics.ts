@@ -272,12 +272,19 @@ export function calculateHolidayStats(
   }
 
   const hasCareEntryAssignments = entryAssignments.size > 0;
+  if (!hasCareEntryAssignments && defaultResponsiblePartyId && holidaySlots.size > 0) {
+    daysByParty.set(defaultResponsiblePartyId, holidaySlots.size);
+  }
   const fatherDays = hasCareEntryAssignments
     ? Array.from(daysByParty.entries()).reduce((sum, [partyId, days]) => sum + (carePartyById.get(partyId)?.kind === "father" ? days : 0), 0)
-    : legacyFatherDays;
+    : defaultResponsiblePartyId
+      ? (carePartyById.get(defaultResponsiblePartyId)?.kind === "father" ? holidaySlots.size : 0)
+      : legacyFatherDays;
   const motherDays = hasCareEntryAssignments
     ? Array.from(daysByParty.entries()).reduce((sum, [partyId, days]) => sum + (carePartyById.get(partyId)?.kind === "mother" ? days : 0), 0)
-    : legacyMotherDays;
+    : defaultResponsiblePartyId
+      ? (carePartyById.get(defaultResponsiblePartyId)?.kind === "mother" ? holidaySlots.size : 0)
+      : legacyMotherDays;
 
   const totalDays = holidaySlots.size;
   const halfTarget = totalDays / 2;

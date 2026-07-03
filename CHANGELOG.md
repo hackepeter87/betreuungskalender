@@ -6,6 +6,28 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.7.3] - 2026-07-03
+
+### Changed
+
+- Changed holiday allocation fallback so holiday blocks without explicit care
+  entries are credited to the configured default responsible care party instead
+  of falling back to the legacy father/mother holiday assignment.
+- Updated the care-entry form so partially completed care can be corrected or
+  documented with actual children, actual time range, and actual responsible
+  care party outside the confirmation-center flow.
+
+### Fixed
+
+- Fixed normal care-entry updates so partial actual-care fields are persisted
+  through `/api/care-entries` instead of only being preserved after a
+  confirmation answer.
+
+### Testing
+
+- Added an end-to-end regression for documenting a partially completed care
+  entry with one actual child and an actual time range.
+
 ## [1.7.2] - 2026-07-03
 
 ### Added

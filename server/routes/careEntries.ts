@@ -374,6 +374,17 @@ function persistEntry(
     (Date.parse(input.endDateTime) - Date.parse(input.startDateTime)) / 60000
   );
   const isContactTime = durationMinutes < 120;
+  const actualChildIds = input.status === "partial"
+    ? [...new Set(input.actualChildIds ?? existing?.actualChildIds ?? input.childIds)]
+    : [];
+  const actualResponsiblePartyId = input.status === "partial"
+    ? input.actualResponsiblePartyId ?? existing?.actualResponsiblePartyId ?? effectiveResponsiblePartyId
+    : undefined;
+  if (input.status === "partial") {
+    assertActiveChildren(actualChildIds);
+    assertActiveCareParty(actualResponsiblePartyId);
+    assertCanUseCareParty(user, actualResponsiblePartyId);
+  }
 
   if (existing) {
     const generatedByPatternId = input.generatedByPatternId ?? existing.generatedByPatternId ?? null;
@@ -416,9 +427,9 @@ function persistEntry(
       input.status === "planned" ? null : existing.confirmationNote ?? null,
       input.status === "planned" ? null : existing.confirmedAt ?? null,
       input.status === "planned" ? null : existing.confirmedBy ?? null,
-      input.status === "partial" ? existing.actualStartDateTime ?? null : null,
-      input.status === "partial" ? existing.actualEndDateTime ?? null : null,
-      input.status === "partial" ? existing.actualResponsiblePartyId ?? null : null,
+      input.status === "partial" ? input.actualStartDateTime ?? existing.actualStartDateTime ?? input.startDateTime : null,
+      input.status === "partial" ? input.actualEndDateTime ?? existing.actualEndDateTime ?? input.endDateTime : null,
+      actualResponsiblePartyId ?? null,
       Number(input.overnight), Number(input.schoolHandover), Number(input.holiday),
       Number(input.weekend), Number(input.additionalCare), input.location ?? null,
       input.customLocation ?? null,
@@ -435,10 +446,11 @@ function persistEntry(
         start_datetime, end_datetime, planned_start_datetime, planned_end_datetime,
         status, deviation_type, deviation_note, care_scope, cancellation_reason,
         confirmation_note, confirmed_at, confirmed_by,
+        actual_start_datetime, actual_end_datetime, actual_responsible_party_id,
         overnight, school_handover, holiday, weekend, additional_care, location,
         custom_location, handover_from, handover_to, notes, evidence_reference, has_evidence,
         duration_minutes, is_contact_time, created_by, updated_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       id, input.generatedByPatternId ?? null, input.ruleOccurrenceDate ?? null,
       input.contactRuleId ?? null, input.contactRuleSegmentId ?? null,
@@ -455,6 +467,9 @@ function persistEntry(
       null,
       null,
       null,
+      input.status === "partial" ? input.actualStartDateTime ?? input.startDateTime : null,
+      input.status === "partial" ? input.actualEndDateTime ?? input.endDateTime : null,
+      actualResponsiblePartyId ?? null,
       Number(input.overnight), Number(input.schoolHandover), Number(input.holiday),
       Number(input.weekend), Number(input.additionalCare), input.location ?? null,
       input.customLocation ?? null,
@@ -465,9 +480,7 @@ function persistEntry(
   }
 
   syncJunction("care_entry_children", "care_entry_id", id, input.childIds, timestamp);
-  if (existing && input.status !== "partial") {
-    syncJunction("care_entry_actual_children", "care_entry_id", id, [], timestamp);
-  }
+  syncJunction("care_entry_actual_children", "care_entry_id", id, input.status === "partial" ? actualChildIds : [], timestamp);
   syncTrips(id, input.trips, userEmail, timestamp);
   syncCosts(id, input.costs, userEmail, timestamp);
 

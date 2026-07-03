@@ -119,9 +119,25 @@ export function EntryForm({
   const initialEnd = entry
     ? dateTimeParts(entry.endDateTime)
     : { date: defaultDate, time: "19:00" };
+  const initialActualStart = entry
+    ? dateTimeParts(entry.actualStartDateTime ?? entry.startDateTime)
+    : initialStart;
+  const initialActualEnd = entry
+    ? dateTimeParts(entry.actualEndDateTime ?? entry.endDateTime)
+    : initialEnd;
   const [childIds, setChildIds] = useState<string[]>(entry?.childIds ?? []);
   const [responsiblePartyId, setResponsiblePartyId] = useState(
     entry?.responsiblePartyId ??
+      data.settings.defaultResponsiblePartyId ??
+      data.careParties[0]?.id ??
+      ""
+  );
+  const [actualChildIds, setActualChildIds] = useState<string[]>(
+    entry?.actualChildIds?.length ? entry.actualChildIds : entry?.childIds ?? []
+  );
+  const [actualResponsiblePartyId, setActualResponsiblePartyId] = useState(
+    entry?.actualResponsiblePartyId ??
+      entry?.responsiblePartyId ??
       data.settings.defaultResponsiblePartyId ??
       data.careParties[0]?.id ??
       ""
@@ -138,6 +154,10 @@ export function EntryForm({
   const [startTime, setStartTime] = useState(initialStart.time);
   const [endDate, setEndDate] = useState(initialEnd.date);
   const [endTime, setEndTime] = useState(initialEnd.time);
+  const [actualStartDate, setActualStartDate] = useState(initialActualStart.date);
+  const [actualStartTime, setActualStartTime] = useState(initialActualStart.time);
+  const [actualEndDate, setActualEndDate] = useState(initialActualEnd.date);
+  const [actualEndTime, setActualEndTime] = useState(initialActualEnd.time);
   const [overnight, setOvernight] = useState(entry?.overnight ?? false);
   const [schoolHandover, setSchoolHandover] = useState(entry?.schoolHandover ?? false);
   const [holiday, setHoliday] = useState(entry?.holiday ?? false);
@@ -170,6 +190,8 @@ export function EntryForm({
 
   const startDateTime = `${startDate}T${startTime}`;
   const endDateTime = `${endDate}T${endTime}`;
+  const actualStartDateTime = `${actualStartDate}T${actualStartTime}`;
+  const actualEndDateTime = `${actualEndDate}T${actualEndTime}`;
   const originalPlanStart = entry?.plannedStartDateTime ?? entry?.startDateTime ?? startDateTime;
   const originalPlanEnd = entry?.plannedEndDateTime ?? entry?.endDateTime ?? endDateTime;
   const selectedNames = useMemo(
@@ -209,6 +231,13 @@ export function EntryForm({
     }
     if (new Date(endDateTime) <= new Date(startDateTime)) {
       nextErrors.endDateTime = copy(locale, "entryForm", "endAfterStart");
+    }
+    const selectedActualChildIds = actualChildIds.filter((id) => childIds.includes(id));
+    if (status === "partial" && !selectedActualChildIds.length) {
+      nextErrors.actualChildren = copy(locale, "entryForm", "childRequired");
+    }
+    if (status === "partial" && new Date(actualEndDateTime) <= new Date(actualStartDateTime)) {
+      nextErrors.actualEndDateTime = copy(locale, "entryForm", "endAfterStart");
     }
     if (status === "cancelled" && !cancellationReason.trim()) {
       nextErrors.cancellationReason = copy(locale, "entryForm", "cancellationReasonRequired");
@@ -255,6 +284,10 @@ export function EntryForm({
       deviationNote: effectiveDeviationType ? deviationNote.trim() || undefined : undefined,
       plannedStartDateTime: effectiveDeviationType ? originalPlanStart : undefined,
       plannedEndDateTime: effectiveDeviationType ? originalPlanEnd : undefined,
+      actualStartDateTime: status === "partial" ? actualStartDateTime : undefined,
+      actualEndDateTime: status === "partial" ? actualEndDateTime : undefined,
+      actualChildIds: status === "partial" ? selectedActualChildIds : undefined,
+      actualResponsiblePartyId: status === "partial" ? actualResponsiblePartyId || responsiblePartyId || undefined : undefined,
       additionalCare: entry?.generatedByPatternId ? false : additionalCare,
       generatedByPatternId: entry?.generatedByPatternId,
       ruleOccurrenceDate: entry?.ruleOccurrenceDate,
@@ -341,9 +374,17 @@ export function EntryForm({
                   onChange={() =>
                     setChildIds((current) => {
                       setFieldErrors((errors) => ({ ...errors, children: "" }));
-                      return checked
+                      const next = checked
                         ? current.filter((id) => id !== child.id)
                         : [...current, child.id];
+                      setActualChildIds((currentActual) =>
+                        checked
+                          ? currentActual.filter((id) => id !== child.id)
+                          : currentActual.includes(child.id)
+                            ? currentActual
+                            : [...currentActual, child.id]
+                      );
+                      return next;
                     })
                   }
                 />
@@ -479,6 +520,91 @@ export function EntryForm({
           </div>
         ) : null}
       </fieldset>
+      ) : null}
+
+      {status === "partial" ? (
+        <fieldset className="form-section">
+          <legend className="field-label-row">
+            <span>{copy(locale, "confirmation", "partialDetails")}</span>
+            <FieldHelpButton fieldId="careEntry.status" />
+          </legend>
+          <p className="form-section__hint">{copy(locale, "entryForm", "deviationPartialDescription")}</p>
+          <fieldset className="inline-fieldset" aria-describedby={fieldErrors.actualChildren ? "actual-children-error" : undefined}>
+            <legend>{copy(locale, "confirmation", "actualChildren")}</legend>
+            <div className="child-choice-grid">
+              {childIds.map((childId) => {
+                const child = data.children.find((item) => item.id === childId);
+                const checked = actualChildIds.includes(childId);
+                return (
+                  <label className={`choice-card ${checked ? "choice-card--selected" : ""}`} data-testid="entry-actual-child-choice" key={childId}>
+                    <input
+                      data-testid="entry-actual-child-option"
+                      type="checkbox"
+                      checked={checked}
+                      aria-invalid={Boolean(fieldErrors.actualChildren)}
+                      onChange={() => {
+                        setActualChildIds((current) =>
+                          checked ? current.filter((id) => id !== childId) : [...current, childId]
+                        );
+                        setFieldErrors((errors) => ({ ...errors, actualChildren: "" }));
+                      }}
+                    />
+                    {child ? <span className="child-dot" style={{ backgroundColor: child.color }} /> : null}
+                    <span>{child?.name ?? childId}</span>
+                  </label>
+                );
+              })}
+            </div>
+            {fieldErrors.actualChildren ? <p className="field-error" id="actual-children-error">{fieldErrors.actualChildren}</p> : null}
+          </fieldset>
+          <div className="datetime-grid">
+            <label className="field">
+              <span>{copy(locale, "confirmation", "actualStart")}</span>
+              <input data-testid="entry-actual-start-date" type="date" value={actualStartDate} onChange={(event) => setActualStartDate(event.target.value)} />
+            </label>
+            <label className="field">
+              <span>{copy(locale, "confirmation", "actualStartTime")}</span>
+              <input data-testid="entry-actual-start-time" type="time" value={actualStartTime} onChange={(event) => setActualStartTime(event.target.value)} />
+            </label>
+            <label className="field">
+              <span>{copy(locale, "confirmation", "actualEnd")}</span>
+              <input
+                type="date"
+                data-testid="entry-actual-end-date"
+                value={actualEndDate}
+                aria-invalid={Boolean(fieldErrors.actualEndDateTime)}
+                onChange={(event) => {
+                  setActualEndDate(event.target.value);
+                  setFieldErrors((errors) => ({ ...errors, actualEndDateTime: "" }));
+                }}
+              />
+            </label>
+            <label className="field">
+              <span>{copy(locale, "confirmation", "actualEndTime")}</span>
+              <input
+                type="time"
+                data-testid="entry-actual-end-time"
+                value={actualEndTime}
+                aria-invalid={Boolean(fieldErrors.actualEndDateTime)}
+                onChange={(event) => {
+                  setActualEndTime(event.target.value);
+                  setFieldErrors((errors) => ({ ...errors, actualEndDateTime: "" }));
+                }}
+              />
+            </label>
+          </div>
+          {fieldErrors.actualEndDateTime ? <p className="field-error">{fieldErrors.actualEndDateTime}</p> : null}
+          {data.careParties.length ? (
+            <label className="field">
+              <span>{copy(locale, "confirmation", "actualCareParty")}</span>
+              <select data-testid="entry-actual-responsible-party" value={actualResponsiblePartyId} onChange={(event) => setActualResponsiblePartyId(event.target.value)}>
+                {data.careParties.map((party) => (
+                  <option key={party.id} value={party.id}>{party.name}</option>
+                ))}
+              </select>
+            </label>
+          ) : null}
+        </fieldset>
       ) : null}
 
       <details className="form-section form-section--collapsible" open>

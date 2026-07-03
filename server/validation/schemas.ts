@@ -62,6 +62,10 @@ export const careEntryInputSchema = z
     endDateTime: isoDateTime,
     plannedStartDateTime: isoDateTime.optional(),
     plannedEndDateTime: isoDateTime.optional(),
+    actualStartDateTime: isoDateTime.optional(),
+    actualEndDateTime: isoDateTime.optional(),
+    actualChildIds: z.array(z.string().trim().min(1)).optional(),
+    actualResponsiblePartyId: z.string().trim().min(1).max(200).optional(),
     childIds,
     generatedByPatternId: z.string().trim().min(1).max(200).optional(),
     ruleOccurrenceDate: dateKey.optional(),
@@ -113,6 +117,22 @@ export const careEntryInputSchema = z
         path: ["plannedEndDateTime"],
         message: "Das ursprüngliche Soll-Ende muss nach dem Soll-Beginn liegen."
       });
+    }
+    if (entry.status === "partial") {
+      if (entry.actualChildIds && entry.actualChildIds.length === 0) {
+        context.addIssue({
+          code: "custom",
+          path: ["actualChildIds"],
+          message: "Bei teilweiser Durchführung ist mindestens ein tatsächlich betreutes Kind erforderlich."
+        });
+      }
+      if (entry.actualStartDateTime && entry.actualEndDateTime && Date.parse(entry.actualEndDateTime) <= Date.parse(entry.actualStartDateTime)) {
+        context.addIssue({
+          code: "custom",
+          path: ["actualEndDateTime"],
+          message: "Das tatsächliche Ende muss nach dem tatsächlichen Beginn liegen."
+        });
+      }
     }
   });
 
