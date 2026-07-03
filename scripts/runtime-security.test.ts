@@ -431,6 +431,11 @@ test("runtime enforces the OIDC authorization matrix across endpoint classes", a
 
   for (const headers of [readonlyHeaders, parentHeaders, fallbackHeaders]) {
     assert.equal((await request("/api/app-data", {
+      method: "PUT",
+      headers: jsonHeaders(headers),
+      body: JSON.stringify({})
+    })).status, 403);
+    assert.equal((await request("/api/app-data", {
       method: "DELETE",
       headers
     })).status, 403);
@@ -450,7 +455,15 @@ test("runtime enforces the OIDC authorization matrix across endpoint classes", a
       headers: jsonHeaders(headers),
       body: JSON.stringify({ fingerprint: "synthetic-fingerprint" })
     })).status, 403);
+    assert.equal((await request("/api/migration/legacy-summary", {
+      headers
+    })).status, 403);
   }
+
+  assert.equal((await request("/api/external-calendar-events/export")).status, 401);
+  assert.equal((await request("/api/external-calendar-events/export", {
+    headers: readonlyHeaders
+  })).status, 200);
 
   assert.equal((await request("/api/app-users", {
     headers: adminHeaders

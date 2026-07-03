@@ -29,6 +29,14 @@ sensitive family data. Protect them with disk encryption, restrictive file
 permissions, access-controlled backup storage, and a tested deletion policy.
 Do not send them unencrypted or upload them to public issue trackers.
 
+Administrative data-replacement paths are intentionally narrower than normal
+domain editing. `/api/app-data`, `/api/migration/*`, app-user administration,
+care-party assignments, and demo-data loading require an admin role. Readonly
+and parent users must not be able to reset, import, migrate, or replace app
+data. Export-like API routes require authentication and use the stricter export
+rate-limit class; calendar feed URLs are the only unauthenticated export
+surface and are scoped bearer secrets, not general API credentials.
+
 Personal iCalendar feed URLs are bearer secrets. The application stores only a
 hash of the token, but anyone with the generated URL can read that feed until
 it is revoked. Feeds may cover all visible entries or one selected care party.
