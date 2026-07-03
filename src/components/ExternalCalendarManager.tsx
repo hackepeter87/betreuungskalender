@@ -4,6 +4,7 @@ import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
 import { useAppStore } from "../store/AppStore";
 import { Icon } from "./Icon";
+import { FieldHelpButton, FieldHelpLabel } from "./FieldHelp";
 
 const DEFAULT_COLOR = "#2563eb";
 
@@ -43,17 +44,32 @@ export function ExternalCalendarManager() {
   return <section className="panel settings-section" data-testid="external-calendar-manager">
     <div className="panel__header panel__header--compact"><div><h2>{copy(locale, "externalCalendar", "title")}</h2><p>{copy(locale, "externalCalendar", "description")}</p></div></div>
     <div className="external-calendar-import-grid">
-      <label className="field"><span>{copy(locale, "externalCalendar", "sourceName")}</span><input data-testid="external-calendar-name" value={name} onChange={(event) => setName(event.target.value)} /></label>
-      <label className="field external-calendar-color-field"><span>{copy(locale, "externalCalendar", "color")}</span><input data-testid="external-calendar-color" type="color" value={color} onChange={(event) => setColor(event.target.value)} /></label>
       <label className="field">
-        <span>{copy(locale, "externalCalendar", "sourceType")}</span>
+        <FieldHelpLabel fieldId="externalCalendar.sourceName">
+          {copy(locale, "externalCalendar", "sourceName")}
+        </FieldHelpLabel>
+        <input data-testid="external-calendar-name" value={name} onChange={(event) => setName(event.target.value)} />
+      </label>
+      <label className="field external-calendar-color-field">
+        <FieldHelpLabel fieldId="externalCalendar.color">
+          {copy(locale, "externalCalendar", "color")}
+        </FieldHelpLabel>
+        <input data-testid="external-calendar-color" type="color" value={color} onChange={(event) => setColor(event.target.value)} />
+      </label>
+      <label className="field">
+        <FieldHelpLabel fieldId="externalCalendar.sourceType">
+          {copy(locale, "externalCalendar", "sourceType")}
+        </FieldHelpLabel>
         <select data-testid="external-calendar-source-type" value={sourceType} onChange={(event) => setSourceType(event.target.value as "overlay" | "holiday")}>
           <option value="overlay">{copy(locale, "externalCalendar", "sourceTypeOverlay")}</option>
           <option value="holiday">{copy(locale, "externalCalendar", "sourceTypeHoliday")}</option>
         </select>
       </label>
       <div className="field external-calendar-file-field">
-        <span>{copy(locale, "externalCalendar", "file")}</span>
+        <span className="field-label-row">
+          <span>{copy(locale, "externalCalendar", "file")}</span>
+          <FieldHelpButton fieldId="externalCalendar.file" />
+        </span>
         <div className="file-picker-row">
           <button className="button button--secondary" type="button" onClick={() => inputRef.current?.click()}>
             <Icon name="upload" size={17} />

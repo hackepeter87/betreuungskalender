@@ -115,6 +115,16 @@ export const fieldHelpById = {
     requirementLevel: required,
     relatedReportSection: "Soll-Ist-Abweichungen / Tagesliste"
   }),
+  "careEntry.responsibleParty": help("careEntry.responsibleParty", {
+    label: "Betreuende Person",
+    shortHelp: "Fachliche Person, der dieser Betreuungseintrag zugeordnet wird.",
+    whyRelevant: "Die Zuordnung steuert persönliche Kalenderfeeds und Auswertungen nach betreuender Person.",
+    usedFor: "Kalenderfeed, Ferienauswertung, Soll-Ist-Abgleich und Berichte.",
+    inputGuidance: "Wähle die Person, der die tatsächliche oder geplante Betreuung fachlich zugerechnet werden soll.",
+    commonMistakes: "Nicht den angemeldeten technischen Nutzer wählen, wenn fachlich eine andere betreuende Person zuständig ist.",
+    requirementLevel: recommended,
+    relatedReportSection: "Betreuende Personen / Ferienanteile"
+  }),
   "careEntry.cancellationReason": help("careEntry.cancellationReason", {
     label: "Ausfallgrund",
     shortHelp: "Sachliche Angabe, warum ein geplanter Termin nicht stattgefunden hat.",
@@ -125,6 +135,27 @@ export const fieldHelpById = {
     requirementLevel: required,
     examples: ["Dienstliche Abwesenheit", "Kind erkrankt"],
     relatedReportSection: "Soll-Ist-Abweichungen / Ausfallgründe"
+  }),
+  "careEntry.deviationType": help("careEntry.deviationType", {
+    label: "Abweichung vom Plan",
+    shortHelp: "Beschreibt, ob ein geplanter Termin ausgefallen, teilweise erfolgt, verschoben oder getauscht wurde.",
+    whyRelevant: "Abweichungen erklären den Unterschied zwischen Regelplanung und tatsächlicher Betreuung.",
+    usedFor: "Soll-Ist-Auswertung, Datenqualität, Tagesliste und Bericht.",
+    inputGuidance: "Wähle die sachlich engste Variante und ergänze nur bei Bedarf eine kurze Notiz.",
+    commonMistakes: "Nicht löschen, wenn ein geplanter Termin nicht wie geplant stattfand; die Abweichung dokumentiert den Verlauf.",
+    requirementLevel: recommended,
+    relatedReportSection: "Soll-Ist-Abweichungen"
+  }),
+  "careEntry.deviationNote": help("careEntry.deviationNote", {
+    label: "Abweichungsnotiz",
+    shortHelp: "Kurze neutrale Erläuterung zur Abweichung vom geplanten Termin.",
+    whyRelevant: "Die Notiz macht Verschiebungen, Tausch oder externe Blockaden später nachvollziehbar.",
+    usedFor: "Tagesliste, Soll-Ist-Bericht und Datenqualitätsprüfung.",
+    inputGuidance: "Beschreibe nur konkrete Fakten, etwa neuen Zeitraum, Tauschpartner oder bekannte Blockade.",
+    commonMistakes: "Keine Bewertungen anderer Personen oder ungesicherten Vermutungen notieren.",
+    requirementLevel: recommended,
+    examples: "Termin auf 18.07. verschoben.",
+    relatedReportSection: "Soll-Ist-Abweichungen"
   }),
   "careEntry.scope": help("careEntry.scope", {
     label: "Betreuungsumfang",
@@ -414,6 +445,24 @@ export const fieldHelpById = {
     commonMistakes: "Keine Bewertungen oder Vermutungen eintragen.",
     requirementLevel: optional
   }),
+  "holiday.externalSource": help("holiday.externalSource", {
+    label: "Externe Ferienquelle",
+    shortHelp: "Importierter ICS-Kalender, aus dem Ferienblöcke abgeleitet werden können.",
+    whyRelevant: "Nur als Ferienquelle markierte Kalender werden für die Ferienverwaltung angeboten.",
+    usedFor: "Ferienblock-Erzeugung und Kalenderanzeige.",
+    inputGuidance: "Wähle die Quelle, deren ganztägige Ereignisse du als Ferienblöcke übernehmen willst.",
+    commonMistakes: "Nicht jede Kalenderquelle automatisch übernehmen; prüfe vorher Name, Zeitraum und betroffene Kinder.",
+    requirementLevel: recommended
+  }),
+  "holiday.externalChildren": help("holiday.externalChildren", {
+    label: "Kinder für abgeleitete Ferien",
+    shortHelp: "Kinder, für die aus der externen Quelle Ferienblöcke erzeugt werden.",
+    whyRelevant: "Ferien können je Kind unterschiedlich gelten oder unterschiedlich dokumentiert werden.",
+    usedFor: "Abgeleitete Ferienblöcke und Ferienauswertung.",
+    inputGuidance: "Wähle nur die Kinder aus, für die die Quelle tatsächlich gelten soll.",
+    commonMistakes: "Nicht automatisch alle Kinder auswählen, wenn Schulen, Bundesländer oder Zeiträume abweichen.",
+    requirementLevel: required
+  }),
 
   "contactPattern.name": help("contactPattern.name", {
     label: "Name der Regel",
@@ -442,6 +491,53 @@ export const fieldHelpById = {
     inputGuidance: "Wähle täglich, wöchentlich oder monatlich und setze das Intervall passend zur Vereinbarung.",
     commonMistakes: "Einzelne Abweichungen nicht durch Verschieben der gesamten Regel abbilden.",
     requirementLevel: required
+  }),
+  "contactPattern.interval": help("contactPattern.interval", {
+    label: "Intervall",
+    shortHelp: "Abstand zwischen Wiederholungen der Regel.",
+    whyRelevant: "Das Intervall macht aus wöchentlich, zweiwöchentlich oder monatlich den konkreten Rhythmus.",
+    usedFor: "RRULE-kompatible Terminberechnung und Kalender-Vorschau.",
+    inputGuidance: "Trage 1 für jede Woche oder jeden Monat, 2 für alle zwei Wochen oder Monate ein.",
+    commonMistakes: "Einzelne Ausnahmen nicht durch Änderung des Intervalls abbilden; nutze dafür den konkreten Termin.",
+    requirementLevel: required,
+    examples: ["1 = jede Woche", "2 = alle zwei Wochen"]
+  }),
+  "contactPattern.weekdays": help("contactPattern.weekdays", {
+    label: "Wochentage",
+    shortHelp: "Tage, an denen die Wiederholung stattfinden soll.",
+    whyRelevant: "Mehrere Wochentage erlauben flexible Modelle ohne 14-Tage-Sonderlogik.",
+    usedFor: "Regelvorschau, automatisch erzeugte Termine und Soll-Ist-Abgleich.",
+    inputGuidance: "Wähle alle regelmäßig betroffenen Wochentage; Zeitspannen bestimmen anschließend Beginn und Ende.",
+    commonMistakes: "Wochenende nicht als starre Vorlage verstehen; jeder passende Wochentag kann gewählt werden.",
+    requirementLevel: required
+  }),
+  "contactPattern.monthlyPattern": help("contactPattern.monthlyPattern", {
+    label: "Monatsmuster",
+    shortHelp: "Legt fest, ob monatlich nach Datum oder nach erstem, drittem oder letztem Wochentag geplant wird.",
+    whyRelevant: "Viele Umgangsmodelle folgen Monatsregeln statt einem festen Wochenrhythmus.",
+    usedFor: "Monatliche Regelberechnung und Kalender-Vorschau.",
+    inputGuidance: "Nutze „Wochentag im Monat“ für Regeln wie erster Samstag oder letzter Freitag.",
+    commonMistakes: "Den 31. Tag nicht für Monate verwenden, in denen dieser Tag nicht existiert.",
+    requirementLevel: required
+  }),
+  "contactPattern.dayOffset": help("contactPattern.dayOffset", {
+    label: "Tagesversatz",
+    shortHelp: "Anzahl Tage nach dem Vorkommnis, an dem eine Zeitspanne beginnt oder endet.",
+    whyRelevant: "Damit lassen sich Wochenenden und mehrtägige Umgangszeiten ohne starre Vorlage abbilden.",
+    usedFor: "Start- und Endzeit der erzeugten Termine.",
+    inputGuidance: "0 bedeutet am Regel-Tag, 1 am Folgetag, 2 zwei Tage später.",
+    commonMistakes: "Nicht mit dem Wiederholungsintervall verwechseln; der Tagesversatz gehört nur zur einzelnen Zeitspanne.",
+    requirementLevel: required,
+    examples: ["Freitag 16:00 bis Sonntag 18:00: Start +0, Ende +2"]
+  }),
+  "contactPattern.responsibleParty": help("contactPattern.responsibleParty", {
+    label: "Betreuende Person",
+    shortHelp: "Fachliche Person, der die automatisch erzeugten Termine zugeordnet werden.",
+    whyRelevant: "Die Zuordnung fließt in persönliche Kalenderfeeds und Ferien-/Betreuungsstatistiken ein.",
+    usedFor: "Regeltermine, Kalenderfeed, Auswertung und Berichte.",
+    inputGuidance: "Wähle die Person, die für diese Regel fachlich zuständig ist.",
+    commonMistakes: "Nicht leer lassen, wenn später persönliche Feeds oder Personenstatistiken genutzt werden sollen.",
+    requirementLevel: recommended
   }),
   "contactPattern.fridayStartTime": help("contactPattern.fridayStartTime", {
     label: "Beginn der Zeitspanne",
@@ -879,6 +975,98 @@ export const fieldHelpById = {
     inputGuidance: "Wähle den am häufigsten passenden Ort und korrigiere ihn im Einzelfall.",
     commonMistakes: "Die Vorauswahl nicht ungeprüft übernehmen, wenn der tatsächliche Ort abweicht.",
     requirementLevel: required
+  }),
+  "settings.language": help("settings.language", {
+    label: "Anzeigesprache",
+    shortHelp: "Lokale Spracheinstellung der Benutzeroberfläche.",
+    whyRelevant: "Sie ändert keine fachlichen Daten und keine gespeicherten Rollen oder Termine.",
+    usedFor: "Navigation, Maskentexte, Hinweise und teilweise Berichte.",
+    inputGuidance: "Wähle die Sprache, in der du die Oberfläche bedienen möchtest.",
+    commonMistakes: "Die Spracheinstellung nicht als Daten- oder Berichtskonvertierung verstehen.",
+    requirementLevel: optional
+  }),
+  "settings.defaultResponsibleParty": help("settings.defaultResponsibleParty", {
+    label: "Hauptbetreuungsperson",
+    shortHelp: "Standard-Zuordnung für neue oder importierte Termine ohne eigene Personenauswahl.",
+    whyRelevant: "Ohne fachliche Zuordnung können Personenstatistiken und Feeds unvollständig werden.",
+    usedFor: "Neue Betreuungseinträge, importierte/geplante Termine, Ferienauswertung und Kalenderfeeds.",
+    inputGuidance: "Wähle die Person, der Betreuung standardmäßig zugerechnet werden soll.",
+    commonMistakes: "Die Hauptbetreuung nicht mit Admin- oder Login-Rechten verwechseln.",
+    requirementLevel: recommended
+  }),
+  "settings.carePartyName": help("settings.carePartyName", {
+    label: "Name der betreuenden Person",
+    shortHelp: "Fachliche Bezeichnung wie Vater, Mutter, Hauptbetreuung oder Großeltern.",
+    whyRelevant: "Der Name erscheint in Auswahlfeldern, Auswertungen und Kalenderfeed-Scope.",
+    usedFor: "Betreuungseinträge, Umgangsregeln, Ferienanteile und persönliche Feeds.",
+    inputGuidance: "Verwende eine neutrale, dauerhaft verständliche Bezeichnung.",
+    commonMistakes: "Nicht den technischen Login-Namen eintragen, wenn fachlich eine Rolle gemeint ist.",
+    requirementLevel: required,
+    examples: ["Hauptbetreuung", "Vater", "Großeltern"]
+  }),
+  "settings.carePartyKind": help("settings.carePartyKind", {
+    label: "Art der betreuenden Person",
+    shortHelp: "Grobe fachliche Einordnung der Person oder Stelle.",
+    whyRelevant: "Die Art hilft bei der Orientierung, ohne das Rollenmodell auf Vater/Mutter zu verengen.",
+    usedFor: "Einstellungen und spätere Auswertungs-/Filterlogik.",
+    inputGuidance: "Wähle die passendste Kategorie; der frei gewählte Name bleibt maßgeblich.",
+    commonMistakes: "Die Kategorie nicht als Zugriffsrecht verstehen.",
+    requirementLevel: recommended
+  }),
+  "settings.notificationChannels": help("settings.notificationChannels", {
+    label: "Benachrichtigungskanäle",
+    shortHelp: "Legt fest, über welche Wege du an offene Bestätigungen erinnert wirst.",
+    whyRelevant: "Bestätigungserinnerungen sollen nützlich sein, ohne sensible Details unnötig zu verbreiten.",
+    usedFor: "In-App-Aufgaben, PWA-Push und vorbereitete E-Mail-Benachrichtigungen.",
+    inputGuidance: "In-App bleibt immer aktiv. Push nutzt dieses Gerät. E-Mail erst aktivieren, wenn SMTP später eingerichtet ist.",
+    commonMistakes: "Push nicht mit E-Mail verwechseln; Push muss pro Gerät erlaubt werden.",
+    requirementLevel: recommended
+  }),
+  "externalCalendar.sourceName": help("externalCalendar.sourceName", {
+    label: "Name der Kalenderquelle",
+    shortHelp: "Eindeutige Bezeichnung für den importierten ICS-Kalender.",
+    whyRelevant: "Der Name erscheint im Kalender und hilft, mehrere Quellen zu unterscheiden.",
+    usedFor: "Kalenderanzeige, Quellenliste und Ferienableitung.",
+    inputGuidance: "Nenne Herkunft und Zweck knapp, zum Beispiel Schulferien NRW.",
+    commonMistakes: "Nicht mehrere unterschiedliche Dateien unter demselben unklaren Namen importieren.",
+    requirementLevel: required,
+    examples: "Schulferien NRW"
+  }),
+  "externalCalendar.color": help("externalCalendar.color", {
+    label: "Kalenderfarbe",
+    shortHelp: "Farbe, mit der Ereignisse dieser Quelle im Kalender markiert werden.",
+    whyRelevant: "Die Farbe trennt externe Kalender sichtbar von Betreuung und Nichtverfügbarkeit.",
+    usedFor: "Kalender und Agenda.",
+    inputGuidance: "Wähle eine gut unterscheidbare Farbe.",
+    commonMistakes: "Farbe nicht als alleinige Information nutzen; Quelle und Text bleiben wichtig.",
+    requirementLevel: recommended
+  }),
+  "externalCalendar.sourceType": help("externalCalendar.sourceType", {
+    label: "Art der Quelle",
+    shortHelp: "Unterscheidet reine Kalenderanzeige von Ferienquellen.",
+    whyRelevant: "Nur Ferienquellen können in der Ferienverwaltung zu Ferienblöcken abgeleitet werden.",
+    usedFor: "Kalenderanzeige und Ferienverwaltung.",
+    inputGuidance: "Wähle Ferienquelle nur für Kalender, deren ganztägige Ereignisse wirklich Ferienblöcke darstellen.",
+    commonMistakes: "Normale Termin-Overlays nicht als Ferienquelle markieren.",
+    requirementLevel: required
+  }),
+  "externalCalendar.file": help("externalCalendar.file", {
+    label: "ICS-Datei",
+    shortHelp: "Lokale iCalendar-Datei, die als externe Quelle importiert wird.",
+    whyRelevant: "Die Datei liefert die externen Kalenderereignisse.",
+    usedFor: "Kalenderoverlay und optional Ferienableitung.",
+    inputGuidance: "Importiere nur vertrauenswürdige `.ics`-Dateien und prüfe die Quelle nach dem Import.",
+    commonMistakes: "Keine produktiven oder fremden Kalenderdateien mit unnötigen privaten Details importieren.",
+    requirementLevel: required
+  }),
+  "calendarFeed.scope": help("calendarFeed.scope", {
+    label: "Feed-Inhalt",
+    shortHelp: "Legt fest, welche Termine die persönliche iCalendar-URL enthält.",
+    whyRelevant: "Gesamtfeed und Personenfeed haben unterschiedliche Reichweite.",
+    usedFor: "Nextcloud, Kalender-Apps und andere iCalendar-Abonnements.",
+    inputGuidance: "Nutze Gesamtfeed für alle zulässigen Termine oder Personenfeed für eine betreuende Person.",
+    commonMistakes: "Feed-URLs wie Passwörter behandeln und nicht öffentlich teilen.",
+    requirementLevel: recommended
   }),
   "settings.defaultHandoverFrom": help("settings.defaultHandoverFrom", {
     label: "Standard-Übergabe von",
