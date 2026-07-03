@@ -8,8 +8,8 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `NODE_ENV` | Runtime mode and production error handling | `production` | Recommended | `development` | Production hides internal error details |
 | `HOST` | Listener address | `127.0.0.1` | Optional | `127.0.0.1` | Use loopback when a local proxy is in front |
 | `PORT` | HTTP port | `3000` | Optional | `3000` | Expose only through the intended firewall/proxy |
-| `APP_RELEASE_VERSION` | Release Compose image tag | `1.6.2` | Required for `deploy/compose.yml` | None | Must match the extracted release package version |
-| `APP_RELEASE_DIR` | Release Compose build context | `/opt/svc_betreuung/betreuungskalender/releases/v1.6.2` | Required for `deploy/compose.yml` | None | Must point at the verified extracted release directory |
+| `APP_RELEASE_VERSION` | Release Compose image tag | `1.7.0` | Required for `deploy/compose.yml` | None | Must match the extracted release package version |
+| `APP_RELEASE_DIR` | Release Compose build context | `/opt/svc_betreuung/betreuungskalender/releases/v1.7.0` | Required for `deploy/compose.yml` | None | Must point at the verified extracted release directory |
 | `APP_COMPOSE_FILE` | Compose file managed by the update tool | `compose.oidc.yml` | Required only when not using `compose.yml` | `compose.yml` | Must be `compose.yml` or `compose.oidc.yml` |
 | `OAUTH2_PROXY_IMAGE` | oauth2-proxy image used by `deploy/compose.oidc.yml` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.3` | Optional for OIDC Compose | Same | Pin and review oauth2-proxy updates like other runtime dependencies |
 | `HOST_BIND_ADDRESS` | Host address published by release Compose | `127.0.0.1` | Recommended for `deploy/compose.yml` | `127.0.0.1` | Use loopback only when the reverse proxy is on the same host |
@@ -30,6 +30,10 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `OIDC_LOGIN_STATE_TTL_SECONDS` | Native OIDC login transaction lifetime | `600` | Optional for `AUTH_MODE=native-oidc` | `600` | Short-lived state, nonce, and PKCE verifier records limit replay windows |
 | `SESSION_COOKIE_NAME` | Native OIDC opaque session cookie name | `betreuungskalender_session` | Optional for `AUTH_MODE=native-oidc` | `betreuungskalender_session` | Cookie value is opaque and never stores claims or tokens |
 | `SESSION_TTL_SECONDS` | Native OIDC server-side session lifetime | `2419200` | Optional for `AUTH_MODE=native-oidc` | `2419200` | Limits how long an unreused opaque session can remain valid |
+| `WEB_PUSH_SUBJECT` | VAPID contact subject for optional Web Push | `mailto:admin@example.invalid` | Required only when Web Push is enabled | `mailto:admin@example.invalid` | Use an operator-controlled contact URI |
+| `WEB_PUSH_PUBLIC_KEY` | VAPID public key for optional Web Push | Generated VAPID public key | Optional | None | Public key may be exposed to browsers |
+| `WEB_PUSH_PRIVATE_KEY` | VAPID private key for optional Web Push | Secret value | Required only when Web Push is enabled | None | Secret; keep only in private environment files |
+| `WEB_PUSH_ALLOWED_ENDPOINT_HOSTS` | Comma-separated allowed browser push service hosts | `fcm.googleapis.com,updates.push.services.mozilla.com` | Optional when Web Push is enabled | Browser push-provider allowlist | Prevents user-controlled push endpoints from causing SSRF |
 | `OIDC_USER_ID_HEADER` | Trusted header containing the stable OIDC subject or user ID | `x-auth-request-user` | Recommended with OIDC | `x-auth-request-user` | Must be stable across email/name changes |
 | `OIDC_EMAIL_HEADER` | Trusted header containing the OIDC email claim | `x-auth-request-email` | Optional with OIDC | `x-auth-request-email` | Stored on the internal user record when present |
 | `OIDC_DISPLAY_NAME_HEADER` | Trusted header containing the OIDC display-name claim | `x-auth-request-preferred-username` | Optional with OIDC | `x-auth-request-preferred-username` | Shown compactly in the app shell |

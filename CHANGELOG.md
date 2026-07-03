@@ -6,6 +6,8 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-07-03
+
 ### Added
 
 - Added external-calendar source classification for overlay-only calendars and
@@ -16,6 +18,13 @@ project follows semantic versioning where practical.
   `completed`, `partial`, and `cancelled` confirmation outcomes.
 - Added per-user notification preferences and optional privacy-preserving Web
   Push subscriptions for confirmation reminders.
+
+### Security
+
+- Restricted stored Web Push subscription endpoints to HTTPS hosts listed in
+  `WEB_PUSH_ALLOWED_ENDPOINT_HOSTS` to avoid server-side request forgery.
+- Kept PWA notification click targets same-origin even if a malformed push
+  payload is received.
 
 ## [1.6.2] - 2026-07-02
 
