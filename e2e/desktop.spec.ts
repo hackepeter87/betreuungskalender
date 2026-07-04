@@ -4,6 +4,7 @@ import {
   createEntry,
   createHoliday,
   dateInCurrentMonth,
+  expectNoDocumentHorizontalOverflow,
   expectNoUnavailableModalOverflow,
   importExternalCalendar,
   navigate,
@@ -135,6 +136,14 @@ test("shows authenticated user and logout action when session metadata is availa
     "href",
     "/oauth2/sign_out"
   );
+});
+
+test("keeps desktop settings layout within the viewport", async ({ page }) => {
+  await openApp(page);
+  await navigate(page, "settings");
+  await expect(page.getByTestId("page-settings")).toBeVisible();
+  await expect(page.getByText("Standardwerte").first()).toBeVisible();
+  await expectNoDocumentHorizontalOverflow(page);
 });
 
 test("shows open care confirmations in the notification center", async ({ page }) => {

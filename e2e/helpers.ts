@@ -124,6 +124,17 @@ export async function expectNoUnavailableModalOverflow(page: Page) {
   expect(result.violations).toEqual([]);
 }
 
+export async function expectNoDocumentHorizontalOverflow(page: Page) {
+  const result = await page.evaluate(() => ({
+    clientWidth: document.documentElement.clientWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+    bodyScrollWidth: document.body.scrollWidth
+  }));
+
+  expect(result.scrollWidth).toBeLessThanOrEqual(result.clientWidth + 1);
+  expect(result.bodyScrollWidth).toBeLessThanOrEqual(result.clientWidth + 1);
+}
+
 export async function navigate(page: Page, destination: AppPage) {
   const mobileNavigation = page.getByTestId("mobile-navigation");
   if (await mobileNavigation.isVisible()) {
