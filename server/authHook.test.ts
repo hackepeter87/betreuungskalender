@@ -90,17 +90,21 @@ test("native OIDC mode rejects trusted proxy headers as API authentication", asy
 });
 
 test("trusted proxy mode rejects identity headers from untrusted source addresses", async () => {
-  const hook = createApiAuthHook(authConfig({
-    authMode: "trusted-proxy",
-    trustProxyAuth: true,
-    oidcRequireRoleClaim: true,
-    trustedProxyRules: [{
-      source: "10.0.0.0/24",
-      address: "10.0.0.0",
-      prefix: 24,
-      family: "ipv4"
-    }]
-  }));
+  const hook = createApiAuthHook(
+    authConfig({
+      authMode: "trusted-proxy",
+      trustProxyAuth: true,
+      oidcRequireRoleClaim: true,
+      trustedProxyRules: [{
+        source: "10.0.0.0/24",
+        address: "10.0.0.0",
+        prefix: 24,
+        family: "ipv4"
+      }]
+    }),
+    undefined,
+    { upsertAuthenticatedUser: () => undefined }
+  );
 
   await assert.rejects(
     () => hook.call(
@@ -126,17 +130,21 @@ test("trusted proxy mode rejects identity headers from untrusted source addresse
 });
 
 test("trusted proxy mode accepts identity headers from allowed source addresses", async () => {
-  const hook = createApiAuthHook(authConfig({
-    authMode: "trusted-proxy",
-    trustProxyAuth: true,
-    oidcRequireRoleClaim: true,
-    trustedProxyRules: [{
-      source: "10.0.0.0/24",
-      address: "10.0.0.0",
-      prefix: 24,
-      family: "ipv4"
-    }]
-  }));
+  const hook = createApiAuthHook(
+    authConfig({
+      authMode: "trusted-proxy",
+      trustProxyAuth: true,
+      oidcRequireRoleClaim: true,
+      trustedProxyRules: [{
+        source: "10.0.0.0/24",
+        address: "10.0.0.0",
+        prefix: 24,
+        family: "ipv4"
+      }]
+    }),
+    undefined,
+    { upsertAuthenticatedUser: () => undefined }
+  );
   const request = {
     method: "GET",
     url: "/api/children",

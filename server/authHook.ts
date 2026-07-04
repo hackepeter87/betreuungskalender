@@ -34,6 +34,7 @@ interface NativeAuthOptions {
   nativeSessions?: Pick<OidcSessionStore, "findByToken">;
   findUserByExternalSubject?: (externalSubject: string) => RequestUser | undefined;
   findRecoveryUserByToken?: (token: string | undefined) => RequestUser | undefined;
+  upsertAuthenticatedUser?: (user: RequestUser) => void;
 }
 
 function httpError(code: string, statusCode: number, message: string): Error & { code: string; statusCode: number } {
@@ -140,7 +141,7 @@ export function createApiAuthHook(
         "Für diese Aktion fehlt die erforderliche Berechtigung."
       );
     }
-    upsertAuthenticatedUser(auth.user);
+    (options.upsertAuthenticatedUser ?? upsertAuthenticatedUser)(auth.user);
     request.user = auth.user;
     request.userEmail = auth.user.id;
   };
