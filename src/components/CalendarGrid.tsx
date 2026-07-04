@@ -85,6 +85,20 @@ export function CalendarGrid({
           const dayExternal = externalByDate.get(day.dateKey) ?? [];
           const dayHolidays = holidaysByDate.get(day.dateKey) ?? [];
           const visibleCount = dayEntries.length + dayUnavailable.length + dayExternal.length + dayHolidays.length;
+          const maxRenderedEvents = 3;
+          const renderedExternal = dayExternal.slice(0, 1);
+          const renderedHolidays = dayHolidays.slice(0, 1);
+          const renderedUnavailable = dayUnavailable.slice(0, 1);
+          const remainingEntrySlots = Math.max(
+            0,
+            maxRenderedEvents - renderedExternal.length - renderedHolidays.length - renderedUnavailable.length
+          );
+          const renderedEntries = dayEntries.slice(0, remainingEntrySlots);
+          const renderedCount =
+            renderedExternal.length +
+            renderedHolidays.length +
+            renderedUnavailable.length +
+            renderedEntries.length;
           return (
             <div
               className={[
@@ -106,17 +120,17 @@ export function CalendarGrid({
                 {day.day}
               </button>
               <div className="calendar-day__entries">
-                {dayExternal.slice(0, 1).map((event) => (
+                {renderedExternal.map((event) => (
                   <span className="calendar-event calendar-event--external" key={`external-${event.id}`} title={`${event.sourceName}: ${event.title}`} style={{ borderColor: event.sourceColor }} data-testid={`external-calendar-event-${event.id}`}>
-                    <Icon name="calendar" size={13} /><span className="calendar-event__label">{event.title}</span>
+                    <Icon name="calendar" size={13} /><span className="calendar-event__label" data-short-label={event.title}>{event.title}</span>
                   </span>
                 ))}
-                {dayHolidays.slice(0, 1).map((period) => (
+                {renderedHolidays.map((period) => (
                   <span className="calendar-event calendar-event--holiday" key={`holiday-${period.id}`} title={period.name} data-testid={`calendar-holiday-${period.id}`}>
-                    <Icon name="sun" size={13} /><span className="calendar-event__label">{period.name}</span>
+                    <Icon name="sun" size={13} /><span className="calendar-event__label" data-short-label={locale === "en" ? "Holiday" : "Ferien"}>{period.name}</span>
                   </span>
                 ))}
-                {dayUnavailable.slice(0, 1).map((period) => (
+                {renderedUnavailable.map((period) => (
                   <button
                     className={`calendar-event calendar-event--unavailable ${period.dutyRelated ? "is-duty" : ""} ${period.scope === "external_contact_block" ? "is-external-block" : ""}`}
                     type="button"
@@ -126,7 +140,16 @@ export function CalendarGrid({
                     title={`${unavailableCategoryLabels[period.category]} · ${formatTime(period.startDateTime, intlLocale)}`}
                   >
                     <span className="calendar-event__unavailable-icon"><Icon name="briefcase" size={13} /></span>
-                    <span className="calendar-event__label">
+                    <span
+                      className="calendar-event__label"
+                      data-short-label={
+                        period.scope === "external_contact_block"
+                          ? locale === "en" ? "Blocked" : "Blockiert"
+                          : period.dutyRelated
+                            ? locale === "en" ? "Duty" : "Dienst"
+                            : locale === "en" ? "Away" : "Abwesend"
+                      }
+                    >
                       {period.scope === "external_contact_block"
                         ? copy(locale, "calendar", "externalBlock")
                         : period.dutyRelated
@@ -135,9 +158,23 @@ export function CalendarGrid({
                     </span>
                   </button>
                 ))}
-                {dayEntries.slice(0, dayUnavailable.length ? 2 : 3).map((entry) => {
+                {renderedEntries.map((entry) => {
                   const isRuleEntry = Boolean(entry.contactRuleId || entry.generatedByPatternId);
                   const isRuleException = entry.contactRuleSyncState === "manual_override";
+                  const entryLabel = entry.status === "cancelled"
+                    ? copy(locale, "calendar", "cancelled")
+                    : entry.additionalCare
+                      ? copy(locale, "agenda", "additionalCare")
+                    : entry.childIds.length > 1
+                      ? copy(locale, "calendar", "bothChildren")
+                      : childMap.get(entry.childIds[0])?.name ?? copy(locale, "calendar", "entry");
+                  const shortEntryLabel = entry.status === "cancelled"
+                    ? locale === "en" ? "Cancelled" : "Ausfall"
+                    : entry.additionalCare
+                      ? locale === "en" ? "Extra" : "Zusatz"
+                    : entry.childIds.length > 1
+                      ? locale === "en" ? "All" : "Beide"
+                      : entryLabel;
                   const ruleStateLabel = entry.status === "cancelled"
                     ? copy(locale, "calendar", "ruleCancelled")
                     : isRuleException
@@ -173,21 +210,15 @@ export function CalendarGrid({
                         <span key={id} data-testid={`calendar-entry-child-color-${id}`} style={{ backgroundColor: childMap.get(id)?.color ?? "#94a3b8" }} />
                       ))}
                     </span>
-                    <span className="calendar-event__label">
-                      {entry.status === "cancelled"
-                        ? copy(locale, "calendar", "cancelled")
-                        : entry.additionalCare
-                          ? copy(locale, "agenda", "additionalCare")
-                        : entry.childIds.length > 1
-                          ? copy(locale, "calendar", "bothChildren")
-                          : childMap.get(entry.childIds[0])?.name ?? copy(locale, "calendar", "entry")}
+                    <span className="calendar-event__label" data-short-label={shortEntryLabel}>
+                      {entryLabel}
                     </span>
                     {entry.overnight ? <Icon name="moon" size={13} /> : null}
                     {hasOverlap ? <Icon name="alert" size={13} /> : isRuleException ? <Icon name="edit" size={13} /> : isRuleEntry ? <Icon name="repeat" size={13} /> : null}
                   </button>
                   );
                 })}
-                {visibleCount > 3 ? <span className="calendar-day__more">{copy(locale, "calendar", "more", { count: visibleCount - 3 })}</span> : null}
+                {visibleCount > renderedCount ? <span className="calendar-day__more">{copy(locale, "calendar", "more", { count: visibleCount - renderedCount })}</span> : null}
               </div>
             </div>
           );

@@ -6,6 +6,26 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.10.1] - 2026-07-04
+
+### Fixed
+
+- Fixed the mobile calendar agenda so holiday periods are scoped to the selected
+  month instead of showing unrelated periods from earlier months.
+- Hardened the mobile month calendar layout with deterministic event limits and
+  short labels for holidays, unavailability, and generated care entries.
+- Tightened mobile layouts for entries, analytics, holiday management, backup,
+  audit log, unavailability, external calendar, and feed settings surfaces to
+  avoid horizontal overflow and control/button overlap.
+- Aligned desktop Settings default-value fields and help buttons.
+
+### Testing
+
+- Added iPhone regression coverage for month-scoped calendar agenda data.
+- Added mobile and desktop horizontal-overflow regression checks for the
+  reported v1.10.1 layout surfaces.
+- Captured visual QA screenshots for the affected mobile and desktop views.
+
 ## [1.10.0] - 2026-07-04
 
 ### Added

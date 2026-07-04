@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   createChild,
   createEntry,
+  expectNoDocumentHorizontalOverflow,
   expectNoUnavailableModalOverflow,
   navigate,
   openApp,
@@ -37,9 +38,126 @@ test("uses mobile navigation and the agenda for entry creation", async ({
 
   await navigate(page, "entries");
   await expect(page.getByText(childName).first()).toBeVisible();
-  expect(await page.evaluate(
-    () => document.documentElement.scrollWidth <= document.documentElement.clientWidth
-  )).toBe(true);
+  await expectNoDocumentHorizontalOverflow(page);
+});
+
+test("keeps mobile agenda scoped to the selected month", async ({
+  page,
+  request
+}) => {
+  const childResponse = await request.post("/api/children", {
+    data: {
+      name: "Agenda Kind",
+      birthMonth: 5,
+      birthYear: 2018,
+      color: "#0f8b83"
+    }
+  });
+  expect(childResponse.ok()).toBeTruthy();
+  const child = await childResponse.json() as { id: string };
+
+  const marchHoliday = await request.post("/api/holiday-periods", {
+    data: {
+      name: "Osterferien 2026 Nordrhein-Westfalen",
+      startDate: "2026-03-30",
+      endDate: "2026-04-11",
+      childIds: [child.id],
+      assignedTo: "shared"
+    }
+  });
+  expect(marchHoliday.ok()).toBeTruthy();
+
+  const julyHoliday = await request.post("/api/holiday-periods", {
+    data: {
+      name: "Sommerferien 2026 Nordrhein-Westfalen",
+      startDate: "2026-07-20",
+      endDate: "2026-08-04",
+      childIds: [child.id],
+      assignedTo: "shared"
+    }
+  });
+  expect(julyHoliday.ok()).toBeTruthy();
+
+  await openApp(page);
+  await navigate(page, "calendar");
+  await expect(page.getByTestId("calendar-view-agenda")).toHaveClass(/is-active/);
+  await expect(page.getByText("Juli 2026").first()).toBeVisible();
+  await expect(page.getByText("Osterferien 2026 Nordrhein-Westfalen")).toHaveCount(0);
+  await expect(page.getByText("Sommerferien 2026 Nordrhein-Westfalen").first()).toBeVisible();
+  await expectNoDocumentHorizontalOverflow(page);
+});
+
+test("keeps critical mobile pages within the viewport", async ({
+  page,
+  request
+}) => {
+  const childResponse = await request.post("/api/children", {
+    data: {
+      name: "Layout Kind",
+      birthMonth: 4,
+      birthYear: 2019,
+      color: "#6b63e5"
+    }
+  });
+  expect(childResponse.ok()).toBeTruthy();
+  const child = await childResponse.json() as { id: string };
+
+  await request.post("/api/holiday-periods", {
+    data: {
+      name: "Sommerferien 2026 Nordrhein-Westfalen",
+      startDate: "2026-07-20",
+      endDate: "2026-08-04",
+      childIds: [child.id],
+      assignedTo: "shared"
+    }
+  });
+  await request.post("/api/care-entries", {
+    data: {
+      startDateTime: "2026-07-31T16:00:00.000Z",
+      endDateTime: "2026-08-02T18:00:00.000Z",
+      childIds: [child.id],
+      status: "planned",
+      overnight: true,
+      schoolHandover: false,
+      holiday: true,
+      weekend: true,
+      additionalCare: false,
+      location: "other",
+      customLocation: "Anderer Ort",
+      hasEvidence: false,
+      trips: [],
+      costs: []
+    }
+  });
+  await request.post("/api/unavailable-periods", {
+    data: {
+      startDateTime: "2026-07-02T08:00:00.000Z",
+      endDateTime: "2026-07-02T17:00:00.000Z",
+      category: "duty",
+      dutyRelated: true,
+      affectsContact: false,
+      affectsHolidays: false,
+      scope: "own_unavailability",
+      location: "Dienststätte",
+      childIds: []
+    }
+  });
+
+  await openApp(page);
+  for (const destination of [
+    "dashboard",
+    "calendar",
+    "entries",
+    "analytics",
+    "holidays",
+    "backup",
+    "audit",
+    "unavailable",
+    "settings"
+  ] as const) {
+    await navigate(page, destination);
+    await expectNoDocumentHorizontalOverflow(page);
+  }
 });
 
 test("opens authenticated user menu from the mobile header", async ({
@@ -85,9 +203,7 @@ test("opens authenticated user menu from the mobile header", async ({
     "href",
     "/oauth2/sign_out"
   );
-  expect(await page.evaluate(
-    () => document.documentElement.scrollWidth <= document.documentElement.clientWidth
-  )).toBe(true);
+  await expectNoDocumentHorizontalOverflow(page);
 });
 
 test("explains read-only mode on mobile when the server is unavailable", async ({

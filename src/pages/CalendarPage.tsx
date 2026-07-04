@@ -13,7 +13,17 @@ import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
 import { api } from "../lib/api";
-import type { CareEntry, ExternalCalendarEvent, UnavailablePeriod } from "../types";
+import type { CareEntry, ExternalCalendarEvent, HolidayPeriod, UnavailablePeriod } from "../types";
+
+function holidayPeriodsForMonth(periods: HolidayPeriod[], monthKey: string): HolidayPeriod[] {
+  const range = rangeForMonth(monthKey);
+  return periods.filter(
+    (period) =>
+      !period.deletedAt &&
+      period.startDate <= range.endDate &&
+      period.endDate >= range.startDate
+  );
+}
 
 export function CalendarPage({
   monthKey,
@@ -37,6 +47,10 @@ export function CalendarPage({
   >(null);
   const [externalEvents, setExternalEvents] = useState<ExternalCalendarEvent[]>([]);
   const entries = useMemo(() => entriesForMonth(data.entries, monthKey), [data.entries, monthKey]);
+  const holidayPeriods = useMemo(
+    () => holidayPeriodsForMonth(data.holidayPeriods, monthKey),
+    [data.holidayPeriods, monthKey]
+  );
   const unavailablePeriods = useMemo(() => {
     const range = rangeForMonth(monthKey);
     return unavailablePeriodsForRange(
@@ -112,7 +126,7 @@ export function CalendarPage({
           entries={entries}
           unavailablePeriods={unavailablePeriods}
           externalEvents={externalEvents}
-          holidayPeriods={data.holidayPeriods}
+          holidayPeriods={holidayPeriods}
           children={data.children}
           onSelectDate={(date) => onNewEntry(date || undefined)}
           onSelectEntry={onEditEntry}
@@ -127,7 +141,7 @@ export function CalendarPage({
               entries={entries}
               unavailablePeriods={unavailablePeriods}
               externalEvents={externalEvents}
-              holidayPeriods={data.holidayPeriods}
+              holidayPeriods={holidayPeriods}
               children={data.children}
               onSelectDate={onNewEntry}
               onSelectEntry={onEditEntry}
