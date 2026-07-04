@@ -6,6 +6,37 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-07-04
+
+### Added
+
+- Added `TRUSTED_PROXY_CIDRS` for trusted-proxy deployments so proxy identity
+  headers are accepted only from configured source IPs or CIDR ranges.
+- Added documentation for trusted-proxy CIDR handling with external HAProxy and
+  containerized reverse proxies.
+
+### Changed
+
+- Moved upcoming care entries higher on the dashboard so the next actionable
+  dates appear before secondary metric cards.
+- Changed the desktop notification entry from a detached icon to an integrated
+  sidebar navigation row.
+- Clarified notification timing and channel editability in Settings.
+
+### Fixed
+
+- Fixed mobile layout issues across the calendar, agenda, entries filter,
+  settings, external calendar import, calendar feed, backup, reports, audit log,
+  holidays, and unavailability surfaces.
+- Fixed the dashboard "open appointments" metric so it acts as a navigation
+  shortcut to the filtered entries surface.
+- Removed the stale local SQLite information card from the desktop sidebar.
+
+### Testing
+
+- Added regression coverage for trusted proxy source-address enforcement.
+- Verified the UI fixes with the existing desktop, iPhone, and iPad E2E suites.
+
 ## [1.9.1] - 2026-07-03
 
 ### Security

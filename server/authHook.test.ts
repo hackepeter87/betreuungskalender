@@ -9,6 +9,7 @@ type TestAuthConfig = Pick<
   | "authMode"
   | "requireAuth"
   | "trustProxyAuth"
+  | "trustedProxyRules"
   | "oidcUserIdHeader"
   | "oidcEmailHeader"
   | "oidcDisplayNameHeader"
@@ -27,6 +28,7 @@ function authConfig(overrides: Partial<TestAuthConfig> = {}): TestAuthConfig {
     authMode: "native-oidc",
     requireAuth: true,
     trustProxyAuth: false,
+    trustedProxyRules: [],
     oidcUserIdHeader: "x-auth-request-user",
     oidcEmailHeader: "x-auth-request-email",
     oidcDisplayNameHeader: "x-auth-request-preferred-username",
@@ -85,6 +87,68 @@ test("native OIDC mode rejects trusted proxy headers as API authentication", asy
       return true;
     }
   );
+});
+
+test("trusted proxy mode rejects identity headers from untrusted source addresses", async () => {
+  const hook = createApiAuthHook(authConfig({
+    authMode: "trusted-proxy",
+    trustProxyAuth: true,
+    oidcRequireRoleClaim: true,
+    trustedProxyRules: [{
+      source: "10.0.0.0/24",
+      address: "10.0.0.0",
+      prefix: 24,
+      family: "ipv4"
+    }]
+  }));
+
+  await assert.rejects(
+    () => hook.call(
+      {} as never,
+      {
+        method: "GET",
+        url: "/api/children",
+        raw: { socket: { remoteAddress: "203.0.113.10" } },
+        headers: {
+          "x-auth-request-user": "subject-123",
+          "x-auth-request-groups": "/betreuungskalender/admins"
+        }
+      } as never,
+      {} as never
+    ),
+    (error) => {
+      const normalized = error as Error & { code?: string; statusCode?: number };
+      assert.equal(normalized.code, "untrusted_proxy");
+      assert.equal(normalized.statusCode, 403);
+      return true;
+    }
+  );
+});
+
+test("trusted proxy mode accepts identity headers from allowed source addresses", async () => {
+  const hook = createApiAuthHook(authConfig({
+    authMode: "trusted-proxy",
+    trustProxyAuth: true,
+    oidcRequireRoleClaim: true,
+    trustedProxyRules: [{
+      source: "10.0.0.0/24",
+      address: "10.0.0.0",
+      prefix: 24,
+      family: "ipv4"
+    }]
+  }));
+  const request = {
+    method: "GET",
+    url: "/api/children",
+    raw: { socket: { remoteAddress: "10.0.0.23" } },
+    headers: {
+      "x-auth-request-user": "subject-123",
+      "x-auth-request-groups": "/betreuungskalender/admins"
+    }
+  } as never;
+
+  await assert.doesNotReject(() => hook.call({} as never, request, {} as never));
+  assert.equal((request as { user?: RequestUser }).user?.role, "admin");
 });
 
 test("/api/session stays reachable for frontend auth discovery", async () => {

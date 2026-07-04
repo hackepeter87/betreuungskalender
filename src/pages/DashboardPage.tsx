@@ -25,7 +25,8 @@ export function DashboardPage({
   onNewEntry,
   onEditEntry,
   onOpenSettings,
-  onOpenCalendar
+  onOpenCalendar,
+  onOpenEntries
 }: {
   monthKey: string;
   onMonthChange: (month: string) => void;
@@ -33,6 +34,7 @@ export function DashboardPage({
   onEditEntry: (entry: CareEntry) => void;
   onOpenSettings: () => void;
   onOpenCalendar: () => void;
+  onOpenEntries: () => void;
 }) {
   const { locale, intlLocale } = useI18n();
   const {
@@ -110,10 +112,10 @@ export function DashboardPage({
     { label: copy(locale, "dashboard", "completeness"), value: `${stats.completeness} %`, detail: copy(locale, "dashboard", "checkedEntries", { count: monthEntries.length }), icon: stats.completeness === 100 ? "check" : "alert", tone: stats.completeness === 100 ? "teal" : "coral" },
     { label: copy(locale, "dashboard", "dataQuality"), value: String(dataQuality.totalIssues), detail: dataQuality.totalIssues ? copy(locale, "dashboard", "monthHints") : copy(locale, "dashboard", "noOpenHints"), icon: dataQuality.totalIssues ? "alert" : "check", tone: dataQuality.totalIssues ? "coral" : "teal" }
   ];
-  const mobileMetrics: Array<{ label: string; value: string; detail: string; icon: IconName; tone: string }> = [
+  const mobileMetrics: Array<{ label: string; value: string; detail: string; icon: IconName; tone: string; onClick?: () => void; testId?: string }> = [
     { label: copy(locale, "dashboard", "overnights"), value: String(stats.overnights), detail: copy(locale, "dashboard", "selectedMonth"), icon: "moon", tone: "violet" },
     { label: copy(locale, "dashboard", "additionalCare"), value: String(monthEntries.filter((entry) => (entry.status === "completed" || entry.status === "partial") && entry.additionalCare).length), detail: copy(locale, "dashboard", "completedDates"), icon: "plus", tone: "teal" },
-    { label: copy(locale, "dashboard", "openDates"), value: String(monthEntries.filter((entry) => entry.status === "planned" && entry.generatedByPatternId).length), detail: copy(locale, "dashboard", "plannedDates"), icon: "calendar", tone: "amber" },
+    { label: copy(locale, "dashboard", "openDates"), value: String(monthEntries.filter((entry) => entry.status === "planned" && entry.generatedByPatternId).length), detail: copy(locale, "dashboard", "plannedDates"), icon: "calendar", tone: "amber", onClick: onOpenEntries, testId: "dashboard-open-dates-card" },
     { label: copy(locale, "dashboard", "dataQuality"), value: String(dataQuality.totalIssues), detail: dataQuality.totalIssues ? copy(locale, "dashboard", "openHints") : copy(locale, "dashboard", "noHints"), icon: dataQuality.totalIssues ? "alert" : "check", tone: dataQuality.totalIssues ? "coral" : "teal" },
     { label: copy(locale, "dashboard", "lastBackup"), value: backupAgeDays === null ? "–" : backupAgeDays === 0 ? copy(locale, "common", "today") : `${backupAgeDays} ${locale === "en" ? "d" : "T."}`, detail: backupIsCurrent ? copy(locale, "dashboard", "backupCurrent") : copy(locale, "dashboard", "backupRequired"), icon: backupIsCurrent ? "backup" : "alert", tone: backupIsCurrent ? "teal" : "coral" }
   ];
@@ -165,6 +167,27 @@ export function DashboardPage({
         </section>
       ) : null}
 
+      <section className="panel dashboard-upcoming-panel">
+        <div className="panel__header panel__header--compact">
+          <div>
+            <h2>{copy(locale, "dashboard", "upcoming")}</h2>
+            <p>{copy(locale, "dashboard", "upcomingDescription")}</p>
+          </div>
+        </div>
+        <div className="upcoming-list upcoming-list--prominent">
+          {upcoming.map((entry) => (
+            <button type="button" key={entry.id} onClick={() => onEditEntry(entry)}>
+              <span className="upcoming-list__date">{formatDate(entry.startDateTime, intlLocale)}</span>
+              <strong>
+                {entry.childIds.map((id) => data.children.find((child) => child.id === id)?.name).filter(Boolean).join(locale === "en" ? " and " : " und ")}
+              </strong>
+              <small>{entry.status === "planned" ? copy(locale, "dashboard", "plannedTitle") : copy(locale, "dashboard", "completed")}{entry.overnight ? ` · ${copy(locale, "agenda", "overnight")}` : ""}</small>
+            </button>
+          ))}
+          {upcoming.length === 0 ? <p className="empty-copy empty-copy--padded">{copy(locale, "dashboard", "noUpcoming")}</p> : null}
+        </div>
+      </section>
+
       <section className="metric-grid metric-grid--desktop" aria-label={copy(locale, "dashboard", "metrics")}>
         {metrics.map((metric) => (
           <article className="metric-card" key={metric.label}>
@@ -180,18 +203,35 @@ export function DashboardPage({
         ))}
       </section>
       <section className="metric-grid metric-grid--mobile" aria-label={copy(locale, "dashboard", "mobileMetrics")}>
-        {mobileMetrics.map((metric) => (
-          <article className="metric-card" key={metric.label}>
-            <span className={`metric-card__icon metric-card__icon--${metric.tone}`}>
-              <Icon name={metric.icon} size={22} />
-            </span>
-            <span>
-              <small>{metric.label}</small>
-              <strong>{metric.value}</strong>
-              <em>{metric.detail}</em>
-            </span>
-          </article>
-        ))}
+        {mobileMetrics.map((metric) => {
+          const content = (
+            <>
+              <span className={`metric-card__icon metric-card__icon--${metric.tone}`}>
+                <Icon name={metric.icon} size={22} />
+              </span>
+              <span>
+                <small>{metric.label}</small>
+                <strong>{metric.value}</strong>
+                <em>{metric.detail}</em>
+              </span>
+            </>
+          );
+          return metric.onClick ? (
+            <button
+              className="metric-card metric-card--button"
+              key={metric.label}
+              type="button"
+              data-testid={metric.testId}
+              onClick={metric.onClick}
+            >
+              {content}
+            </button>
+          ) : (
+            <article className="metric-card" key={metric.label}>
+              {content}
+            </article>
+          );
+        })}
       </section>
 
       {closure ? (
@@ -292,27 +332,6 @@ export function DashboardPage({
               <div><dt>{copy(locale, "dashboard", "costsWithoutCategory")}</dt><dd>{dataQuality.costsWithoutCategory}</dd></div>
               <div><dt>{copy(locale, "dashboard", "overduePlanned")}</dt><dd>{dataQuality.overduePlannedEntries}</dd></div>
             </dl>
-          </section>
-
-          <section className="panel">
-            <div className="panel__header panel__header--compact">
-              <div>
-                <h2>{copy(locale, "dashboard", "upcoming")}</h2>
-                <p>{copy(locale, "dashboard", "upcomingDescription")}</p>
-              </div>
-            </div>
-            <div className="upcoming-list">
-              {upcoming.map((entry) => (
-                <button type="button" key={entry.id} onClick={() => onEditEntry(entry)}>
-                  <span className="upcoming-list__date">{formatDate(entry.startDateTime, intlLocale)}</span>
-                  <strong>
-                    {entry.childIds.map((id) => data.children.find((child) => child.id === id)?.name).filter(Boolean).join(locale === "en" ? " and " : " und ")}
-                  </strong>
-                  <small>{entry.status === "planned" ? copy(locale, "dashboard", "plannedTitle") : copy(locale, "dashboard", "completed")}{entry.overnight ? ` · ${copy(locale, "agenda", "overnight")}` : ""}</small>
-                </button>
-              ))}
-              {upcoming.length === 0 ? <p className="empty-copy">{copy(locale, "dashboard", "noUpcoming")}</p> : null}
-            </div>
           </section>
 
           <section className={`privacy-card ${backupIsCurrent ? "" : "privacy-card--warning"}`}>

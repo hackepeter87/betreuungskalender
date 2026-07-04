@@ -8,6 +8,7 @@ import {
 import type { config as appConfig } from "./config.js";
 import { cookieValue } from "./cookies.js";
 import { type OidcSessionRecord, type OidcSessionStore } from "./services/oidcSessions.js";
+import { isTrustedProxyAddress } from "./trustedProxy.js";
 import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "./services/users.js";
 
 type AuthConfig = Pick<
@@ -15,6 +16,7 @@ type AuthConfig = Pick<
   | "authMode"
   | "requireAuth"
   | "trustProxyAuth"
+  | "trustedProxyRules"
   | "oidcUserIdHeader"
   | "oidcEmailHeader"
   | "oidcDisplayNameHeader"
@@ -97,6 +99,16 @@ export function createApiAuthHook(
       request.user = user;
       request.userEmail = user.id;
       return;
+    }
+    if (
+      config.trustProxyAuth &&
+      !isTrustedProxyAddress(request.raw.socket.remoteAddress, config.trustedProxyRules)
+    ) {
+      throw httpError(
+        "untrusted_proxy",
+        403,
+        "Die Proxy-Authentifizierung ist von dieser Netzwerkadresse nicht zugelassen."
+      );
     }
     const auth = resolveRequestUser(request.headers, {
       requireAuth: config.requireAuth,

@@ -266,6 +266,11 @@ function NotificationBell({
         onClick={() => setOpen((current) => !current)}
       >
         <Icon name="bell" size={20} />
+        {testIdPrefix === "sidebar" ? (
+          <span className="notification-center__label">
+            {copy(locale, "confirmation", "notificationCenterShort")}
+          </span>
+        ) : null}
         {count ? <span className="notification-center__badge" data-testid={`${testIdPrefix}-notification-center-badge`}>{count > 9 ? "9+" : count}</span> : null}
       </button>
       {open ? (
@@ -373,10 +378,7 @@ export function AppShell({
           ))}
         </nav>
 
-        <div className="sidebar__privacy">
-          <Icon name="info" size={18} />
-          <p>{t("app.storageNotice")}</p>
-        </div>
+        <NotificationBell testIdPrefix="sidebar" onOpenEntry={onOpenEntry} />
 
         <AuthSessionCard
           session={session}
@@ -384,8 +386,6 @@ export function AppShell({
           onLogout={() => void logout()}
           t={t}
         />
-
-        <NotificationBell testIdPrefix="sidebar" onOpenEntry={onOpenEntry} />
 
         <button
           className={`sidebar__settings ${activePage === "settings" ? "is-active" : ""}`}

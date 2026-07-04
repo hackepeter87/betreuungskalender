@@ -157,6 +157,7 @@ export function App() {
           onEditEntry={openEditEntry}
           onOpenSettings={() => setActivePage("settings")}
           onOpenCalendar={() => setActivePage("calendar")}
+          onOpenEntries={() => setActivePage("entries")}
         />
       );
   }

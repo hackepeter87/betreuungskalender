@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { csvListEnv, parseTrustedProxyRules } from "./trustedProxy.js";
 
 export type AuthMode = "local" | "trusted-proxy" | "native-oidc";
 
@@ -54,6 +55,7 @@ export interface AuthModeValidationInput {
   requireAuth: boolean;
   configuredTrustProxyAuth: boolean;
   explicitAuthMode: boolean;
+  trustedProxyCidrs: string[];
   oidcIssuerUrl?: string;
   oidcClientId?: string;
   oidcRedirectUri?: string;
@@ -103,6 +105,7 @@ export function validateAuthModeConfig(input: AuthModeValidationInput): void {
       );
     }
   }
+  parseTrustedProxyRules(input.trustedProxyCidrs);
 }
 
 function packageVersion(): string {
@@ -122,6 +125,8 @@ const authMode = authModeEnv(
   process.env.AUTH_MODE,
   configuredTrustProxyAuth ? "trusted-proxy" : "local"
 );
+const trustedProxyCidrs = csvListEnv(process.env.TRUSTED_PROXY_CIDRS);
+const trustedProxyRules = parseTrustedProxyRules(trustedProxyCidrs);
 
 export const config = {
   nodeEnv: process.env.NODE_ENV ?? "development",
@@ -131,6 +136,8 @@ export const config = {
   backupDir: resolve(process.cwd(), process.env.BACKUP_DIR ?? "./backups"),
   requireAuth: booleanEnv(process.env.REQUIRE_AUTH),
   trustProxyAuth: authMode === "trusted-proxy",
+  trustedProxyCidrs,
+  trustedProxyRules,
   authMode,
   authLogoutUrl: process.env.AUTH_LOGOUT_URL?.trim() || undefined,
   oidcIssuerUrl: process.env.OIDC_ISSUER_URL?.trim() || undefined,
@@ -191,6 +198,7 @@ validateAuthModeConfig({
   requireAuth: config.requireAuth,
   configuredTrustProxyAuth,
   explicitAuthMode,
+  trustedProxyCidrs,
   oidcIssuerUrl: config.oidcIssuerUrl,
   oidcClientId: config.oidcClientId,
   oidcRedirectUri: config.oidcRedirectUri
