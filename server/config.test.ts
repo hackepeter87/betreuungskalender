@@ -11,6 +11,7 @@ function validationInput(
     requireAuth: true,
     configuredTrustProxyAuth: true,
     explicitAuthMode: false,
+    trustedProxyCidrs: [],
     ...overrides
   };
 }
@@ -79,5 +80,25 @@ test("auth mode validation keeps local evaluation explicit", () => {
     requireAuth: false,
     configuredTrustProxyAuth: false,
     explicitAuthMode: true
+  })));
+});
+
+test("auth mode validation rejects invalid trusted proxy CIDR entries", () => {
+  assert.throws(
+    () => validateAuthModeConfig(validationInput({
+      trustedProxyCidrs: ["10.0.0.0/99"]
+    })),
+    /Invalid trusted proxy CIDR prefix/
+  );
+
+  assert.throws(
+    () => validateAuthModeConfig(validationInput({
+      trustedProxyCidrs: ["not-an-address"]
+    })),
+    /Invalid trusted proxy address or CIDR/
+  );
+
+  assert.doesNotThrow(() => validateAuthModeConfig(validationInput({
+    trustedProxyCidrs: ["127.0.0.1", "10.0.0.0/24", "::1/128"]
   })));
 });

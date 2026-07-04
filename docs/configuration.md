@@ -8,8 +8,8 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `NODE_ENV` | Runtime mode and production error handling | `production` | Recommended | `development` | Production hides internal error details |
 | `HOST` | Listener address | `127.0.0.1` | Optional | `127.0.0.1` | Use loopback when a local proxy is in front |
 | `PORT` | HTTP port | `3000` | Optional | `3000` | Expose only through the intended firewall/proxy |
-| `APP_RELEASE_VERSION` | Release Compose image tag | `1.9.1` | Required for `deploy/compose.yml` | None | Must match the extracted release package version |
-| `APP_RELEASE_DIR` | Release Compose build context | `/opt/svc_betreuung/betreuungskalender/releases/v1.9.1` | Required for `deploy/compose.yml` | None | Must point at the verified extracted release directory |
+| `APP_RELEASE_VERSION` | Release Compose image tag | `1.10.0` | Required for `deploy/compose.yml` | None | Must match the extracted release package version |
+| `APP_RELEASE_DIR` | Release Compose build context | `/opt/svc_betreuung/betreuungskalender/releases/v1.10.0` | Required for `deploy/compose.yml` | None | Must point at the verified extracted release directory |
 | `APP_COMPOSE_FILE` | Compose file managed by the update tool | `compose.oidc.yml` | Required only when not using `compose.yml` | `compose.yml` | Must be `compose.yml` or `compose.oidc.yml` |
 | `OAUTH2_PROXY_IMAGE` | oauth2-proxy image used by `deploy/compose.oidc.yml` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.3` | Optional for OIDC Compose | Same | Pin and review oauth2-proxy updates like other runtime dependencies |
 | `HOST_BIND_ADDRESS` | Host address published by release Compose | `127.0.0.1` | Recommended for `deploy/compose.yml` | `127.0.0.1` | Use loopback only when the reverse proxy is on the same host |
@@ -19,6 +19,7 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `AUTH_MODE` | Authentication implementation mode | `trusted-proxy` | Optional | Derived from `TRUST_PROXY_AUTH` | Selects the only authentication implementation the API will accept |
 | `REQUIRE_AUTH` | Require a trusted identity for API routes | `true` | Recommended in production | `false` | Must be `true` for protected reverse-proxy operation |
 | `TRUST_PROXY_AUTH` | Legacy trusted-proxy switch and header-trust flag | `true` | Required with `AUTH_MODE=trusted-proxy` | `false` | Only valid for trusted-proxy auth; never enable when clients can directly reach the app |
+| `TRUSTED_PROXY_CIDRS` | Optional comma-separated trusted source IPs or CIDRs for trusted-proxy identity headers | `127.0.0.1,10.88.0.0/16` | Recommended with `AUTH_MODE=trusted-proxy` | Empty | When set, proxy identity headers are accepted only from matching socket source addresses |
 | `AUTH_LOGOUT_URL` | Optional browser logout path shown in the app shell | `/oauth2/sign_out` | Optional with external auth | None | Keep same-origin or reviewed by the operator |
 | `OIDC_ISSUER_URL` | Native OIDC issuer URL | `https://idp.example.net/realms/family` | Required for `AUTH_MODE=native-oidc` | None | Must match the provider issuer exactly |
 | `OIDC_CLIENT_ID` | Native OIDC client ID | `betreuungskalender` | Required for `AUTH_MODE=native-oidc` | None | Register the exact redirect URI with this client |
@@ -109,6 +110,7 @@ accidental direct deployment fails closed.
 AUTH_MODE=trusted-proxy
 REQUIRE_AUTH=true
 TRUST_PROXY_AUTH=true
+TRUSTED_PROXY_CIDRS=127.0.0.1,10.88.0.0/16
 ```
 
 The app accepts the first non-empty value from:
@@ -121,6 +123,22 @@ The app accepts the first non-empty value from:
 These headers are authentication assertions, not user input. Direct client
 access to the app must be blocked by binding to loopback, container networking,
 or firewall policy.
+
+`TRUSTED_PROXY_CIDRS` adds an application-side source-address check for these
+identity headers. Use the actual socket source address of the trusted proxy or
+proxy network, for example loopback for a same-host reverse proxy or the
+private Podman/Docker network used by oauth2-proxy. Values may be exact IP
+addresses or CIDR ranges. When unset, existing trusted-proxy deployments keep
+their previous network-boundary behavior; setting it is recommended for new or
+hardened deployments.
+
+`TRUSTED_PROXY_CIDRS` intentionally accepts only IP addresses and CIDR ranges,
+not DNS names or Compose service names such as `nginx` or `oauth2-proxy`. The
+application verifies the remote socket address of the incoming connection; it
+does not authenticate the proxy by container name. For a reverse proxy running
+as a container, use a fixed proxy container IP or the smallest isolated
+Podman/Docker network CIDR that contains only trusted proxy traffic. For an
+external HAProxy, use the HAProxy source IP or a narrow HAProxy subnet.
 
 When trusted identity headers are available, the app maps the stable subject
 from `OIDC_USER_ID_HEADER` to an internal `app_users` row. Display name, email,

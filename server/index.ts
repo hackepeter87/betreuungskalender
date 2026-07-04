@@ -12,6 +12,7 @@ import { cookieValue } from "./cookies.js";
 import { db } from "./db/connection.js";
 import { runMigrations } from "./db/migrate.js";
 import { sanitizeRequestUrl } from "./logging.js";
+import { isTrustedProxyAddress } from "./trustedProxy.js";
 import { auditRoutes } from "./routes/audit.js";
 import { appDataRoutes } from "./routes/appData.js";
 import { careConfirmationRoutes } from "./routes/careConfirmations.js";
@@ -74,7 +75,9 @@ const app = Fastify({
       censor: "[redacted]"
     }
   },
-  trustProxy: config.trustProxyAuth
+  trustProxy: config.trustProxyAuth && config.trustedProxyRules.length > 0
+    ? (address) => isTrustedProxyAddress(address, config.trustedProxyRules)
+    : config.trustProxyAuth
 });
 
 await app.register(helmet, {
@@ -325,6 +328,16 @@ app.get("/api/session", readLimit, async (request) => {
             loginUrl: "/auth/login",
             ...(config.demoDatasetsEnabled ? { demoDatasetsEnabled: true } : {})
           })
+    };
+  }
+  if (
+    config.trustProxyAuth &&
+    !isTrustedProxyAddress(request.raw.socket.remoteAddress, config.trustedProxyRules)
+  ) {
+    return {
+      authRequired: config.requireAuth,
+      authenticated: false,
+      ...(config.demoDatasetsEnabled ? { demoDatasetsEnabled: true } : {})
     };
   }
   return {

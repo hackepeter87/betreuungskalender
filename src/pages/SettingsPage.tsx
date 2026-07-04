@@ -123,6 +123,10 @@ function NotificationPreferencesSection() {
           {copy(locale, "notifications", "enablePush")}
         </button>
       </div>
+      <div className="notification-rules">
+        <p><strong>{copy(locale, "notifications", "whenTitle")}</strong>{copy(locale, "notifications", "whenDescription")}</p>
+        <p><strong>{copy(locale, "notifications", "editableTitle")}</strong>{copy(locale, "notifications", "editableDescription")}</p>
+      </div>
       <div className="notification-preferences-table">
         <div className="notification-preferences-row notification-preferences-row--head">
           <span>{copy(locale, "notifications", "event")}</span>

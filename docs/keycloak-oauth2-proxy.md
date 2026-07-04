@@ -102,6 +102,7 @@ OIDC_ADMIN_GROUP=/betreuungskalender/admins
 OIDC_PARENT_GROUP=/betreuungskalender/parents
 OIDC_READONLY_GROUP=/betreuungskalender/readers
 OIDC_REQUIRE_ROLE_CLAIM=false
+TRUSTED_PROXY_CIDRS=127.0.0.1,10.88.0.0/16
 ```
 
 When oauth2-proxy acts as the reverse proxy and forwards directly to the app
@@ -111,6 +112,19 @@ browser-visible response-header flows, but the app must be configured for the
 header that reaches its request. Keep
 `OIDC_GROUPS_HEADER=x-forwarded-groups` for the release Compose OIDC topology
 unless your proxy has been verified to send a different request header.
+
+Set `TRUSTED_PROXY_CIDRS` to the socket source address or private network from
+which oauth2-proxy reaches the app. In rootless Podman this is commonly the
+private Compose network range; for same-host non-container proxies it may be
+`127.0.0.1` or `::1`.
+
+Use IP addresses or CIDR ranges only. Do not put Compose service names,
+container names, or DNS names into `TRUSTED_PROXY_CIDRS`; the app checks the
+remote socket address of the incoming request. If oauth2-proxy, nginx, or
+HAProxy runs as a container, either assign a stable container IP or use the
+smallest private container-network CIDR that is dedicated to the trusted proxy
+path. If an external HAProxy forwards to the host or container network, use
+that HAProxy source IP/CIDR instead.
 
 The user ID header must contain a stable subject value that does not change
 when an email address or display name changes. The app maps that subject to an
