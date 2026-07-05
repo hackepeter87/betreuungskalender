@@ -6,6 +6,44 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-07-06
+
+### Added
+
+- Added invitation token acceptance so users can join an existing instance with
+  owner-issued invitation codes.
+- Added owner-scoped member management APIs for listing app users, assigning
+  app-managed roles, revoking invitations, and removing explicit app roles.
+- Added Settings UI for invitation creation, one-time invitation code display,
+  member role management, and invitation revocation.
+- Added optional SMTP-based invitation delivery. Owners can send an invitation
+  email when mail delivery is configured, while the one-time code remains
+  available as a manual fallback.
+
+### Security
+
+- Invitation tokens are stored hashed, expire, are single-use, and are only
+  revealed once at creation time.
+- Invitation and member-management actions are owner/admin scoped and audited.
+- Invitation email delivery returns generic failure states and does not expose
+  SMTP credentials or invitation tokens through server logs.
+
+### Changed
+
+- Documented the invitation public base URL and SMTP configuration in
+  deployment and security documentation.
+- Kept OIDC group-derived roles as compatibility fallback while app-managed
+  memberships become the preferred access-control model for shared instances.
+
+### Testing
+
+- Added backend coverage for invitation acceptance, member role assignment,
+  member removal safeguards, invitation revocation, and SMTP delivery success
+  and failure handling.
+- Added E2E coverage for Settings-based invitation and member workflows.
+- Re-ran lint, unit, build, E2E, runtime-security, and release checks across
+  the merged v1.12.0 changes.
+
 ## [1.11.0] - 2026-07-05
 
 ### Added
