@@ -77,6 +77,12 @@ token is returned once at creation time and is never persisted. Invitations
 carry the target app role, an optional email hint, expiry, acceptance and
 revocation timestamps, and the accepted app user ID once claimed.
 
+Member administration uses `settings.setup.ownerUserId` when present. The
+explicit owner can list members, manage invitation records, and update app
+membership roles. Existing installations without an explicit owner retain an
+admin fallback so they can transition into the app-owned membership model
+without being locked out.
+
 `audit_log` stores timestamp, stable API user ID, entity type and ID, action,
 field name, old/new serialized values, and optional metadata. Audit API
 responses join the current `app_users.display_name` for readability while

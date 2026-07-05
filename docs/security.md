@@ -165,6 +165,11 @@ roles for known app users. Without an active membership, trusted-proxy and
 native OIDC deployments keep using the configured group mapping as the
 compatibility fallback.
 
+Member administration is owner-scoped. Once `setup.ownerUserId` exists, only
+that app user can create or revoke invitations and change application
+membership roles. Existing installations without an explicit owner keep an
+admin fallback so upgrades remain operable until ownership is set.
+
 Application invitations use one-time bearer tokens. The server stores only a
 SHA-256 token hash, expiry, revocation status, target role, and acceptance
 metadata. Treat raw invitation URLs like passwords: they are shown only at
