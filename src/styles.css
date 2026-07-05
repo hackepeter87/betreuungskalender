@@ -2434,6 +2434,44 @@ button.metric-card {
   gap: 10px;
 }
 
+.toggle-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.toggle-card--compact {
+  min-height: 0;
+}
+
+.toggle-card input {
+  width: 20px;
+  height: 20px;
+}
+
+.toggle-card span {
+  min-width: 0;
+}
+
+.toggle-card strong,
+.toggle-card small {
+  display: block;
+}
+
+.toggle-card small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
 .member-token-card textarea {
   min-width: 0;
   min-height: 74px;

@@ -127,6 +127,7 @@ const authMode = authModeEnv(
 );
 const trustedProxyCidrs = csvListEnv(process.env.TRUSTED_PROXY_CIDRS);
 const trustedProxyRules = parseTrustedProxyRules(trustedProxyCidrs);
+const allowedOrigin = process.env.ALLOWED_ORIGIN ?? "http://localhost:5173";
 
 export const config = {
   nodeEnv: process.env.NODE_ENV ?? "development",
@@ -170,7 +171,15 @@ export const config = {
   oidcParentGroup: textEnv(process.env.OIDC_PARENT_GROUP, "/betreuungskalender/parents"),
   oidcReadonlyGroup: textEnv(process.env.OIDC_READONLY_GROUP, "/betreuungskalender/readers"),
   oidcRequireRoleClaim: booleanEnv(process.env.OIDC_REQUIRE_ROLE_CLAIM, authMode === "native-oidc"),
-  allowedOrigin: process.env.ALLOWED_ORIGIN ?? "http://localhost:5173",
+  allowedOrigin,
+  invitationPublicBaseUrl: textEnv(process.env.INVITATION_PUBLIC_BASE_URL, allowedOrigin),
+  invitationEmailEnabled: booleanEnv(process.env.INVITATION_EMAIL_ENABLED),
+  smtpHost: process.env.SMTP_HOST?.trim() || undefined,
+  smtpPort: positiveNumberEnv(process.env.SMTP_PORT, 587),
+  smtpSecure: booleanEnv(process.env.SMTP_SECURE),
+  smtpUser: process.env.SMTP_USER?.trim() || undefined,
+  smtpPassword: process.env.SMTP_PASSWORD?.trim() || undefined,
+  smtpFrom: process.env.SMTP_FROM?.trim() || undefined,
   logLevel: process.env.LOG_LEVEL ?? (
     process.env.NODE_ENV === "production" ? "info" : "debug"
   ),

@@ -325,7 +325,13 @@ test("manages member invitations from settings", async ({ page }) => {
           updatedAt: now
         };
         invitations = [invitation, ...invitations];
-        return json({ invitation, token: "invite_e2e_created_token" }, 201);
+        return json({
+          invitation,
+          token: "invite_e2e_created_token",
+          emailDelivery: body.sendEmail
+            ? { status: "sent" }
+            : { status: "not_requested" }
+        }, 201);
       }
       if (pathname === "/api/invitations/accept" && method === "POST") {
         return json({ ...invitations[0], acceptedAt: now, acceptedUserId: "user-owner-e2e" });
@@ -380,7 +386,9 @@ test("manages member invitations from settings", async ({ page }) => {
   await manager.getByTestId("invitation-email-hint").fill("new-user@example.invalid");
   await manager.getByTestId("invitation-role").selectOption("readonly");
   await manager.getByTestId("invitation-expires-days").fill("14");
+  await manager.getByTestId("invitation-send-email").check();
   await manager.getByRole("button", { name: "Einladung erstellen" }).click();
+  await expect(manager).toContainText("Einladung wurde erstellt und per E-Mail versendet.");
   await expect(manager.getByTestId("invitation-created-token")).toHaveValue("invite_e2e_created_token");
   await expect(manager.getByTestId("invitation-list")).toContainText("new-user@example.invalid");
 

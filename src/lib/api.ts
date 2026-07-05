@@ -665,7 +665,7 @@ export const api = {
   listInvitations() {
     return request<ApiInvitation[]>("/api/invitations");
   },
-  createInvitation(input: { role: ApiAuthRole; expiresAt: string; emailHint?: string }) {
+  createInvitation(input: { role: ApiAuthRole; expiresAt: string; emailHint?: string; sendEmail?: boolean }) {
     return request<ApiCreatedInvitation>("/api/invitations", {
       method: "POST",
       body: JSON.stringify(input)

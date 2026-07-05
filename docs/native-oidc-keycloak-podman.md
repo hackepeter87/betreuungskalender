@@ -112,6 +112,14 @@ WEB_PUSH_SUBJECT=mailto:admin@example.invalid
 WEB_PUSH_PUBLIC_KEY=
 WEB_PUSH_PRIVATE_KEY=
 WEB_PUSH_ALLOWED_ENDPOINT_HOSTS=fcm.googleapis.com,updates.push.services.mozilla.com,web.push.apple.com,webpush.push.apple.com
+INVITATION_EMAIL_ENABLED=false
+INVITATION_PUBLIC_BASE_URL=https://app.example.net
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM=
 ALLOWED_ORIGIN=https://app.example.net
 LOG_LEVEL=info
 ```
@@ -129,6 +137,11 @@ only. If Push is enabled, generate VAPID keys outside the repository and keep
 the private key in the private `.env` or secret store. Keep the allowed
 endpoint hosts restricted to browser push services so users cannot make the
 server send outbound requests to arbitrary internal URLs.
+
+Invitation email delivery is optional. Leave `INVITATION_EMAIL_ENABLED=false`
+unless a reviewed SMTP relay is configured. If enabled, keep `SMTP_PASSWORD`
+only in private deployment state and set `INVITATION_PUBLIC_BASE_URL` to the
+public HTTPS app origin; invitation links contain one-time bearer tokens.
 
 Do not set `TRUST_PROXY_AUTH=true` in native mode. The application rejects that
 combination because native OIDC must not accept forged proxy identity headers
