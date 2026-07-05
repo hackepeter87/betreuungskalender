@@ -456,7 +456,8 @@ test("native OIDC callback rejects claims without a configured role group", asyn
     },
     sessions: new OidcSessionStore(database),
     upsertUser: (user) => upsertAuthenticatedUser(user, new Date().toISOString(), database),
-    applyMembershipRole: (candidate) => ({ user: candidate })
+    applyMembershipRole: (candidate) => ({ user: candidate }),
+    isSetupRequired: () => false
   });
 
   try {
@@ -535,6 +536,65 @@ test("native OIDC callback accepts users with app membership without role groups
     const sessionToken = setCookie.split(";")[0]?.split("=")[1];
     assert.equal(Boolean(sessionToken), true);
     assert.equal(sessions.findByToken(sessionToken)?.externalSubject, "subject-member");
+  } finally {
+    await app.close();
+    cleanup();
+  }
+});
+
+test("native OIDC callback allows provisional setup sessions without role groups", async () => {
+  const { database, cleanup } = testDatabase();
+  const app = Fastify({ logger: false });
+  const sessions = new OidcSessionStore(database);
+  await app.register(nativeOidcRoutes, {
+    config: {
+      authMode: "native-oidc",
+      nodeEnv: "production",
+      oidcIssuerUrl: "https://idp.example.test/realms/demo",
+      oidcClientId: "betreuungskalender",
+      oidcClientSecret: "test-secret",
+      oidcRedirectUri: "https://bk.example.test/auth/callback",
+      oidcPostLogoutRedirectUri: "https://bk.example.test/",
+      oidcScopes: "openid email profile",
+      oidcGroupsClaim: "groups",
+      oidcLoginStateTtlSeconds: 600,
+      oidcAdminGroup: "/betreuungskalender/admins",
+      oidcParentGroup: "/betreuungskalender/parents",
+      oidcReadonlyGroup: "/betreuungskalender/readers",
+      oidcRequireRoleClaim: true,
+      sessionCookieName: "betreuungskalender_session",
+      sessionTtlSeconds: 3600,
+      rateLimitSensitiveMax: 5,
+      rateLimitWindowMs: 60_000
+    },
+    service: {
+      createLoginRedirect: async () => new URL("https://idp.example.test/auth?state=state-123"),
+      createLogoutRedirect: async () => new URL("https://idp.example.test/logout"),
+      validateCallback: async () => ({
+        subject: "subject-setup",
+        email: "setup@example.net",
+        displayName: "Setup User",
+        groups: ["/other"]
+      })
+    },
+    sessions,
+    upsertUser: (user) => upsertAuthenticatedUser(user, new Date().toISOString(), database),
+    applyMembershipRole: (candidate) => ({ user: candidate }),
+    isSetupRequired: () => true
+  });
+
+  try {
+    const callback = await app.inject({
+      method: "GET",
+      url: "/auth/callback?code=code-123&state=state-123"
+    });
+
+    assert.equal(callback.statusCode, 302);
+    assert.equal(callback.headers.location, "/");
+    const setCookie = String(callback.headers["set-cookie"]);
+    const sessionToken = setCookie.split(";")[0]?.split("=")[1];
+    assert.equal(Boolean(sessionToken), true);
+    assert.equal(sessions.findByToken(sessionToken)?.externalSubject, "subject-setup");
   } finally {
     await app.close();
     cleanup();

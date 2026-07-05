@@ -223,6 +223,17 @@ export interface ApiSetupState {
   required: boolean;
 }
 
+export interface ApiSetupOwnerBootstrap {
+  setup: ApiSetupState;
+  completedAt: string;
+  owner: {
+    id: string;
+    displayName: string;
+    role: "admin";
+    email?: string;
+  };
+}
+
 export interface ApiPushSubscriptionInput {
   endpoint: string;
   keys: {

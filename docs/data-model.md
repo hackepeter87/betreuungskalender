@@ -93,9 +93,10 @@ request user and role.
 
 First-use setup state is stored as small JSON settings rather than a separate
 table. Fresh installations are detected from server-side domain data. Later
-setup flows can persist `setup.completedAt` and `setup.completedBy` in
-`settings`; `/api/session` exposes only the minimal `complete`/`required`
-state, while detailed counts remain admin-only instance-readiness information.
+setup flows can persist `setup.completedAt`, `setup.completedBy`, and
+`setup.ownerUserId` in `settings`; `/api/session` exposes only the minimal
+`complete`/`required` state, while detailed counts remain admin-only
+instance-readiness information.
 
 ## Care parties
 

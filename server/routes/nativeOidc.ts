@@ -12,6 +12,7 @@ import {
   type MembershipResolution
 } from "../services/memberships.js";
 import { OidcSessionStore } from "../services/oidcSessions.js";
+import { buildSetupState } from "../services/setupState.js";
 import { upsertAuthenticatedUser } from "../services/users.js";
 
 type NativeOidcRouteConfig = Pick<
@@ -45,6 +46,7 @@ interface NativeOidcRoutesOptions {
   sessions?: OidcSessionStore;
   upsertUser?: (user: RequestUser) => void;
   applyMembershipRole?: (user: RequestUser) => MembershipResolution;
+  isSetupRequired?: () => boolean;
 }
 
 function notFound(reply: FastifyReply) {
@@ -91,6 +93,7 @@ export async function nativeOidcRoutes(
   const sessions = options.sessions ?? new OidcSessionStore();
   const upsertUser = options.upsertUser ?? upsertAuthenticatedUser;
   const resolveMembership = options.applyMembershipRole ?? applyMembershipRole;
+  const isSetupRequired = options.isSetupRequired ?? (() => buildSetupState().required);
 
   const providerLogoutUrl = async (
     log: FastifyInstance["log"]
@@ -141,7 +144,7 @@ export async function nativeOidcRoutes(
       }
       upsertUser(auth.user);
       const membership = resolveMembership(auth.user);
-      if (auth.reason === "missing_role" && !membership.membershipRole) {
+      if (auth.reason === "missing_role" && !membership.membershipRole && !isSetupRequired()) {
         throw new NativeOidcError(
           "authorization_required",
           403,

@@ -11,6 +11,7 @@ import type {
   ApiContactRule,
   ApiLogout,
   ApiSession,
+  ApiSetupOwnerBootstrap,
   ApiUserCarePartyAssignment,
   ApiMonthlyClosing,
   ApiUnavailablePeriod,
@@ -647,6 +648,12 @@ export const api = {
   },
   getInstanceReadiness() {
     return request<ApiInstanceReadiness>("/api/instance-readiness");
+  },
+  bootstrapInstallationOwner() {
+    return request<ApiSetupOwnerBootstrap>("/api/setup/owner-bootstrap", {
+      method: "POST",
+      body: JSON.stringify({ confirm: true })
+    });
   },
   updateUserCarePartyAssignment(userId: string, carePartyIds: string[]) {
     return request<ApiUserCarePartyAssignment>(

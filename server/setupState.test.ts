@@ -4,7 +4,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
 import Database from "better-sqlite3";
+import { permissionsForRole, type RequestUser } from "./auth.js";
 import { migrateDatabase } from "./db/migrationRunner.js";
+import { membershipRoleForUser } from "./services/memberships.js";
+import { bootstrapInstallationOwner, SetupBootstrapError } from "./services/setupBootstrap.js";
 import { buildSetupState, publicSetupState } from "./services/setupState.js";
 
 const migrationsDirectory = resolve(process.cwd(), "server/migrations");
@@ -66,6 +69,17 @@ function insertSetting(database: Database.Database, key: string, value: unknown)
   `).run(key, JSON.stringify(value), "tester", "tester", timestamp, timestamp);
 }
 
+function setupUser(): RequestUser {
+  return {
+    id: "local-dev",
+    externalSubject: "local-dev",
+    displayName: "local-dev",
+    groups: [],
+    role: "readonly",
+    permissions: permissionsForRole("readonly")
+  };
+}
+
 test("detects a fresh installation without browser state", () => {
   withDatabase((database) => {
     const setup = buildSetupState(database);
@@ -115,5 +129,59 @@ test("supports explicit setup completion metadata for later owner bootstrap", ()
     assert.equal(setup.completedBy, "user_owner");
     assert.equal(setup.counts.children, 0);
     assert.equal(setup.counts.careParties, 0);
+  });
+});
+
+test("bootstraps the first owner and records explicit setup completion", () => {
+  withDatabase((database) => {
+    const result = bootstrapInstallationOwner(
+      setupUser(),
+      "2026-07-05T12:00:00.000Z",
+      database
+    );
+    const settings = database.prepare(`
+      SELECT key, value_json AS valueJson
+      FROM settings
+      WHERE key IN ('setup.ownerUserId', 'setup.completedAt', 'setup.completedBy')
+      ORDER BY key
+    `).all() as Array<{ key: string; valueJson: string }>;
+    const auditRows = database.prepare(`
+      SELECT field_name AS fieldName
+      FROM audit_log
+      WHERE entity_type = 'setup'
+      ORDER BY id
+    `).all() as Array<{ fieldName: string }>;
+
+    assert.deepEqual(result.setup, {
+      complete: true,
+      required: false
+    });
+    assert.equal(result.owner.id, "local-dev");
+    assert.equal(result.owner.role, "admin");
+    assert.equal(membershipRoleForUser("local-dev", database), "admin");
+    assert.deepEqual(settings.map((row) => [row.key, JSON.parse(row.valueJson)]), [
+      ["setup.completedAt", "2026-07-05T12:00:00.000Z"],
+      ["setup.completedBy", "local-dev"],
+      ["setup.ownerUserId", "local-dev"]
+    ]);
+    assert.deepEqual(auditRows.map((row) => row.fieldName), [
+      "owner_bootstrap",
+      "setup_completed"
+    ]);
+  });
+});
+
+test("does not allow silent owner takeover after setup completion", () => {
+  withDatabase((database) => {
+    insertSetting(database, "setup.completedAt", "2026-07-05T11:00:00.000Z");
+
+    assert.throws(
+      () => bootstrapInstallationOwner(setupUser(), timestamp, database),
+      (error) =>
+        error instanceof SetupBootstrapError &&
+        error.code === "setup_already_complete" &&
+        error.statusCode === 409
+    );
+    assert.equal(membershipRoleForUser("local-dev", database), undefined);
   });
 });
