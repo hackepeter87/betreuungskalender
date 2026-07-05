@@ -10,6 +10,7 @@ import {
   canAdministerMembers,
   listMembers,
   MemberManagementError,
+  removeMember,
   updateMemberRole
 } from "./services/memberManagement.js";
 import { membershipRoleForUser } from "./services/memberships.js";
@@ -169,5 +170,54 @@ test("member listing exposes claim and effective roles without tokens", () => {
     assert.equal(listed?.membershipRole, "parent");
     assert.equal(listed?.effectiveRole, "parent");
     assert.equal("token" in (listed ?? {}), false);
+  });
+});
+
+test("owner can remove another member app role without deleting the user", () => {
+  withDatabase((database) => {
+    const owner = user("user_owner", "admin");
+    const target = user("user_target", "readonly");
+    insertUser(database, owner);
+    insertUser(database, target);
+    setOwner(database, owner.id);
+    updateMemberRole(owner, target.id, "parent", timestamp, database);
+
+    const updated = removeMember(owner, target.id, "2026-07-05T12:00:00.000Z", database);
+
+    assert.equal(updated.id, target.id);
+    assert.equal(updated.membershipRole, undefined);
+    assert.equal(updated.effectiveRole, "readonly");
+    assert.equal(membershipRoleForUser(target.id, database), undefined);
+    const remainingUser = database.prepare(
+      "SELECT COUNT(*) AS count FROM app_users WHERE id = ?"
+    ).get(target.id) as { count: number };
+    assert.equal(remainingUser.count, 1);
+    assert.deepEqual(database.prepare(`
+      SELECT field_name AS fieldName, old_value AS oldValue, new_value AS newValue
+      FROM audit_log
+      WHERE entity_type = 'app_member'
+      ORDER BY timestamp DESC
+      LIMIT 1
+    `).get(), {
+      fieldName: "membershipRole",
+      oldValue: "\"parent\"",
+      newValue: "null"
+    });
+  });
+});
+
+test("users cannot remove their own membership through member management", () => {
+  withDatabase((database) => {
+    const owner = user("user_owner", "admin");
+    insertUser(database, owner);
+    setOwner(database, owner.id);
+
+    assert.throws(
+      () => removeMember(owner, owner.id, timestamp, database),
+      (error) =>
+        error instanceof MemberManagementError &&
+        error.code === "self_remove_rejected" &&
+        error.statusCode === 400
+    );
   });
 });

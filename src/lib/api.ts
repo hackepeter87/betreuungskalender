@@ -3,6 +3,7 @@ import type {
   ApiAppUser,
   ApiCalendarFeedStatus,
   ApiCalendarFeedScope,
+  ApiCreatedInvitation,
   ApiCareConfirmationAnswer,
   ApiCareConfirmationRequest,
   ApiCareEntry,
@@ -19,10 +20,13 @@ import type {
   ApiExternalCalendarBackupEvent,
   ApiExternalCalendarSource,
   ApiExternalCalendarHolidayDeriveResult,
+  ApiInvitation,
   ApiInstanceReadiness,
+  ApiMember,
   ApiNotificationPreferencesResponse,
   ApiNotificationPreference,
   ApiPushSubscriptionInput,
+  ApiAuthRole,
   CareScope
 } from "../../shared/api";
 import type {
@@ -642,6 +646,42 @@ export const api = {
   },
   listAppUsers() {
     return request<ApiAppUser[]>("/api/app-users");
+  },
+  listMembers() {
+    return request<ApiMember[]>("/api/members");
+  },
+  updateMemberRole(userId: string, role: ApiAuthRole) {
+    return request<ApiMember>(
+      `/api/members/${encodeURIComponent(userId)}/role`,
+      { method: "PUT", body: JSON.stringify({ role }) }
+    );
+  },
+  removeMember(userId: string) {
+    return request<ApiMember>(
+      `/api/members/${encodeURIComponent(userId)}`,
+      { method: "DELETE" }
+    );
+  },
+  listInvitations() {
+    return request<ApiInvitation[]>("/api/invitations");
+  },
+  createInvitation(input: { role: ApiAuthRole; expiresAt: string; emailHint?: string }) {
+    return request<ApiCreatedInvitation>("/api/invitations", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
+  },
+  revokeInvitation(id: string) {
+    return request<ApiInvitation>(
+      `/api/invitations/${encodeURIComponent(id)}`,
+      { method: "DELETE" }
+    );
+  },
+  acceptInvitation(token: string) {
+    return request<ApiInvitation>("/api/invitations/accept", {
+      method: "POST",
+      body: JSON.stringify({ token })
+    });
   },
   listUserCarePartyAssignments() {
     return request<ApiUserCarePartyAssignment[]>("/api/user-care-party-assignments");

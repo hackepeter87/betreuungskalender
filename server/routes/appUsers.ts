@@ -9,6 +9,7 @@ import {
   assertCanAdministerMembers,
   listMembers,
   MemberManagementError,
+  removeMember,
   updateMemberRole
 } from "../services/memberManagement.js";
 import { listAppUsers } from "../services/users.js";
@@ -75,6 +76,24 @@ export async function appUserRoutes(app: FastifyInstance): Promise<void> {
     }
     try {
       return updateMemberRole(request.user, request.params.userId, parsed.data.role);
+    } catch (error) {
+      const normalized = normalizeMemberError(error);
+      return reply.code(normalized.statusCode).send({
+        error: normalized.error,
+        message: normalized.message
+      });
+    }
+  });
+
+  app.delete<{ Params: { userId: string } }>("/api/members/:userId", writeLimit, async (request, reply) => {
+    if (!request.user) {
+      return reply.code(401).send({
+        error: "authentication_required",
+        message: "Authentifizierung erforderlich."
+      });
+    }
+    try {
+      return removeMember(request.user, request.params.userId);
     } catch (error) {
       const normalized = normalizeMemberError(error);
       return reply.code(normalized.statusCode).send({

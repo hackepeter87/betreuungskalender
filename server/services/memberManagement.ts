@@ -1,7 +1,7 @@
 import type Database from "better-sqlite3";
 import type { AuthRole, RequestUser } from "../auth.js";
 import { db } from "../db/connection.js";
-import { setMembershipRole } from "./memberships.js";
+import { clearMembershipRole, setMembershipRole } from "./memberships.js";
 
 export interface AppMember {
   id: string;
@@ -28,6 +28,7 @@ export class MemberManagementError extends Error {
     public readonly code:
       | "member_admin_required"
       | "self_role_change_rejected"
+      | "self_remove_rejected"
       | "unknown_user",
     public readonly statusCode: number,
     message: string
@@ -176,6 +177,51 @@ export function updateMemberRole(
       "membershipRole",
       before.membershipRole,
       role,
+      timestamp
+    );
+    const after = memberById(targetUserId, database);
+    if (!after) {
+      throw new MemberManagementError(
+        "unknown_user",
+        404,
+        "Mitglied nicht gefunden."
+      );
+    }
+    return after;
+  })();
+}
+
+export function removeMember(
+  actor: RequestUser,
+  targetUserId: string,
+  timestamp = new Date().toISOString(),
+  database: Database.Database = db
+): AppMember {
+  return database.transaction(() => {
+    assertCanAdministerMembers(actor, database);
+    if (actor.id === targetUserId) {
+      throw new MemberManagementError(
+        "self_remove_rejected",
+        400,
+        "Die eigene Mitgliedschaft kann nicht über die Mitgliederverwaltung entfernt werden."
+      );
+    }
+    const before = memberById(targetUserId, database);
+    if (!before) {
+      throw new MemberManagementError(
+        "unknown_user",
+        404,
+        "Mitglied nicht gefunden."
+      );
+    }
+    const removedRole = clearMembershipRole(targetUserId, actor.id, timestamp, database);
+    recordMemberAudit(
+      database,
+      actor.id,
+      targetUserId,
+      "membershipRole",
+      removedRole ?? before.membershipRole,
+      null,
       timestamp
     );
     const after = memberById(targetUserId, database);

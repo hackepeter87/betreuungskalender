@@ -220,6 +220,185 @@ test("shows admin instance readiness information in settings", async ({ page }) 
   await expectNoDocumentHorizontalOverflow(page);
 });
 
+test("manages member invitations from settings", async ({ page }) => {
+  page.on("dialog", (dialog) => void dialog.accept());
+  await page.addInitScript(() => {
+    type Member = {
+      id: string;
+      displayName: string;
+      claimRole: "admin" | "parent" | "readonly";
+      effectiveRole: "admin" | "parent" | "readonly";
+      owner: boolean;
+      membershipRole?: "admin" | "parent" | "readonly";
+      email?: string;
+      lastSeenAt?: string;
+    };
+    type Invitation = {
+      id: string;
+      role: "admin" | "parent" | "readonly";
+      expiresAt: string;
+      createdAt: string;
+      updatedAt: string;
+      emailHint?: string;
+      revokedAt?: string;
+    };
+    const now = "2026-07-05T10:00:00.000Z";
+    let members: Member[] = [
+      {
+        id: "user-owner-e2e",
+        displayName: "Owner E2E",
+        email: "owner@example.invalid",
+        claimRole: "admin",
+        effectiveRole: "admin",
+        owner: true,
+        lastSeenAt: now
+      },
+      {
+        id: "user-member-e2e",
+        displayName: "Member E2E",
+        email: "member@example.invalid",
+        claimRole: "readonly",
+        effectiveRole: "parent",
+        owner: false,
+        membershipRole: "parent",
+        lastSeenAt: now
+      }
+    ];
+    let invitations: Invitation[] = [
+      {
+        id: "invitation-existing-e2e",
+        role: "readonly",
+        emailHint: "readonly@example.invalid",
+        expiresAt: "2026-07-20T10:00:00.000Z",
+        createdAt: now,
+        updatedAt: now
+      }
+    ];
+    const json = (body: unknown, status = 200) =>
+      Promise.resolve(new Response(JSON.stringify(body), {
+        status,
+        headers: { "content-type": "application/json" }
+      }));
+    const readBody = (init?: RequestInit) => {
+      if (typeof init?.body !== "string") return {};
+      try {
+        return JSON.parse(init.body) as Record<string, unknown>;
+      } catch {
+        return {};
+      }
+    };
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+      const pathname = new URL(url, window.location.href).pathname;
+      if (pathname === "/api/session") {
+        return json({
+          authRequired: true,
+          authenticated: true,
+          user: {
+            id: "user-owner-e2e",
+            displayName: "Owner E2E",
+            role: "admin",
+            email: "owner@example.invalid"
+          }
+        });
+      }
+      if (pathname === "/api/members" && method === "GET") {
+        return json(members);
+      }
+      if (pathname === "/api/invitations" && method === "GET") {
+        return json(invitations);
+      }
+      if (pathname === "/api/invitations" && method === "POST") {
+        const body = readBody(init);
+        const invitation: Invitation = {
+          id: "invitation-created-e2e",
+          role: body.role === "admin" || body.role === "readonly" ? body.role : "parent",
+          emailHint: typeof body.emailHint === "string" ? body.emailHint : undefined,
+          expiresAt: typeof body.expiresAt === "string" ? body.expiresAt : "2026-07-12T10:00:00.000Z",
+          createdAt: now,
+          updatedAt: now
+        };
+        invitations = [invitation, ...invitations];
+        return json({ invitation, token: "invite_e2e_created_token" }, 201);
+      }
+      if (pathname === "/api/invitations/accept" && method === "POST") {
+        return json({ ...invitations[0], acceptedAt: now, acceptedUserId: "user-owner-e2e" });
+      }
+      if (pathname === "/api/invitations/invitation-existing-e2e" && method === "DELETE") {
+        invitations = invitations.map((invitation) =>
+          invitation.id === "invitation-existing-e2e"
+            ? { ...invitation, revokedAt: now, updatedAt: now }
+            : invitation
+        );
+        return json(invitations.find((invitation) => invitation.id === "invitation-existing-e2e"));
+      }
+      if (pathname === "/api/members/user-member-e2e/role" && method === "PUT") {
+        const body = readBody(init);
+        members = members.map((member) =>
+          member.id === "user-member-e2e"
+            ? {
+                ...member,
+                effectiveRole: body.role === "admin" || body.role === "readonly" ? body.role : "parent",
+                membershipRole: body.role === "admin" || body.role === "readonly" ? body.role : "parent"
+              }
+            : member
+        );
+        return json(members.find((member) => member.id === "user-member-e2e"));
+      }
+      if (pathname === "/api/members/user-member-e2e" && method === "DELETE") {
+        members = members.map((member) =>
+          member.id === "user-member-e2e"
+            ? {
+                ...member,
+                effectiveRole: member.claimRole,
+                membershipRole: undefined
+              }
+            : member
+        );
+        return json(members.find((member) => member.id === "user-member-e2e"));
+      }
+      return originalFetch(input, init);
+    };
+  });
+
+  await openApp(page);
+  await navigate(page, "settings");
+
+  const manager = page.getByTestId("member-invitations");
+  await expect(manager).toBeVisible();
+  await expect(manager).toContainText("Member E2E");
+  await manager.getByTestId("invitation-accept-token").fill("invite_e2e_existing_token");
+  await manager.getByRole("button", { name: "Einladung annehmen" }).click();
+  await expect(manager).toContainText("Einladung wurde angenommen.");
+
+  await manager.getByTestId("invitation-email-hint").fill("new-user@example.invalid");
+  await manager.getByTestId("invitation-role").selectOption("readonly");
+  await manager.getByTestId("invitation-expires-days").fill("14");
+  await manager.getByRole("button", { name: "Einladung erstellen" }).click();
+  await expect(manager.getByTestId("invitation-created-token")).toHaveValue("invite_e2e_created_token");
+  await expect(manager.getByTestId("invitation-list")).toContainText("new-user@example.invalid");
+
+  const memberRow = manager.getByTestId("member-row-user-member-e2e");
+  await memberRow.getByTestId("member-role-select").selectOption("readonly");
+  await expect(manager).toContainText("Rolle wurde aktualisiert.");
+  await expect(memberRow).toContainText("Nur lesen");
+
+  await memberRow.getByTestId("member-remove-role").click();
+  await expect(manager).toContainText("App-Rolle wurde entfernt.");
+  await expect(memberRow).toContainText("Externe Rolle");
+
+  await manager.getByTestId("invitation-row-invitation-existing-e2e").getByTestId("invitation-revoke").click();
+  await expect(manager).toContainText("Einladung wurde widerrufen.");
+  await expect(manager.getByTestId("invitation-row-invitation-existing-e2e")).toContainText("Widerrufen");
+  await expectNoDocumentHorizontalOverflow(page);
+});
+
 test("shows open care confirmations in the notification center", async ({ page }) => {
   const end = new Date(Date.now() - 86_400_000);
   end.setHours(18, 0, 0, 0);
