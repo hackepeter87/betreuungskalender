@@ -243,6 +243,60 @@ test("native OIDC API authentication enforces readonly permissions", async () =>
   );
 });
 
+test("instance readiness requires an admin session", async () => {
+  const parentHook = createApiAuthHook(authConfig(), undefined, {
+    nativeSessions: {
+      findByToken: () => ({
+        id: "session-parent",
+        externalSubject: "subject-parent",
+        createdAt: "2026-07-01T00:00:00.000Z",
+        expiresAt: "2026-07-02T00:00:00.000Z"
+      })
+    },
+    findUserByExternalSubject: () => user("parent")
+  });
+
+  await assert.rejects(
+    () => parentHook.call(
+      {} as never,
+      {
+        method: "GET",
+        url: "/api/instance-readiness",
+        headers: { cookie: "betreuungskalender_session=valid" }
+      } as never,
+      {} as never
+    ),
+    (error) => {
+      const normalized = error as Error & { code?: string; statusCode?: number };
+      assert.equal(normalized.code, "forbidden");
+      assert.equal(normalized.statusCode, 403);
+      return true;
+    }
+  );
+
+  const adminHook = createApiAuthHook(authConfig(), undefined, {
+    nativeSessions: {
+      findByToken: () => ({
+        id: "session-admin",
+        externalSubject: "subject-admin",
+        createdAt: "2026-07-01T00:00:00.000Z",
+        expiresAt: "2026-07-02T00:00:00.000Z"
+      })
+    },
+    findUserByExternalSubject: () => user("admin")
+  });
+
+  await assert.doesNotReject(() => adminHook.call(
+    {} as never,
+    {
+      method: "GET",
+      url: "/api/instance-readiness",
+      headers: { cookie: "betreuungskalender_session=valid" }
+    } as never,
+    {} as never
+  ));
+});
+
 test("native OIDC API authentication rejects missing sessions", async () => {
   const hook = createApiAuthHook(authConfig(), undefined, {
     nativeSessions: {

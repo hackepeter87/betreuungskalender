@@ -1988,6 +1988,61 @@ button.metric-card {
   padding: 0 18px;
 }
 
+.instance-readiness-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 12px;
+  padding: 18px;
+}
+
+.readiness-item {
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.readiness-item--wide {
+  grid-column: span 2;
+}
+
+.readiness-item small,
+.readiness-item strong,
+.readiness-item span {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.readiness-item small {
+  color: var(--muted);
+  font-size: 0.62rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.readiness-item strong {
+  margin-top: 4px;
+  color: var(--ink);
+  font-size: 0.82rem;
+}
+
+.readiness-item span {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.67rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.readiness-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 8px;
+}
+
 .notification-preferences-table {
   display: grid;
   border-top: 1px solid var(--line);
@@ -6416,6 +6471,16 @@ button.metric-card {
 .settings-form-grid select {
   width: 100%;
   min-width: 0;
+}
+
+@media (max-width: 720px) {
+  .instance-readiness-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .readiness-item--wide {
+    grid-column: auto;
+  }
 }
 
 .list-toolbar {

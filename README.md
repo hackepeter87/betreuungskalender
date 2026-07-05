@@ -253,6 +253,12 @@ npm run healthcheck
 Health output includes status, application version, database reachability, and
 timestamp. It does not expose database paths or secrets.
 
+Admins can also review non-sensitive instance information in the settings UI.
+That view shows the app version, auth mode, migration status, setup counts, and
+abstract feature flags. It is intentionally not exposed through the public
+health endpoints and does not include paths, provider URLs, client IDs, keys, or
+secrets.
+
 ## Backup and restore
 
 Create and verify an online-safe SQLite backup:

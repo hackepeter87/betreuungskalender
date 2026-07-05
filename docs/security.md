@@ -151,7 +151,7 @@ as the security boundary.
 | `/api/health`, `/api/ready`, `/api/session` | Allowed for health or session discovery | Allowed | Allowed | Allowed |
 | Protected domain reads, such as children, entries, care parties, rules, holidays, reports, and settings reads | `401` | Allowed | Allowed | Allowed |
 | Normal domain writes, such as children, entries, care parties, rules, holidays, unavailability, settings writes, and confirmation actions | `401` | `403` | Allowed | Allowed |
-| Administrative app-data operations, legacy migration endpoints, app-user administration, care-party assignments, and demo-data loading | `401` | `403` | `403` | Allowed |
+| Administrative app-data operations, legacy migration endpoints, app-user administration, care-party assignments, instance readiness details, and demo-data loading | `401` | `403` | `403` | Allowed |
 | Calendar feed token endpoint | Token scoped to the feed only | Token scoped to the feed only | Token scoped to the feed only | Token scoped to the feed only |
 
 `readonly` users are intended for review-only access. `parent` users can manage
