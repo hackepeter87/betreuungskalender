@@ -12,6 +12,11 @@ import {
   InvitationError,
   revokeInvitation
 } from "./services/invitations.js";
+import {
+  InvitationEmailError,
+  sendInvitationEmail,
+  type InvitationEmailConfig
+} from "./services/invitationEmail.js";
 import { membershipRoleForUser } from "./services/memberships.js";
 
 const migrationsDirectory = resolve(process.cwd(), "server/migrations");
@@ -189,4 +194,89 @@ test("accepted invitations cannot be reused", () => {
     assert.equal(membershipRoleForUser(firstUser.id, database), "parent");
     assert.equal(membershipRoleForUser(secondUser.id, database), undefined);
   });
+});
+
+test("invitation email delivery uses a provider-neutral test transport", async () => {
+  const sent: Array<{ from: string; to: string; subject: string; text: string }> = [];
+  const mailConfig: InvitationEmailConfig = {
+    invitationEmailEnabled: true,
+    invitationPublicBaseUrl: "https://bk.example.test",
+    smtpHost: "smtp.example.test",
+    smtpPort: 587,
+    smtpSecure: false,
+    smtpFrom: "Betreuungskalender <no-reply@example.test>"
+  };
+
+  await sendInvitationEmail(
+    {
+      to: "invited@example.test",
+      token: "test-token-mail-delivery-000000",
+      role: "parent",
+      expiresAt: "2026-07-06T10:00:00.000Z"
+    },
+    mailConfig,
+    () => ({
+      sendMail: (message) => {
+        sent.push(message);
+      }
+    })
+  );
+
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0]?.from, "Betreuungskalender <no-reply@example.test>");
+  assert.equal(sent[0]?.to, "invited@example.test");
+  assert.equal(sent[0]?.subject, "Einladung zum Betreuungskalender");
+  assert.match(sent[0]?.text ?? "", /https:\/\/bk\.example\.test\/settings\?invitation=test-token-mail-delivery-000000/);
+  assert.match(sent[0]?.text ?? "", /Rolle: Bearbeiten/);
+});
+
+test("invitation email delivery reports missing or failed mail configuration safely", async () => {
+  await assert.rejects(
+    () => sendInvitationEmail({
+      to: "invited@example.test",
+      token: "test-token-mail-missing-config-000000",
+      role: "readonly",
+      expiresAt: "2026-07-06T10:00:00.000Z"
+    }, {
+      invitationEmailEnabled: false,
+      invitationPublicBaseUrl: "https://bk.example.test",
+      smtpPort: 587,
+      smtpSecure: false
+    }),
+    (error) =>
+      error instanceof InvitationEmailError &&
+      error.code === "mail_not_configured" &&
+      !error.message.includes("smtp.example.test")
+  );
+
+  await assert.rejects(
+    () => sendInvitationEmail(
+      {
+        to: "invited@example.test",
+        token: "test-token-mail-failure-000000",
+        role: "admin",
+        expiresAt: "2026-07-06T10:00:00.000Z"
+      },
+      {
+        invitationEmailEnabled: true,
+        invitationPublicBaseUrl: "https://bk.example.test",
+        smtpHost: "smtp.example.test",
+        smtpPort: 587,
+        smtpSecure: true,
+        smtpUser: "smtp-user",
+        smtpPassword: "smtp-secret",
+        smtpFrom: "no-reply@example.test"
+      },
+      () => ({
+        sendMail: () => {
+          throw new Error("smtp-secret at smtp.example.test");
+        }
+      })
+    ),
+    (error) =>
+      error instanceof InvitationEmailError &&
+      error.code === "mail_delivery_failed" &&
+      !error.message.includes("smtp-secret") &&
+      !error.message.includes("smtp.example.test")
+  );
 });

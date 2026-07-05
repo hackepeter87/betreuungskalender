@@ -231,10 +231,13 @@ function MemberInvitationManager() {
   const { session, reload } = useAppStore();
   const [members, setMembers] = useState<ApiMember[]>([]);
   const [invitations, setInvitations] = useState<ApiInvitation[]>([]);
-  const [acceptToken, setAcceptToken] = useState("");
+  const [acceptToken, setAcceptToken] = useState(() =>
+    new URLSearchParams(window.location.search).get("invitation") ?? ""
+  );
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<ApiAuthRole>("parent");
   const [expiresDays, setExpiresDays] = useState(7);
+  const [sendEmail, setSendEmail] = useState(false);
   const [createdToken, setCreatedToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [ownerForbidden, setOwnerForbidden] = useState(false);
@@ -298,12 +301,20 @@ function MemberInvitationManager() {
       const created = await api.createInvitation({
         role: inviteRole,
         expiresAt,
-        emailHint: inviteEmail.trim() || undefined
+        emailHint: inviteEmail.trim() || undefined,
+        sendEmail
       });
       setInvitations((items) => [created.invitation, ...items]);
       setCreatedToken(created.token);
       setInviteEmail("");
-      setMessage(copy(locale, "settings", "invitationCreated"));
+      setSendEmail(false);
+      if (created.emailDelivery?.status === "sent") {
+        setMessage(copy(locale, "settings", "invitationEmailSent"));
+      } else if (created.emailDelivery?.status === "failed") {
+        setMessage(created.emailDelivery.message ?? copy(locale, "settings", "invitationEmailFailed"));
+      } else {
+        setMessage(copy(locale, "settings", "invitationCreated"));
+      }
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -407,7 +418,10 @@ function MemberInvitationManager() {
                   data-testid="invitation-email-hint"
                   type="email"
                   value={inviteEmail}
-                  onChange={(event) => setInviteEmail(event.target.value)}
+                  onChange={(event) => {
+                    setInviteEmail(event.target.value);
+                    if (!event.target.value.trim()) setSendEmail(false);
+                  }}
                   placeholder="name@example.invalid"
                 />
               </label>
@@ -425,6 +439,19 @@ function MemberInvitationManager() {
                   <input data-testid="invitation-expires-days" type="number" min="1" max="30" value={expiresDays} onChange={(event) => setExpiresDays(Number(event.target.value))} />
                 </label>
               </div>
+              <label className="toggle-card toggle-card--compact">
+                <input
+                  data-testid="invitation-send-email"
+                  type="checkbox"
+                  checked={sendEmail}
+                  onChange={(event) => setSendEmail(event.target.checked)}
+                  disabled={!inviteEmail.trim()}
+                />
+                <span>
+                  <strong>{copy(locale, "settings", "invitationSendEmail")}</strong>
+                  <small>{copy(locale, "settings", "invitationSendEmailDescription")}</small>
+                </span>
+              </label>
               <button className="button button--primary" type="submit" disabled={busy}>
                 <Icon name="plus" size={17} />
                 {copy(locale, "settings", "invitationCreateAction")}
