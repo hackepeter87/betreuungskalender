@@ -442,6 +442,23 @@ test("keeps the shell quiet in local development without authentication", async 
   await expect(page.getByTestId("auth-session")).toHaveCount(0);
 });
 
+test("exposes first-use setup state through the session endpoint", async ({
+  page
+}) => {
+  await openApp(page);
+  const session = await page.evaluate(async () => {
+    const response = await fetch("/api/session", { cache: "no-store" });
+    return response.json() as Promise<{
+      setup?: { complete: boolean; required: boolean };
+    }>;
+  });
+
+  expect(session.setup).toEqual({
+    complete: false,
+    required: true
+  });
+});
+
 test("creates a personal calendar feed URL from settings", async ({
   page,
   request

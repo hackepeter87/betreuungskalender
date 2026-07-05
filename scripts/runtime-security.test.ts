@@ -245,7 +245,11 @@ test("runtime exposes compact session metadata for trusted proxy auth", async (t
   assert.deepEqual(await missingIdentity.json(), {
     authRequired: true,
     authenticated: false,
-    logoutUrl: "/oauth2/sign_out"
+    logoutUrl: "/oauth2/sign_out",
+    setup: {
+      complete: false,
+      required: true
+    }
   });
 
   const session = await fetch(`${baseUrl}/api/session`, {
@@ -265,7 +269,11 @@ test("runtime exposes compact session metadata for trusted proxy auth", async (t
       role: "parent",
       email: "parent@example.net"
     },
-    logoutUrl: "/oauth2/sign_out"
+    logoutUrl: "/oauth2/sign_out",
+    setup: {
+      complete: false,
+      required: true
+    }
   });
 
   const readOnlyRead = await fetch(`${baseUrl}/api/children`, {
@@ -568,7 +576,11 @@ test("runtime rejects users without matching OIDC groups when strict role claims
   assert.equal(session.status, 200);
   assert.deepEqual(await session.json(), {
     authRequired: true,
-    authenticated: false
+    authenticated: false,
+    setup: {
+      complete: false,
+      required: true
+    }
   });
 
   const read = await fetch(`${baseUrl}/api/children`, {
@@ -703,7 +715,11 @@ test("runtime enforces native OIDC sessions without trusting proxy headers or lo
       role: "parent",
       email: "parent@example.net"
     },
-    logoutUrl: "/auth/logout"
+    logoutUrl: "/auth/logout",
+    setup: {
+      complete: false,
+      required: true
+    }
   });
 
   const trustedProxyHeadersOnly = await fetch(`${baseUrl}/api/children`, {
@@ -721,7 +737,11 @@ test("runtime enforces native OIDC sessions without trusting proxy headers or lo
   assert.deepEqual(await missingUserSession.json(), {
     authRequired: true,
     authenticated: false,
-    loginUrl: "/auth/login"
+    loginUrl: "/auth/login",
+    setup: {
+      complete: false,
+      required: true
+    }
   });
 
   assert.equal((await fetch(`${baseUrl}/api/children`, {

@@ -117,7 +117,11 @@ const AppStoreContext = createContext<AppStoreValue | null>(null);
 
 const defaultSession: ApiSession = {
   authRequired: false,
-  authenticated: false
+  authenticated: false,
+  setup: {
+    complete: false,
+    required: true
+  }
 };
 
 function requiresLogin(session: ApiSession): boolean {
