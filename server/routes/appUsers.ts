@@ -5,8 +5,17 @@ import { db } from "../db/connection.js";
 import { recordAudit } from "../services/audit.js";
 import { assertActiveCareParty } from "../services/careParties.js";
 import { nowIso } from "../services/common.js";
+import {
+  assertCanAdministerMembers,
+  listMembers,
+  MemberManagementError,
+  updateMemberRole
+} from "../services/memberManagement.js";
 import { listAppUsers } from "../services/users.js";
-import { userCarePartyAssignmentInputSchema } from "../validation/schemas.js";
+import {
+  memberRoleInputSchema,
+  userCarePartyAssignmentInputSchema
+} from "../validation/schemas.js";
 
 const readLimit = {
   config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
@@ -24,8 +33,56 @@ function activeAssignmentIds(userId: string): string[] {
   `).all(userId) as Array<{ carePartyId: string }>).map((row) => row.carePartyId);
 }
 
+function normalizeMemberError(error: unknown) {
+  if (error instanceof MemberManagementError) {
+    return {
+      statusCode: error.statusCode,
+      error: error.code,
+      message: error.message
+    };
+  }
+  return {
+    statusCode: 500,
+    error: "member_update_failed",
+    message: "Mitglied konnte nicht aktualisiert werden."
+  };
+}
+
 export async function appUserRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/app-users", readLimit, async () => listAppUsers());
+
+  app.get("/api/members", readLimit, async (request, reply) => {
+    try {
+      assertCanAdministerMembers(request.user);
+      return listMembers();
+    } catch (error) {
+      const normalized = normalizeMemberError(error);
+      return reply.code(normalized.statusCode).send({
+        error: normalized.error,
+        message: normalized.message
+      });
+    }
+  });
+
+  app.put<{ Params: { userId: string } }>("/api/members/:userId/role", writeLimit, async (request, reply) => {
+    const parsed = memberRoleInputSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
+    if (!request.user) {
+      return reply.code(401).send({
+        error: "authentication_required",
+        message: "Authentifizierung erforderlich."
+      });
+    }
+    try {
+      return updateMemberRole(request.user, request.params.userId, parsed.data.role);
+    } catch (error) {
+      const normalized = normalizeMemberError(error);
+      return reply.code(normalized.statusCode).send({
+        error: normalized.error,
+        message: normalized.message
+      });
+    }
+  });
 
   app.get("/api/user-care-party-assignments", readLimit, async () =>
     listAppUsers().map((user) => ({

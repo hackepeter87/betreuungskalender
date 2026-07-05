@@ -252,6 +252,17 @@ export interface ApiCreatedInvitation {
   token: string;
 }
 
+export interface ApiMember {
+  id: string;
+  displayName: string;
+  claimRole: ApiAuthRole;
+  effectiveRole: ApiAuthRole;
+  owner: boolean;
+  membershipRole?: ApiAuthRole;
+  email?: string;
+  lastSeenAt?: string;
+}
+
 export interface ApiPushSubscriptionInput {
   endpoint: string;
   keys: {

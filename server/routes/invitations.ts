@@ -8,6 +8,10 @@ import {
   revokeInvitation
 } from "../services/invitations.js";
 import {
+  assertCanAdministerMembers,
+  MemberManagementError
+} from "../services/memberManagement.js";
+import {
   invitationAcceptInputSchema,
   invitationInputSchema
 } from "../validation/schemas.js";
@@ -18,14 +22,6 @@ const readLimit = {
 const writeLimit = {
   config: { rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
 };
-
-function ensureAdmin(request: { user?: { role: string } }, reply: { code: (status: number) => { send: (payload: unknown) => unknown } }) {
-  if (request.user?.role === "admin") return undefined;
-  return reply.code(403).send({
-    error: "forbidden",
-    message: "Für diese Aktion fehlt die erforderliche Berechtigung."
-  });
-}
 
 function normalizeInvitationError(error: unknown) {
   if (error instanceof InvitationError) {
@@ -42,16 +38,45 @@ function normalizeInvitationError(error: unknown) {
   };
 }
 
+function normalizeMemberError(error: unknown) {
+  if (error instanceof MemberManagementError) {
+    return {
+      statusCode: error.statusCode,
+      error: error.code,
+      message: error.message
+    };
+  }
+  return {
+    statusCode: 500,
+    error: "member_admin_failed",
+    message: "Mitgliederverwaltung konnte nicht geprüft werden."
+  };
+}
+
 export async function invitationRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/invitations", readLimit, async (request, reply) => {
-    const denied = ensureAdmin(request, reply);
-    if (denied) return denied;
+    try {
+      assertCanAdministerMembers(request.user);
+    } catch (error) {
+      const normalized = normalizeMemberError(error);
+      return reply.code(normalized.statusCode).send({
+        error: normalized.error,
+        message: normalized.message
+      });
+    }
     return listInvitations();
   });
 
   app.post("/api/invitations", writeLimit, async (request, reply) => {
-    const denied = ensureAdmin(request, reply);
-    if (denied) return denied;
+    try {
+      assertCanAdministerMembers(request.user);
+    } catch (error) {
+      const normalized = normalizeMemberError(error);
+      return reply.code(normalized.statusCode).send({
+        error: normalized.error,
+        message: normalized.message
+      });
+    }
     const parsed = invitationInputSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -92,8 +117,15 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.delete<{ Params: { id: string } }>("/api/invitations/:id", writeLimit, async (request, reply) => {
-    const denied = ensureAdmin(request, reply);
-    if (denied) return denied;
+    try {
+      assertCanAdministerMembers(request.user);
+    } catch (error) {
+      const normalized = normalizeMemberError(error);
+      return reply.code(normalized.statusCode).send({
+        error: normalized.error,
+        message: normalized.message
+      });
+    }
     const invitation = revokeInvitation(request.params.id, request.userEmail);
     if (!invitation) {
       return reply.code(404).send({

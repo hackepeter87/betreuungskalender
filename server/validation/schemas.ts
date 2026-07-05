@@ -51,6 +51,10 @@ export const invitationAcceptInputSchema = z.object({
   token: z.string().trim().min(24).max(500)
 });
 
+export const memberRoleInputSchema = z.object({
+  role: z.enum(["admin", "parent", "readonly"])
+});
+
 export const tripInputSchema = z.object({
   id: z.string().min(1).optional(),
   purpose: z.string().trim().min(1, "Fahrtzweck ist erforderlich.").max(200),
