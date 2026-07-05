@@ -1937,6 +1937,10 @@ button.metric-card {
   padding: 0 18px 12px;
 }
 
+.calendar-feed-scope-field {
+  padding: 0 18px;
+}
+
 .calendar-feed-status small,
 .settings-note {
   color: var(--muted);
@@ -2009,7 +2013,7 @@ button.metric-card {
 
 .notification-preferences-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 90px 90px 90px;
+  grid-template-columns: minmax(0, 1fr) 90px 90px;
   align-items: center;
   gap: 12px;
   padding: 14px 18px;
@@ -2257,7 +2261,7 @@ button.metric-card {
 
 @media (max-width: 720px) {
   .notification-preferences-row {
-    grid-template-columns: minmax(0, 1fr) repeat(3, 56px);
+    grid-template-columns: minmax(0, 1fr) repeat(2, 56px);
     gap: 8px;
     padding: 12px 14px;
   }
@@ -3597,6 +3601,17 @@ button.metric-card {
   background: #fbfcfd;
 }
 
+.rule-segment-row .field,
+.rule-segment-row input,
+.rule-segment-row .icon-button {
+  min-width: 0;
+}
+
+.rule-segment-row input {
+  width: 100%;
+  max-width: 100%;
+}
+
 .rule-segment-row > strong {
   align-self: center;
   font-size: 0.72rem;
@@ -3725,6 +3740,41 @@ button.metric-card {
 
 .summary-strip--five {
   grid-template-columns: repeat(5, 1fr);
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr));
+  gap: 10px;
+  padding: 14px 18px 18px;
+}
+
+.stats-grid > div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.stats-grid small,
+.stats-grid strong {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.stats-grid small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.stats-grid strong {
+  margin-top: 4px;
+  font-size: 0.9rem;
+  line-height: 1.25;
 }
 
 .rule-entry-list {
@@ -4212,13 +4262,43 @@ button.metric-card {
   }
 
   .rule-entry__actions {
-    justify-content: flex-end;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) repeat(2, 40px);
+    gap: 8px;
+    align-items: center;
+    justify-content: stretch;
     padding: 0 10px 10px;
+  }
+
+  .rule-entry__actions .button {
+    min-width: 0;
+    padding-inline: 8px;
+    white-space: normal;
+  }
+
+  .rule-entry__actions .field-help-trigger {
+    justify-self: end;
   }
 
   .recurrence-builder,
   .rule-segment-row {
     grid-template-columns: 1fr;
+  }
+
+  .rule-segment-row {
+    overflow: hidden;
+  }
+
+  .rule-segment-row > .field,
+  .rule-segment-row input,
+  .rule-segment-row .icon-button {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .rule-segment-row > .icon-button {
+    justify-self: start;
+    width: 46px;
   }
 
   .weekday-choice-row,
@@ -5239,10 +5319,76 @@ button.metric-card {
     border-bottom: 1px solid var(--line);
   }
 
+  .entry-form .form-section--collapsible[open] {
+    padding: 0 10px 12px;
+  }
+
+  .entry-form .form-section__summary {
+    min-height: 44px;
+    margin: 0;
+    padding: 0 38px 0 12px;
+    font-size: 0.75rem;
+  }
+
+  .entry-form .form-section--collapsible[open] > .form-section__summary {
+    margin: 0 -10px 12px;
+    padding: 0 38px 0 10px;
+  }
+
+  .entry-form .form-section__summary > span {
+    min-width: 18px;
+    height: 18px;
+    margin-left: 5px;
+    border-radius: 9px;
+    font-size: 0.58rem;
+    line-height: 1;
+  }
+
   .datetime-grid,
   .form-grid,
   .line-item-grid {
     grid-template-columns: 1fr;
+  }
+
+  .entry-form .datetime-grid,
+  .entry-form .form-grid {
+    gap: 9px;
+  }
+
+  .entry-form .field {
+    gap: 4px;
+    font-size: 0.67rem;
+  }
+
+  .entry-form .field input,
+  .entry-form .field select,
+  .entry-form .field textarea {
+    min-height: 40px;
+    padding: 7px 9px;
+    font-size: 16px;
+  }
+
+  .entry-form .field-label-row {
+    gap: 6px;
+  }
+
+  .entry-form .field-help-button {
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    min-height: 28px;
+  }
+
+  .entry-form .toggle-row {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .entry-form .toggle {
+    min-height: 34px;
+    font-size: 0.66rem;
   }
 
   .form-actions {
@@ -5272,7 +5418,7 @@ button.metric-card {
 
   .analytics-export-actions {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: 1fr;
     gap: 10px;
     margin: 0 0 10px;
   }
@@ -5280,15 +5426,56 @@ button.metric-card {
   .analytics-export-actions .action-with-help,
   .backup-card .action-with-help {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) 40px;
     align-items: center;
     gap: 10px;
+  }
+
+  .analytics-export-actions .field-help-trigger {
+    justify-self: end;
   }
 
   .calendar-feed-status {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
     align-items: start;
+    gap: 6px;
+    padding: 10px 14px 8px;
+  }
+
+  .settings-section--calendar-feed .status-pill {
+    width: fit-content;
+    max-width: 100%;
+    min-height: 24px;
+    padding: 4px 8px;
+    font-size: 0.62rem;
+    line-height: 1.2;
+  }
+
+  .settings-section--calendar-feed .field-help-button {
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    min-height: 28px;
+  }
+
+  .calendar-feed-scope-field {
+    gap: 6px;
+    padding: 0 14px;
+  }
+
+  .calendar-feed-scope-field .field-label-row {
+    min-height: 30px;
+  }
+
+  .calendar-feed-scope-field select {
+    min-height: 44px;
+  }
+
+  .settings-section--calendar-feed .settings-note {
+    margin-top: 10px;
+    padding: 0 14px;
+    font-size: 0.66rem;
   }
 
   .mobile-export-notice {
@@ -5338,10 +5525,31 @@ button.metric-card {
   }
 
   .summary-strip div:nth-last-child(-n + 2),
-  .summary-strip--seven div:last-child,
   .summary-strip--six div:nth-last-child(-n + 2),
   .summary-strip--five div:last-child {
     border-bottom: 0;
+  }
+
+  .summary-strip--seven div:nth-child(7) {
+    grid-column: 1 / -1;
+    border-right: 0;
+    border-bottom: 0;
+  }
+
+  .summary-strip--five div:nth-child(5) {
+    grid-column: 1 / -1;
+    border-right: 0;
+    border-bottom: 0;
+  }
+
+  .stats-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .stats-grid > div {
+    padding: 10px 12px;
   }
 
   .analytics-details > summary {
@@ -5444,7 +5652,6 @@ button.metric-card {
     grid-template-columns: 1fr;
   }
 
-  .analytics-export-actions .field-help-trigger,
   .backup-card .field-help-trigger {
     justify-self: start;
   }
@@ -6425,6 +6632,11 @@ button.metric-card {
     padding: 10px 10px 10px 0;
   }
 
+  .agenda-card--external {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 10px 12px;
+  }
+
   .agenda-card--holiday {
     grid-template-columns: minmax(0, 1fr);
     padding: 10px 12px;
@@ -6474,6 +6686,35 @@ button.metric-card {
   .segmented-control button {
     min-width: 86px;
     flex: 0 0 auto;
+  }
+
+  .list-toolbar .segmented-control {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-auto-columns: initial;
+    grid-auto-flow: row;
+    overflow: hidden;
+    scrollbar-width: none;
+  }
+
+  .list-toolbar .segmented-control button {
+    grid-column: span 2;
+    min-width: 0;
+    min-height: 34px;
+    padding: 0 5px;
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    white-space: normal;
+    line-height: 1.15;
+  }
+
+  .list-toolbar .segmented-control button:nth-child(n + 4) {
+    grid-column: span 3;
+    border-bottom: 0;
+  }
+
+  .list-toolbar .segmented-control button:nth-child(3),
+  .list-toolbar .segmented-control button:last-child {
+    border-right: 0;
   }
 
   .period-selector {
@@ -6612,14 +6853,27 @@ button.metric-card {
   }
 
   .calendar-feed-status {
-    gap: 8px;
-    padding: 0 14px 12px;
+    gap: 6px;
+    padding: 10px 14px 8px;
   }
 
   .status-pill {
     width: fit-content;
     max-width: 100%;
+    min-height: 24px;
+    padding: 4px 8px;
     font-size: 0.62rem;
+    line-height: 1.2;
+  }
+
+  .calendar-feed-scope-field {
+    gap: 6px;
+    padding: 0 14px;
+  }
+
+  .settings-section--calendar-feed .settings-note {
+    margin-top: 10px;
+    padding: 0 14px;
   }
 
   .holiday-derive-form {
@@ -6688,7 +6942,7 @@ button.metric-card {
 }
 
 @media (max-width: 430px) {
-  .analytics-export-actions,
+  .analytics-export-actions .action-with-help,
   .backup-card .action-with-help {
     grid-template-columns: minmax(0, 1fr) 38px;
   }

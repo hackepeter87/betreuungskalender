@@ -6,6 +6,49 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.10.2] - 2026-07-05
+
+### Fixed
+
+- Fixed mobile agenda cards for external calendar events so event titles no
+  longer collapse into a narrow vertical text column.
+- Fixed mobile contact-rule time-span fields so date-offset and time inputs stay
+  inside their card on narrow screens.
+- Fixed mobile contact-rule summary metrics and generated-entry actions so the
+  seventh metric and help buttons no longer look detached from their cards.
+- Fixed mobile holiday statistics and care-party share cards so the fifth metric
+  and person shares stay aligned inside their panels.
+- Fixed the mobile analytics export actions so CSV/PDF buttons and help icons no
+  longer overlap.
+- Fixed the mobile care-entry form so period fields, toggles, and help buttons no
+  longer appear oversized.
+- Fixed mobile care-entry collapsible sections so trip, cost, and notes headers
+  stay aligned inside their cards.
+- Fixed mobile calendar-feed spacing so status, scope selection, help icon, and
+  explanatory text stay visually grouped.
+- Fixed mobile entry status filters so all filter options are visible without
+  horizontal scrolling.
+- Hid the notification E-Mail channel controls until server-side E-Mail delivery
+  is implemented.
+
+### Testing
+
+- Added iPhone regression coverage for readable external calendar agenda cards.
+- Added iPhone regression coverage for contained contact-rule time-span inputs.
+- Added iPhone regression coverage for contact-rule summary metrics and
+  generated-entry actions.
+- Added iPhone regression coverage for holiday statistics and care-party share
+  layouts.
+- Added iPhone regression coverage for analytics export action containment.
+- Added iPhone regression coverage for compact mobile care-entry form controls.
+- Added iPhone regression coverage for mobile care-entry collapsible section
+  headers.
+- Added iPhone regression coverage for mobile calendar-feed spacing.
+- Added iPhone regression coverage for the mobile entry status filter grid.
+- Added iPhone regression coverage that notification settings do not expose the
+  unfinished E-Mail channel.
+- Re-ran the full desktop, iPhone, and iPad E2E suite.
+
 ## [1.10.1] - 2026-07-04
 
 ### Fixed
