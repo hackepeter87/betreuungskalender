@@ -261,17 +261,15 @@ const de = {
     event: "Anlass",
     inApp: "In-App",
     push: "Push",
-    email: "E-Mail",
     careConfirmationDue: "Betreuung bestätigen",
     careConfirmationReminder: "Später erinnern",
     enablePush: "Push auf diesem Gerät aktivieren",
     pushActive: "Push ist auf {count} Gerät(en) aktiv.",
     pushUnavailable: "Push ist serverseitig noch nicht konfiguriert.",
-    emailHint: "E-Mail ist vorbereitet, wird aber erst nach SMTP-Konfiguration versendet.",
     whenTitle: "Wann? ",
     whenDescription: "Geplante Betreuung wird nach dem Termin zur Bestätigung vorgemerkt. „Später erinnern“ plant eine erneute Erinnerung.",
     editableTitle: "Was ist editierbar? ",
-    editableDescription: "In-App bleibt immer aktiv. Push kann je Gerät ein- oder ausgeschaltet werden; E-Mail bleibt bis zur Server-Konfiguration ohne Versand."
+    editableDescription: "In-App bleibt immer aktiv. Push kann je Gerät ein- oder ausgeschaltet werden."
   },
   confirmation: {
     title: "Offene Bestätigungen",

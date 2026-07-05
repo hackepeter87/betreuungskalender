@@ -135,10 +135,6 @@ function NotificationPreferencesSection() {
             {copy(locale, "notifications", "push")}
             <FieldHelpButton fieldId="settings.notificationChannels" showRequirement={false} />
           </span>
-          <span className="notification-preferences-row__channel">
-            {copy(locale, "notifications", "email")}
-            <FieldHelpButton fieldId="settings.notificationChannels" showRequirement={false} />
-          </span>
         </div>
         {preferences.map((preference) => (
           <div className="notification-preferences-row" key={preference.eventType}>
@@ -153,15 +149,6 @@ function NotificationPreferencesSection() {
               />
               <span />
             </label>
-            <label className="toggle toggle--compact">
-              <input
-                type="checkbox"
-                checked={preference.emailEnabled}
-                disabled={!canWrite || isSaving}
-                onChange={(event) => patchPreference(preference.eventType, { emailEnabled: event.target.checked })}
-              />
-              <span />
-            </label>
           </div>
         ))}
       </div>
@@ -169,8 +156,6 @@ function NotificationPreferencesSection() {
         {notificationPreferences?.pushAvailable
           ? copy(locale, "notifications", "pushActive", { count: notificationPreferences.activePushSubscriptions })
           : copy(locale, "notifications", "pushUnavailable")}
-        {" "}
-        {copy(locale, "notifications", "emailHint")}
       </p>
     </section>
   );
@@ -302,7 +287,7 @@ function CalendarFeedManager() {
   };
 
   return (
-    <section className="panel settings-section" data-testid="calendar-feed-manager">
+    <section className="panel settings-section settings-section--calendar-feed" data-testid="calendar-feed-manager">
       <div className="panel__header panel__header--compact">
         <div>
           <h2>{copy(locale, "calendarFeed", "title")}</h2>
@@ -325,7 +310,7 @@ function CalendarFeedManager() {
             : copy(locale, "calendarFeed", "neverUsed")}
         </small>
       </div>
-      <label className="field">
+      <label className="field calendar-feed-scope-field">
         <FieldHelpLabel fieldId="calendarFeed.scope">
           {copy(locale, "calendarFeed", "scopeLabel")}
         </FieldHelpLabel>

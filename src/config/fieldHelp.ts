@@ -1017,9 +1017,9 @@ export const fieldHelpById = {
     label: "Benachrichtigungskanäle",
     shortHelp: "Legt fest, über welche Wege du an offene Bestätigungen erinnert wirst.",
     whyRelevant: "Bestätigungserinnerungen sollen nützlich sein, ohne sensible Details unnötig zu verbreiten.",
-    usedFor: "In-App-Aufgaben, PWA-Push und vorbereitete E-Mail-Benachrichtigungen.",
-    inputGuidance: "In-App bleibt immer aktiv. Push nutzt dieses Gerät. E-Mail erst aktivieren, wenn SMTP später eingerichtet ist.",
-    commonMistakes: "Push nicht mit E-Mail verwechseln; Push muss pro Gerät erlaubt werden.",
+    usedFor: "In-App-Aufgaben und PWA-Push auf aktivierten Geräten.",
+    inputGuidance: "In-App bleibt immer aktiv. Push nutzt nur Geräte, auf denen du Benachrichtigungen ausdrücklich erlaubst.",
+    commonMistakes: "Push muss pro Gerät erlaubt werden und kann je Gerät unterschiedlich aktiv sein.",
     requirementLevel: recommended
   }),
   "externalCalendar.sourceName": help("externalCalendar.sourceName", {
