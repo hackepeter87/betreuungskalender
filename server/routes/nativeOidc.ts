@@ -7,6 +7,10 @@ import {
   serializeSessionCookie
 } from "../cookies.js";
 import { NativeOidcError, NativeOidcService } from "../nativeOidc.js";
+import {
+  applyMembershipRole,
+  type MembershipResolution
+} from "../services/memberships.js";
 import { OidcSessionStore } from "../services/oidcSessions.js";
 import { upsertAuthenticatedUser } from "../services/users.js";
 
@@ -40,6 +44,7 @@ interface NativeOidcRoutesOptions {
   >;
   sessions?: OidcSessionStore;
   upsertUser?: (user: RequestUser) => void;
+  applyMembershipRole?: (user: RequestUser) => MembershipResolution;
 }
 
 function notFound(reply: FastifyReply) {
@@ -85,6 +90,7 @@ export async function nativeOidcRoutes(
   });
   const sessions = options.sessions ?? new OidcSessionStore();
   const upsertUser = options.upsertUser ?? upsertAuthenticatedUser;
+  const resolveMembership = options.applyMembershipRole ?? applyMembershipRole;
 
   const providerLogoutUrl = async (
     log: FastifyInstance["log"]
@@ -123,7 +129,8 @@ export async function nativeOidcRoutes(
         adminGroup: options.config.oidcAdminGroup,
         parentGroup: options.config.oidcParentGroup,
         readonlyGroup: options.config.oidcReadonlyGroup,
-        requireRoleClaim: options.config.oidcRequireRoleClaim
+        requireRoleClaim: options.config.oidcRequireRoleClaim,
+        fallbackRoleOnMissing: "readonly"
       });
       if (!auth.user) {
         throw new NativeOidcError(
@@ -133,7 +140,15 @@ export async function nativeOidcRoutes(
         );
       }
       upsertUser(auth.user);
-      const session = sessions.create(auth.user.externalSubject, options.config.sessionTtlSeconds);
+      const membership = resolveMembership(auth.user);
+      if (auth.reason === "missing_role" && !membership.membershipRole) {
+        throw new NativeOidcError(
+          "authorization_required",
+          403,
+          "Keine passende Berechtigung in den OIDC-Claims gefunden."
+        );
+      }
+      const session = sessions.create(membership.user.externalSubject, options.config.sessionTtlSeconds);
       return reply
         .header("set-cookie", serializeSessionCookie({
           name: options.config.sessionCookieName,
