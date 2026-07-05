@@ -259,6 +259,10 @@ abstract feature flags. It is intentionally not exposed through the public
 health endpoints and does not include paths, provider URLs, client IDs, keys, or
 secrets.
 
+The normal `/api/session` response contains only a minimal setup state
+(`complete` and `required`) for first-use onboarding. Detailed setup counts are
+restricted to the admin instance-information view.
+
 ## Backup and restore
 
 Create and verify an online-safe SQLite backup:

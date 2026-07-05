@@ -38,7 +38,7 @@ discovery source; it is not synchronized or treated as current persistence.
 | `contact_rules` | Flexible recurring contact rules and synchronization settings |
 | `contact_rule_children` | Child assignment for flexible contact rules |
 | `unavailable_periods` | Duty-related and other unavailable periods |
-| `settings` | JSON-encoded server-side settings |
+| `settings` | JSON-encoded server-side settings, including optional first-use setup metadata |
 | `monthly_closings` | Monthly summary and post-close change marker |
 | `audit_log` | Field changes, creates, deletes, and post-close changes |
 | `app_users` | Stable users derived from trusted proxy headers or native OIDC claims |
@@ -84,6 +84,12 @@ as changed.
 `updated_by`. These actor fields store stable `app_users.id` values. They are
 for attribution and audit display; authorization still comes from the current
 request user and role.
+
+First-use setup state is stored as small JSON settings rather than a separate
+table. Fresh installations are detected from server-side domain data. Later
+setup flows can persist `setup.completedAt` and `setup.completedBy` in
+`settings`; `/api/session` exposes only the minimal `complete`/`required`
+state, while detailed counts remain admin-only instance-readiness information.
 
 ## Care parties
 

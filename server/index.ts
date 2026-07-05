@@ -36,6 +36,7 @@ import { externalCalendarRoutes } from "./routes/externalCalendars.js";
 import { calendarFeedRoutes } from "./routes/calendarFeeds.js";
 import { OidcSessionStore } from "./services/oidcSessions.js";
 import { RecoveryAdminStore } from "./services/recoveryAdmin.js";
+import { publicSetupState } from "./services/setupState.js";
 import { findAuthenticatedUserBySubject } from "./services/users.js";
 import { runCareConfirmationSweep } from "./services/careConfirmations.js";
 
@@ -287,6 +288,7 @@ app.get("/api/ready", readLimit, async (_request, reply) => {
 });
 
 app.get("/api/session", readLimit, async (request) => {
+  const setup = publicSetupState();
   const recoveryUser = recoveryAdmin.findUserByToken(
     cookieValue(request.headers.cookie, config.recoveryAdminSessionCookieName)
   );
@@ -294,6 +296,7 @@ app.get("/api/session", readLimit, async (request) => {
     return {
       authRequired: config.requireAuth,
       authenticated: true,
+      setup,
       user: {
         id: recoveryUser.id,
         displayName: recoveryUser.displayName,
@@ -314,6 +317,7 @@ app.get("/api/session", readLimit, async (request) => {
     return {
       authRequired: config.requireAuth,
       authenticated: Boolean(nativeSession && nativeUser),
+      setup,
       ...(nativeUser
         ? {
             user: {
@@ -338,11 +342,13 @@ app.get("/api/session", readLimit, async (request) => {
     return {
       authRequired: config.requireAuth,
       authenticated: false,
+      setup,
       ...(config.demoDatasetsEnabled ? { demoDatasetsEnabled: true } : {})
     };
   }
   return {
     ...sessionInfo(request.headers, config),
+    setup,
     ...(config.demoDatasetsEnabled ? { demoDatasetsEnabled: true } : {})
   };
 });

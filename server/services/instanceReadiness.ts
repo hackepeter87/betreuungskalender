@@ -3,6 +3,7 @@ import type Database from "better-sqlite3";
 import { config } from "../config.js";
 import { db } from "../db/connection.js";
 import { availableMigrationVersions } from "../db/migrationRunner.js";
+import { buildSetupState } from "./setupState.js";
 import type { ApiInstanceReadiness } from "../../shared/api.js";
 
 type ReadinessConfig = Pick<
@@ -17,13 +18,6 @@ type ReadinessConfig = Pick<
   | "webPushPrivateKey"
   | "webPushPublicKey"
 >;
-
-function countTable(database: Database.Database, table: string): number {
-  const row = database.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE deleted_at IS NULL`).get() as {
-    count: number;
-  };
-  return row.count;
-}
 
 function appliedMigrations(database: Database.Database): Array<{ version: string; appliedAt: string }> {
   return database.prepare(`
@@ -48,10 +42,7 @@ export function buildInstanceReadiness(
   const available = availableMigrationVersions();
   const latestApplied = migrations.at(-1)?.version;
   const latestAvailable = available.at(-1);
-  const children = countTable(database, "children");
-  const careParties = countTable(database, "care_parties");
-  const appUsers = countTable(database, "app_users");
-  const setupComplete = children > 0 && careParties > 0;
+  const setup = buildSetupState(database);
 
   return {
     instanceId: stableInstanceId(migrations),
@@ -69,10 +60,10 @@ export function buildInstanceReadiness(
       upToDate: Boolean(latestApplied && latestAvailable && latestApplied === latestAvailable)
     },
     setup: {
-      complete: setupComplete,
-      children,
-      careParties,
-      appUsers
+      complete: setup.complete,
+      children: setup.counts.children,
+      careParties: setup.counts.careParties,
+      appUsers: setup.counts.appUsers
     },
     features: {
       demoDatasetsEnabled: runtime.demoDatasetsEnabled,

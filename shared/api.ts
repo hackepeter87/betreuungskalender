@@ -218,6 +218,11 @@ export interface ApiInstanceReadiness {
   };
 }
 
+export interface ApiSetupState {
+  complete: boolean;
+  required: boolean;
+}
+
 export interface ApiPushSubscriptionInput {
   endpoint: string;
   keys: {
@@ -254,6 +259,7 @@ export interface ApiSession {
   authRequired: boolean;
   authenticated: boolean;
   demoDatasetsEnabled?: boolean;
+  setup: ApiSetupState;
   user?: {
     id: string;
     displayName: string;

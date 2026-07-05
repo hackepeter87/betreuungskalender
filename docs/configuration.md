@@ -158,7 +158,11 @@ emits the expected group claim.
 
 `/api/session` returns compact session metadata for the app shell. The UI shows
 a short display name and, when `AUTH_LOGOUT_URL` is configured, a logout link.
-With oauth2-proxy this is usually `/oauth2/sign_out`.
+With oauth2-proxy this is usually `/oauth2/sign_out`. The response also includes
+a minimal setup state with `setup.complete` and `setup.required` so the app can
+detect fresh self-hosted installations without relying on browser storage. It
+does not expose domain-data counts; those remain admin-only instance readiness
+information.
 
 The release OIDC Compose mode enforces the intended boundary by publishing only
 oauth2-proxy. Do not add an app `ports:` mapping while `TRUST_PROXY_AUTH=true`.
