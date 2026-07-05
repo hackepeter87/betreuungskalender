@@ -250,6 +250,10 @@ export interface ApiInvitation {
 export interface ApiCreatedInvitation {
   invitation: ApiInvitation;
   token: string;
+  emailDelivery?: {
+    status: "not_requested" | "sent" | "failed";
+    message?: string;
+  };
 }
 
 export interface ApiMember {

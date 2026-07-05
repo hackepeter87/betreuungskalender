@@ -41,10 +41,14 @@ export const carePartyInputSchema = z.object({
 export const invitationInputSchema = z.object({
   role: z.enum(["admin", "parent", "readonly"]),
   emailHint: z.string().trim().email().max(320).optional(),
-  expiresAt: isoDateTime
+  expiresAt: isoDateTime,
+  sendEmail: z.boolean().default(false)
 }).refine((invitation) => Date.parse(invitation.expiresAt) > Date.now(), {
   path: ["expiresAt"],
   message: "Die Einladung muss in der Zukunft ablaufen."
+}).refine((invitation) => !invitation.sendEmail || Boolean(invitation.emailHint), {
+  path: ["emailHint"],
+  message: "Für den E-Mail-Versand ist eine Empfängeradresse erforderlich."
 });
 
 export const invitationAcceptInputSchema = z.object({

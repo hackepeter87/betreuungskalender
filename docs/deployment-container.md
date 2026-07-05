@@ -111,6 +111,14 @@ WEB_PUSH_SUBJECT=mailto:admin@example.invalid
 WEB_PUSH_PUBLIC_KEY=
 WEB_PUSH_PRIVATE_KEY=
 WEB_PUSH_ALLOWED_ENDPOINT_HOSTS=fcm.googleapis.com,updates.push.services.mozilla.com,web.push.apple.com,webpush.push.apple.com
+INVITATION_EMAIL_ENABLED=false
+INVITATION_PUBLIC_BASE_URL=https://app.example.net
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM=
 RECOVERY_ADMIN_ENABLED=false
 ALLOWED_ORIGIN=https://app.example.net
 ```
@@ -121,6 +129,11 @@ enabling Push, generate VAPID keys outside the repository and keep the private
 key in the deployment environment only. Keep
 `WEB_PUSH_ALLOWED_ENDPOINT_HOSTS` restricted to browser push-service hosts; do
 not add private infrastructure, loopback hosts, or broad wildcard domains.
+
+Invitation email delivery is optional. Leave `INVITATION_EMAIL_ENABLED=false`
+unless a reviewed SMTP relay is available. If enabled, keep `SMTP_PASSWORD`
+only in private deployment state and set `INVITATION_PUBLIC_BASE_URL` to the
+public HTTPS app origin that invited users open.
 
 Recovery admin is optional and disabled by default. If you deliberately enable
 it as an emergency identity-provider fallback, prefer a mounted secret file over

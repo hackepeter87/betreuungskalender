@@ -12,6 +12,10 @@ import {
   MemberManagementError
 } from "../services/memberManagement.js";
 import {
+  InvitationEmailError,
+  sendInvitationEmail
+} from "../services/invitationEmail.js";
+import {
   invitationAcceptInputSchema,
   invitationInputSchema
 } from "../validation/schemas.js";
@@ -53,6 +57,11 @@ function normalizeMemberError(error: unknown) {
   };
 }
 
+function normalizeInvitationEmailError(error: unknown): string {
+  if (error instanceof InvitationEmailError) return error.message;
+  return "Einladungs-E-Mail konnte nicht gesendet werden.";
+}
+
 export async function invitationRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/invitations", readLimit, async (request, reply) => {
     try {
@@ -88,7 +97,32 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
       ...parsed.data,
       actorId: request.userEmail
     });
-    return reply.code(201).send(created);
+    if (!parsed.data.sendEmail) {
+      return reply.code(201).send({
+        ...created,
+        emailDelivery: { status: "not_requested" }
+      });
+    }
+    try {
+      await sendInvitationEmail({
+        to: parsed.data.emailHint,
+        token: created.token,
+        role: created.invitation.role,
+        expiresAt: created.invitation.expiresAt
+      });
+      return reply.code(201).send({
+        ...created,
+        emailDelivery: { status: "sent" }
+      });
+    } catch (error) {
+      return reply.code(201).send({
+        ...created,
+        emailDelivery: {
+          status: "failed",
+          message: normalizeInvitationEmailError(error)
+        }
+      });
+    }
   });
 
   app.post("/api/invitations/accept", writeLimit, async (request, reply) => {
