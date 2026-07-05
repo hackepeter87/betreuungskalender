@@ -14,6 +14,7 @@ export const careScopes = [
 
 export type CareScope = (typeof careScopes)[number];
 export type ApiEntryStatus = "planned" | "completed" | "cancelled" | "partial";
+export type ApiAuthRole = "admin" | "parent" | "readonly";
 export type ApiCareDeviationType =
   | "cancelled"
   | "partial"
@@ -234,6 +235,23 @@ export interface ApiSetupOwnerBootstrap {
   };
 }
 
+export interface ApiInvitation {
+  id: string;
+  role: ApiAuthRole;
+  expiresAt: string;
+  createdAt: string;
+  updatedAt: string;
+  emailHint?: string;
+  acceptedUserId?: string;
+  acceptedAt?: string;
+  revokedAt?: string;
+}
+
+export interface ApiCreatedInvitation {
+  invitation: ApiInvitation;
+  token: string;
+}
+
 export interface ApiPushSubscriptionInput {
   endpoint: string;
   keys: {
@@ -274,7 +292,7 @@ export interface ApiSession {
   user?: {
     id: string;
     displayName: string;
-    role: "admin" | "parent" | "readonly";
+    role: ApiAuthRole;
     email?: string;
   };
   loginUrl?: string;
@@ -306,7 +324,7 @@ export interface ApiCalendarFeedScopeOption {
 export interface ApiAppUser {
   id: string;
   displayName: string;
-  role: "admin" | "parent" | "readonly";
+  role: ApiAuthRole;
   email?: string;
   lastSeenAt: string;
 }

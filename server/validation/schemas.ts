@@ -38,6 +38,19 @@ export const carePartyInputSchema = z.object({
   kind: z.enum(carePartyKinds).default("other")
 });
 
+export const invitationInputSchema = z.object({
+  role: z.enum(["admin", "parent", "readonly"]),
+  emailHint: z.string().trim().email().max(320).optional(),
+  expiresAt: isoDateTime
+}).refine((invitation) => Date.parse(invitation.expiresAt) > Date.now(), {
+  path: ["expiresAt"],
+  message: "Die Einladung muss in der Zukunft ablaufen."
+});
+
+export const invitationAcceptInputSchema = z.object({
+  token: z.string().trim().min(24).max(500)
+});
+
 export const tripInputSchema = z.object({
   id: z.string().min(1).optional(),
   purpose: z.string().trim().min(1, "Fahrtzweck ist erforderlich.").max(200),

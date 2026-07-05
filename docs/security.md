@@ -165,6 +165,11 @@ roles for known app users. Without an active membership, trusted-proxy and
 native OIDC deployments keep using the configured group mapping as the
 compatibility fallback.
 
+Application invitations use one-time bearer tokens. The server stores only a
+SHA-256 token hash, expiry, revocation status, target role, and acceptance
+metadata. Treat raw invitation URLs like passwords: they are shown only at
+creation time and should be shared through a trusted channel.
+
 Fresh installations support an explicit owner bootstrap. During that incomplete
 first-run state, a successfully authenticated identity may create the initial
 admin membership and mark setup complete. The action is audited and becomes

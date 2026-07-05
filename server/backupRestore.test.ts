@@ -30,7 +30,8 @@ const expectedMigrations = [
   "019_care_entry_deviations",
   "020_contact_impediments",
   "021_recovery_admin",
-  "022_app_memberships"
+  "022_app_memberships",
+  "023_app_invitations"
 ];
 
 async function withTemporaryDirectory(
