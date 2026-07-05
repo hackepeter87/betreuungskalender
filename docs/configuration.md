@@ -189,8 +189,12 @@ Native OIDC maps the stable `sub` claim to `app_users.external_subject`.
 `groups`. Values may be emitted as an array or as comma, semicolon, or
 newline-separated strings. The same `OIDC_ADMIN_GROUP`, `OIDC_PARENT_GROUP`,
 and `OIDC_READONLY_GROUP` settings are used in trusted-proxy and native mode.
-When no configured group matches, native OIDC rejects the callback with `403`
-by default and does not create a browser session.
+When an active application membership exists for the stable app user, that
+membership role is used before the identity-provider group-derived role. If no
+membership exists, the configured OIDC groups remain the compatibility fallback.
+When no configured group matches and no app membership exists, native OIDC
+rejects the callback with `403` by default and does not create a browser
+session.
 
 In native mode, unauthenticated `/api/session` responses include
 `loginUrl: "/auth/login"`. Authenticated native sessions include

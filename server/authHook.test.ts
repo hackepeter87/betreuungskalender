@@ -103,7 +103,10 @@ test("trusted proxy mode rejects identity headers from untrusted source addresse
       }]
     }),
     undefined,
-    { upsertAuthenticatedUser: () => undefined }
+    {
+      upsertAuthenticatedUser: () => undefined,
+      applyMembershipRole: (candidate) => ({ user: candidate })
+    }
   );
 
   await assert.rejects(
@@ -143,7 +146,10 @@ test("trusted proxy mode accepts identity headers from allowed source addresses"
       }]
     }),
     undefined,
-    { upsertAuthenticatedUser: () => undefined }
+    {
+      upsertAuthenticatedUser: () => undefined,
+      applyMembershipRole: (candidate) => ({ user: candidate })
+    }
   );
   const request = {
     method: "GET",
@@ -157,6 +163,47 @@ test("trusted proxy mode accepts identity headers from allowed source addresses"
 
   await assert.doesNotReject(() => hook.call({} as never, request, {} as never));
   assert.equal((request as { user?: RequestUser }).user?.role, "admin");
+});
+
+test("trusted proxy mode can authorize strict users through app membership", async () => {
+  const hook = createApiAuthHook(
+    authConfig({
+      authMode: "trusted-proxy",
+      trustProxyAuth: true,
+      oidcRequireRoleClaim: true,
+      trustedProxyRules: [{
+        source: "10.0.0.0/24",
+        address: "10.0.0.0",
+        prefix: 24,
+        family: "ipv4"
+      }]
+    }),
+    undefined,
+    {
+      upsertAuthenticatedUser: () => undefined,
+      applyMembershipRole: (candidate) => ({
+        membershipRole: "parent",
+        user: {
+          ...candidate,
+          role: "parent",
+          permissions: ["read", "write"]
+        }
+      })
+    }
+  );
+  const request = {
+    method: "POST",
+    url: "/api/children",
+    raw: { socket: { remoteAddress: "10.0.0.23" } },
+    headers: {
+      "x-auth-request-user": "subject-member",
+      "x-auth-request-email": "member@example.test",
+      "x-auth-request-groups": "/unknown/group"
+    }
+  } as never;
+
+  await assert.doesNotReject(() => hook.call({} as never, request, {} as never));
+  assert.equal((request as { user?: RequestUser }).user?.role, "parent");
 });
 
 test("/api/session stays reachable for frontend auth discovery", async () => {

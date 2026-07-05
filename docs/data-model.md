@@ -42,6 +42,7 @@ discovery source; it is not synchronized or treated as current persistence.
 | `monthly_closings` | Monthly summary and post-close change marker |
 | `audit_log` | Field changes, creates, deletes, and post-close changes |
 | `app_users` | Stable users derived from trusted proxy headers or native OIDC claims |
+| `app_memberships` | Optional application-level member roles overriding identity-provider group roles |
 | `app_user_care_party_assignments` | Optional mapping between authenticated users and domain care parties |
 | `calendar_feed_tokens` | Revocable per-user iCalendar feed token hashes |
 | `native_oidc_login_states` | Short-lived server-side OIDC state, nonce, and PKCE verifier records |
@@ -64,6 +65,11 @@ internal user IDs. It stores the latest display name, email, derived role,
 group list, timestamps, and soft-delete metadata. The stable internal ID is
 used in API audit fields so name or email changes do not rewrite historical
 actors.
+
+`app_memberships` stores optional application-level roles for known app users.
+When an active membership exists, its role is used for authorization before the
+identity-provider group-derived role. If no membership exists, the existing
+OIDC group mapping remains the compatibility fallback.
 
 `audit_log` stores timestamp, stable API user ID, entity type and ID, action,
 field name, old/new serialized values, and optional metadata. Audit API

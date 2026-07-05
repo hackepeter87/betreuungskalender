@@ -1,6 +1,7 @@
 import { db } from "../db/connection.js";
 import { permissionsForRole, type AuthRole, type RequestUser } from "../auth.js";
 import type Database from "better-sqlite3";
+import { applyMembershipRole } from "./memberships.js";
 
 interface AppUserRow {
   id: string;
@@ -68,7 +69,7 @@ export function findAuthenticatedUserBySubject(
       AND deleted_at IS NULL
   `).get(externalSubject) as AppUserRow | undefined;
   if (!row || !isAuthRole(row.role)) return undefined;
-  return {
+  return applyMembershipRole({
     id: row.id,
     externalSubject: row.external_subject,
     ...(row.email ? { email: row.email } : {}),
@@ -76,7 +77,7 @@ export function findAuthenticatedUserBySubject(
     groups: parseGroups(row.groups_json),
     role: row.role,
     permissions: permissionsForRole(row.role)
-  };
+  }, database).user;
 }
 
 export function listAppUsers(database: Database.Database = db) {

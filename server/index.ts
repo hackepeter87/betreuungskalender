@@ -5,7 +5,7 @@ import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyRequest } from "fastify";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { sessionInfo } from "./auth.js";
+import { resolveRequestUser, sessionInfo } from "./auth.js";
 import { createApiAuthHook } from "./authHook.js";
 import { config } from "./config.js";
 import { cookieValue } from "./cookies.js";
@@ -36,8 +36,9 @@ import { externalCalendarRoutes } from "./routes/externalCalendars.js";
 import { calendarFeedRoutes } from "./routes/calendarFeeds.js";
 import { OidcSessionStore } from "./services/oidcSessions.js";
 import { RecoveryAdminStore } from "./services/recoveryAdmin.js";
+import { applyMembershipRole } from "./services/memberships.js";
 import { publicSetupState } from "./services/setupState.js";
-import { findAuthenticatedUserBySubject } from "./services/users.js";
+import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "./services/users.js";
 import { runCareConfirmationSweep } from "./services/careConfirmations.js";
 
 runMigrations();
@@ -345,6 +346,40 @@ app.get("/api/session", readLimit, async (request) => {
       setup,
       ...(config.demoDatasetsEnabled ? { demoDatasetsEnabled: true } : {})
     };
+  }
+  if (config.trustProxyAuth) {
+    const auth = resolveRequestUser(request.headers, {
+      requireAuth: config.requireAuth,
+      trustProxyAuth: config.trustProxyAuth,
+      userIdHeader: config.oidcUserIdHeader,
+      emailHeader: config.oidcEmailHeader,
+      displayNameHeader: config.oidcDisplayNameHeader,
+      groupsHeader: config.oidcGroupsHeader,
+      adminGroup: config.oidcAdminGroup,
+      parentGroup: config.oidcParentGroup,
+      readonlyGroup: config.oidcReadonlyGroup,
+      requireRoleClaim: config.oidcRequireRoleClaim,
+      fallbackRoleOnMissing: "readonly"
+    });
+    if (auth.authenticated && auth.user) {
+      upsertAuthenticatedUser(auth.user);
+      const membership = applyMembershipRole(auth.user);
+      if (auth.reason !== "missing_role" || membership.membershipRole) {
+        return {
+          authRequired: config.requireAuth,
+          authenticated: true,
+          setup,
+          user: {
+            id: membership.user.id,
+            displayName: membership.user.displayName,
+            role: membership.user.role,
+            ...(membership.user.email ? { email: membership.user.email } : {})
+          },
+          ...(config.authLogoutUrl ? { logoutUrl: config.authLogoutUrl } : {}),
+          ...(config.demoDatasetsEnabled ? { demoDatasetsEnabled: true } : {})
+        };
+      }
+    }
   }
   return {
     ...sessionInfo(request.headers, config),

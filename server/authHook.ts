@@ -10,6 +10,10 @@ import { cookieValue } from "./cookies.js";
 import { type OidcSessionRecord, type OidcSessionStore } from "./services/oidcSessions.js";
 import { isTrustedProxyAddress } from "./trustedProxy.js";
 import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "./services/users.js";
+import {
+  applyMembershipRole,
+  type MembershipResolution
+} from "./services/memberships.js";
 
 type AuthConfig = Pick<
   typeof appConfig,
@@ -35,6 +39,7 @@ interface NativeAuthOptions {
   findUserByExternalSubject?: (externalSubject: string) => RequestUser | undefined;
   findRecoveryUserByToken?: (token: string | undefined) => RequestUser | undefined;
   upsertAuthenticatedUser?: (user: RequestUser) => void;
+  applyMembershipRole?: (user: RequestUser) => MembershipResolution;
 }
 
 function httpError(code: string, statusCode: number, message: string): Error & { code: string; statusCode: number } {
@@ -121,7 +126,8 @@ export function createApiAuthHook(
       adminGroup: config.oidcAdminGroup,
       parentGroup: config.oidcParentGroup,
       readonlyGroup: config.oidcReadonlyGroup,
-      requireRoleClaim: config.oidcRequireRoleClaim
+      requireRoleClaim: config.oidcRequireRoleClaim,
+      fallbackRoleOnMissing: "readonly"
     });
     if (!auth.authenticated || !auth.user) {
       const missingRole = auth.reason === "missing_role";
@@ -131,18 +137,27 @@ export function createApiAuthHook(
         missingRole
           ? "Keine passende Berechtigung in den OIDC-Claims gefunden."
           : "Authentifizierung erforderlich."
+        );
+    }
+    (options.upsertAuthenticatedUser ?? upsertAuthenticatedUser)(auth.user);
+    const membership = (options.applyMembershipRole ?? applyMembershipRole)(auth.user);
+    if (auth.reason === "missing_role" && !membership.membershipRole) {
+      throw httpError(
+        "authorization_required",
+        403,
+        "Keine passende Berechtigung in den OIDC-Claims gefunden."
       );
     }
+    const user = membership.user;
     const requiredPermission = requiredPermissionForRequest(request.method, request.url);
-    if (!hasPermission(auth.user, requiredPermission)) {
+    if (!hasPermission(user, requiredPermission)) {
       throw httpError(
         "forbidden",
         403,
         "Für diese Aktion fehlt die erforderliche Berechtigung."
       );
     }
-    (options.upsertAuthenticatedUser ?? upsertAuthenticatedUser)(auth.user);
-    request.user = auth.user;
-    request.userEmail = auth.user.id;
+    request.user = user;
+    request.userEmail = user.id;
   };
 }

@@ -119,13 +119,16 @@ export function userFromClaims(
     parentGroup: string;
     readonlyGroup: string;
     requireRoleClaim: boolean;
+    fallbackRoleOnMissing?: AuthRole;
   }
 ): { authenticated: boolean; user?: RequestUser; reason?: "missing_role" } {
-  const role = roleFromGroups(claims.groups, options);
+  const claimRole = roleFromGroups(claims.groups, options);
+  const role = claimRole ?? options.fallbackRoleOnMissing;
   if (!role) return { authenticated: false, reason: "missing_role" };
   const displayName = claims.displayName ?? claims.email ?? claims.subject;
   return {
     authenticated: true,
+    ...(!claimRole ? { reason: "missing_role" as const } : {}),
     user: {
       id: stableUserId(claims.subject),
       externalSubject: claims.subject,
@@ -151,6 +154,7 @@ export function resolveRequestUser(
     parentGroup: string;
     readonlyGroup: string;
     requireRoleClaim: boolean;
+    fallbackRoleOnMissing?: AuthRole;
   }
 ): { authenticated: boolean; user?: RequestUser; reason?: "missing_identity" | "missing_role" } {
   if (!options.trustProxyAuth) {
@@ -167,11 +171,13 @@ export function resolveRequestUser(
   const email = headerValue(headers, options.emailHeader);
   const displayName = headerValue(headers, options.displayNameHeader) ?? email ?? subject;
   const groups = splitGroups(headerValue(headers, options.groupsHeader));
-  const role = roleFromGroups(groups, options);
+  const claimRole = roleFromGroups(groups, options);
+  const role = claimRole ?? options.fallbackRoleOnMissing;
   if (!role) return { authenticated: false, reason: "missing_role" };
 
   return {
     authenticated: true,
+    ...(!claimRole ? { reason: "missing_role" as const } : {}),
     user: {
       id: stableUserId(subject),
       externalSubject: subject,

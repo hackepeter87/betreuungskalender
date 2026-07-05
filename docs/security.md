@@ -160,6 +160,11 @@ users, or care-party assignments. `admin` users can perform those
 administrative actions when request input is valid. Calendar feed bearer tokens
 never authenticate general API routes.
 
+Application memberships, when present, override identity-provider group-derived
+roles for known app users. Without an active membership, trusted-proxy and
+native OIDC deployments keep using the configured group mapping as the
+compatibility fallback.
+
 Care confirmation push notifications are deliberately generic. Push payloads
 must not include child names, exact care times, locations, notes, evidence
 references, costs, trips, or other sensitive case details. Store VAPID private
