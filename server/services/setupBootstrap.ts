@@ -1,7 +1,7 @@
 import type Database from "better-sqlite3";
-import { randomUUID } from "node:crypto";
 import type { RequestUser } from "../auth.js";
 import { db } from "../db/connection.js";
+import { setMembershipRole } from "./memberships.js";
 import { buildSetupState, publicSetupState } from "./setupState.js";
 
 export class SetupBootstrapError extends Error {
@@ -47,38 +47,6 @@ function upsertSetting(
   `).run(key, JSON.stringify(value), actorId, actorId, timestamp, timestamp);
 }
 
-function upsertOwnerMembership(
-  database: Database.Database,
-  userId: string,
-  actorId: string,
-  timestamp: string
-): void {
-  const existing = database.prepare(`
-    SELECT id
-    FROM app_memberships
-    WHERE user_id = ? AND deleted_at IS NULL
-    ORDER BY updated_at DESC, id DESC
-    LIMIT 1
-  `).get(userId) as { id: string } | undefined;
-
-  if (existing) {
-    database.prepare(`
-      UPDATE app_memberships
-      SET role = 'admin',
-          updated_by = ?,
-          updated_at = ?
-      WHERE id = ?
-    `).run(actorId, timestamp, existing.id);
-    return;
-  }
-
-  database.prepare(`
-    INSERT INTO app_memberships (
-      id, user_id, role, created_by, updated_by, created_at, updated_at
-    ) VALUES (?, ?, 'admin', ?, ?, ?, ?)
-  `).run(randomUUID(), userId, actorId, actorId, timestamp, timestamp);
-}
-
 function recordBootstrapAudit(
   database: Database.Database,
   actorId: string,
@@ -110,7 +78,7 @@ export function bootstrapInstallationOwner(
     }
 
     assertKnownUser(user.id, database);
-    upsertOwnerMembership(database, user.id, user.id, timestamp);
+    setMembershipRole(user.id, "admin", user.id, timestamp, database);
     upsertSetting(database, "setup.ownerUserId", user.id, user.id, timestamp);
     upsertSetting(database, "setup.completedAt", timestamp, user.id, timestamp);
     upsertSetting(database, "setup.completedBy", user.id, user.id, timestamp);
