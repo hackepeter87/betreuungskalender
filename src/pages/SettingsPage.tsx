@@ -8,17 +8,20 @@ import { useI18n } from "../i18n/I18nProvider";
 import { copy, type CatalogKey } from "../i18n/catalog";
 import { localeMetadata, supportedLocales } from "../i18n/resources";
 import { actorDisplayName } from "../lib/actors";
-import { api } from "../lib/api";
+import { ApiError, api } from "../lib/api";
 import { formatDateTime } from "../lib/date";
 import { handoverLabel, locationLabel } from "../lib/labels";
 import { useAppStore } from "../store/AppStore";
 import {
+  type ApiAuthRole,
   carePartyKinds,
   type ApiAppUser,
   type ApiCalendarFeedScope,
   type ApiCalendarFeedStatus,
   type ApiCarePartyKind,
+  type ApiInvitation,
   type ApiInstanceReadiness,
+  type ApiMember,
   type ApiUserCarePartyAssignment
 } from "../../shared/api";
 import type { CareLocation, CareParty, Child, HandoverParty, NotificationEventType, NotificationPreference } from "../types";
@@ -204,6 +207,316 @@ function FirstRunOwnerBootstrapSection() {
         </button>
       </div>
       <p className="settings-note">{copy(locale, "settings", "ownerBootstrapNote")}</p>
+      {message ? <p className="inline-message" role="status">{message}</p> : null}
+      {error ? <p className="form-error" role="alert">{error}</p> : null}
+    </section>
+  );
+}
+
+const memberRoles: ApiAuthRole[] = ["admin", "parent", "readonly"];
+
+function memberRoleLabel(role: ApiAuthRole, locale: "de" | "en") {
+  return copy(locale, "settings", `memberRole_${role}` as CatalogKey<"settings">);
+}
+
+function invitationStatus(invitation: ApiInvitation, locale: "de" | "en") {
+  if (invitation.acceptedAt) return copy(locale, "settings", "invitationAccepted");
+  if (invitation.revokedAt) return copy(locale, "settings", "invitationRevoked");
+  if (Date.parse(invitation.expiresAt) <= Date.now()) return copy(locale, "settings", "invitationExpired");
+  return copy(locale, "settings", "invitationPending");
+}
+
+function MemberInvitationManager() {
+  const { locale, intlLocale } = useI18n();
+  const { session, reload } = useAppStore();
+  const [members, setMembers] = useState<ApiMember[]>([]);
+  const [invitations, setInvitations] = useState<ApiInvitation[]>([]);
+  const [acceptToken, setAcceptToken] = useState("");
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<ApiAuthRole>("parent");
+  const [expiresDays, setExpiresDays] = useState(7);
+  const [createdToken, setCreatedToken] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [ownerForbidden, setOwnerForbidden] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const loadOwnerData = async () => {
+    if (session.user?.role !== "admin") return;
+    try {
+      const [nextMembers, nextInvitations] = await Promise.all([
+        api.listMembers(),
+        api.listInvitations()
+      ]);
+      setMembers(nextMembers);
+      setInvitations(nextInvitations);
+      setOwnerForbidden(false);
+      setError(null);
+    } catch (reason) {
+      if (reason instanceof ApiError && reason.status === 403) {
+        setOwnerForbidden(true);
+        return;
+      }
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
+  useEffect(() => {
+    void loadOwnerData();
+  }, [session.user?.role, session.user?.id]);
+
+  if (!session.authenticated) return null;
+
+  const acceptInvitation = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!acceptToken.trim()) return;
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      await api.acceptInvitation(acceptToken.trim());
+      setAcceptToken("");
+      setMessage(copy(locale, "settings", "invitationAcceptDone"));
+      await reload();
+      await loadOwnerData();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const createInvitation = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    setCreatedToken(null);
+    try {
+      const safeExpiresDays = Number.isFinite(expiresDays) ? Math.min(30, Math.max(1, expiresDays)) : 7;
+      const expiresAt = new Date(Date.now() + safeExpiresDays * 86_400_000).toISOString();
+      const created = await api.createInvitation({
+        role: inviteRole,
+        expiresAt,
+        emailHint: inviteEmail.trim() || undefined
+      });
+      setInvitations((items) => [created.invitation, ...items]);
+      setCreatedToken(created.token);
+      setInviteEmail("");
+      setMessage(copy(locale, "settings", "invitationCreated"));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const changeRole = async (member: ApiMember, role: ApiAuthRole) => {
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const updated = await api.updateMemberRole(member.id, role);
+      setMembers((items) => items.map((item) => item.id === updated.id ? updated : item));
+      setMessage(copy(locale, "settings", "memberRoleUpdated"));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const removeMember = async (member: ApiMember) => {
+    if (!window.confirm(copy(locale, "settings", "memberRemoveConfirm", { name: member.displayName }))) return;
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const updated = await api.removeMember(member.id);
+      setMembers((items) => items.map((item) => item.id === updated.id ? updated : item));
+      setMessage(copy(locale, "settings", "memberRemoved"));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const revokeInvitation = async (invitation: ApiInvitation) => {
+    if (!window.confirm(copy(locale, "settings", "invitationRevokeConfirm"))) return;
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      const revoked = await api.revokeInvitation(invitation.id);
+      setInvitations((items) => items.map((item) => item.id === revoked.id ? revoked : item));
+      setMessage(copy(locale, "settings", "invitationRevokedDone"));
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const copyToken = async () => {
+    if (!createdToken) return;
+    await navigator.clipboard.writeText(createdToken);
+    setMessage(copy(locale, "settings", "invitationTokenCopied"));
+  };
+
+  const currentUserId = session.user?.id;
+  const showOwnerControls = session.user?.role === "admin" && !ownerForbidden;
+
+  return (
+    <section className="panel settings-section" data-testid="member-invitations">
+      <div className="panel__header panel__header--compact">
+        <div>
+          <h2>{copy(locale, "settings", "members")}</h2>
+          <p>{copy(locale, "settings", "membersDescription")}</p>
+        </div>
+      </div>
+
+      <form className="member-invite-accept" data-testid="invitation-accept-form" onSubmit={(event) => void acceptInvitation(event)}>
+        <label className="field">
+          <span>{copy(locale, "settings", "invitationAccept")}</span>
+          <input
+            data-testid="invitation-accept-token"
+            value={acceptToken}
+            onChange={(event) => setAcceptToken(event.target.value)}
+            placeholder={copy(locale, "settings", "invitationTokenPlaceholder")}
+            autoComplete="off"
+          />
+        </label>
+        <button className="button button--secondary" type="submit" disabled={busy || !acceptToken.trim()}>
+          <Icon name="check" size={17} />
+          {copy(locale, "settings", "invitationAcceptAction")}
+        </button>
+      </form>
+
+      {showOwnerControls ? (
+        <>
+          <div className="member-management-grid">
+            <form className="member-invite-card" data-testid="invitation-create-form" onSubmit={(event) => void createInvitation(event)}>
+              <div>
+                <strong>{copy(locale, "settings", "invitationCreate")}</strong>
+                <small>{copy(locale, "settings", "invitationCreateDescription")}</small>
+              </div>
+              <label className="field">
+                <span>{copy(locale, "settings", "invitationEmailHint")}</span>
+                <input
+                  data-testid="invitation-email-hint"
+                  type="email"
+                  value={inviteEmail}
+                  onChange={(event) => setInviteEmail(event.target.value)}
+                  placeholder="name@example.invalid"
+                />
+              </label>
+              <div className="member-invite-card__row">
+                <label className="field">
+                  <span>{copy(locale, "settings", "memberRole")}</span>
+                  <select data-testid="invitation-role" value={inviteRole} onChange={(event) => setInviteRole(event.target.value as ApiAuthRole)}>
+                    {memberRoles.map((role) => (
+                      <option key={role} value={role}>{memberRoleLabel(role, locale)}</option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{copy(locale, "settings", "invitationExpiresDays")}</span>
+                  <input data-testid="invitation-expires-days" type="number" min="1" max="30" value={expiresDays} onChange={(event) => setExpiresDays(Number(event.target.value))} />
+                </label>
+              </div>
+              <button className="button button--primary" type="submit" disabled={busy}>
+                <Icon name="plus" size={17} />
+                {copy(locale, "settings", "invitationCreateAction")}
+              </button>
+            </form>
+
+            {createdToken ? (
+              <div className="member-token-card" data-testid="created-invitation-token">
+                <strong>{copy(locale, "settings", "invitationTokenTitle")}</strong>
+                <small>{copy(locale, "settings", "invitationTokenDescription")}</small>
+                <textarea data-testid="invitation-created-token" readOnly value={createdToken} />
+                <button className="button button--secondary" type="button" onClick={() => void copyToken()}>
+                  <Icon name="copy" size={17} />
+                  {copy(locale, "settings", "invitationTokenCopy")}
+                </button>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="member-list" data-testid="member-list">
+            {members.map((member) => (
+              <div className="member-row" data-testid={`member-row-${member.id}`} key={member.id}>
+                <div className="member-row__identity">
+                  <span className="child-avatar child-avatar--neutral">
+                    <Icon name="user" size={18} />
+                  </span>
+                  <span>
+                    <strong>{member.displayName}</strong>
+                    <small>{member.email ?? member.id}</small>
+                    <small>
+                      {member.owner ? copy(locale, "settings", "memberOwner") : copy(locale, "settings", "memberLastSeen", {
+                        date: member.lastSeenAt ? formatDateTime(member.lastSeenAt, intlLocale) : copy(locale, "common", "none")
+                      })}
+                    </small>
+                  </span>
+                </div>
+                <label className="field field--compact">
+                  <span>{copy(locale, "settings", "memberRole")}</span>
+                  <select
+                    data-testid="member-role-select"
+                    value={member.effectiveRole}
+                    disabled={busy || member.owner || member.id === currentUserId}
+                    onChange={(event) => void changeRole(member, event.target.value as ApiAuthRole)}
+                  >
+                    {memberRoles.map((role) => (
+                      <option key={role} value={role}>{memberRoleLabel(role, locale)}</option>
+                    ))}
+                  </select>
+                </label>
+                <div className="member-row__actions">
+                  {member.membershipRole ? <span className="status-pill status-pill--ok">{copy(locale, "settings", "memberAppRole")}</span> : <span className="status-pill">{copy(locale, "settings", "memberClaimRole")}</span>}
+                  <button
+                    className="button button--danger-quiet"
+                    data-testid="member-remove-role"
+                    type="button"
+                    disabled={busy || member.owner || member.id === currentUserId || !member.membershipRole}
+                    onClick={() => void removeMember(member)}
+                  >
+                    <Icon name="trash" size={17} />
+                    {copy(locale, "settings", "memberRemove")}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="invitation-list" data-testid="invitation-list">
+            <h3>{copy(locale, "settings", "pendingInvitations")}</h3>
+            {invitations.length ? invitations.map((invitation) => {
+              const active = !invitation.acceptedAt && !invitation.revokedAt && Date.parse(invitation.expiresAt) > Date.now();
+              return (
+                <div className="invitation-row" data-testid={`invitation-row-${invitation.id}`} key={invitation.id}>
+                  <span>
+                    <strong>{invitation.emailHint || memberRoleLabel(invitation.role, locale)}</strong>
+                    <small>
+                      {memberRoleLabel(invitation.role, locale)} · {copy(locale, "settings", "invitationExpiresAt", {
+                        date: formatDateTime(invitation.expiresAt, intlLocale)
+                      })}
+                    </small>
+                  </span>
+                  <span className={active ? "status-pill status-pill--ok" : "status-pill"}>{invitationStatus(invitation, locale)}</span>
+                  <button className="button button--danger-quiet" data-testid="invitation-revoke" type="button" disabled={busy || !active} onClick={() => void revokeInvitation(invitation)}>
+                    <Icon name="trash" size={17} />
+                    {copy(locale, "settings", "invitationRevoke")}
+                  </button>
+                </div>
+              );
+            }) : <p className="empty-copy empty-copy--padded">{copy(locale, "settings", "invitationsEmpty")}</p>}
+          </div>
+        </>
+      ) : null}
+
       {message ? <p className="inline-message" role="status">{message}</p> : null}
       {error ? <p className="form-error" role="alert">{error}</p> : null}
     </section>
@@ -704,6 +1017,8 @@ export function SettingsPage() {
       <NotificationPreferencesSection />
 
       <InstanceReadinessSection />
+
+      <MemberInvitationManager />
 
       <UserCarePartyAssignmentManager />
 

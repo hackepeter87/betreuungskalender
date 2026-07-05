@@ -80,3 +80,30 @@ export function setMembershipRole(
     ) VALUES (?, ?, ?, ?, ?, ?, ?)
   `).run(randomUUID(), userId, role, actorId, actorId, timestamp, timestamp);
 }
+
+export function clearMembershipRole(
+  userId: string,
+  actorId: string,
+  timestamp = new Date().toISOString(),
+  database: Database.Database = db
+): AuthRole | undefined {
+  const existing = database.prepare(`
+    SELECT id, role
+    FROM app_memberships
+    WHERE user_id = ? AND deleted_at IS NULL
+    ORDER BY updated_at DESC, id DESC
+    LIMIT 1
+  `).get(userId) as { id: string; role: AuthRole } | undefined;
+
+  if (!existing) return undefined;
+
+  database.prepare(`
+    UPDATE app_memberships
+    SET deleted_at = ?,
+        updated_by = ?,
+        updated_at = ?
+    WHERE id = ?
+  `).run(timestamp, actorId, timestamp, existing.id);
+
+  return existing.role;
+}
