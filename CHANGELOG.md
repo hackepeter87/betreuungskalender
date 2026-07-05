@@ -6,6 +6,36 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-07-05
+
+### Added
+
+- Added admin-only instance readiness information for abstract version,
+  runtime, migration, setup, and feature status checks.
+- Added first-use setup state to `/api/session` so fresh self-hosted
+  installations can be detected without browser-local state.
+- Added application-managed memberships that can override identity-provider
+  group-derived roles for known users while keeping existing OIDC group mapping
+  as compatibility fallback.
+- Added an explicit first-run owner bootstrap flow for fresh installations. The
+  signed-in setup user can confirm ownership once, creating an admin membership
+  and completing setup with audit entries.
+
+### Changed
+
+- Native OIDC can create a provisional setup session without a matching role
+  group only while first-run setup is incomplete. General write APIs remain
+  blocked until an application membership exists.
+- Documented the app-managed access model and first-run owner bootstrap in the
+  configuration, data-model, and security documentation.
+
+### Testing
+
+- Added backend coverage for setup-state detection, owner bootstrap audit
+  records, app-managed membership role resolution, trusted-proxy membership
+  authorization, and Native OIDC provisional setup sessions.
+- Re-ran the full unit, build, E2E, runtime-security, and release checks.
+
 ## [1.10.2] - 2026-07-05
 
 ### Fixed
