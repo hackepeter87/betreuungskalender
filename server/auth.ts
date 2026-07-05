@@ -271,6 +271,7 @@ export function requiredPermissionForRequest(
   if (
     url.startsWith("/api/app-data") ||
     url.startsWith("/api/app-users") ||
+    url.startsWith("/api/instance-readiness") ||
     url.startsWith("/api/user-care-party-assignments") ||
     url.startsWith("/api/demo-data") ||
     url.startsWith("/api/migration/")

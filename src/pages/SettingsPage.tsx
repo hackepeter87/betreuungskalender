@@ -18,6 +18,7 @@ import {
   type ApiCalendarFeedScope,
   type ApiCalendarFeedStatus,
   type ApiCarePartyKind,
+  type ApiInstanceReadiness,
   type ApiUserCarePartyAssignment
 } from "../../shared/api";
 import type { CareLocation, CareParty, Child, HandoverParty, NotificationEventType, NotificationPreference } from "../types";
@@ -89,6 +90,10 @@ function notificationEventLabel(eventType: NotificationEventType, locale: "de" |
   return eventType === "care_confirmation_due"
     ? copy(locale, "notifications", "careConfirmationDue")
     : copy(locale, "notifications", "careConfirmationReminder");
+}
+
+function yesNo(value: boolean, locale: "de" | "en") {
+  return copy(locale, "common", value ? "yes" : "no");
 }
 
 function NotificationPreferencesSection() {
@@ -452,6 +457,110 @@ function UserCarePartyAssignmentManager() {
   );
 }
 
+function InstanceReadinessSection() {
+  const { locale, intlLocale } = useI18n();
+  const { session } = useAppStore();
+  const [readiness, setReadiness] = useState<ApiInstanceReadiness | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (session.user?.role !== "admin") return;
+    let cancelled = false;
+    api.getInstanceReadiness()
+      .then((next) => {
+        if (cancelled) return;
+        setReadiness(next);
+        setError(null);
+      })
+      .catch((reason) => {
+        if (cancelled) return;
+        setError(reason instanceof Error ? reason.message : copy(locale, "settings", "loadInstanceReadinessFailed"));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [locale, session.user?.role]);
+
+  if (session.user?.role !== "admin") return null;
+
+  const featureLabels = readiness
+    ? [
+        readiness.features.nativeOidc ? copy(locale, "settings", "nativeOidc") : null,
+        readiness.features.trustedProxy ? copy(locale, "settings", "trustedProxy") : null,
+        readiness.features.pushConfigured ? copy(locale, "settings", "pushConfigured") : null,
+        readiness.features.demoDatasetsEnabled ? copy(locale, "settings", "demoDatasets") : null,
+        readiness.features.recoveryAdminEnabled ? copy(locale, "settings", "recoveryAdmin") : null
+      ].filter(Boolean)
+    : [];
+
+  return (
+    <section className="panel settings-section" data-testid="instance-readiness">
+      <div className="panel__header panel__header--compact">
+        <div>
+          <h2>{copy(locale, "settings", "instanceReadiness")}</h2>
+          <p>{copy(locale, "settings", "instanceReadinessDescription")}</p>
+        </div>
+      </div>
+      {readiness ? (
+        <div className="instance-readiness-grid">
+          <div className="readiness-item">
+            <small>{copy(locale, "settings", "appVersion")}</small>
+            <strong>{readiness.version}</strong>
+          </div>
+          <div className="readiness-item">
+            <small>{copy(locale, "settings", "authMode")}</small>
+            <strong>{readiness.authMode}</strong>
+          </div>
+          <div className="readiness-item">
+            <small>{copy(locale, "settings", "runtimeEnvironment")}</small>
+            <strong>{readiness.environment}</strong>
+          </div>
+          <div className="readiness-item">
+            <small>{copy(locale, "settings", "requireAuth")}</small>
+            <strong>{yesNo(readiness.requireAuth, locale)}</strong>
+          </div>
+          <div className="readiness-item readiness-item--wide">
+            <small>{copy(locale, "settings", "databaseStatus")}</small>
+            <strong>{readiness.database.reachable && readiness.database.upToDate ? copy(locale, "settings", "databaseReady") : copy(locale, "settings", "databaseNeedsAttention")}</strong>
+            <span>{copy(locale, "settings", "migrations")}: {readiness.database.migrationsApplied} / {readiness.database.latestAvailableMigration ?? "-"}</span>
+          </div>
+          <div className="readiness-item readiness-item--wide">
+            <small>{copy(locale, "settings", "setupState")}</small>
+            <strong>{readiness.setup.complete ? copy(locale, "settings", "setupComplete") : copy(locale, "settings", "setupIncomplete")}</strong>
+            <span>
+              {copy(locale, "settings", "setupCounts", {
+                children: readiness.setup.children,
+                careParties: readiness.setup.careParties,
+                appUsers: readiness.setup.appUsers
+              })}
+            </span>
+          </div>
+          <div className="readiness-item readiness-item--wide">
+            <small>{copy(locale, "settings", "enabledFeatures")}</small>
+            <div className="readiness-pills">
+              {featureLabels.length ? featureLabels.map((label) => (
+                <span className="status-pill status-pill--ok" key={label}>{label}</span>
+              )) : <span className="status-pill">{copy(locale, "settings", "notConfigured")}</span>}
+            </div>
+          </div>
+          <div className="readiness-item readiness-item--wide">
+            <small>{copy(locale, "settings", "serverTime")}</small>
+            <strong>{formatDateTime(readiness.serverTime, intlLocale)}</strong>
+            <span>{readiness.timezone}</span>
+          </div>
+          <div className="readiness-item readiness-item--wide">
+            <small>{copy(locale, "settings", "instanceId")}</small>
+            <strong>{readiness.instanceId}</strong>
+          </div>
+        </div>
+      ) : (
+        <p className="empty-copy empty-copy--padded">{error ?? "..."}</p>
+      )}
+      {error && readiness ? <p className="form-error" role="alert">{error}</p> : null}
+    </section>
+  );
+}
+
 export function SettingsPage() {
   const { locale, intlLocale, setLocale, t } = useI18n();
   const {
@@ -547,6 +656,8 @@ export function SettingsPage() {
       </section>
 
       <NotificationPreferencesSection />
+
+      <InstanceReadinessSection />
 
       <UserCarePartyAssignmentManager />
 

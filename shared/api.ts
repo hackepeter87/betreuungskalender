@@ -188,6 +188,36 @@ export interface ApiNotificationPreferencesResponse {
   activePushSubscriptions: number;
 }
 
+export interface ApiInstanceReadiness {
+  instanceId: string;
+  version: string;
+  environment: string;
+  authMode: "local" | "trusted-proxy" | "native-oidc";
+  requireAuth: boolean;
+  serverTime: string;
+  timezone: string;
+  database: {
+    reachable: boolean;
+    migrationsApplied: number;
+    latestAppliedMigration?: string;
+    latestAvailableMigration?: string;
+    upToDate: boolean;
+  };
+  setup: {
+    complete: boolean;
+    children: number;
+    careParties: number;
+    appUsers: number;
+  };
+  features: {
+    demoDatasetsEnabled: boolean;
+    nativeOidc: boolean;
+    trustedProxy: boolean;
+    recoveryAdminEnabled: boolean;
+    pushConfigured: boolean;
+  };
+}
+
 export interface ApiPushSubscriptionInput {
   endpoint: string;
   keys: {

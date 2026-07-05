@@ -18,6 +18,7 @@ import type {
   ApiExternalCalendarBackupEvent,
   ApiExternalCalendarSource,
   ApiExternalCalendarHolidayDeriveResult,
+  ApiInstanceReadiness,
   ApiNotificationPreferencesResponse,
   ApiNotificationPreference,
   ApiPushSubscriptionInput,
@@ -643,6 +644,9 @@ export const api = {
   },
   listUserCarePartyAssignments() {
     return request<ApiUserCarePartyAssignment[]>("/api/user-care-party-assignments");
+  },
+  getInstanceReadiness() {
+    return request<ApiInstanceReadiness>("/api/instance-readiness");
   },
   updateUserCarePartyAssignment(userId: string, carePartyIds: string[]) {
     return request<ApiUserCarePartyAssignment>(

@@ -8,6 +8,13 @@ const migrationsDirectory = existsSync(compiledDirectory)
   ? compiledDirectory
   : resolve(process.cwd(), "server/migrations");
 
+export function availableMigrationVersions(directory = migrationsDirectory): string[] {
+  return readdirSync(directory)
+    .filter((file) => file.endsWith(".sql"))
+    .sort()
+    .map((file) => basename(file, ".sql"));
+}
+
 export function migrateDatabase(
   database: Database.Database,
   directory = migrationsDirectory
@@ -25,9 +32,7 @@ export function migrateDatabase(
     })
   );
 
-  const files = readdirSync(directory)
-    .filter((file) => file.endsWith(".sql"))
-    .sort();
+  const files = availableMigrationVersions(directory).map((version) => `${version}.sql`);
 
   const applyMigration = database.transaction((file: string) => {
     const version = basename(file, ".sql");

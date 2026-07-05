@@ -146,6 +146,70 @@ test("keeps desktop settings layout within the viewport", async ({ page }) => {
   await expectNoDocumentHorizontalOverflow(page);
 });
 
+test("shows admin instance readiness information in settings", async ({ page }) => {
+  await page.route("**/api/session", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        authRequired: true,
+        authenticated: true,
+        demoDatasetsEnabled: true,
+        user: {
+          id: "user-admin-e2e",
+          displayName: "Admin",
+          role: "admin"
+        }
+      })
+    });
+  });
+  await page.route("**/api/instance-readiness", async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        instanceId: "inst_e2e000000000000",
+        version: "1.10.2",
+        environment: "test",
+        authMode: "native-oidc",
+        requireAuth: true,
+        serverTime: "2026-07-05T10:00:00.000Z",
+        timezone: "Europe/Berlin",
+        database: {
+          reachable: true,
+          migrationsApplied: 21,
+          latestAppliedMigration: "021_recovery_admin",
+          latestAvailableMigration: "021_recovery_admin",
+          upToDate: true
+        },
+        setup: {
+          complete: true,
+          children: 1,
+          careParties: 1,
+          appUsers: 1
+        },
+        features: {
+          demoDatasetsEnabled: true,
+          nativeOidc: true,
+          trustedProxy: false,
+          recoveryAdminEnabled: false,
+          pushConfigured: true
+        }
+      })
+    });
+  });
+
+  await openApp(page);
+  await navigate(page, "settings");
+  const readiness = page.getByTestId("instance-readiness");
+  await expect(readiness).toBeVisible();
+  await expect(readiness).toContainText("Version");
+  await expect(readiness).toContainText("1.10.2");
+  await expect(readiness).toContainText("Native OIDC");
+  await expect(readiness).toContainText("Push konfiguriert");
+  await expectNoDocumentHorizontalOverflow(page);
+});
+
 test("shows open care confirmations in the notification center", async ({ page }) => {
   const end = new Date(Date.now() - 86_400_000);
   end.setHours(18, 0, 0, 0);
