@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import {
   externalCalendarReplacementFixture,
+  expectNoDocumentHorizontalOverflow,
   importExternalCalendar,
   invalidCalendarFixture,
   navigate,
@@ -47,8 +48,12 @@ test("imports, manages, and removes an external calendar through the UI", async 
   const agendaViewButton = page.getByTestId("calendar-view-agenda");
   await expect(agendaViewButton).toBeVisible();
   await agendaViewButton.click();
-  await expect(page.locator(".agenda-list").getByTestId(`external-calendar-event-${event?.id}`))
-    .toHaveCount(1);
+  const agendaEvent = page.locator(".agenda-list").getByTestId(`external-calendar-event-${event?.id}`);
+  await expect(agendaEvent).toHaveCount(1);
+  await expect(agendaEvent.getByText("E2E Holiday", { exact: true })).toBeVisible();
+  const agendaEventContentBox = await agendaEvent.locator(".agenda-card__main").boundingBox();
+  expect(agendaEventContentBox?.width ?? 0).toBeGreaterThan(250);
+  await expectNoDocumentHorizontalOverflow(page);
 
   await navigate(page, "settings");
   const sourceRow = page.getByTestId(`external-calendar-source-${source?.id}`);

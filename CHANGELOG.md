@@ -6,6 +6,25 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.10.2] - 2026-07-05
+
+### Fixed
+
+- Fixed mobile agenda cards for external calendar events so event titles no
+  longer collapse into a narrow vertical text column.
+- Fixed mobile contact-rule time-span fields so date-offset and time inputs stay
+  inside their card on narrow screens.
+- Fixed mobile contact-rule summary metrics and generated-entry actions so the
+  seventh metric and help buttons no longer look detached from their cards.
+
+### Testing
+
+- Added iPhone regression coverage for readable external calendar agenda cards.
+- Added iPhone regression coverage for contained contact-rule time-span inputs.
+- Added iPhone regression coverage for contact-rule summary metrics and
+  generated-entry actions.
+- Re-ran the full desktop, iPhone, and iPad E2E suite.
+
 ## [1.10.1] - 2026-07-04
 
 ### Fixed

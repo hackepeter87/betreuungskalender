@@ -160,6 +160,53 @@ test("keeps critical mobile pages within the viewport", async ({
   }
 });
 
+test("keeps mobile contact rule time spans inside their card", async ({
+  page
+}) => {
+  await openApp(page);
+  await createChild(page, "Regel Layout Kind");
+
+  await navigate(page, "contact");
+  const segmentRow = page.locator(".rule-segment-row").first();
+  await segmentRow.scrollIntoViewIfNeeded();
+  await expect(segmentRow).toBeVisible();
+
+  const rowBox = await segmentRow.boundingBox();
+  expect(rowBox).toBeTruthy();
+  for (const input of await segmentRow.locator("input").all()) {
+    const inputBox = await input.boundingBox();
+    expect(inputBox).toBeTruthy();
+    expect(inputBox!.x).toBeGreaterThanOrEqual(rowBox!.x - 1);
+    expect(inputBox!.x + inputBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width + 1);
+  }
+
+  const summary = page.locator(".summary-strip--seven").first();
+  await summary.scrollIntoViewIfNeeded();
+  await expect(summary).toBeVisible();
+  const summaryBox = await summary.boundingBox();
+  const finalMetricBox = await summary.locator(":scope > div").nth(6).boundingBox();
+  expect(summaryBox).toBeTruthy();
+  expect(finalMetricBox).toBeTruthy();
+  expect(finalMetricBox!.x).toBeGreaterThanOrEqual(summaryBox!.x - 1);
+  expect(finalMetricBox!.x + finalMetricBox!.width).toBeLessThanOrEqual(summaryBox!.x + summaryBox!.width + 1);
+  expect(finalMetricBox!.width).toBeGreaterThan(summaryBox!.width * 0.9);
+
+  await page.getByTestId("contact-pattern-save").click();
+  await expect(page.getByTestId("contact-message")).toContainText("Umgangsregel gespeichert");
+  const generatedEntry = page.getByTestId("contact-generated-entry").first();
+  await generatedEntry.scrollIntoViewIfNeeded();
+  await expect(generatedEntry).toBeVisible();
+  const generatedEntryBox = await generatedEntry.boundingBox();
+  expect(generatedEntryBox).toBeTruthy();
+  for (const action of await generatedEntry.locator(".rule-entry__actions > *").all()) {
+    const actionBox = await action.boundingBox();
+    expect(actionBox).toBeTruthy();
+    expect(actionBox!.x).toBeGreaterThanOrEqual(generatedEntryBox!.x - 1);
+    expect(actionBox!.x + actionBox!.width).toBeLessThanOrEqual(generatedEntryBox!.x + generatedEntryBox!.width + 1);
+  }
+  await expectNoDocumentHorizontalOverflow(page);
+});
+
 test("opens authenticated user menu from the mobile header", async ({
   page
 }) => {

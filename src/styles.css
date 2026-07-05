@@ -3597,6 +3597,17 @@ button.metric-card {
   background: #fbfcfd;
 }
 
+.rule-segment-row .field,
+.rule-segment-row input,
+.rule-segment-row .icon-button {
+  min-width: 0;
+}
+
+.rule-segment-row input {
+  width: 100%;
+  max-width: 100%;
+}
+
 .rule-segment-row > strong {
   align-self: center;
   font-size: 0.72rem;
@@ -4212,13 +4223,43 @@ button.metric-card {
   }
 
   .rule-entry__actions {
-    justify-content: flex-end;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) repeat(2, 40px);
+    gap: 8px;
+    align-items: center;
+    justify-content: stretch;
     padding: 0 10px 10px;
+  }
+
+  .rule-entry__actions .button {
+    min-width: 0;
+    padding-inline: 8px;
+    white-space: normal;
+  }
+
+  .rule-entry__actions .field-help-trigger {
+    justify-self: end;
   }
 
   .recurrence-builder,
   .rule-segment-row {
     grid-template-columns: 1fr;
+  }
+
+  .rule-segment-row {
+    overflow: hidden;
+  }
+
+  .rule-segment-row > .field,
+  .rule-segment-row input,
+  .rule-segment-row .icon-button {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .rule-segment-row > .icon-button {
+    justify-self: start;
+    width: 46px;
   }
 
   .weekday-choice-row,
@@ -5338,9 +5379,14 @@ button.metric-card {
   }
 
   .summary-strip div:nth-last-child(-n + 2),
-  .summary-strip--seven div:last-child,
   .summary-strip--six div:nth-last-child(-n + 2),
   .summary-strip--five div:last-child {
+    border-bottom: 0;
+  }
+
+  .summary-strip--seven div:nth-child(7) {
+    grid-column: 1 / -1;
+    border-right: 0;
     border-bottom: 0;
   }
 
@@ -6423,6 +6469,11 @@ button.metric-card {
     gap: 8px;
     min-height: 0;
     padding: 10px 10px 10px 0;
+  }
+
+  .agenda-card--external {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 10px 12px;
   }
 
   .agenda-card--holiday {
