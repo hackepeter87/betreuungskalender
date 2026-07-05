@@ -165,6 +165,12 @@ roles for known app users. Without an active membership, trusted-proxy and
 native OIDC deployments keep using the configured group mapping as the
 compatibility fallback.
 
+Fresh installations support an explicit owner bootstrap. During that incomplete
+first-run state, a successfully authenticated identity may create the initial
+admin membership and mark setup complete. The action is audited and becomes
+unavailable once setup is complete, so later users cannot silently take over
+ownership through the same flow.
+
 Care confirmation push notifications are deliberately generic. Push payloads
 must not include child names, exact care times, locations, notes, evidence
 references, costs, trips, or other sensitive case details. Store VAPID private

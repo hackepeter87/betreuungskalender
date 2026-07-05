@@ -166,6 +166,50 @@ function NotificationPreferencesSection() {
   );
 }
 
+function FirstRunOwnerBootstrapSection() {
+  const { locale } = useI18n();
+  const { session, reload } = useAppStore();
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  if (!session.authenticated || !session.setup?.required) return null;
+
+  const bootstrap = async () => {
+    if (!window.confirm(copy(locale, "settings", "ownerBootstrapConfirm"))) return;
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      await api.bootstrapInstallationOwner();
+      setMessage(copy(locale, "settings", "ownerBootstrapDone"));
+      await reload();
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section className="panel settings-section" data-testid="owner-bootstrap">
+      <div className="panel__header">
+        <div>
+          <h2>{copy(locale, "settings", "ownerBootstrap")}</h2>
+          <p>{copy(locale, "settings", "ownerBootstrapDescription")}</p>
+        </div>
+        <button className="button button--primary" type="button" data-testid="owner-bootstrap-confirm" disabled={busy} onClick={() => void bootstrap()}>
+          <Icon name="check" size={17} />
+          {copy(locale, "settings", "ownerBootstrapAction")}
+        </button>
+      </div>
+      <p className="settings-note">{copy(locale, "settings", "ownerBootstrapNote")}</p>
+      {message ? <p className="inline-message" role="status">{message}</p> : null}
+      {error ? <p className="form-error" role="alert">{error}</p> : null}
+    </section>
+  );
+}
+
 function CarePartyForm({ party, onDone }: { party?: CareParty; onDone: () => void }) {
   const { saveCareParty, canWrite, isSaving } = useAppStore();
   const { locale } = useI18n();
@@ -654,6 +698,8 @@ export function SettingsPage() {
           </label>
         </div>
       </section>
+
+      <FirstRunOwnerBootstrapSection />
 
       <NotificationPreferencesSection />
 

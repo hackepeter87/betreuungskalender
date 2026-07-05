@@ -196,6 +196,12 @@ When no configured group matches and no app membership exists, native OIDC
 rejects the callback with `403` by default and does not create a browser
 session.
 
+The only exception is a fresh installation with incomplete first-run setup. In
+that state, a successfully authenticated identity may receive a provisional
+setup session without a matching role group. That session can only complete the
+explicit owner bootstrap; ordinary write APIs remain blocked until an
+application membership exists.
+
 In native mode, unauthenticated `/api/session` responses include
 `loginUrl: "/auth/login"`. Authenticated native sessions include
 `logoutUrl: "/auth/logout"`, which the frontend calls with `POST`. The route
