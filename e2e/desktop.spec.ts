@@ -147,56 +147,66 @@ test("keeps desktop settings layout within the viewport", async ({ page }) => {
 });
 
 test("shows admin instance readiness information in settings", async ({ page }) => {
-  await page.route("**/api/session", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        authRequired: true,
-        authenticated: true,
-        demoDatasetsEnabled: true,
-        user: {
-          id: "user-admin-e2e",
-          displayName: "Admin",
-          role: "admin"
-        }
-      })
-    });
-  });
-  await page.route("**/api/instance-readiness", async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({
-        instanceId: "inst_e2e000000000000",
-        version: "1.10.2",
-        environment: "test",
-        authMode: "native-oidc",
-        requireAuth: true,
-        serverTime: "2026-07-05T10:00:00.000Z",
-        timezone: "Europe/Berlin",
-        database: {
-          reachable: true,
-          migrationsApplied: 21,
-          latestAppliedMigration: "021_recovery_admin",
-          latestAvailableMigration: "021_recovery_admin",
-          upToDate: true
-        },
-        setup: {
-          complete: true,
-          children: 1,
-          careParties: 1,
-          appUsers: 1
-        },
-        features: {
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      const pathname = new URL(url, window.location.href).pathname;
+      if (pathname === "/api/session") {
+        return Promise.resolve(new Response(JSON.stringify({
+          authRequired: true,
+          authenticated: true,
           demoDatasetsEnabled: true,
-          nativeOidc: true,
-          trustedProxy: false,
-          recoveryAdminEnabled: false,
-          pushConfigured: true
-        }
-      })
-    });
+          user: {
+            id: "user-admin-e2e",
+            displayName: "Admin",
+            role: "admin"
+          }
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }));
+      }
+      if (pathname === "/api/instance-readiness") {
+        return Promise.resolve(new Response(JSON.stringify({
+          instanceId: "inst_e2e000000000000",
+          version: "1.10.2",
+          environment: "test",
+          authMode: "native-oidc",
+          requireAuth: true,
+          serverTime: "2026-07-05T10:00:00.000Z",
+          timezone: "Europe/Berlin",
+          database: {
+            reachable: true,
+            migrationsApplied: 21,
+            latestAppliedMigration: "021_recovery_admin",
+            latestAvailableMigration: "021_recovery_admin",
+            upToDate: true
+          },
+          setup: {
+            complete: true,
+            children: 1,
+            careParties: 1,
+            appUsers: 1
+          },
+          features: {
+            demoDatasetsEnabled: true,
+            nativeOidc: true,
+            trustedProxy: false,
+            recoveryAdminEnabled: false,
+            pushConfigured: true
+          }
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }));
+      }
+      return originalFetch(input, init);
+    };
   });
 
   await openApp(page);
