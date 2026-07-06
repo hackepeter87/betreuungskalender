@@ -6,6 +6,11 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+### Changed
+
+- Invitation emails now use the configured installation label as the sender
+  display name when available, while `SMTP_FROM` remains the sender mailbox.
+
 ## [1.13.0] - 2026-07-06
 
 ### Added

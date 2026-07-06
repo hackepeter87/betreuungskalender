@@ -14,6 +14,7 @@ import {
 } from "./services/invitations.js";
 import {
   InvitationEmailError,
+  invitationSenderAddress,
   sendInvitationEmail,
   type InvitationEmailConfig
 } from "./services/invitationEmail.js";
@@ -228,6 +229,47 @@ test("invitation email delivery uses a provider-neutral test transport", async (
   assert.equal(sent[0]?.subject, "Einladung zum Betreuungskalender");
   assert.match(sent[0]?.text ?? "", /https:\/\/bk\.example\.test\/settings\?invitation=test-token-mail-delivery-000000/);
   assert.match(sent[0]?.text ?? "", /Rolle: Bearbeiten/);
+});
+
+test("invitation email delivery can use the installation label as sender display name", async () => {
+  const sent: Array<{ from: string; to: string; subject: string; text: string }> = [];
+  const mailConfig: InvitationEmailConfig = {
+    invitationEmailEnabled: true,
+    invitationPublicBaseUrl: "https://bk.example.test",
+    smtpHost: "smtp.example.test",
+    smtpPort: 587,
+    smtpSecure: false,
+    smtpFrom: "no-reply@example.test",
+    smtpFromName: "Familienkalender"
+  };
+
+  await sendInvitationEmail(
+    {
+      to: "invited@example.test",
+      token: "test-token-mail-display-name-000000",
+      role: "readonly",
+      expiresAt: "2026-07-06T10:00:00.000Z"
+    },
+    mailConfig,
+    () => ({
+      sendMail: (message) => {
+        sent.push(message);
+      }
+    })
+  );
+
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0]?.from, "\"Familienkalender\" <no-reply@example.test>");
+});
+
+test("invitation sender display name is safe for mail headers", () => {
+  const from = invitationSenderAddress(
+    "Betreuungskalender <no-reply@example.test>",
+    "Familie\nKalender \"Demo\""
+  );
+
+  assert.equal(from, "\"Familie Kalender \\\"Demo\\\"\" <no-reply@example.test>");
+  assert.doesNotMatch(from, /[\r\n]/);
 });
 
 test("invitation email delivery reports missing or failed mail configuration safely", async () => {
