@@ -11,6 +11,7 @@ export interface InvitationEmailConfig {
   smtpUser?: string;
   smtpPassword?: string;
   smtpFrom?: string;
+  smtpFromName?: string;
 }
 
 export interface InvitationEmailInput {
@@ -100,6 +101,24 @@ function defaultTransport(mailConfig: InvitationEmailConfig): InvitationEmailTra
   });
 }
 
+function sanitizeDisplayName(value?: string): string | undefined {
+  const normalized = value?.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
+  if (!normalized) return undefined;
+  return normalized.slice(0, 120);
+}
+
+function escapeDisplayName(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+export function invitationSenderAddress(smtpFrom: string, smtpFromName?: string): string {
+  const displayName = sanitizeDisplayName(smtpFromName);
+  if (!displayName) return smtpFrom;
+  const from = smtpFrom.trim();
+  const address = from.match(/<([^<>]+)>/)?.[1]?.trim() || from;
+  return `"${escapeDisplayName(displayName)}" <${address}>`;
+}
+
 export async function sendInvitationEmail(
   input: InvitationEmailInput,
   mailConfig: InvitationEmailConfig = config,
@@ -116,7 +135,7 @@ export async function sendInvitationEmail(
   try {
     const transport = transportFactory(mailConfig);
     await transport.sendMail({
-      from: mailConfig.smtpFrom,
+      from: invitationSenderAddress(mailConfig.smtpFrom, mailConfig.smtpFromName),
       to,
       subject: "Einladung zum Betreuungskalender",
       text: invitationEmailText(input, mailConfig.invitationPublicBaseUrl)

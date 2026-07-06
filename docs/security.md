@@ -179,9 +179,10 @@ Optional invitation email delivery sends the same bearer invitation link
 through an operator-configured SMTP relay. Keep `INVITATION_EMAIL_ENABLED`
 disabled until `SMTP_HOST`, `SMTP_FROM`, TLS mode, and any SMTP credentials are
 configured in private deployment state. SMTP passwords must never be committed
-or placed in release artifacts. Delivery errors returned to owners must remain
-generic and must not include raw tokens, SMTP credentials, relay hostnames, or
-provider stack traces.
+or placed in release artifacts. The setup installation label is used as the
+sender display name when available; the actual sender mailbox still comes from
+`SMTP_FROM`. Delivery errors returned to owners must remain generic and must not
+include raw tokens, SMTP credentials, relay hostnames, or provider stack traces.
 
 Fresh installations support an explicit owner bootstrap. During that incomplete
 first-run state, a successfully authenticated identity may create the initial

@@ -48,7 +48,7 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `SMTP_SECURE` | Use implicit TLS for SMTP transport | `false` for STARTTLS on 587, `true` for 465 | Optional | `false` | Prefer encrypted transport according to the relay configuration |
 | `SMTP_USER` | Optional SMTP username | Service account name | Optional | None | Secret-adjacent; keep out of committed files |
 | `SMTP_PASSWORD` | Optional SMTP password | Secret value | Optional | None | Secret; keep only in private environment files or mounted secrets |
-| `SMTP_FROM` | Sender address for invitation emails | `Betreuungskalender <no-reply@example.net>` | Required when invitation email is enabled | None | Use an operator-controlled sender accepted by the SMTP relay |
+| `SMTP_FROM` | Sender mailbox for invitation emails | `no-reply@example.net` | Required when invitation email is enabled | None | Use an operator-controlled sender accepted by the SMTP relay; the setup installation label is used as display name when available |
 | `OIDC_USER_ID_HEADER` | Trusted header containing the stable OIDC subject or user ID | `x-auth-request-user` | Recommended with OIDC | `x-auth-request-user` | Must be stable across email/name changes |
 | `OIDC_EMAIL_HEADER` | Trusted header containing the OIDC email claim | `x-auth-request-email` | Optional with OIDC | `x-auth-request-email` | Stored on the internal user record when present |
 | `OIDC_DISPLAY_NAME_HEADER` | Trusted header containing the OIDC display-name claim | `x-auth-request-preferred-username` | Optional with OIDC | `x-auth-request-preferred-username` | Shown compactly in the app shell |
@@ -265,14 +265,17 @@ SMTP_PORT=587
 SMTP_SECURE=false
 SMTP_USER=
 SMTP_PASSWORD=
-SMTP_FROM=
+SMTP_FROM=no-reply@example.net
 ```
 
 Set `INVITATION_EMAIL_ENABLED=true` only after an operator-controlled SMTP
 relay is available. `INVITATION_PUBLIC_BASE_URL` must be the public HTTPS app
 origin that invited users can open. The implementation is provider-neutral:
 configure the relay address, port, TLS mode, optional SMTP credentials, and
-sender address; do not add provider-specific API keys to the app.
+sender mailbox; do not add provider-specific API keys to the app. If the setup
+installation label is configured, invitation email uses it as the sender display
+name. Without an installation label, `SMTP_FROM` is used unchanged and may
+include a display name accepted by the SMTP relay.
 
 Invitation links contain the one-time token. Treat sent mail like any other
 bearer-link delivery channel. If delivery fails, the owner sees a generic

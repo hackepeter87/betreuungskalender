@@ -15,6 +15,7 @@ import {
   InvitationEmailError,
   sendInvitationEmail
 } from "../services/invitationEmail.js";
+import { getStoredSettings } from "../services/settings.js";
 import {
   invitationAcceptInputSchema,
   invitationInputSchema
@@ -62,6 +63,11 @@ function normalizeInvitationEmailError(error: unknown): string {
   return "Einladungs-E-Mail konnte nicht gesendet werden.";
 }
 
+function invitationSenderName(): string | undefined {
+  const value = getStoredSettings()["setup.installationLabel"];
+  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
 export async function invitationRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/invitations", readLimit, async (request, reply) => {
     try {
@@ -104,12 +110,18 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     try {
-      await sendInvitationEmail({
-        to: parsed.data.emailHint,
-        token: created.token,
-        role: created.invitation.role,
-        expiresAt: created.invitation.expiresAt
-      });
+      await sendInvitationEmail(
+        {
+          to: parsed.data.emailHint,
+          token: created.token,
+          role: created.invitation.role,
+          expiresAt: created.invitation.expiresAt
+        },
+        {
+          ...config,
+          smtpFromName: invitationSenderName()
+        }
+      );
       return reply.code(201).send({
         ...created,
         emailDelivery: { status: "sent" }
