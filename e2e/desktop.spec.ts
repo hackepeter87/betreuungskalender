@@ -664,6 +664,9 @@ test("guides fresh installations through first-use setup before showing navigati
   await page.getByTestId("setup-secondary-care-party-kind").selectOption("mother");
   await page.getByTestId("setup-default-care-party").selectOption("secondary");
   await page.getByTestId("setup-child-name").fill("Setup Kind");
+  await expect(page.getByTestId("setup-calendar-feed-discovery")).toContainText("Kalenderfeed");
+  await expect(page.getByTestId("setup-calendar-import-discovery")).toContainText("Externe Kalender");
+  await expect(page.getByTestId("setup-calendar-export-discovery")).toContainText("exportieren");
   await page.getByTestId("setup-wizard-submit").click();
 
   await expect(page.getByTestId("setup-wizard")).toHaveCount(0);
