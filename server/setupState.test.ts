@@ -196,6 +196,11 @@ test("completes first-use setup with owner, care party, child, and defaults", ()
           name: "Primary care",
           kind: "other"
         },
+        secondaryCareParty: {
+          name: "Other parent",
+          kind: "mother"
+        },
+        defaultCareParty: "secondary",
         child: {
           name: "Child A",
           birthMonth: 4,
@@ -208,11 +213,16 @@ test("completes first-use setup with owner, care party, child, and defaults", ()
     );
 
     const setup = buildSetupState(database);
-    const careParty = database.prepare(`
+    const careParties = database.prepare(`
       SELECT id, name, kind
       FROM care_parties
-      WHERE id = ? AND deleted_at IS NULL
-    `).get(result.created.carePartyId) as { id: string; name: string; kind: string } | undefined;
+      WHERE id IN (?, ?) AND deleted_at IS NULL
+      ORDER BY name
+    `).all(result.created.carePartyId, result.created.secondaryCarePartyId) as Array<{
+      id: string;
+      name: string;
+      kind: string;
+    }>;
     const child = database.prepare(`
       SELECT id, name, birth_month AS birthMonth, birth_year AS birthYear
       FROM children
@@ -246,14 +256,16 @@ test("completes first-use setup with owner, care party, child, and defaults", ()
     assert.equal(setup.complete, true);
     assert.equal(setup.required, false);
     assert.equal(setup.counts.children, 1);
-    assert.equal(setup.counts.careParties, 1);
-    assert.equal(careParty?.name, "Primary care");
-    assert.equal(careParty?.kind, "other");
+    assert.equal(setup.counts.careParties, 2);
+    assert.deepEqual(careParties.map((party) => [party.name, party.kind]), [
+      ["Other parent", "mother"],
+      ["Primary care", "other"]
+    ]);
     assert.equal(child?.name, "Child A");
     assert.equal(child?.birthMonth, 4);
     assert.equal(child?.birthYear, 2017);
     assert.deepEqual(settings.map((row) => [row.key, JSON.parse(row.valueJson)]), [
-      ["defaultResponsiblePartyId", result.created.carePartyId],
+      ["defaultResponsiblePartyId", result.created.secondaryCarePartyId],
       ["setup.completedAt", "2026-07-05T12:30:00.000Z"],
       ["setup.completedBy", "local-dev"],
       ["setup.installationLabel", "Private calendar"],

@@ -38,7 +38,8 @@ export async function resetApp(
       careParty: {
         name: "Hauptbetreuung",
         kind: "other"
-      }
+      },
+      defaultCareParty: "primary"
     }
   });
   expect(setup.ok()).toBeTruthy();
