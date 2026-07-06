@@ -46,6 +46,8 @@ const mobileNavItems = navItems.filter((item) =>
   ["dashboard", "calendar", "entries", "analytics"].includes(item.id)
 );
 
+const sidebarCollapsedStorageKey = "betreuungskalender.sidebarCollapsed";
+
 function AuthSessionCard({
   session,
   mobile = false,
@@ -320,6 +322,13 @@ export function AppShell({
   const { t } = useI18n();
   const [showMore, setShowMore] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      return window.localStorage.getItem(sidebarCollapsedStorageKey) === "true";
+    } catch {
+      return false;
+    }
+  });
   const {
     serverStatus,
     session,
@@ -335,6 +344,14 @@ export function AppShell({
     setShowMore(false);
     onNavigate(page);
   };
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(sidebarCollapsedStorageKey, sidebarCollapsed ? "true" : "false");
+    } catch {
+      // Local UI preference only; failure should not affect navigation.
+    }
+  }, [sidebarCollapsed]);
 
   const logout = async () => {
     if (!session.logoutUrl) return;
@@ -355,15 +372,29 @@ export function AppShell({
   };
 
   return (
-    <div className="app-shell" data-testid="app-shell">
-      <aside className="sidebar">
-        <button className="brand" type="button" onClick={() => navigate("dashboard")}>
-          <span className="brand__mark"><Icon name="calendar" size={22} /></span>
-          <span>
-            <strong>{t("app.name")}</strong>
-            <small>{t("app.tagline")}</small>
-          </span>
-        </button>
+    <div className={`app-shell${sidebarCollapsed ? " app-shell--sidebar-collapsed" : ""}`} data-testid="app-shell">
+      <aside className={`sidebar${sidebarCollapsed ? " sidebar--collapsed" : ""}`}>
+        <div className="sidebar__header">
+          <button className="brand" type="button" onClick={() => navigate("dashboard")} aria-label={t("app.name")}>
+            <span className="brand__mark"><Icon name="calendar" size={22} /></span>
+            <span>
+              <strong>{t("app.name")}</strong>
+              <small>{t("app.tagline")}</small>
+            </span>
+          </button>
+          {!setupMode ? (
+            <button
+              className="sidebar__collapse-control"
+              type="button"
+              aria-label={t(sidebarCollapsed ? "nav.expandSidebar" : "nav.collapseSidebar")}
+              aria-pressed={sidebarCollapsed}
+              title={t(sidebarCollapsed ? "nav.expandSidebar" : "nav.collapseSidebar")}
+              onClick={() => setSidebarCollapsed((current) => !current)}
+            >
+              <Icon name={sidebarCollapsed ? "chevronRight" : "chevronLeft"} size={18} />
+            </button>
+          ) : null}
+        </div>
 
         {!setupMode ? (
           <>
@@ -375,6 +406,8 @@ export function AppShell({
                   data-testid={`nav-${item.id}`}
                   className={activePage === item.id ? "is-active" : ""}
                   onClick={() => navigate(item.id)}
+                  aria-label={t(item.labelKey)}
+                  title={sidebarCollapsed ? t(item.labelKey) : undefined}
                 >
                   <Icon name={item.icon} />
                   <span>{t(item.labelKey)}</span>
@@ -386,12 +419,23 @@ export function AppShell({
           </>
         ) : null}
 
-        <AuthSessionCard
-          session={session}
-          loggingOut={loggingOut}
-          onLogout={() => void logout()}
-          t={t}
-        />
+        {sidebarCollapsed && !setupMode ? (
+          <div className="sidebar__collapsed-auth">
+            <MobileAuthMenu
+              session={session}
+              loggingOut={loggingOut}
+              onLogout={() => void logout()}
+              t={t}
+            />
+          </div>
+        ) : (
+          <AuthSessionCard
+            session={session}
+            loggingOut={loggingOut}
+            onLogout={() => void logout()}
+            t={t}
+          />
+        )}
 
         {!setupMode ? (
           <button
@@ -399,6 +443,8 @@ export function AppShell({
             type="button"
             data-testid="nav-settings"
             onClick={() => navigate("settings")}
+            aria-label={t("nav.settings")}
+            title={sidebarCollapsed ? t("nav.settings") : undefined}
           >
             <Icon name="settings" />
             <span>{t("nav.settings")}</span>
