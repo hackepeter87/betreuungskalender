@@ -92,7 +92,7 @@ jobs:
         run: DOCKERFILE=Dockerfile.release bash scripts/container-smoke.sh
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
@@ -100,7 +100,7 @@ jobs:
 
       - name: Build and push release image
         id: build
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: Dockerfile.release
@@ -135,7 +135,7 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload digest artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: betreuungskalender-${{ steps.release.outputs.tag }}-image-digest
           path: betreuungskalender-${{ steps.release.outputs.tag }}.image-digest.txt
