@@ -4,6 +4,7 @@ import { Icon } from "../components/Icon";
 import { FieldHelpButton, FieldHelpLabel } from "../components/FieldHelp";
 import { Modal } from "../components/Modal";
 import { ExternalCalendarManager } from "../components/ExternalCalendarManager";
+import { useHelpPreferences } from "../context/HelpPreferences";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy, type CatalogKey } from "../i18n/catalog";
 import { localeMetadata, supportedLocales } from "../i18n/resources";
@@ -947,6 +948,7 @@ function InstanceReadinessSection() {
 
 export function SettingsPage() {
   const { locale, intlLocale, setLocale, t } = useI18n();
+  const { helpIconsVisible, setHelpIconsVisible } = useHelpPreferences();
   const {
     data,
     removeChild,
@@ -1035,6 +1037,34 @@ export function SettingsPage() {
               ))}
             </select>
             <small>{t("settings.language.fallback")}</small>
+          </label>
+        </div>
+      </section>
+
+      <section className="panel settings-section" data-testid="settings-help-visibility">
+        <div className="panel__header panel__header--compact">
+          <div>
+            <h2>{copy(locale, "settings", "inlineHelpTitle")}</h2>
+            <p>{copy(locale, "settings", "inlineHelpDescription")}</p>
+          </div>
+        </div>
+        <div className="settings-toggle-row">
+          <span>
+            <strong>{copy(locale, "settings", "inlineHelpToggle")}</strong>
+            <small>{copy(locale, "settings", "inlineHelpToggleDescription")}</small>
+          </span>
+          <label
+            aria-label={copy(locale, "settings", "inlineHelpToggle")}
+            className="toggle toggle--compact"
+            data-testid="settings-help-icons-switch"
+          >
+            <input
+              data-testid="settings-help-icons-toggle"
+              type="checkbox"
+              checked={helpIconsVisible}
+              onChange={(event) => setHelpIconsVisible(event.target.checked)}
+            />
+            <span />
           </label>
         </div>
       </section>

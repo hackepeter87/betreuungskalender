@@ -932,6 +932,28 @@ test("persists the selected language and localizes the report surface", async ({
   await expect(page.getByTestId("settings-language")).toHaveValue("en");
 });
 
+test("can hide inline help icons while keeping the help page available", async ({
+  page
+}) => {
+  await openApp(page);
+  await navigate(page, "settings");
+
+  await expect(page.getByTestId("nav-rules")).toContainText("Hilfe");
+  await expect(page.locator(".field-help-button").first()).toBeVisible();
+  await page.getByTestId("settings-help-icons-switch").click();
+  await expect(page.getByTestId("settings-help-icons-toggle")).not.toBeChecked();
+  await expect(page.locator(".field-help-button")).toHaveCount(0);
+
+  await page.reload();
+  await navigate(page, "settings");
+  await expect(page.getByTestId("settings-help-icons-toggle")).not.toBeChecked();
+  await expect(page.locator(".field-help-button")).toHaveCount(0);
+
+  await navigate(page, "rules");
+  await page.locator("details.field-help-group summary").first().click();
+  await expect(page.locator(".field-help-list .field-help-button").first()).toBeVisible();
+});
+
 test("uses compact required-field markers in forms", async ({ page }) => {
   const childName = "Pflichtfeld Kind";
   await openApp(page);

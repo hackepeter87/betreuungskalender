@@ -11,6 +11,7 @@ import {
   requirementLevelLabels,
   type FieldHelpId
 } from "../config/fieldHelp";
+import { useHelpPreferences } from "../context/HelpPreferences";
 import { Icon } from "./Icon";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
@@ -22,12 +23,15 @@ function stopLabelToggle(event: MouseEvent) {
 
 export function FieldHelpButton({
   fieldId,
-  showRequirement = false
+  showRequirement = false,
+  alwaysVisible = false
 }: {
   fieldId: FieldHelpId;
   showRequirement?: boolean;
+  alwaysVisible?: boolean;
 }) {
   const { locale } = useI18n();
+  const { helpIconsVisible } = useHelpPreferences();
   const [open, setOpen] = useState(false);
   const titleId = useId();
   const help = getFieldHelp(fieldId);
@@ -40,6 +44,8 @@ export function FieldHelpButton({
     document.addEventListener("keydown", closeOnEscape);
     return () => document.removeEventListener("keydown", closeOnEscape);
   }, [open]);
+
+  if (!alwaysVisible && !helpIconsVisible) return null;
 
   return (
     <>

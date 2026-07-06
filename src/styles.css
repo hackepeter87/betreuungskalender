@@ -2132,6 +2132,27 @@ button.metric-card {
   padding: 0 18px;
 }
 
+.settings-toggle-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+}
+
+.settings-toggle-row strong,
+.settings-toggle-row small {
+  display: block;
+}
+
+.settings-toggle-row small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
 .instance-readiness-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));

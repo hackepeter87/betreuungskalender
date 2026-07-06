@@ -110,6 +110,7 @@ export function DocumentationRulesPage() {
                       </div>
                       <FieldHelpButton
                         fieldId={item.fieldId as FieldHelpId}
+                        alwaysVisible
                         showRequirement={false}
                       />
                     </article>
