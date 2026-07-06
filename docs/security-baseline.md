@@ -57,8 +57,11 @@ incident response.
 - Personal calendar feeds use bearer URLs only for the `.ics` endpoint. They do
   not authenticate general API routes and exclude notes, evidence references,
   trips, costs, audit metadata, deleted entries, and cancelled entries.
-- External ICS imports are size-limited, count-limited, validated, rejected for
-  unsupported recurrence, and returned with generic error codes on failure.
+- External ICS imports and external calendar feed URLs are size-limited,
+  count-limited, validated, rejected for unsupported recurrence, and returned
+  with generic error codes on failure. Feed URLs must use HTTPS, reject obvious
+  local/private hosts, and are shown only redacted because they can contain
+  bearer-like provider tokens.
 - Request URL logging redacts feed tokens and common OIDC or token query
   parameters.
 - Release checks reject tracked and untracked sensitive artifacts such as real

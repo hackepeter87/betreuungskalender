@@ -721,6 +721,15 @@ export const api = {
   replaceExternalCalendar(id: string, input: { name: string; color: string; sourceType: ExternalCalendarSource["sourceType"]; content: string }) {
     return request<{ source: ExternalCalendarSource; importedEvents: number }>(`/api/external-calendars/${encodeURIComponent(id)}/import`, { method: "PUT", body: JSON.stringify(input) });
   },
+  importExternalCalendarFeed(input: { name: string; color: string; sourceType: ExternalCalendarSource["sourceType"]; url: string }) {
+    return request<{ source: ExternalCalendarSource; importedEvents: number }>("/api/external-calendars/feed", { method: "POST", body: JSON.stringify(input) });
+  },
+  replaceExternalCalendarFeed(id: string, input: { name: string; color: string; sourceType: ExternalCalendarSource["sourceType"]; url: string }) {
+    return request<{ source: ExternalCalendarSource; importedEvents: number }>(`/api/external-calendars/${encodeURIComponent(id)}/feed`, { method: "PUT", body: JSON.stringify(input) });
+  },
+  refreshExternalCalendarFeed(id: string) {
+    return request<{ source: ExternalCalendarSource; importedEvents: number }>(`/api/external-calendars/${encodeURIComponent(id)}/refresh`, { method: "POST" });
+  },
   updateExternalCalendar(id: string, input: Partial<Pick<ExternalCalendarSource, "name" | "color" | "visible" | "sourceType">>) {
     return request<ExternalCalendarSource>(`/api/external-calendars/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(input) });
   },

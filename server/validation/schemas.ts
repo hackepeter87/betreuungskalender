@@ -460,6 +460,13 @@ export const externalCalendarImportSchema = z.object({
   content: z.string().min(1).max(1_000_000)
 });
 
+export const externalCalendarFeedSchema = z.object({
+  name: z.string().trim().min(1).max(200),
+  color: z.string().trim().regex(/^#[0-9a-fA-F]{6}$/),
+  sourceType: z.enum(["overlay", "holiday"]).default("overlay"),
+  url: z.string().trim().min(1).max(2048)
+});
+
 export const externalCalendarUpdateSchema = z
   .object({
     name: z.string().trim().min(1).max(200).optional(),

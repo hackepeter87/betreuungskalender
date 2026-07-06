@@ -345,6 +345,7 @@ export interface ApiSession {
 
 export type ApiCalendarFeedScope = "legacy" | "all" | `party:${string}`;
 export type ApiExternalCalendarSourceType = "overlay" | "holiday";
+export type ApiExternalCalendarSourceKind = "file" | "url";
 
 export interface ApiLogout {
   authenticated: false;
@@ -479,7 +480,11 @@ export interface ApiExternalCalendarSource {
   color: string;
   visible: boolean;
   sourceType: ApiExternalCalendarSourceType;
+  sourceKind: ApiExternalCalendarSourceKind;
+  feedUrlRedacted?: string;
   lastImportedAt: string;
+  lastRefreshAt?: string;
+  lastRefreshError?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -524,5 +529,6 @@ export interface ApiExternalCalendarHolidayDeriveResult {
 export type ExternalCalendarErrorCode =
   | "external_calendar_invalid"
   | "external_calendar_limit"
+  | "external_calendar_fetch_failed"
   | "external_calendar_recurrence_unsupported"
   | "external_calendar_not_found";

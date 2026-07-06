@@ -6,6 +6,34 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-07-06
+
+### Added
+
+- Added a collapsible desktop sidebar so the calendar can use more horizontal
+  space while keeping navigation available.
+- Added external calendar feed URLs as read-only calendar overlays. HTTPS feed
+  URLs can be added, refreshed, replaced, disabled, or deleted from Settings.
+
+### Changed
+
+- External calendar sources now distinguish local ICS files from URL feeds while
+  keeping imported events read-only and excluded from reports and statistics.
+- Calendar and agenda views now surface when a recurring rule date falls inside
+  a holiday period. Holiday periods remain planning frames and do not silently
+  replace care entries.
+
+### Security
+
+- External calendar feed URLs require HTTPS, reject obvious local/private hosts,
+  are fetched with timeout and size limits, and are shown only in redacted form
+  because provider URLs can contain bearer-like tokens.
+
+### Documentation
+
+- Updated external-calendar, data-model, README, and security documentation for
+  URL feed overlays and explicit holiday/contact-rule behavior.
+
 ## [1.14.0] - 2026-07-06
 
 ### Changed

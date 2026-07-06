@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ExternalCalendarError, parseIcs } from "./services/externalCalendars.js";
+import { ExternalCalendarError, fetchExternalCalendarFeedContent, normalizeExternalCalendarFeedUrl, parseIcs, redactExternalCalendarFeedUrl } from "./services/externalCalendars.js";
 
 const calendar = (event: string) => `BEGIN:VCALENDAR\r\nVERSION:2.0\r\n${event}\r\nEND:VCALENDAR\r\n`;
 const event = (id: number, body = "SUMMARY:Import test") => [
@@ -94,4 +94,49 @@ test("treats HTML and special characters in imported calendar text as data", () 
   assert.equal(parsed?.title, "<script>alert(1)</script> & family event");
   assert.equal(parsed?.description, "<b>bold</b>\nLine two, with comma");
   assert.equal(parsed?.location, "<img src=x onerror=alert(1)>");
+});
+
+test("validates and redacts external calendar feed URLs", () => {
+  assert.equal(
+    normalizeExternalCalendarFeedUrl(" https://calendar.example.net/remote.php/dav/calendars/demo/private.ics?token=secret#fragment "),
+    "https://calendar.example.net/remote.php/dav/calendars/demo/private.ics?token=secret"
+  );
+  assert.equal(
+    redactExternalCalendarFeedUrl("https://calendar.example.net/remote.php/dav/calendars/demo/private.ics?token=secret"),
+    "https://calendar.example.net/remote.php/dav/calendars/demo/private.ics?..."
+  );
+  assertExternalCalendarError(() => normalizeExternalCalendarFeedUrl("http://calendar.example.net/private.ics"), "external_calendar_invalid");
+  assertExternalCalendarError(() => normalizeExternalCalendarFeedUrl("https://user:secret@calendar.example.net/private.ics"), "external_calendar_invalid");
+  assertExternalCalendarError(() => normalizeExternalCalendarFeedUrl("https://localhost/private.ics"), "external_calendar_invalid");
+  assertExternalCalendarError(() => normalizeExternalCalendarFeedUrl("https://192.168.1.10/private.ics"), "external_calendar_invalid");
+});
+
+test("fetches external calendar feeds with generic errors and size limits", async () => {
+  const validCalendar = calendar(event(10));
+  const successfulFetch: typeof fetch = async () => new Response(validCalendar, {
+    status: 200,
+    headers: { "content-length": String(Buffer.byteLength(validCalendar, "utf8")) }
+  });
+  assert.equal(
+    await fetchExternalCalendarFeedContent("https://calendar.example.net/private.ics?token=RAW_PRIVATE_TOKEN", successfulFetch),
+    validCalendar
+  );
+
+  await assert.rejects(
+    () => fetchExternalCalendarFeedContent("https://calendar.example.net/private.ics?token=RAW_PRIVATE_TOKEN", async () => new Response("", { status: 403 })),
+    (error: unknown) => {
+      assert.ok(error instanceof ExternalCalendarError);
+      assert.equal(error.code, "external_calendar_fetch_failed");
+      assert.doesNotMatch(error.message, /RAW_PRIVATE_TOKEN|calendar\.example\.net/);
+      return true;
+    }
+  );
+
+  await assert.rejects(
+    () => fetchExternalCalendarFeedContent("https://calendar.example.net/large.ics", async () => new Response("", {
+      status: 200,
+      headers: { "content-length": "1000001" }
+    })),
+    (error: unknown) => error instanceof ExternalCalendarError && error.code === "external_calendar_limit"
+  );
 });

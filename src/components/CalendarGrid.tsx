@@ -188,6 +188,7 @@ export function CalendarGrid({
                     unavailableForEntry(entry, unavailablePeriods, {
                       affectsContactOnly: true
                     }).length > 0;
+                  const hasHolidayOverlap = isRuleEntry && dayHolidays.length > 0;
                   return (
                   <button
                     className={[
@@ -195,7 +196,8 @@ export function CalendarGrid({
                       `calendar-event--${entry.status}`,
                       isRuleEntry ? "calendar-event--rule" : "",
                       isRuleException ? "calendar-event--exception" : "",
-                      hasOverlap ? "calendar-event--overlap" : ""
+                      hasOverlap ? "calendar-event--overlap" : "",
+                      hasHolidayOverlap ? "calendar-event--holiday-overlap" : ""
                     ].filter(Boolean).join(" ")}
                     type="button"
                     key={entry.id}
@@ -203,6 +205,8 @@ export function CalendarGrid({
                     onClick={() => onSelectEntry(entry)}
                     title={hasOverlap
                       ? copy(locale, "agenda", "overlap")
+                      : hasHolidayOverlap
+                        ? copy(locale, "calendar", "holidayOverlap")
                       : `${statusLabel(entry.status, locale)} · ${ruleStateLabel ? `${ruleStateLabel} · ` : ""}${formatTime(entry.startDateTime, intlLocale)}`}
                   >
                     <span className="calendar-event__colors">
@@ -214,7 +218,7 @@ export function CalendarGrid({
                       {entryLabel}
                     </span>
                     {entry.overnight ? <Icon name="moon" size={13} /> : null}
-                    {hasOverlap ? <Icon name="alert" size={13} /> : isRuleException ? <Icon name="edit" size={13} /> : isRuleEntry ? <Icon name="repeat" size={13} /> : null}
+                    {hasOverlap ? <Icon name="alert" size={13} /> : hasHolidayOverlap ? <Icon name="sun" size={13} /> : isRuleException ? <Icon name="edit" size={13} /> : isRuleEntry ? <Icon name="repeat" size={13} /> : null}
                   </button>
                   );
                 })}

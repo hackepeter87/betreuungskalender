@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
+import { isIP } from "node:net";
 import ICAL from "ical.js";
-import type { ApiExternalCalendarSourceType } from "../../shared/api.js";
+import type { ApiExternalCalendarSourceKind, ApiExternalCalendarSourceType } from "../../shared/api.js";
 import { db } from "../db/connection.js";
 import { markClosedMonthsChanged, recordAudit } from "./audit.js";
 import { assertActiveChildren, makeId, nowIso, syncJunction } from "./common.js";
@@ -8,9 +9,18 @@ import { assertActiveChildren, makeId, nowIso, syncJunction } from "./common.js"
 const MAX_ICS_BYTES = 1_000_000;
 const MAX_ICS_EVENTS = 2_000;
 const MAX_TEXT_LENGTH = 10_000;
+const MAX_FEED_URL_LENGTH = 2_048;
+const FEED_FETCH_TIMEOUT_MS = 10_000;
+
+type ExternalCalendarErrorCode =
+  | "external_calendar_invalid"
+  | "external_calendar_limit"
+  | "external_calendar_fetch_failed"
+  | "external_calendar_recurrence_unsupported"
+  | "external_calendar_not_found";
 
 export class ExternalCalendarError extends Error {
-  constructor(readonly code: "external_calendar_invalid" | "external_calendar_limit" | "external_calendar_recurrence_unsupported" | "external_calendar_not_found", message: string) {
+  constructor(readonly code: ExternalCalendarErrorCode, message: string) {
     super(message);
   }
 }
@@ -32,6 +42,13 @@ export interface ExternalCalendarSourceInput {
   color: string;
   sourceType: ApiExternalCalendarSourceType;
   content: string;
+}
+
+export interface ExternalCalendarFeedInput {
+  name: string;
+  color: string;
+  sourceType: ApiExternalCalendarSourceType;
+  url: string;
 }
 
 export interface ExternalCalendarHolidayDeriveInput {
@@ -111,14 +128,112 @@ function truncate(value: string, limit: number): string {
   return value.length > limit ? value.slice(0, limit - 1) : value;
 }
 
+function isBlockedFeedHost(hostname: string): boolean {
+  const normalized = hostname.toLowerCase().replace(/^\[/, "").replace(/\]$/, "").replace(/\.$/, "");
+  if (normalized === "localhost" || normalized.endsWith(".localhost") || normalized.endsWith(".local")) return true;
+  const ipVersion = isIP(normalized);
+  if (ipVersion === 4) {
+    const [a = 0, b = 0] = normalized.split(".").map((part) => Number.parseInt(part, 10));
+    return a === 0 ||
+      a === 10 ||
+      a === 127 ||
+      a === 169 && b === 254 ||
+      a === 172 && b >= 16 && b <= 31 ||
+      a === 192 && b === 168 ||
+      a === 100 && b >= 64 && b <= 127 ||
+      a === 198 && (b === 18 || b === 19);
+  }
+  if (ipVersion === 6) {
+    return normalized === "::" ||
+      normalized === "::1" ||
+      normalized.startsWith("fe80:") ||
+      normalized.startsWith("fc") ||
+      normalized.startsWith("fd") ||
+      normalized.startsWith("::ffff:10.") ||
+      normalized.startsWith("::ffff:127.") ||
+      normalized.startsWith("::ffff:192.168.");
+  }
+  return false;
+}
+
+export function normalizeExternalCalendarFeedUrl(input: string): string {
+  const trimmed = input.trim();
+  if (!trimmed || trimmed.length > MAX_FEED_URL_LENGTH) {
+    throw new ExternalCalendarError("external_calendar_invalid", "Calendar feed URL is invalid.");
+  }
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    throw new ExternalCalendarError("external_calendar_invalid", "Calendar feed URL is invalid.");
+  }
+  if (url.protocol !== "https:" || url.username || url.password || !url.hostname || isBlockedFeedHost(url.hostname)) {
+    throw new ExternalCalendarError("external_calendar_invalid", "Calendar feed URL is invalid.");
+  }
+  url.hash = "";
+  return url.href;
+}
+
+export function redactExternalCalendarFeedUrl(input: string): string {
+  try {
+    const url = new URL(input);
+    url.username = "";
+    url.password = "";
+    url.hash = "";
+    url.search = url.search ? "?..." : "";
+    return url.href;
+  } catch {
+    return "invalid-url";
+  }
+}
+
+export async function fetchExternalCalendarFeedContent(
+  input: string,
+  fetcher: typeof fetch = fetch
+): Promise<string> {
+  const url = normalizeExternalCalendarFeedUrl(input);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), FEED_FETCH_TIMEOUT_MS);
+  try {
+    const response = await fetcher(url, {
+      headers: { accept: "text/calendar, text/plain;q=0.8, */*;q=0.1" },
+      redirect: "follow",
+      signal: controller.signal
+    });
+    if (!response.ok) {
+      throw new ExternalCalendarError("external_calendar_fetch_failed", "Calendar feed could not be fetched.");
+    }
+    const length = response.headers.get("content-length");
+    if (length && Number(length) > MAX_ICS_BYTES) {
+      throw new ExternalCalendarError("external_calendar_limit", "Calendar feed exceeds the supported size.");
+    }
+    const content = await response.text();
+    if (Buffer.byteLength(content, "utf8") > MAX_ICS_BYTES) {
+      throw new ExternalCalendarError("external_calendar_limit", "Calendar feed exceeds the supported size.");
+    }
+    return content;
+  } catch (error) {
+    if (error instanceof ExternalCalendarError) throw error;
+    throw new ExternalCalendarError("external_calendar_fetch_failed", "Calendar feed could not be fetched.");
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 function mapSource(row: Record<string, unknown>) {
+  const sourceKind = (row.source_kind === "url" ? "url" : "file") as ApiExternalCalendarSourceKind;
+  const feedUrl = typeof row.feed_url === "string" ? row.feed_url : "";
   return {
     id: String(row.id),
     name: String(row.name),
     color: String(row.color),
     visible: Boolean(row.visible),
     sourceType: (row.source_type === "holiday" ? "holiday" : "overlay") as ApiExternalCalendarSourceType,
+    sourceKind,
+    feedUrlRedacted: sourceKind === "url" && feedUrl ? redactExternalCalendarFeedUrl(feedUrl) : undefined,
     lastImportedAt: String(row.last_imported_at),
+    lastRefreshAt: row.last_refresh_at ? String(row.last_refresh_at) : undefined,
+    lastRefreshError: row.last_refresh_error ? String(row.last_refresh_error) : undefined,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at)
   };
@@ -189,14 +304,68 @@ export function importExternalCalendar(input: ExternalCalendarSourceInput, sourc
   const id = sourceId ?? randomUUID();
   db.transaction(() => {
     if (sourceId) {
-      const changed = db.prepare("UPDATE external_calendar_sources SET name = ?, color = ?, source_type = ?, last_imported_at = ?, updated_at = ? WHERE id = ?").run(input.name, input.color, input.sourceType, timestamp, timestamp, id);
+      const changed = db.prepare("UPDATE external_calendar_sources SET name = ?, color = ?, source_type = ?, source_kind = 'file', feed_url = NULL, last_refresh_at = NULL, last_refresh_error = NULL, last_imported_at = ?, updated_at = ? WHERE id = ?").run(input.name, input.color, input.sourceType, timestamp, timestamp, id);
       if (!changed.changes) throw new ExternalCalendarError("external_calendar_not_found", "External calendar source was not found.");
     } else {
-      db.prepare("INSERT INTO external_calendar_sources (id, name, color, visible, source_type, last_imported_at, created_at, updated_at) VALUES (?, ?, ?, 1, ?, ?, ?, ?)").run(id, input.name, input.color, input.sourceType, timestamp, timestamp, timestamp);
+      db.prepare("INSERT INTO external_calendar_sources (id, name, color, visible, source_type, source_kind, feed_url, last_imported_at, created_at, updated_at) VALUES (?, ?, ?, 1, ?, 'file', NULL, ?, ?, ?)").run(id, input.name, input.color, input.sourceType, timestamp, timestamp, timestamp);
     }
     writeEvents(id, events, timestamp);
   })();
   return { source: mapSource(db.prepare("SELECT * FROM external_calendar_sources WHERE id = ?").get(id) as Record<string, unknown>), importedEvents: events.length };
+}
+
+export async function importExternalCalendarFeed(input: ExternalCalendarFeedInput, sourceId?: string) {
+  const url = normalizeExternalCalendarFeedUrl(input.url);
+  const content = await fetchExternalCalendarFeedContent(url);
+  const events = parseIcs(content);
+  const timestamp = nowIso();
+  const id = sourceId ?? randomUUID();
+  db.transaction(() => {
+    if (sourceId) {
+      const changed = db.prepare(`
+        UPDATE external_calendar_sources
+        SET name = ?, color = ?, source_type = ?, source_kind = 'url',
+          feed_url = ?, last_imported_at = ?, last_refresh_at = ?,
+          last_refresh_error = NULL, updated_at = ?
+        WHERE id = ?
+      `).run(input.name, input.color, input.sourceType, url, timestamp, timestamp, timestamp, id);
+      if (!changed.changes) throw new ExternalCalendarError("external_calendar_not_found", "External calendar source was not found.");
+    } else {
+      db.prepare(`
+        INSERT INTO external_calendar_sources (
+          id, name, color, visible, source_type, source_kind, feed_url,
+          last_imported_at, last_refresh_at, last_refresh_error, created_at, updated_at
+        ) VALUES (?, ?, ?, 1, ?, 'url', ?, ?, ?, NULL, ?, ?)
+      `).run(id, input.name, input.color, input.sourceType, url, timestamp, timestamp, timestamp, timestamp);
+    }
+    writeEvents(id, events, timestamp);
+  })();
+  return { source: mapSource(db.prepare("SELECT * FROM external_calendar_sources WHERE id = ?").get(id) as Record<string, unknown>), importedEvents: events.length };
+}
+
+export async function refreshExternalCalendarFeed(id: string) {
+  const current = db.prepare("SELECT * FROM external_calendar_sources WHERE id = ?").get(id) as Record<string, unknown> | undefined;
+  if (!current) throw new ExternalCalendarError("external_calendar_not_found", "External calendar source was not found.");
+  if (current.source_kind !== "url" || typeof current.feed_url !== "string") {
+    throw new ExternalCalendarError("external_calendar_invalid", "External calendar source is not a URL feed.");
+  }
+  const timestamp = nowIso();
+  try {
+    const content = await fetchExternalCalendarFeedContent(current.feed_url);
+    const events = parseIcs(content);
+    db.transaction(() => {
+      db.prepare(`
+        UPDATE external_calendar_sources
+        SET last_imported_at = ?, last_refresh_at = ?, last_refresh_error = NULL, updated_at = ?
+        WHERE id = ?
+      `).run(timestamp, timestamp, timestamp, id);
+      writeEvents(id, events, timestamp);
+    })();
+    return { source: mapSource(db.prepare("SELECT * FROM external_calendar_sources WHERE id = ?").get(id) as Record<string, unknown>), importedEvents: events.length };
+  } catch (error) {
+    db.prepare("UPDATE external_calendar_sources SET last_refresh_at = ?, last_refresh_error = ?, updated_at = ? WHERE id = ?").run(timestamp, error instanceof ExternalCalendarError ? error.code : "external_calendar_fetch_failed", timestamp, id);
+    throw error;
+  }
 }
 
 export function updateExternalCalendarSource(id: string, input: { name?: string; color?: string; visible?: boolean; sourceType?: ApiExternalCalendarSourceType }) {

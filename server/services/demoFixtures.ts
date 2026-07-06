@@ -320,6 +320,7 @@ export function createEdgeCaseDemoData(): DemoData {
         color: "#2563eb",
         visible: true,
         sourceType: "overlay",
+        sourceKind: "file",
         lastImportedAt: timestamp,
         createdAt: timestamp,
         updatedAt: timestamp
