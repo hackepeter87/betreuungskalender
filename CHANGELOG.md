@@ -6,6 +6,38 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-07-06
+
+### Added
+
+- Added a guided first-use setup wizard for fresh self-hosted installations.
+  The wizard walks through owner confirmation, basic child setup, care-party
+  setup, default values, and the initial calendar/feed discovery steps.
+- Added setup-focused care-party defaults so fresh installations can start with
+  a clear primary care party and standard handover values.
+- Added clearer empty states for installations without existing children, care
+  entries, care parties, or feed configuration.
+- Added a calendar/feed discovery step that points new installations to external
+  calendar import, holiday source selection, and personal calendar-feed setup.
+- Added a local Settings preference to show or hide inline field-help icons.
+  The central Help page remains available when inline icons are hidden.
+
+### Changed
+
+- Renamed the navigation entry from "Rules" to "Help" to better match the
+  central guidance page.
+- Improved first-use guidance so setup tasks are presented as a connected flow
+  instead of scattered configuration surfaces.
+
+### Testing
+
+- Added backend coverage for setup completion with owner, care party, child,
+  and default settings.
+- Added E2E coverage for the setup wizard, fresh-install empty states,
+  calendar/feed discovery, and the help-icon visibility preference.
+- Re-ran lint, unit tests, build, E2E, and release checks across the merged
+  v1.13.0 changes.
+
 ## [1.12.0] - 2026-07-06
 
 ### Added
