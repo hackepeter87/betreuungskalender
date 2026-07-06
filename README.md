@@ -11,13 +11,13 @@ travel, costs, holidays, and unavailable periods.
 
 ## Project status
 
-- Latest published release: [v1.6.0](docs/release-notes/v1.6.0.md)
-- Current release candidate: [v1.7.0](docs/release-notes/v1.7.0.md)
-- Current `main`: SQLite/API domain persistence, language packs, external
-  read-only calendar overlays, native OIDC authentication, trusted-proxy
-  rollback support, RRULE-compatible contact rules with calendar synchronization,
-  care parties, scoped calendar feeds, responsive mobile support,
-  backup/restore tooling, release archives, and GHCR release images
+- Latest published release: [v1.13.0](docs/release-notes/v1.13.0.md)
+- Current `main`: SQLite/API domain persistence, first-use setup, application
+  memberships and invitations, optional invitation email delivery, native OIDC
+  authentication, trusted-proxy compatibility, RRULE-compatible contact rules
+  with calendar synchronization, care parties, scoped calendar feeds,
+  responsive mobile support, backup/restore tooling, release archives, and GHCR
+  release images
 - Roadmap and work tracking: [GitHub milestones and issues](https://github.com/hackepeter87/betreuungskalender/milestones)
 - Stability target: stable self-hosted release line with roadmap work tracked in
   GitHub milestones
@@ -31,6 +31,7 @@ included in repository screenshots.
 
 [Features](#features) · [Development](#development-quick-start) ·
 [Container](#container-quick-start) · [Image Promotion](docs/image-promotion.md) · [Updates](docs/update.md) · [systemd/LXC](#lxcsystemd-quick-start) ·
+[First-use setup](docs/self-hosted-onboarding.md) ·
 [Configuration](docs/configuration.md) · [Security](docs/security.md) ·
 [Security baseline](docs/security-baseline.md) · [Security review](docs/security-review.md) ·
 [Backup](docs/backup-restore.md) · [Legacy migration](docs/migration.md) ·
@@ -56,8 +57,12 @@ included in repository screenshots.
   overlays; imported events do not affect care statistics or reports
 - Revocable iCalendar subscription feeds for all visible care entries or a
   selected care party; existing legacy user-created feeds remain valid
-- Fastify API with SQLite, migrations, validation, auth-proxy support, health
-  endpoints, and production security headers
+- First-use setup, owner bootstrap, application memberships, member
+  invitations, optional invitation email delivery, and admin-only instance
+  readiness information
+- Fastify API with SQLite, migrations, validation, native OIDC,
+  trusted-proxy compatibility, health endpoints, and production security
+  headers
 
 The application documents user-entered facts and does not evaluate another
 person's conduct.
@@ -198,14 +203,30 @@ Every variable, default, and security implication is documented in
 
 ## Authentication and reverse proxy
 
-Local mode:
+Local evaluation mode:
 
 ```dotenv
 REQUIRE_AUTH=false
 TRUST_PROXY_AUTH=false
 ```
 
-Protected mode behind oauth2-proxy:
+Native OIDC mode lets the app own login, callback, logout, and server-side
+sessions while the external identity provider remains the source of user
+identity:
+
+```dotenv
+AUTH_MODE=native-oidc
+REQUIRE_AUTH=true
+TRUST_PROXY_AUTH=false
+OIDC_ISSUER_URL=https://idp.example.net/realms/example
+OIDC_CLIENT_ID=betreuungskalender
+OIDC_REDIRECT_URI=https://betreuung.example.net/auth/callback
+OIDC_REQUIRE_ROLE_CLAIM=true
+```
+
+Protected trusted-proxy mode remains available for deployments that already
+terminate authentication in oauth2-proxy or another reviewed private proxy
+boundary:
 
 ```dotenv
 REQUIRE_AUTH=true
@@ -221,17 +242,14 @@ OIDC_READONLY_GROUP=/betreuungskalender/readers
 OIDC_REQUIRE_ROLE_CLAIM=false
 ```
 
-The API maps the trusted OIDC subject header to an internal user and derives
-server-side permissions from configured group claims. Admin users may use
-import, migration, and clear-data endpoints; parent users may read and write
-ordinary app data; readonly users can only read. These headers can be forged if
-users can reach the app directly, so the app port must be private or bound to
-loopback. For the first live rollout, keep `OIDC_REQUIRE_ROLE_CLAIM=false` and
-switch it to `true` only after Keycloak/oauth2-proxy group headers are
-confirmed. When trusted identity is available, the app shell shows a compact
-signed-in user indicator and a logout link if `AUTH_LOGOUT_URL` is configured.
-Do not use `TRUST_PROXY_AUTH=true` with the direct `deploy/compose.yml` app
-port unless another reviewed proxy boundary prevents all direct client access.
+The API maps the stable OIDC subject to an internal app user. Application
+memberships and owner-assigned roles are used for authorization when present;
+configured identity-provider groups remain a compatibility fallback for
+existing installations. Admin users may use import, migration, member
+administration, and clear-data endpoints; parent users may read and write
+ordinary app data; readonly users can only read. Trusted proxy headers can be
+forged if users can reach the app directly, so the app port must be private or
+bound to loopback when `TRUST_PROXY_AUTH=true`.
 
 - HAProxy, nginx, Caddy, and Traefik:
   [docs/reverse-proxy.md](docs/reverse-proxy.md)
@@ -262,6 +280,22 @@ secrets.
 The normal `/api/session` response contains only a minimal setup state
 (`complete` and `required`) for first-use onboarding. Detailed setup counts are
 restricted to the admin instance-information view.
+
+## First-use setup and members
+
+Fresh self-hosted installations show a guided first-use setup after the first
+successful sign-in. The flow confirms the installation owner, creates initial
+application defaults, and points the user to calendar/feed setup without
+requiring browser-local state.
+
+Owner-scoped member administration is available in Settings. Owners can create
+one-time invitations, assign application roles, revoke pending invitations, and
+manage explicit app roles. Invitation codes are shown only at creation time;
+the server stores token hashes and acceptance metadata. Optional SMTP delivery
+sends the same one-time invitation link when mail is configured, while manual
+code transfer remains available.
+
+Full guide: [docs/self-hosted-onboarding.md](docs/self-hosted-onboarding.md).
 
 ## Backup and restore
 

@@ -11,6 +11,14 @@ project follows semantic versioning where practical.
 - Invitation emails now use the configured installation label as the sender
   display name when available, while `SMTP_FROM` remains the sender mailbox.
 
+### Documentation
+
+- Added a self-hosted onboarding and member-administration guide covering
+  first-use setup, owner bootstrap, app memberships, invitations, and readiness
+  checks.
+- Updated the README and security policy to reflect the current self-hosted
+  release line and setup/member-administration scope.
+
 ## [1.13.0] - 2026-07-06
 
 ### Added
