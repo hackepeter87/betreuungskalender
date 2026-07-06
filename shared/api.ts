@@ -242,6 +242,11 @@ export interface ApiSetupFirstUseInput {
     name: string;
     kind: ApiCarePartyKind;
   };
+  secondaryCareParty?: {
+    name: string;
+    kind: ApiCarePartyKind;
+  };
+  defaultCareParty: "primary" | "secondary";
   child?: {
     name: string;
     birthMonth: number;
@@ -253,6 +258,8 @@ export interface ApiSetupFirstUseInput {
 export interface ApiSetupFirstUse extends ApiSetupOwnerBootstrap {
   created: {
     carePartyId: string;
+    secondaryCarePartyId?: string;
+    defaultCarePartyId: string;
     childId?: string;
   };
 }

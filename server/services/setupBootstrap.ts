@@ -120,12 +120,45 @@ export interface FirstUseSetupInput {
     name: string;
     kind: ApiCarePartyKind;
   };
+  secondaryCareParty?: {
+    name: string;
+    kind: ApiCarePartyKind;
+  };
+  defaultCareParty: "primary" | "secondary";
   child?: {
     name: string;
     birthMonth: number;
     birthYear: number;
     color: string;
   };
+}
+
+function createCareParty(
+  database: Database.Database,
+  userId: string,
+  timestamp: string,
+  careParty: { name: string; kind: ApiCarePartyKind },
+  auditFieldName: "care_party_created" | "secondary_care_party_created"
+): string {
+  const carePartyId = makeId("party");
+  database.prepare(`
+    INSERT INTO care_parties (
+      id, name, kind, created_by, updated_by, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    carePartyId,
+    careParty.name,
+    careParty.kind,
+    userId,
+    userId,
+    timestamp,
+    timestamp
+  );
+  recordBootstrapAudit(database, userId, auditFieldName, {
+    carePartyId,
+    kind: careParty.kind
+  }, timestamp);
+  return carePartyId;
 }
 
 export function completeFirstUseSetup(
@@ -146,24 +179,25 @@ export function completeFirstUseSetup(
 
     assertKnownUser(user.id, database);
 
-    const carePartyId = makeId("party");
-    database.prepare(`
-      INSERT INTO care_parties (
-        id, name, kind, created_by, updated_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      carePartyId,
-      input.careParty.name,
-      input.careParty.kind,
-      user.id,
+    const carePartyId = createCareParty(
+      database,
       user.id,
       timestamp,
-      timestamp
+      input.careParty,
+      "care_party_created"
     );
-    recordBootstrapAudit(database, user.id, "care_party_created", {
-      carePartyId,
-      kind: input.careParty.kind
-    }, timestamp);
+    const secondaryCarePartyId = input.secondaryCareParty
+      ? createCareParty(
+        database,
+        user.id,
+        timestamp,
+        input.secondaryCareParty,
+        "secondary_care_party_created"
+      )
+      : undefined;
+    const defaultCarePartyId = input.defaultCareParty === "secondary" && secondaryCarePartyId
+      ? secondaryCarePartyId
+      : carePartyId;
 
     let childId: string | undefined;
     if (input.child) {
@@ -189,7 +223,7 @@ export function completeFirstUseSetup(
       }, timestamp);
     }
 
-    upsertSetting(database, "defaultResponsiblePartyId", carePartyId, user.id, timestamp);
+    upsertSetting(database, "defaultResponsiblePartyId", defaultCarePartyId, user.id, timestamp);
     if (input.installationLabel) {
       upsertSetting(database, "setup.installationLabel", input.installationLabel, user.id, timestamp);
     }
@@ -199,6 +233,8 @@ export function completeFirstUseSetup(
       ...completed,
       created: {
         carePartyId,
+        ...(secondaryCarePartyId ? { secondaryCarePartyId } : {}),
+        defaultCarePartyId,
         ...(childId ? { childId } : {})
       }
     };

@@ -42,7 +42,12 @@ export const setupFirstUseInputSchema = z.object({
   installationLabel: z.string().trim().max(120).optional(),
   ownerConfirmed: z.literal(true),
   careParty: carePartyInputSchema,
+  secondaryCareParty: carePartyInputSchema.optional(),
+  defaultCareParty: z.enum(["primary", "secondary"]).default("primary"),
   child: childInputSchema.optional()
+}).refine((setup) => setup.defaultCareParty === "primary" || Boolean(setup.secondaryCareParty), {
+  path: ["defaultCareParty"],
+  message: "Eine zweite betreuende Person ist erforderlich, wenn sie als Standard verwendet werden soll."
 });
 
 export const invitationInputSchema = z.object({

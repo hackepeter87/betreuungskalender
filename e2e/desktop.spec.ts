@@ -658,7 +658,11 @@ test("guides fresh installations through first-use setup before showing navigati
   await expect(page.getByTestId("setup-wizard")).toBeVisible();
   await expect(page.getByTestId("nav-calendar")).toHaveCount(0);
   await page.getByTestId("setup-installation-label").fill("Testkalender");
-  await page.getByTestId("setup-care-party-name").fill("Hauptbetreuung");
+  await page.getByTestId("setup-care-party-name").fill("Vater");
+  await page.getByTestId("setup-care-party-kind").selectOption("father");
+  await page.getByTestId("setup-secondary-care-party-name").fill("Mutter");
+  await page.getByTestId("setup-secondary-care-party-kind").selectOption("mother");
+  await page.getByTestId("setup-default-care-party").selectOption("secondary");
   await page.getByTestId("setup-child-name").fill("Setup Kind");
   await page.getByTestId("setup-wizard-submit").click();
 
@@ -686,6 +690,10 @@ test("guides fresh installations through first-use setup before showing navigati
     member.effectiveRole === "admin" &&
     member.owner
   )).toBe(true);
+
+  await navigate(page, "settings");
+  await expect(page.getByTestId("settings-default-responsible-party")).toHaveValue(/party_/);
+  await expect(page.getByTestId("settings-default-responsible-party")).toContainText("Mutter");
 });
 
 test("creates a personal calendar feed URL from settings", async ({
