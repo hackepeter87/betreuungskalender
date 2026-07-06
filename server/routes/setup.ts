@@ -3,9 +3,10 @@ import { cookieValue } from "../cookies.js";
 import { config } from "../config.js";
 import { resolveRequestUser, type RequestUser } from "../auth.js";
 import { isTrustedProxyAddress } from "../trustedProxy.js";
-import { bootstrapInstallationOwner, SetupBootstrapError } from "../services/setupBootstrap.js";
+import { bootstrapInstallationOwner, completeFirstUseSetup, SetupBootstrapError } from "../services/setupBootstrap.js";
 import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "../services/users.js";
 import type { OidcSessionStore } from "../services/oidcSessions.js";
+import { setupFirstUseInputSchema } from "../validation/schemas.js";
 
 const writeLimit = {
   config: { rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
@@ -120,6 +121,34 @@ export async function setupRoutes(
 
     try {
       return bootstrapInstallationOwner(user);
+    } catch (error) {
+      const normalized = normalizeSetupError(error);
+      return reply.code(normalized.statusCode).send({
+        error: normalized.error,
+        message: normalized.message
+      });
+    }
+  });
+
+  app.post("/api/setup/first-use", writeLimit, async (request, reply) => {
+    const parsed = setupFirstUseInputSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({
+        error: "validation_error",
+        issues: parsed.error.issues
+      });
+    }
+
+    const user = setupUser(request, options.nativeSessions);
+    if (!user) {
+      return reply.code(401).send({
+        error: "authentication_required",
+        message: "Authentifizierung erforderlich."
+      });
+    }
+
+    try {
+      return completeFirstUseSetup(user, parsed.data);
     } catch (error) {
       const normalized = normalizeSetupError(error);
       return reply.code(normalized.statusCode).send({

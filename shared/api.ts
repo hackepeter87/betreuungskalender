@@ -235,6 +235,28 @@ export interface ApiSetupOwnerBootstrap {
   };
 }
 
+export interface ApiSetupFirstUseInput {
+  installationLabel?: string;
+  ownerConfirmed: true;
+  careParty: {
+    name: string;
+    kind: ApiCarePartyKind;
+  };
+  child?: {
+    name: string;
+    birthMonth: number;
+    birthYear: number;
+    color: string;
+  };
+}
+
+export interface ApiSetupFirstUse extends ApiSetupOwnerBootstrap {
+  created: {
+    carePartyId: string;
+    childId?: string;
+  };
+}
+
 export interface ApiInvitation {
   id: string;
   role: ApiAuthRole;

@@ -58,7 +58,8 @@ export function createApiAuthHook(
       request.url === "/api/health" ||
       request.url === "/api/ready" ||
       request.url === "/api/session" ||
-      request.url === "/api/setup/owner-bootstrap"
+      request.url === "/api/setup/owner-bootstrap" ||
+      request.url === "/api/setup/first-use"
     ) return;
     const recoveryUser = config.recoveryAdminEnabled
       ? options.findRecoveryUserByToken?.(

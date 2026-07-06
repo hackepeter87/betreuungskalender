@@ -280,6 +280,7 @@ export interface ExternalCalendarBackupEvent {
 }
 
 export interface AppSettings {
+  installationLabel?: string;
   kilometerRate: number;
   defaultLocation: CareLocation;
   defaultHandoverFrom: HandoverParty;

@@ -38,6 +38,13 @@ export const carePartyInputSchema = z.object({
   kind: z.enum(carePartyKinds).default("other")
 });
 
+export const setupFirstUseInputSchema = z.object({
+  installationLabel: z.string().trim().max(120).optional(),
+  ownerConfirmed: z.literal(true),
+  careParty: carePartyInputSchema,
+  child: childInputSchema.optional()
+});
+
 export const invitationInputSchema = z.object({
   role: z.enum(["admin", "parent", "readonly"]),
   emailHint: z.string().trim().email().max(320).optional(),

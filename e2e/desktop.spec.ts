@@ -630,8 +630,10 @@ test("keeps the shell quiet in local development without authentication", async 
 });
 
 test("exposes first-use setup state through the session endpoint", async ({
-  page
+  page,
+  request
 }) => {
+  await resetApp(request, { completeSetup: false });
   await openApp(page);
   const session = await page.evaluate(async () => {
     const response = await fetch("/api/session", { cache: "no-store" });
@@ -644,6 +646,46 @@ test("exposes first-use setup state through the session endpoint", async ({
     complete: false,
     required: true
   });
+});
+
+test("guides fresh installations through first-use setup before showing navigation", async ({
+  page,
+  request
+}) => {
+  await resetApp(request, { completeSetup: false });
+  await openApp(page);
+
+  await expect(page.getByTestId("setup-wizard")).toBeVisible();
+  await expect(page.getByTestId("nav-calendar")).toHaveCount(0);
+  await page.getByTestId("setup-installation-label").fill("Testkalender");
+  await page.getByTestId("setup-care-party-name").fill("Hauptbetreuung");
+  await page.getByTestId("setup-child-name").fill("Setup Kind");
+  await page.getByTestId("setup-wizard-submit").click();
+
+  await expect(page.getByTestId("setup-wizard")).toHaveCount(0);
+  await expect(page.getByTestId("nav-calendar")).toBeVisible();
+  await expect(page.getByText("Setup Kind", { exact: true }).first()).toBeVisible();
+
+  const session = await page.evaluate(async () => {
+    const response = await fetch("/api/session", { cache: "no-store" });
+    return response.json() as Promise<{
+      setup?: { complete: boolean; required: boolean };
+    }>;
+  });
+  expect(session.setup).toEqual({
+    complete: true,
+    required: false
+  });
+  const members = await (await request.get("/api/members")).json() as Array<{
+    displayName: string;
+    effectiveRole: string;
+    owner: boolean;
+  }>;
+  expect(members.some((member) =>
+    member.displayName === "local-dev" &&
+    member.effectiveRole === "admin" &&
+    member.owner
+  )).toBe(true);
 });
 
 test("creates a personal calendar feed URL from settings", async ({
@@ -765,6 +807,7 @@ test("manages care parties and assigns them to entries and contact rules", async
   const parties = await (await request.get("/api/care-parties")).json() as Array<{ id: string; name: string }>;
   const party = parties.find((item) => item.name === partyName);
   expect(party).toBeTruthy();
+  await page.getByTestId("settings-default-responsible-party").selectOption(party!.id);
 
   await createEntry(page, {
     childName,
