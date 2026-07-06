@@ -53,6 +53,16 @@ NODE_ENV=production npm run start
 The production Fastify process serves both `dist/` and `/api` on `PORT`.
 Migrations run automatically before the listener starts.
 
+## First-use setup
+
+Fresh self-hosted installations are detected from server-side SQLite state.
+After the first successful sign-in, the app can guide the initial owner through
+setup, child and care-party defaults, and calendar/feed discovery. Member
+administration and invitations are handled inside Settings after setup.
+
+Read the complete setup and member-administration guide:
+[self-hosted-onboarding.md](self-hosted-onboarding.md).
+
 ## Important storage distinction
 
 The SQLite API is the single persistence surface for current domain data. The

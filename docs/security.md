@@ -190,6 +190,9 @@ admin membership and mark setup complete. The action is audited and becomes
 unavailable once setup is complete, so later users cannot silently take over
 ownership through the same flow.
 
+The full self-hosted setup, owner, member, and invitation model is documented
+in [self-hosted-onboarding.md](self-hosted-onboarding.md).
+
 Care confirmation push notifications are deliberately generic. Push payloads
 must not include child names, exact care times, locations, notes, evidence
 references, costs, trips, or other sensitive case details. Store VAPID private
