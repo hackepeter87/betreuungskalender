@@ -1,8 +1,10 @@
 import type Database from "better-sqlite3";
 import type { RequestUser } from "../auth.js";
 import { db } from "../db/connection.js";
+import type { ApiCarePartyKind } from "../../shared/api.js";
 import { setMembershipRole } from "./memberships.js";
 import { buildSetupState, publicSetupState } from "./setupState.js";
+import { makeId } from "./common.js";
 
 export class SetupBootstrapError extends Error {
   constructor(
@@ -62,6 +64,36 @@ function recordBootstrapAudit(
   `).run(timestamp, actorId, fieldName, JSON.stringify(value), timestamp, timestamp);
 }
 
+function recordSetupComplete(
+  database: Database.Database,
+  user: RequestUser,
+  timestamp: string
+) {
+  setMembershipRole(user.id, "admin", user.id, timestamp, database);
+  upsertSetting(database, "setup.ownerUserId", user.id, user.id, timestamp);
+  upsertSetting(database, "setup.completedAt", timestamp, user.id, timestamp);
+  upsertSetting(database, "setup.completedBy", user.id, user.id, timestamp);
+  recordBootstrapAudit(database, user.id, "owner_bootstrap", {
+    userId: user.id,
+    role: "admin"
+  }, timestamp);
+  recordBootstrapAudit(database, user.id, "setup_completed", {
+    completedAt: timestamp,
+    completedBy: user.id
+  }, timestamp);
+
+  return {
+    setup: publicSetupState(database),
+    completedAt: timestamp,
+    owner: {
+      id: user.id,
+      displayName: user.displayName,
+      role: "admin" as const,
+      ...(user.email ? { email: user.email } : {})
+    }
+  };
+}
+
 export function bootstrapInstallationOwner(
   user: RequestUser,
   timestamp = new Date().toISOString(),
@@ -78,27 +110,96 @@ export function bootstrapInstallationOwner(
     }
 
     assertKnownUser(user.id, database);
-    setMembershipRole(user.id, "admin", user.id, timestamp, database);
-    upsertSetting(database, "setup.ownerUserId", user.id, user.id, timestamp);
-    upsertSetting(database, "setup.completedAt", timestamp, user.id, timestamp);
-    upsertSetting(database, "setup.completedBy", user.id, user.id, timestamp);
-    recordBootstrapAudit(database, user.id, "owner_bootstrap", {
-      userId: user.id,
-      role: "admin"
-    }, timestamp);
-    recordBootstrapAudit(database, user.id, "setup_completed", {
-      completedAt: timestamp,
-      completedBy: user.id
+    return recordSetupComplete(database, user, timestamp);
+  })();
+}
+
+export interface FirstUseSetupInput {
+  installationLabel?: string;
+  careParty: {
+    name: string;
+    kind: ApiCarePartyKind;
+  };
+  child?: {
+    name: string;
+    birthMonth: number;
+    birthYear: number;
+    color: string;
+  };
+}
+
+export function completeFirstUseSetup(
+  user: RequestUser,
+  input: FirstUseSetupInput,
+  timestamp = new Date().toISOString(),
+  database: Database.Database = db
+) {
+  return database.transaction(() => {
+    const setup = buildSetupState(database);
+    if (setup.complete) {
+      throw new SetupBootstrapError(
+        "setup_already_complete",
+        409,
+        "Die Installation wurde bereits eingerichtet."
+      );
+    }
+
+    assertKnownUser(user.id, database);
+
+    const carePartyId = makeId("party");
+    database.prepare(`
+      INSERT INTO care_parties (
+        id, name, kind, created_by, updated_by, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      carePartyId,
+      input.careParty.name,
+      input.careParty.kind,
+      user.id,
+      user.id,
+      timestamp,
+      timestamp
+    );
+    recordBootstrapAudit(database, user.id, "care_party_created", {
+      carePartyId,
+      kind: input.careParty.kind
     }, timestamp);
 
+    let childId: string | undefined;
+    if (input.child) {
+      childId = makeId("child");
+      database.prepare(`
+        INSERT INTO children (
+          id, name, birth_month, birth_year, color, created_by, updated_by,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `).run(
+        childId,
+        input.child.name,
+        input.child.birthMonth,
+        input.child.birthYear,
+        input.child.color,
+        user.id,
+        user.id,
+        timestamp,
+        timestamp
+      );
+      recordBootstrapAudit(database, user.id, "child_created", {
+        childId
+      }, timestamp);
+    }
+
+    upsertSetting(database, "defaultResponsiblePartyId", carePartyId, user.id, timestamp);
+    if (input.installationLabel) {
+      upsertSetting(database, "setup.installationLabel", input.installationLabel, user.id, timestamp);
+    }
+
+    const completed = recordSetupComplete(database, user, timestamp);
     return {
-      setup: publicSetupState(database),
-      completedAt: timestamp,
-      owner: {
-        id: user.id,
-        displayName: user.displayName,
-        role: "admin" as const,
-        ...(user.email ? { email: user.email } : {})
+      ...completed,
+      created: {
+        carePartyId,
+        ...(childId ? { childId } : {})
       }
     };
   })();

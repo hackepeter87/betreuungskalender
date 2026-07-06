@@ -23,6 +23,7 @@ import { EntriesPage } from "./pages/EntriesPage";
 import { HolidaysPage } from "./pages/HolidaysPage";
 import { ReportPage } from "./pages/ReportPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { SetupWizardPage } from "./pages/SetupWizardPage";
 import { UnavailablePeriodsPage } from "./pages/UnavailablePeriodsPage";
 import { Icon } from "./components/Icon";
 import type { CareEntry } from "./types";
@@ -37,7 +38,7 @@ interface EntryDialogState {
 
 export function App() {
   const { locale } = useI18n();
-  const { data, isLoading, serverStatus, openConfirmations } = useAppStore();
+  const { data, isLoading, serverStatus, openConfirmations, session } = useAppStore();
   const [activePage, setActivePage] = useState<PageId>("dashboard");
   const [monthKey, setMonthKey] = useState(() => toMonthKey(new Date()));
   const [entryDialog, setEntryDialog] = useState<EntryDialogState | null>(null);
@@ -106,8 +107,15 @@ export function App() {
     setActivePage("contact");
   };
 
+  const setupMode = Boolean(
+    session.setup?.required &&
+    (!session.authRequired || session.authenticated)
+  );
+
   let page;
-  switch (activePage) {
+  if (setupMode) {
+    page = <SetupWizardPage />;
+  } else switch (activePage) {
     case "calendar":
       page = <CalendarPage monthKey={monthKey} onMonthChange={setMonthKey} onNewEntry={openNewEntry} onEditEntry={openEditEntry} />;
       break;
@@ -169,6 +177,7 @@ export function App() {
         onNavigate={setActivePage}
         onNewEntry={() => openNewEntry()}
         onOpenEntry={openEditEntry}
+        setupMode={setupMode}
       >
         {page}
       </AppShell>

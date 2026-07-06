@@ -12,6 +12,8 @@ import type {
   ApiContactRule,
   ApiLogout,
   ApiSession,
+  ApiSetupFirstUse,
+  ApiSetupFirstUseInput,
   ApiSetupOwnerBootstrap,
   ApiUserCarePartyAssignment,
   ApiMonthlyClosing,
@@ -693,6 +695,12 @@ export const api = {
     return request<ApiSetupOwnerBootstrap>("/api/setup/owner-bootstrap", {
       method: "POST",
       body: JSON.stringify({ confirm: true })
+    });
+  },
+  completeFirstUseSetup(input: ApiSetupFirstUseInput) {
+    return request<ApiSetupFirstUse>("/api/setup/first-use", {
+      method: "POST",
+      body: JSON.stringify(input)
     });
   },
   updateUserCarePartyAssignment(userId: string, carePartyIds: string[]) {

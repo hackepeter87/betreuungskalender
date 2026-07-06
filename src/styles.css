@@ -871,6 +871,116 @@ button.metric-card {
   line-height: 1.45;
 }
 
+.setup-wizard {
+  padding-bottom: 40px;
+}
+
+.setup-wizard__intro {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 18px;
+  border-color: #b9deda;
+  background: var(--teal-soft);
+}
+
+.setup-wizard__intro h2,
+.setup-step h2 {
+  margin: 0;
+}
+
+.setup-wizard__intro p,
+.setup-step p,
+.setup-wizard__actions p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.setup-wizard__icon,
+.setup-step__number {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 44px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--teal);
+  font-weight: 850;
+}
+
+.setup-wizard__form {
+  overflow: hidden;
+}
+
+.setup-step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 16px;
+  padding: 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.setup-step__content {
+  min-width: 0;
+}
+
+.setup-owner-card {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.setup-owner-card small,
+.setup-owner-card strong {
+  display: block;
+}
+
+.setup-owner-card small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.setup-owner-card strong {
+  margin-top: 2px;
+}
+
+.settings-form-grid--two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.settings-form-grid--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.setup-color-field {
+  margin-top: 12px;
+}
+
+.setup-wizard__actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px;
+}
+
+.setup-wizard__actions .button {
+  flex: 0 0 auto;
+}
+
 .dashboard-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 300px;
@@ -3180,6 +3290,27 @@ button.metric-card {
 
   .settings-form-grid {
     grid-template-columns: 1fr;
+  }
+
+  .setup-wizard__intro,
+  .setup-step {
+    grid-template-columns: 1fr;
+  }
+
+  .setup-wizard__icon,
+  .setup-step__number {
+    width: 38px;
+    height: 38px;
+    flex-basis: 38px;
+  }
+
+  .setup-wizard__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .setup-wizard__actions .button {
+    width: 100%;
   }
 
   .external-calendar-import-grid {

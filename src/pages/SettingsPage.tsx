@@ -1149,6 +1149,7 @@ export function SettingsPage() {
               {copy(locale, "settings", "defaultResponsibleParty")}
             </FieldHelpLabel>
             <select
+              data-testid="settings-default-responsible-party"
               value={data.settings.defaultResponsiblePartyId ?? ""}
               disabled={!canWrite || isSaving || !data.careParties.length}
               onChange={(event) =>

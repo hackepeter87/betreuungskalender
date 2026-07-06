@@ -307,12 +307,14 @@ export function AppShell({
   onNavigate,
   onNewEntry,
   onOpenEntry,
+  setupMode = false,
   children
 }: {
   activePage: PageId;
   onNavigate: (page: PageId) => void;
   onNewEntry: () => void;
   onOpenEntry: (entry: CareEntry) => void;
+  setupMode?: boolean;
   children: ReactNode;
 }) {
   const { t } = useI18n();
@@ -363,22 +365,26 @@ export function AppShell({
           </span>
         </button>
 
-        <nav className="sidebar__nav" aria-label={t("nav.main")}>
-          {navItems.map((item) => (
-            <button
-              type="button"
-              key={item.id}
-              data-testid={`nav-${item.id}`}
-              className={activePage === item.id ? "is-active" : ""}
-              onClick={() => navigate(item.id)}
-            >
-              <Icon name={item.icon} />
-              <span>{t(item.labelKey)}</span>
-            </button>
-          ))}
-        </nav>
+        {!setupMode ? (
+          <>
+            <nav className="sidebar__nav" aria-label={t("nav.main")}>
+              {navItems.map((item) => (
+                <button
+                  type="button"
+                  key={item.id}
+                  data-testid={`nav-${item.id}`}
+                  className={activePage === item.id ? "is-active" : ""}
+                  onClick={() => navigate(item.id)}
+                >
+                  <Icon name={item.icon} />
+                  <span>{t(item.labelKey)}</span>
+                </button>
+              ))}
+            </nav>
 
-        <NotificationBell testIdPrefix="sidebar" onOpenEntry={onOpenEntry} />
+            <NotificationBell testIdPrefix="sidebar" onOpenEntry={onOpenEntry} />
+          </>
+        ) : null}
 
         <AuthSessionCard
           session={session}
@@ -387,18 +393,20 @@ export function AppShell({
           t={t}
         />
 
-        <button
-          className={`sidebar__settings ${activePage === "settings" ? "is-active" : ""}`}
-          type="button"
-          data-testid="nav-settings"
-          onClick={() => navigate("settings")}
-        >
-          <Icon name="settings" />
-          <span>{t("nav.settings")}</span>
-        </button>
+        {!setupMode ? (
+          <button
+            className={`sidebar__settings ${activePage === "settings" ? "is-active" : ""}`}
+            type="button"
+            data-testid="nav-settings"
+            onClick={() => navigate("settings")}
+          >
+            <Icon name="settings" />
+            <span>{t("nav.settings")}</span>
+          </button>
+        ) : null}
       </aside>
 
-      <nav className="mobile-nav" aria-label={t("nav.mobile")} data-testid="mobile-navigation">
+      {!setupMode ? <nav className="mobile-nav" aria-label={t("nav.mobile")} data-testid="mobile-navigation">
         {mobileNavItems.map((item) => (
           <button
             type="button"
@@ -422,7 +430,7 @@ export function AppShell({
           <Icon name="list" size={19} />
           <span>{t("nav.more")}</span>
         </button>
-      </nav>
+      </nav> : null}
 
       <main className="main">
         <header className="mobile-header">
@@ -431,24 +439,26 @@ export function AppShell({
             <strong>{t("app.name")}</strong>
           </button>
           <div className="mobile-header__actions">
-            <NotificationBell testIdPrefix="mobile" onOpenEntry={onOpenEntry} />
+            {!setupMode ? <NotificationBell testIdPrefix="mobile" onOpenEntry={onOpenEntry} /> : null}
             <MobileAuthMenu
               session={session}
               loggingOut={loggingOut}
               onLogout={() => void logout()}
               t={t}
             />
-            <button
-              className="button button--primary button--icon-mobile"
-              type="button"
-              data-testid="mobile-entry-create"
-              onClick={onNewEntry}
-              disabled={!canWrite}
-              aria-label={t("action.newEntry")}
-            >
-              <Icon name="plus" />
-              <span>{t("action.entryShort")}</span>
-            </button>
+            {!setupMode ? (
+              <button
+                className="button button--primary button--icon-mobile"
+                type="button"
+                data-testid="mobile-entry-create"
+                onClick={onNewEntry}
+                disabled={!canWrite}
+                aria-label={t("action.newEntry")}
+              >
+                <Icon name="plus" />
+                <span>{t("action.entryShort")}</span>
+              </button>
+            ) : null}
           </div>
         </header>
         {serverStatus === "offline" ? (
@@ -499,7 +509,7 @@ export function AppShell({
         {children}
       </main>
 
-      {showMore ? (
+      {showMore && !setupMode ? (
         <div className="mobile-more-backdrop" role="presentation" onClick={() => setShowMore(false)}>
           <section
             className="mobile-more-sheet"

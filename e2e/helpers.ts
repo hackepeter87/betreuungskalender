@@ -25,9 +25,23 @@ export function dateInCurrentMonth(day: number): string {
   ].join("-");
 }
 
-export async function resetApp(request: APIRequestContext) {
+export async function resetApp(
+  request: APIRequestContext,
+  options: { completeSetup?: boolean } = {}
+) {
   const response = await request.delete("/api/app-data");
   expect(response.ok()).toBeTruthy();
+  if (options.completeSetup === false) return;
+  const setup = await request.post("/api/setup/first-use", {
+    data: {
+      ownerConfirmed: true,
+      careParty: {
+        name: "Hauptbetreuung",
+        kind: "other"
+      }
+    }
+  });
+  expect(setup.ok()).toBeTruthy();
 }
 
 export async function openApp(page: Page) {

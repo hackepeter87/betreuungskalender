@@ -7,7 +7,7 @@ import Database from "better-sqlite3";
 import { permissionsForRole, type RequestUser } from "./auth.js";
 import { migrateDatabase } from "./db/migrationRunner.js";
 import { membershipRoleForUser } from "./services/memberships.js";
-import { bootstrapInstallationOwner, SetupBootstrapError } from "./services/setupBootstrap.js";
+import { bootstrapInstallationOwner, completeFirstUseSetup, SetupBootstrapError } from "./services/setupBootstrap.js";
 import { buildSetupState, publicSetupState } from "./services/setupState.js";
 
 const migrationsDirectory = resolve(process.cwd(), "server/migrations");
@@ -183,5 +183,81 @@ test("does not allow silent owner takeover after setup completion", () => {
         error.statusCode === 409
     );
     assert.equal(membershipRoleForUser("local-dev", database), undefined);
+  });
+});
+
+test("completes first-use setup with owner, care party, child, and defaults", () => {
+  withDatabase((database) => {
+    const result = completeFirstUseSetup(
+      setupUser(),
+      {
+        installationLabel: "Private calendar",
+        careParty: {
+          name: "Primary care",
+          kind: "other"
+        },
+        child: {
+          name: "Child A",
+          birthMonth: 4,
+          birthYear: 2017,
+          color: "#0d9488"
+        }
+      },
+      "2026-07-05T12:30:00.000Z",
+      database
+    );
+
+    const setup = buildSetupState(database);
+    const careParty = database.prepare(`
+      SELECT id, name, kind
+      FROM care_parties
+      WHERE id = ? AND deleted_at IS NULL
+    `).get(result.created.carePartyId) as { id: string; name: string; kind: string } | undefined;
+    const child = database.prepare(`
+      SELECT id, name, birth_month AS birthMonth, birth_year AS birthYear
+      FROM children
+      WHERE id = ? AND deleted_at IS NULL
+    `).get(result.created.childId) as {
+      id: string;
+      name: string;
+      birthMonth: number;
+      birthYear: number;
+    } | undefined;
+    const settings = database.prepare(`
+      SELECT key, value_json AS valueJson
+      FROM settings
+      WHERE key IN (
+        'defaultResponsiblePartyId',
+        'setup.completedAt',
+        'setup.completedBy',
+        'setup.installationLabel',
+        'setup.ownerUserId'
+      )
+      ORDER BY key
+    `).all() as Array<{ key: string; valueJson: string }>;
+
+    assert.deepEqual(result.setup, {
+      complete: true,
+      required: false
+    });
+    assert.equal(result.owner.id, "local-dev");
+    assert.equal(result.owner.role, "admin");
+    assert.equal(membershipRoleForUser("local-dev", database), "admin");
+    assert.equal(setup.complete, true);
+    assert.equal(setup.required, false);
+    assert.equal(setup.counts.children, 1);
+    assert.equal(setup.counts.careParties, 1);
+    assert.equal(careParty?.name, "Primary care");
+    assert.equal(careParty?.kind, "other");
+    assert.equal(child?.name, "Child A");
+    assert.equal(child?.birthMonth, 4);
+    assert.equal(child?.birthYear, 2017);
+    assert.deepEqual(settings.map((row) => [row.key, JSON.parse(row.valueJson)]), [
+      ["defaultResponsiblePartyId", result.created.carePartyId],
+      ["setup.completedAt", "2026-07-05T12:30:00.000Z"],
+      ["setup.completedBy", "local-dev"],
+      ["setup.installationLabel", "Private calendar"],
+      ["setup.ownerUserId", "local-dev"]
+    ]);
   });
 });
