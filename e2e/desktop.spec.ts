@@ -696,6 +696,38 @@ test("guides fresh installations through first-use setup before showing navigati
   await expect(page.getByTestId("settings-default-responsible-party")).toContainText("Mutter");
 });
 
+test("shows useful empty states after first-use setup without domain data", async ({
+  page,
+  request
+}) => {
+  await resetApp(request, { completeSetup: false });
+  await openApp(page);
+
+  await page.getByTestId("setup-care-party-name").fill("Hauptbetreuung");
+  await page.getByTestId("setup-wizard-submit").click();
+  await expect(page.getByTestId("setup-wizard")).toHaveCount(0);
+
+  await expect(page.getByTestId("dashboard-setup-child")).toBeVisible();
+  await expect(page.getByText("Lege ein Kind oder Kürzel an", { exact: false }).first()).toBeVisible();
+
+  await navigate(page, "calendar");
+  await expect(page.getByTestId("calendar-empty-state")).toBeVisible();
+  await expect(page.getByText("Der Kalender ist noch leer")).toBeVisible();
+
+  await navigate(page, "entries");
+  await expect(page.getByTestId("entries-empty-state")).toBeVisible();
+  await expect(page.getByText("Beginne mit einem ersten Eintrag")).toBeVisible();
+
+  await navigate(page, "analytics");
+  await expect(page.getByTestId("analytics-empty-state")).toBeVisible();
+
+  await navigate(page, "report");
+  await expect(page.getByTestId("report-empty-state")).toBeVisible();
+
+  await navigate(page, "settings");
+  await expect(page.getByText("Noch kein Kind angelegt.", { exact: false })).toBeVisible();
+});
+
 test("creates a personal calendar feed URL from settings", async ({
   page,
   request

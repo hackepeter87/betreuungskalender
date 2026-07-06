@@ -50,13 +50,17 @@ export function EntriesPage({
   const activeEntriesCount = data.entries.filter((entry) => !entry.deletedAt).length;
   const hasActiveFilters = status !== "all" || Boolean(deferredQuery);
   const emptyTitle =
-    monthEntries.length === 0 && activeEntriesCount > 0
+    activeEntriesCount === 0
+      ? copy(locale, "entries", "emptyFreshTitle")
+      : monthEntries.length === 0 && activeEntriesCount > 0
       ? copy(locale, "entries", "emptyMonthTitle")
       : hasActiveFilters
         ? copy(locale, "entries", "emptyFilteredTitle")
         : copy(locale, "entries", "emptyTitle");
   const emptyDescription =
-    monthEntries.length === 0 && activeEntriesCount > 0
+    activeEntriesCount === 0
+      ? copy(locale, "entries", "emptyFreshDescription")
+      : monthEntries.length === 0 && activeEntriesCount > 0
       ? copy(locale, "entries", "emptyMonthDescription")
       : hasActiveFilters
         ? copy(locale, "entries", "emptyFilteredDescription")

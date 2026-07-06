@@ -45,6 +45,7 @@ export function AnalyticsPage({ monthKey }: { monthKey: string }) {
       setCreatingPdf(false);
     }
   };
+  const hasAnyEntries = data.entries.some((entry) => !entry.deletedAt);
 
   return (
     <div className="page">
@@ -74,6 +75,14 @@ export function AnalyticsPage({ monthKey }: { monthKey: string }) {
         </span>
       </div>
       <MobileExportNotice />
+
+      {!hasAnyEntries ? (
+        <section className="panel empty-state" data-testid="analytics-empty-state">
+          <span><Icon name="fileText" size={25} /></span>
+          <h2>{copy(locale, "analytics", "emptyTitle")}</h2>
+          <p>{copy(locale, "analytics", "emptyDescription")}</p>
+        </section>
+      ) : null}
 
       <section className="summary-strip summary-strip--six">
         <div><small>{copy(locale, "analytics", "careDays")}</small><strong>{stats.careDays}</strong></div>

@@ -89,6 +89,7 @@ export function ReportPage() {
       ),
     [data, locale, selection.endDate, selection.startDate]
   );
+  const hasAnyEntries = data.entries.some((entry) => !entry.deletedAt);
 
   useEffect(() => {
     setReportId(makeReportId());
@@ -143,6 +144,14 @@ export function ReportPage() {
         <PeriodSelector value={selection} onChange={setSelection} />
         <MobileExportNotice />
       </div>
+
+      {!hasAnyEntries ? (
+        <section className="panel empty-state no-print" data-testid="report-empty-state">
+          <span><Icon name="fileText" size={25} /></span>
+          <h2>{t("report.emptyTitle")}</h2>
+          <p>{t("report.emptyDescription")}</p>
+        </section>
+      ) : null}
 
       <article className="report-document" data-testid="report-document">
         <header className="report-document__header">

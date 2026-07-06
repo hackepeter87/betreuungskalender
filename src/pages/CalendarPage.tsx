@@ -59,6 +59,11 @@ export function CalendarPage({
       range.endDate
     );
   }, [data.unavailablePeriods, monthKey]);
+  const hasCalendarContent =
+    entries.length > 0 ||
+    holidayPeriods.length > 0 ||
+    unavailablePeriods.length > 0 ||
+    externalEvents.length > 0;
 
   useEffect(() => {
     const range = rangeForMonth(monthKey);
@@ -99,6 +104,18 @@ export function CalendarPage({
           {copy(locale, "calendarPage", "unavailability")}
         </button>
       </div>
+
+      {!hasCalendarContent ? (
+        <section className="panel empty-state" data-testid="calendar-empty-state">
+          <span><Icon name="calendar" size={25} /></span>
+          <h2>{copy(locale, "calendarPage", "emptyTitle")}</h2>
+          <p>{copy(locale, "calendarPage", "emptyDescription")}</p>
+          <button className="button button--primary" type="button" onClick={() => onNewEntry()} disabled={!canWrite}>
+            <Icon name="plus" size={17} />
+            {copy(locale, "calendarPage", "createEntry")}
+          </button>
+        </section>
+      ) : null}
 
       <div className="calendar-view-toggle" role="group" aria-label={copy(locale, "calendarPage", "viewLabel")}>
         <button
