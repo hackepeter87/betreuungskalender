@@ -2107,6 +2107,25 @@ button.metric-card {
   padding: 18px;
 }
 
+.external-calendar-kind-control {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.external-calendar-url-field {
+  min-width: 0;
+}
+
+.external-calendar-url-field input,
+.external-calendar-url-field small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.text-danger {
+  color: var(--danger);
+}
+
 .field--compact {
   min-width: 160px;
 }
@@ -6350,6 +6369,11 @@ button.metric-card {
 
 .calendar-event--overlap {
   box-shadow: inset 0 0 0 1px #d97706;
+}
+
+.calendar-event--holiday-overlap {
+  border-color: #eab308;
+  background: #fffbeb;
 }
 
 .status-label--unavailable {

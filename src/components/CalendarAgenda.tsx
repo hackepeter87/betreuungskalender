@@ -185,6 +185,9 @@ export function CalendarAgenda({
                 unavailableForEntry(entry, unavailablePeriods, {
                   affectsContactOnly: true
                 }).length > 0;
+              const hasHolidayOverlap =
+                Boolean(entry.contactRuleId || entry.generatedByPatternId) &&
+                group.holidays.length > 0;
               return (
                 <button
                   className={`agenda-card agenda-card--${entry.status}`}
@@ -213,6 +216,7 @@ export function CalendarAgenda({
                       {entry.overnight ? <span><Icon name="moon" size={14} />{copy(locale, "agenda", "overnight")}</span> : null}
                       {entry.additionalCare ? <span><Icon name="plus" size={14} />{copy(locale, "agenda", "additionalCare")}</span> : null}
                       {entry.holiday ? <span><Icon name="sun" size={14} />{copy(locale, "agenda", "holiday")}</span> : null}
+                      {hasHolidayOverlap ? <span><Icon name="sun" size={14} />{copy(locale, "agenda", "holidayOverlap")}</span> : null}
                       {entry.deviationType ? <span><Icon name="history" size={14} />{deviationLabel(entry.deviationType, locale)}</span> : null}
                     </span>
                     {entry.plannedStartDateTime && entry.plannedEndDateTime ? (
@@ -229,6 +233,12 @@ export function CalendarAgenda({
                       <span className="agenda-card__warning">
                         <Icon name="alert" size={15} />
                         {copy(locale, "agenda", "overlap")}
+                      </span>
+                    ) : null}
+                    {hasHolidayOverlap ? (
+                      <span className="agenda-card__warning agenda-card__warning--neutral">
+                        <Icon name="sun" size={15} />
+                        {copy(locale, "agenda", "holidayOverlapNotice")}
                       </span>
                     ) : null}
                   </span>

@@ -1059,6 +1059,15 @@ export const fieldHelpById = {
     commonMistakes: "Keine produktiven oder fremden Kalenderdateien mit unnötigen privaten Details importieren.",
     requirementLevel: required
   }),
+  "externalCalendar.feedUrl": help("externalCalendar.feedUrl", {
+    label: "Feed-URL",
+    shortHelp: "HTTPS-URL eines externen iCalendar-Feeds.",
+    whyRelevant: "Damit lassen sich externe Kalender, zum Beispiel abonnierte Kalender, als read-only Overlay anzeigen.",
+    usedFor: "Kalender und Agenda; nicht für Auswertungen oder Betreuungsgutschriften.",
+    inputGuidance: "Nutze nur vertrauenswürdige HTTPS-Feeds. Die vollständige URL wird serverseitig gespeichert und in der UI nur redigiert angezeigt.",
+    commonMistakes: "Feed-URLs können Zugriffstoken enthalten und sollten wie Passwörter behandelt werden.",
+    requirementLevel: required
+  }),
   "calendarFeed.scope": help("calendarFeed.scope", {
     label: "Feed-Inhalt",
     shortHelp: "Legt fest, welche Termine die persönliche iCalendar-URL enthält.",

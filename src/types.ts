@@ -245,7 +245,11 @@ export interface ExternalCalendarSource {
   color: string;
   visible: boolean;
   sourceType: "overlay" | "holiday";
+  sourceKind: "file" | "url";
+  feedUrlRedacted?: string;
   lastImportedAt: string;
+  lastRefreshAt?: string;
+  lastRefreshError?: string;
   createdAt: string;
   updatedAt: string;
 }

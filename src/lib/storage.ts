@@ -275,7 +275,11 @@ export function normalizeBackupData(value: unknown): AppData {
           color: String(source.color ?? "#2563eb"),
           visible: Boolean(source.visible),
           sourceType: source.sourceType === "holiday" ? "holiday" : "overlay",
+          sourceKind: source.sourceKind === "url" ? "url" : "file",
+          feedUrlRedacted: typeof source.feedUrlRedacted === "string" ? source.feedUrlRedacted : undefined,
           lastImportedAt: String(source.lastImportedAt ?? nowIso()),
+          lastRefreshAt: typeof source.lastRefreshAt === "string" ? source.lastRefreshAt : undefined,
+          lastRefreshError: typeof source.lastRefreshError === "string" ? source.lastRefreshError : undefined,
           createdAt: String(source.createdAt ?? nowIso()),
           updatedAt: String(source.updatedAt ?? nowIso())
         }))

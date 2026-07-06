@@ -2,14 +2,21 @@
 
 ## External calendars
 
-`external_calendar_sources` stores imported file sources, visibility, and
-whether the source is a read-only overlay or a holiday source.
+`external_calendar_sources` stores imported file sources or external HTTPS feed
+sources, visibility, and whether the source is a read-only overlay or a holiday
+source. URL feed sources keep the full feed URL server-side for refreshes, but
+API responses expose only a redacted URL.
 `external_calendar_events` stores normalized, read-only event data and
 references its source with cascade deletion. The unique `(source_id, ical_uid,
 recurrence_id)` key makes re-import idempotent; missing recurrence IDs are
 stored as an empty string. Holiday periods can optionally keep
 `source_external_calendar_source_id` and `source_external_calendar_event_id`
 when they were explicitly derived from a holiday source.
+
+Holiday periods are reporting and planning frames. They do not override
+recurring contact rules or generated care entries. A care entry inside a holiday
+period remains a normal care entry and is counted once through the care-entry
+model.
 
 ## Persistence surfaces
 

@@ -53,8 +53,9 @@ included in repository screenshots.
 - Multiple trips and costs per care entry with period statistics
 - Monthly closure, data-quality checks, soft delete, and field-level audit log
 - JSON backup/import, separate CSV exports, neutral PDF report, and A4 print view
-- Local `.ics` holiday calendar import with source visibility and read-only
-  overlays; imported events do not affect care statistics or reports
+- External calendar overlays from local `.ics` files or HTTPS feed URLs, with
+  source visibility and optional holiday-source derivation; imported events do
+  not affect care statistics or reports
 - Revocable iCalendar subscription feeds for all visible care entries or a
   selected care party; existing legacy user-created feeds remain valid
 - First-use setup, owner bootstrap, application memberships, member
