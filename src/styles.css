@@ -969,6 +969,40 @@ button.metric-card {
   margin-top: 12px;
 }
 
+.setup-discovery-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.setup-discovery-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.setup-discovery-card svg {
+  margin-top: 2px;
+  color: var(--teal);
+}
+
+.setup-discovery-card h3 {
+  margin: 0;
+  font-size: 0.86rem;
+}
+
+.setup-discovery-card p {
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
 .setup-wizard__actions {
   display: flex;
   align-items: center;
@@ -3311,6 +3345,10 @@ button.metric-card {
 
   .setup-wizard__actions .button {
     width: 100%;
+  }
+
+  .setup-discovery-grid {
+    grid-template-columns: 1fr;
   }
 
   .external-calendar-import-grid {

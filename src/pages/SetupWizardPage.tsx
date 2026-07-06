@@ -258,6 +258,37 @@ export function SetupWizardPage() {
           </div>
         </section>
 
+        <section className="setup-step">
+          <div className="setup-step__number">4</div>
+          <div className="setup-step__content">
+            <h2>{copy(locale, "setup", "calendarTitle")}</h2>
+            <p>{copy(locale, "setup", "calendarDescription")}</p>
+            <div className="setup-discovery-grid">
+              <article className="setup-discovery-card" data-testid="setup-calendar-feed-discovery">
+                <Icon name="calendar" size={20} />
+                <div>
+                  <h3>{copy(locale, "setup", "calendarFeedTitle")}</h3>
+                  <p>{copy(locale, "setup", "calendarFeedDescription")}</p>
+                </div>
+              </article>
+              <article className="setup-discovery-card" data-testid="setup-calendar-import-discovery">
+                <Icon name="upload" size={20} />
+                <div>
+                  <h3>{copy(locale, "setup", "calendarImportTitle")}</h3>
+                  <p>{copy(locale, "setup", "calendarImportDescription")}</p>
+                </div>
+              </article>
+              <article className="setup-discovery-card" data-testid="setup-calendar-export-discovery">
+                <Icon name="download" size={20} />
+                <div>
+                  <h3>{copy(locale, "setup", "calendarExportTitle")}</h3>
+                  <p>{copy(locale, "setup", "calendarExportDescription")}</p>
+                </div>
+              </article>
+            </div>
+          </div>
+        </section>
+
         {error ? <p className="form-error" role="alert">{error}</p> : null}
 
         <footer className="setup-wizard__actions">
