@@ -200,7 +200,8 @@ test("completes first-use setup with owner, care party, child, and defaults", ()
           name: "Other parent",
           kind: "mother"
         },
-        defaultCareParty: "secondary",
+        primaryCareParty: "secondary",
+        defaultCareParty: "primary",
         child: {
           name: "Child A",
           birthMonth: 4,
@@ -238,6 +239,7 @@ test("completes first-use setup with owner, care party, child, and defaults", ()
       FROM settings
       WHERE key IN (
         'defaultResponsiblePartyId',
+        'primaryCarePartyId',
         'setup.completedAt',
         'setup.completedBy',
         'setup.installationLabel',
@@ -265,11 +267,14 @@ test("completes first-use setup with owner, care party, child, and defaults", ()
     assert.equal(child?.birthMonth, 4);
     assert.equal(child?.birthYear, 2017);
     assert.deepEqual(settings.map((row) => [row.key, JSON.parse(row.valueJson)]), [
-      ["defaultResponsiblePartyId", result.created.secondaryCarePartyId],
+      ["defaultResponsiblePartyId", result.created.carePartyId],
+      ["primaryCarePartyId", result.created.secondaryCarePartyId],
       ["setup.completedAt", "2026-07-05T12:30:00.000Z"],
       ["setup.completedBy", "local-dev"],
       ["setup.installationLabel", "Private calendar"],
       ["setup.ownerUserId", "local-dev"]
     ]);
+    assert.equal(result.created.primaryCarePartyId, result.created.secondaryCarePartyId);
+    assert.equal(result.created.defaultCarePartyId, result.created.carePartyId);
   });
 });

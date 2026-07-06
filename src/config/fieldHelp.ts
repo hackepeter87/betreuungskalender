@@ -985,13 +985,22 @@ export const fieldHelpById = {
     commonMistakes: "Die Spracheinstellung nicht als Daten- oder Berichtskonvertierung verstehen.",
     requirementLevel: optional
   }),
-  "settings.defaultResponsibleParty": help("settings.defaultResponsibleParty", {
+  "settings.primaryCareParty": help("settings.primaryCareParty", {
     label: "Hauptbetreuungsperson",
-    shortHelp: "Standard-Zuordnung für neue oder importierte Termine ohne eigene Personenauswahl.",
-    whyRelevant: "Ohne fachliche Zuordnung können Personenstatistiken und Feeds unvollständig werden.",
-    usedFor: "Neue Betreuungseinträge, importierte/geplante Termine, Ferienauswertung und Kalenderfeeds.",
-    inputGuidance: "Wähle die Person, der Betreuung standardmäßig zugerechnet werden soll.",
-    commonMistakes: "Die Hauptbetreuung nicht mit Admin- oder Login-Rechten verwechseln.",
+    shortHelp: "Fachliche Person, der Zeiten zugerechnet werden, wenn kein einzelner Betreuungseintrag vorhanden ist.",
+    whyRelevant: "Ohne diesen Fallback können Ferienauswertungen und Berichte bei noch nicht aufgeteilten Zeiträumen leer oder missverständlich sein.",
+    usedFor: "Ferienauswertung und fachliche Fallbacks ohne konkrete Terminzuordnung.",
+    inputGuidance: "Wähle die Person, die standardmäßig als Hauptbetreuung gelten soll. Das ändert nicht automatisch den Termin-Standard.",
+    commonMistakes: "Nicht mit Login-Rolle, Admin-Rechten oder dem Standard für neu erfasste Termine verwechseln.",
+    requirementLevel: recommended
+  }),
+  "settings.defaultResponsibleParty": help("settings.defaultResponsibleParty", {
+    label: "Standard für neue Termine",
+    shortHelp: "Vorbelegung für neu erfasste Betreuungseinträge und neue Umgangsregeln.",
+    whyRelevant: "Neue Termine sollen ohne Zusatzaufwand der richtigen fachlichen Person zugeordnet werden.",
+    usedFor: "Neue Betreuungseinträge, neue Umgangsregeln und importierte/geplante Termine ohne eigene Personenauswahl.",
+    inputGuidance: "Wähle die Person, zu der neue von dir angelegte Termine zunächst gehören sollen.",
+    commonMistakes: "Nicht mit der Hauptbetreuungsperson für Ferien- oder Fallback-Auswertungen verwechseln.",
     requirementLevel: recommended
   }),
   "settings.carePartyName": help("settings.carePartyName", {

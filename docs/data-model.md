@@ -195,6 +195,10 @@ calculated duration, contact-time classification, and an optional
 `responsible_party_id`. If a new entry or contact rule does not provide a
 responsible party, the server uses the configured
 `defaultResponsiblePartyId` setting when an active care party is available.
+`primaryCarePartyId` is a separate setting for domain-level fallbacks, for
+example when holiday periods are analyzed before individual care entries have
+been recorded. It does not change the default responsible party for newly
+created entries.
 Supported stored statuses are `planned`, `completed`, `partial`, and
 `cancelled`. The API can additionally expose a derived `unconfirmed`
 confirmation state for planned entries whose end time is already in the past.

@@ -1063,6 +1063,44 @@ button.metric-card {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
+.setup-person-card {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.setup-person-card__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+}
+
+.setup-person-card__header h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.9rem;
+  line-height: 1.25;
+}
+
+.setup-person-card__header p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.setup-primary-toggle {
+  justify-content: flex-end;
+  min-height: 30px;
+  white-space: nowrap;
+}
+
 .setup-wizard .field {
   gap: 8px;
 }
@@ -3542,6 +3580,14 @@ button.metric-card {
 
   .setup-wizard__actions .button {
     width: 100%;
+  }
+
+  .setup-person-card__header {
+    grid-template-columns: 1fr;
+  }
+
+  .setup-primary-toggle {
+    justify-content: flex-start;
   }
 
   .setup-discovery-grid {

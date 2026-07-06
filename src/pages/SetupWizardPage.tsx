@@ -12,15 +12,19 @@ function defaultBirthYear(): number {
   return new Date().getFullYear() - 8;
 }
 
+function kindLabel(locale: "de" | "en", kind: ApiCarePartyKind): string {
+  return copy(locale, "settings", `carePartyKind_${kind}` as CatalogKey<"settings">);
+}
+
 export function SetupWizardPage() {
   const { locale } = useI18n();
   const { session, reload, isSaving } = useAppStore();
   const [installationLabel, setInstallationLabel] = useState("");
-  const [carePartyName, setCarePartyName] = useState(copy(locale, "setup", "defaultCareParty"));
-  const [carePartyKind, setCarePartyKind] = useState<ApiCarePartyKind>("other");
+  const [carePartyName, setCarePartyName] = useState(kindLabel(locale, "father"));
+  const [carePartyKind, setCarePartyKind] = useState<ApiCarePartyKind>("father");
   const [secondaryCarePartyName, setSecondaryCarePartyName] = useState("");
-  const [secondaryCarePartyKind, setSecondaryCarePartyKind] = useState<ApiCarePartyKind>("other");
-  const [defaultCareParty, setDefaultCareParty] = useState<"primary" | "secondary">("primary");
+  const [secondaryCarePartyKind, setSecondaryCarePartyKind] = useState<ApiCarePartyKind>("mother");
+  const [primaryCareParty, setPrimaryCareParty] = useState<"primary" | "secondary">("primary");
   const [childName, setChildName] = useState("");
   const [birthMonth, setBirthMonth] = useState(1);
   const [birthYear, setBirthYear] = useState(defaultBirthYear);
@@ -32,6 +36,7 @@ export function SetupWizardPage() {
     event.preventDefault();
     if (!carePartyName.trim()) return;
     const hasSecondaryCareParty = Boolean(secondaryCarePartyName.trim());
+    if (primaryCareParty === "secondary" && !hasSecondaryCareParty) return;
     setBusy(true);
     setError(null);
     try {
@@ -50,7 +55,8 @@ export function SetupWizardPage() {
               }
             }
           : {}),
-        defaultCareParty: hasSecondaryCareParty && defaultCareParty === "secondary" ? "secondary" : "primary",
+        primaryCareParty: hasSecondaryCareParty && primaryCareParty === "secondary" ? "secondary" : "primary",
+        defaultCareParty: "primary",
         ...(childName.trim()
           ? {
               child: {
@@ -122,76 +128,105 @@ export function SetupWizardPage() {
                 />
                 <small>{copy(locale, "setup", "optional")}</small>
               </label>
-              <label className="field">
-                <FieldHelpLabel fieldId="settings.defaultResponsibleParty">
-                  {copy(locale, "setup", "carePartyName")}
-                </FieldHelpLabel>
-                <input
-                  data-testid="setup-care-party-name"
-                  required
-                  value={carePartyName}
-                  maxLength={200}
-                  onChange={(event) => setCarePartyName(event.target.value)}
-                />
-                <small>{copy(locale, "setup", "ownCarePartyHint")}</small>
-              </label>
-              <label className="field">
-                <span>{copy(locale, "setup", "carePartyKind")}</span>
-                <select
-                  data-testid="setup-care-party-kind"
-                  value={carePartyKind}
-                  onChange={(event) => setCarePartyKind(event.target.value as ApiCarePartyKind)}
-                >
-                  {carePartyKinds.map((kind) => (
-                    <option key={kind} value={kind}>
-                      {copy(locale, "settings", `carePartyKind_${kind}` as CatalogKey<"settings">)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <span>{copy(locale, "setup", "secondaryCarePartyName")}</span>
-                <input
-                  data-testid="setup-secondary-care-party-name"
-                  value={secondaryCarePartyName}
-                  maxLength={200}
-                  onChange={(event) => {
-                    setSecondaryCarePartyName(event.target.value);
-                    if (!event.target.value.trim()) setDefaultCareParty("primary");
-                  }}
-                  placeholder={copy(locale, "settings", "carePartyNamePlaceholder")}
-                />
-                <small>{copy(locale, "setup", "optional")}</small>
-              </label>
-              <label className="field">
-                <span>{copy(locale, "setup", "secondaryCarePartyKind")}</span>
-                <select
-                  data-testid="setup-secondary-care-party-kind"
-                  value={secondaryCarePartyKind}
-                  disabled={!secondaryCarePartyName.trim()}
-                  onChange={(event) => setSecondaryCarePartyKind(event.target.value as ApiCarePartyKind)}
-                >
-                  {carePartyKinds.map((kind) => (
-                    <option key={kind} value={kind}>
-                      {copy(locale, "settings", `carePartyKind_${kind}` as CatalogKey<"settings">)}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <FieldHelpLabel fieldId="settings.defaultResponsibleParty">
-                  {copy(locale, "setup", "defaultCarePartyChoice")}
-                </FieldHelpLabel>
-                <select
-                  data-testid="setup-default-care-party"
-                  value={secondaryCarePartyName.trim() ? defaultCareParty : "primary"}
-                  onChange={(event) => setDefaultCareParty(event.target.value as "primary" | "secondary")}
-                >
-                  <option value="primary">{carePartyName.trim() || copy(locale, "setup", "defaultCareParty")}</option>
-                  {secondaryCarePartyName.trim() ? <option value="secondary">{secondaryCarePartyName.trim()}</option> : null}
-                </select>
-                <small>{copy(locale, "setup", "defaultCarePartyDescription")}</small>
-              </label>
+              <article className="setup-person-card">
+                <div className="setup-person-card__header">
+                  <div>
+                    <h3>{copy(locale, "setup", "ownCarePartyTitle")}</h3>
+                    <p>{copy(locale, "setup", "ownCarePartyHint")}</p>
+                  </div>
+                  <label className="toggle setup-primary-toggle">
+                    <input
+                      data-testid="setup-primary-care-party-own"
+                      type="radio"
+                      name="setup-primary-care-party"
+                      checked={primaryCareParty === "primary"}
+                      onChange={() => setPrimaryCareParty("primary")}
+                    />
+                    <span />
+                    {copy(locale, "setup", "primaryCarePartyToggle")}
+                  </label>
+                </div>
+                <label className="field">
+                  <span>{copy(locale, "setup", "carePartyKind")}</span>
+                  <select
+                    data-testid="setup-care-party-kind"
+                    value={carePartyKind}
+                    onChange={(event) => {
+                      const nextKind = event.target.value as ApiCarePartyKind;
+                      if (!carePartyName.trim() || carePartyName === kindLabel(locale, carePartyKind)) {
+                        setCarePartyName(kindLabel(locale, nextKind));
+                      }
+                      setCarePartyKind(nextKind);
+                    }}
+                  >
+                    {carePartyKinds.map((kind) => (
+                      <option key={kind} value={kind}>
+                        {kindLabel(locale, kind)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{copy(locale, "setup", "carePartyName")}</span>
+                  <input
+                    data-testid="setup-care-party-name"
+                    required
+                    value={carePartyName}
+                    maxLength={200}
+                    onChange={(event) => setCarePartyName(event.target.value)}
+                  />
+                  <small>{copy(locale, "setup", "ownDefaultCarePartyDescription")}</small>
+                </label>
+              </article>
+              <article className="setup-person-card">
+                <div className="setup-person-card__header">
+                  <div>
+                    <h3>{copy(locale, "setup", "secondaryCarePartyName")}</h3>
+                    <p>{copy(locale, "setup", "secondaryCarePartyDescription")}</p>
+                  </div>
+                  <label className="toggle setup-primary-toggle">
+                    <input
+                      data-testid="setup-primary-care-party-secondary"
+                      type="radio"
+                      name="setup-primary-care-party"
+                      disabled={!secondaryCarePartyName.trim()}
+                      checked={primaryCareParty === "secondary"}
+                      onChange={() => setPrimaryCareParty("secondary")}
+                    />
+                    <span />
+                    {copy(locale, "setup", "primaryCarePartyToggle")}
+                  </label>
+                </div>
+                <label className="field">
+                  <span>{copy(locale, "setup", "secondaryCarePartyKind")}</span>
+                  <select
+                    data-testid="setup-secondary-care-party-kind"
+                    value={secondaryCarePartyKind}
+                    disabled={!secondaryCarePartyName.trim()}
+                    onChange={(event) => setSecondaryCarePartyKind(event.target.value as ApiCarePartyKind)}
+                  >
+                    {carePartyKinds.map((kind) => (
+                      <option key={kind} value={kind}>
+                        {kindLabel(locale, kind)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field">
+                  <span>{copy(locale, "setup", "secondaryCarePartyLabel")}</span>
+                  <input
+                    data-testid="setup-secondary-care-party-name"
+                    value={secondaryCarePartyName}
+                    maxLength={200}
+                    onChange={(event) => {
+                      setSecondaryCarePartyName(event.target.value);
+                      if (!event.target.value.trim()) setPrimaryCareParty("primary");
+                    }}
+                    placeholder={kindLabel(locale, secondaryCarePartyKind)}
+                  />
+                  <small>{copy(locale, "setup", "optional")}</small>
+                </label>
+              </article>
             </div>
           </div>
         </section>
