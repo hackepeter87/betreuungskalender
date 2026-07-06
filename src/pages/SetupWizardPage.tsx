@@ -110,7 +110,7 @@ export function SetupWizardPage() {
           <div className="setup-step__content">
             <h2>{copy(locale, "setup", "basicTitle")}</h2>
             <p>{copy(locale, "setup", "basicDescription")}</p>
-            <div className="settings-form-grid settings-form-grid--two">
+            <div className="settings-form-grid settings-form-grid--two setup-form-grid">
               <label className="field">
                 <span>{copy(locale, "setup", "installationLabel")}</span>
                 <input
@@ -201,7 +201,7 @@ export function SetupWizardPage() {
           <div className="setup-step__content">
             <h2>{copy(locale, "setup", "childTitle")}</h2>
             <p>{copy(locale, "setup", "childDescription")}</p>
-            <div className="settings-form-grid settings-form-grid--three">
+            <div className="settings-form-grid settings-form-grid--three setup-form-grid setup-form-grid--child">
               <label className="field">
                 <FieldHelpLabel fieldId="child.name">
                   {copy(locale, "setup", "childName")}
