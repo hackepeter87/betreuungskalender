@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { App } from "./App";
+import { HelpPreferencesProvider } from "./context/HelpPreferences";
 import { I18nProvider } from "./i18n/I18nProvider";
 import { AppStoreProvider } from "./store/AppStore";
 import "./styles.css";
@@ -8,9 +9,11 @@ import "./styles.css";
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <I18nProvider>
-      <AppStoreProvider>
-        <App />
-      </AppStoreProvider>
+      <HelpPreferencesProvider>
+        <AppStoreProvider>
+          <App />
+        </AppStoreProvider>
+      </HelpPreferencesProvider>
     </I18nProvider>
   </StrictMode>
 );
