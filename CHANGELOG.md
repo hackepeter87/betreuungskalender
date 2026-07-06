@@ -6,6 +6,8 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-07-06
+
 ### Changed
 
 - Invitation emails now use the configured installation label as the sender
