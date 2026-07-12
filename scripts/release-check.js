@@ -254,6 +254,13 @@ export function hasReleaseNotesHeading(content, version) {
   return new RegExp(`^# v${escapedVersion}(?:\\s|$)`, "m").test(content);
 }
 
+export function hasReadmeReleaseLink(content, version) {
+  const tag = releaseTagForVersion(version);
+  return content.includes(
+    `Latest published release: [${tag}](docs/release-notes/${tag}.md)`
+  );
+}
+
 export function parseEnvValue(content, key) {
   const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const match = content.match(new RegExp(`^\\s*${escapedKey}=(.*)$`, "m"));
@@ -404,6 +411,17 @@ function checkReleaseMetadata(cwd, packageJson, version, report) {
     }
   } catch {
     report.fail(`${notesPath} could not be read`);
+  }
+
+  try {
+    const readme = readFileSync(resolve(cwd, "README.md"), "utf8");
+    if (hasReadmeReleaseLink(readme, version)) {
+      report.pass(`README.md links to v${version} release notes`);
+    } else {
+      report.fail(`README.md latest release link must reference v${version}`);
+    }
+  } catch {
+    report.fail("README.md could not be read");
   }
 }
 

@@ -10,6 +10,7 @@ import {
   findMissingDockerignoreRules,
   findMissingGitignoreRules,
   hasChangelogRelease,
+  hasReadmeReleaseLink,
   hasReleaseNotesHeading,
   isImageOutsideScreenshotDirectory,
   parseEnvValue,
@@ -192,6 +193,23 @@ test("requires release notes to identify the matching tag", () => {
   );
   assert.equal(
     hasReleaseNotesHeading("# Release notes\n", "0.3.0"),
+    false
+  );
+});
+
+test("requires the README latest release link to match the package version", () => {
+  assert.equal(
+    hasReadmeReleaseLink(
+      "- Latest published release: [v1.15.1](docs/release-notes/v1.15.1.md)",
+      "1.15.1"
+    ),
+    true
+  );
+  assert.equal(
+    hasReadmeReleaseLink(
+      "- Latest published release: [v1.15.0](docs/release-notes/v1.15.0.md)",
+      "1.15.1"
+    ),
     false
   );
 });

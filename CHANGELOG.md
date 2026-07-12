@@ -6,6 +6,34 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.15.1] - 2026-07-12
+
+### Fixed
+
+- Corrected holiday allocation so each calendar day is counted once, explicit
+  care takes precedence, and uncovered child shares fall back to the configured
+  primary care party.
+- Kept calendar agenda groups within the selected month, including holiday
+  periods that cross month boundaries.
+- Synchronized bounded recurring contact rules across their complete configured
+  range, with an explicit action for existing rules and a 36-month safety limit.
+- Batched due care-confirmation pushes to one generic notification per user and
+  sweep while retaining each in-app confirmation task.
+- Corrected the first-use setup form alignment on wide screens.
+
+### Changed
+
+- Updated continuous-integration actions for the current Node.js runner.
+- Added release checks that keep the README release link aligned with package,
+  lockfile, release notes, and deployment examples.
+
+### Security
+
+- The manual contact-rule synchronization endpoint uses existing write limits,
+  care-party authorization, bounded expansion, and idempotent occurrence keys.
+- Batched push text remains generic and contains no child names, schedules, or
+  other care details.
+
 ## [1.15.0] - 2026-07-06
 
 ### Added
