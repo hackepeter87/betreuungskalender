@@ -159,9 +159,12 @@ Notes, evidence references, trips, costs, and audit data are not exported.
 
 `native_oidc_login_states` stores short-lived, single-use login transaction
 records for native OIDC. It contains the random `state`, matching `nonce`,
-server-side PKCE verifier, redirect URI, creation timestamp, expiry timestamp,
-and optional consumption timestamp. It never stores ID tokens, access tokens,
-refresh tokens, client secrets, or browser session identifiers.
+server-side PKCE verifier, redirect URI, a constrained login context, creation
+timestamp, expiry timestamp, and optional consumption timestamp. Login context
+distinguishes normal login, initial owner setup, and invitation acceptance.
+Onboarding contexts may contain only a SHA-256 token hash. The table never
+stores raw onboarding tokens, ID tokens, access tokens, refresh tokens, client
+secrets, or browser session identifiers.
 
 `native_oidc_sessions` stores server-side native OIDC sessions. Browser cookies
 contain only random opaque tokens; SQLite stores their SHA-256 hashes, the OIDC

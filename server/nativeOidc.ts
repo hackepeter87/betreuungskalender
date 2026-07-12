@@ -1,6 +1,9 @@
 import * as oidc from "openid-client";
 import type { AuthenticatedClaims } from "./auth.js";
-import { OidcLoginStateStore } from "./services/oidcLoginStates.js";
+import {
+  OidcLoginStateStore,
+  type OidcLoginContext
+} from "./services/oidcLoginStates.js";
 
 export interface NativeOidcConfig {
   issuerUrl?: string;
@@ -13,7 +16,9 @@ export interface NativeOidcConfig {
   loginStateTtlSeconds: number;
 }
 
-export type NativeOidcClaims = AuthenticatedClaims;
+export type NativeOidcClaims = AuthenticatedClaims & {
+  loginContext: OidcLoginContext;
+};
 
 interface TokenResponseWithClaims {
   claims(): Record<string, unknown> | undefined;
@@ -111,7 +116,7 @@ export class NativeOidcService {
     this.#library = options.library ?? openidClientLibrary;
   }
 
-  async createLoginRedirect(): Promise<URL> {
+  async createLoginRedirect(context: OidcLoginContext = { type: "normal" }): Promise<URL> {
     const configuration = await this.#configuration();
     const codeVerifier = this.#library.randomPKCECodeVerifier();
     const codeChallenge = await this.#library.calculatePKCECodeChallenge(codeVerifier);
@@ -124,7 +129,8 @@ export class NativeOidcService {
         state,
         nonce,
         pkceVerifier: codeVerifier,
-        redirectUri
+        redirectUri,
+        context
       },
       this.#config.loginStateTtlSeconds
     );
@@ -208,6 +214,7 @@ export class NativeOidcService {
     return {
       subject: subject.trim(),
       groups: groupsClaim(claims, this.#config.groupsClaim),
+      loginContext: loginState.context,
       ...(email ? { email } : {}),
       ...(displayName ? { displayName } : {})
     };
