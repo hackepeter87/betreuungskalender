@@ -206,11 +206,18 @@ When no configured group matches and no app membership exists, native OIDC
 rejects the callback with `403` by default and does not create a browser
 session.
 
-The only exception is a fresh installation with incomplete first-run setup. In
-that state, a successfully authenticated identity may receive a provisional
-setup session without a matching role group. That session can only complete the
-explicit owner bootstrap; ordinary write APIs remain blocked until an
-application membership exists.
+Normal login always requires either a matching configured role group or an
+existing app membership. The only onboarding exceptions are validated,
+short-lived owner-setup and invitation contexts. Those contexts may create the
+specific owner or invited membership after the callback; they do not grant a
+generic provisional session and cannot be used for ordinary login.
+
+For initial owner setup, mount a private random value at
+`OWNER_SETUP_TOKEN_FILE` and open `/setup?token=<one-time-value>` before
+`OWNER_SETUP_TOKEN_TTL_SECONDS` expires. The browser first shows a neutral
+landing page, then starts OIDC only after the user continues. The raw value is
+never stored in SQLite and is redacted from request logs. See
+[self-hosted-onboarding.md](self-hosted-onboarding.md) for the complete flow.
 
 In native mode, unauthenticated `/api/session` responses include
 `loginUrl: "/auth/login"`. Authenticated native sessions include
