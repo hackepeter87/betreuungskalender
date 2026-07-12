@@ -6,6 +6,33 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-07-12
+
+### Added
+
+- Added contextual server-side OIDC login transactions for normal login,
+  initial owner setup, and invitation acceptance.
+- Added a short-lived, one-time owner setup link backed by a mounted secret
+  file and an audited owner membership claim.
+- Added invitation links that start native OIDC login and assign the invited
+  application role after the validated callback.
+
+### Changed
+
+- Invitation emails now use the automatic invitation login flow. Manual token
+  acceptance remains available as a compatibility fallback.
+- Owner membership claim and first-use setup completion are separate steps, so
+  the existing setup wizard remains authoritative.
+
+### Security
+
+- Setup and invitation bearer values are redacted from application request
+  logs and are persisted only as SHA-256 hashes.
+- Owner setup links are time-limited and single-use. Invitation expiry,
+  revocation, and single-use checks remain transactional.
+- Onboarding callbacks retain OIDC state, nonce, PKCE, issuer, audience, and
+  session-cookie validation.
+
 ## [1.15.1] - 2026-07-12
 
 ### Fixed
