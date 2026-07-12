@@ -233,7 +233,9 @@ names, notes, evidence references, exported data, or full request bodies to
 routine logs.
 
 Calendar feed request paths redact the token segment before application
-request metadata is logged. Reverse proxies may still log the full URL unless
+request metadata is logged. Setup and invitation browser links redact their
+entire query string so bearer tokens and adjacent parameters do not enter
+application request logs. Reverse proxies may still log the full URL unless
 configured otherwise.
 
 ## Operator responsibility

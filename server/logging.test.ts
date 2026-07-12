@@ -23,4 +23,21 @@ test("request URL sanitizer redacts bearer feed tokens and OIDC callback paramet
     sanitizeRequestUrl("/auth/logout?id_token_hint=id-secret&state=state-secret"),
     "/auth/logout?id_token_hint=[redacted]&state=[redacted]"
   );
+  assert.equal(
+    sanitizeRequestUrl("/invite?token=invitation-secret&source=email"),
+    "/invite?[redacted]"
+  );
+  assert.equal(
+    sanitizeRequestUrl("/setup?token=owner-secret&unexpected=private"),
+    "/setup?[redacted]"
+  );
+  assert.equal(
+    sanitizeRequestUrl("/settings?tab=members"),
+    "/settings?tab=members"
+  );
+  assert.equal(
+    sanitizeRequestUrl("/api/invitations/accept"),
+    "/api/invitations/accept"
+  );
+  assert.equal(sanitizeRequestUrl("/setup"), "/setup");
 });
