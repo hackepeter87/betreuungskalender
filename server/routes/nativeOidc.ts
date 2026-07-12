@@ -18,6 +18,11 @@ import {
 } from "../services/ownerSetupTokens.js";
 import { buildSetupState } from "../services/setupState.js";
 import { upsertAuthenticatedUser } from "../services/users.js";
+import {
+  acceptInvitationByHash,
+  InvitationError,
+  prepareInvitationLogin
+} from "../services/invitations.js";
 
 type NativeOidcRouteConfig = Pick<
   typeof appConfig,
@@ -52,6 +57,10 @@ interface NativeOidcRoutesOptions {
   applyMembershipRole?: (user: RequestUser) => MembershipResolution;
   isSetupRequired?: () => boolean;
   ownerSetupTokens?: Pick<OwnerSetupTokenStore, "begin" | "consumeAndClaim">;
+  invitationFlow?: {
+    begin(token: string): string;
+    accept(tokenHash: string, user: RequestUser): void;
+  };
 }
 
 function notFound(reply: FastifyReply) {
@@ -64,6 +73,9 @@ function notFound(reply: FastifyReply) {
 function sanitizedError(error: unknown): NativeOidcError {
   if (error instanceof NativeOidcError) return error;
   if (error instanceof OwnerSetupTokenError) {
+    return new NativeOidcError(error.code, error.statusCode, error.message);
+  }
+  if (error instanceof InvitationError) {
     return new NativeOidcError(error.code, error.statusCode, error.message);
   }
   return new NativeOidcError(
@@ -106,6 +118,12 @@ export async function nativeOidcRoutes(
     tokenFile: options.config.ownerSetupTokenFile ?? "/run/secrets/owner-setup-token",
     ttlSeconds: options.config.ownerSetupTokenTtlSeconds ?? 86_400
   });
+  const invitationFlow = options.invitationFlow ?? {
+    begin: (token: string) => prepareInvitationLogin(token),
+    accept: (tokenHash: string, user: RequestUser) => {
+      acceptInvitationByHash(tokenHash, user);
+    }
+  };
 
   const providerLogoutUrl = async (
     log: FastifyInstance["log"]
@@ -159,6 +177,25 @@ export async function nativeOidcRoutes(
     }
   });
 
+  app.get<{ Querystring: { token?: string } }>("/invite", authRateLimit, async (request, reply) => {
+    if (options.config.authMode !== "native-oidc") return notFound(reply);
+    try {
+      const token = request.query.token?.trim();
+      if (!token) {
+        throw new NativeOidcError("invalid_invitation", 400, "Die Einladung ist ungültig.");
+      }
+      const tokenHash = invitationFlow.begin(token);
+      const redirectUrl = await service.createLoginRedirect({ type: "invitation", tokenHash });
+      return reply.redirect(redirectUrl.href);
+    } catch (error) {
+      const normalized = sanitizedError(error);
+      return reply.code(normalized.statusCode).send({
+        error: normalized.code,
+        message: normalized.message
+      });
+    }
+  });
+
   app.get("/auth/callback", authRateLimit, async (request, reply) => {
     if (options.config.authMode !== "native-oidc") return notFound(reply);
     try {
@@ -180,6 +217,8 @@ export async function nativeOidcRoutes(
       upsertUser(auth.user);
       if (claims.loginContext.type === "owner_setup") {
         ownerSetupTokens.consumeAndClaim(claims.loginContext.tokenHash, auth.user);
+      } else if (claims.loginContext.type === "invitation") {
+        invitationFlow.accept(claims.loginContext.tokenHash, auth.user);
       }
       const membership = resolveMembership(auth.user);
       if (auth.reason === "missing_role" && !membership.membershipRole && !isSetupRequired()) {
