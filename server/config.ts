@@ -149,6 +149,11 @@ export const config = {
   oidcScopes: textEnv(process.env.OIDC_SCOPES, "openid email profile"),
   oidcGroupsClaim: textEnv(process.env.OIDC_GROUPS_CLAIM, "groups"),
   oidcLoginStateTtlSeconds: positiveNumberEnv(process.env.OIDC_LOGIN_STATE_TTL_SECONDS, 600),
+  ownerSetupTokenFile: textEnv(
+    process.env.OWNER_SETUP_TOKEN_FILE,
+    "/run/secrets/owner-setup-token"
+  ),
+  ownerSetupTokenTtlSeconds: positiveNumberEnv(process.env.OWNER_SETUP_TOKEN_TTL_SECONDS, 86_400),
   sessionCookieName: textEnv(process.env.SESSION_COOKIE_NAME, "betreuungskalender_session"),
   sessionTtlSeconds: positiveNumberEnv(process.env.SESSION_TTL_SECONDS, 28 * 24 * 60 * 60),
   recoveryAdminEnabled: booleanEnv(process.env.RECOVERY_ADMIN_ENABLED),

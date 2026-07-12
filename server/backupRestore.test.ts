@@ -34,7 +34,8 @@ const expectedMigrations = [
   "023_app_invitations",
   "024_external_calendar_feed_urls",
   "025_primary_care_party_setting",
-  "026_oidc_login_context"
+  "026_oidc_login_context",
+  "027_owner_setup_tokens"
 ];
 
 async function withTemporaryDirectory(

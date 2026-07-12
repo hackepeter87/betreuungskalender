@@ -238,6 +238,12 @@ entire query string so bearer tokens and adjacent parameters do not enter
 application request logs. Reverse proxies may still log the full URL unless
 configured otherwise.
 
+Initial owner setup uses a one-time bearer value from a mounted secret file.
+Only its SHA-256 hash, validity window, and consumption metadata are stored in
+SQLite. The link is accepted only while first-use setup is incomplete and the
+authenticated OIDC subject is bound to the resulting owner membership. The raw
+value must not be placed in environment files or logs.
+
 ## Operator responsibility
 
 The operator remains responsible for server hardening, TLS, authentication,

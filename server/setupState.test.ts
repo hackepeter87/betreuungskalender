@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -9,6 +9,7 @@ import { migrateDatabase } from "./db/migrationRunner.js";
 import { membershipRoleForUser } from "./services/memberships.js";
 import { bootstrapInstallationOwner, completeFirstUseSetup, SetupBootstrapError } from "./services/setupBootstrap.js";
 import { buildSetupState, publicSetupState } from "./services/setupState.js";
+import { OwnerSetupTokenError, OwnerSetupTokenStore } from "./services/ownerSetupTokens.js";
 
 const migrationsDirectory = resolve(process.cwd(), "server/migrations");
 const timestamp = "2026-07-05T10:00:00.000Z";
@@ -183,6 +184,65 @@ test("does not allow silent owner takeover after setup completion", () => {
         error.statusCode === 409
     );
     assert.equal(membershipRoleForUser("local-dev", database), undefined);
+  });
+});
+
+test("owner setup token claims an owner once without completing the wizard", () => {
+  withDatabase((database) => {
+    const directory = mkdtempSync(join(tmpdir(), "betreuungskalender-owner-token-"));
+    const tokenFile = join(directory, "owner-token");
+    try {
+      writeFileSync(tokenFile, "fictional-owner-secret\n", { mode: 0o600 });
+      const issuedAt = new Date("2026-07-05T11:00:00.000Z");
+      utimesSync(tokenFile, issuedAt, issuedAt);
+      const store = new OwnerSetupTokenStore({
+        tokenFile,
+        ttlSeconds: 3600,
+        database
+      });
+      const hash = store.begin(
+        "fictional-owner-secret",
+        new Date("2026-07-05T11:15:00.000Z")
+      );
+      assert.match(hash, /^[0-9a-f]{64}$/);
+      const stored = database.prepare(`
+        SELECT token_hash AS tokenHash
+        FROM owner_setup_tokens
+      `).get() as { tokenHash: string };
+      assert.equal(stored.tokenHash, hash);
+      assert.equal(stored.tokenHash.includes("fictional-owner-secret"), false);
+
+      store.consumeAndClaim(
+        hash,
+        setupUser(),
+        new Date("2026-07-05T11:20:00.000Z")
+      );
+      assert.equal(membershipRoleForUser("local-dev", database), "admin");
+      assert.equal(buildSetupState(database).complete, false);
+
+      assert.throws(
+        () => store.begin(
+          "fictional-owner-secret",
+          new Date("2026-07-05T11:25:00.000Z")
+        ),
+        (error) =>
+          error instanceof OwnerSetupTokenError &&
+          error.code === "owner_setup_consumed"
+      );
+      const auditFields = database.prepare(`
+        SELECT field_name AS fieldName
+        FROM audit_log
+        WHERE entity_type = 'setup'
+        ORDER BY id
+      `).all() as Array<{ fieldName: string }>;
+      assert.deepEqual(auditFields.map((row) => row.fieldName), [
+        "owner_setup_token_consumed",
+        "owner_bootstrap",
+        "owner_setup_reuse_rejected"
+      ]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });
 
