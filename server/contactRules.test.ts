@@ -8,6 +8,7 @@ import { migrateDatabase } from "./db/migrationRunner.js";
 import {
   expandContactRule,
   syncContactRule,
+  upsertContactRule,
   upsertContactRuleFromPattern
 } from "./services/contactRules.js";
 import { contactRuleInputSchema } from "./validation/schemas.js";
@@ -270,6 +271,146 @@ test("contact rule validation rejects unsupported or excessive RRULE input", () 
       }
     }).success, false);
   }
+
+  assert.equal(contactRuleInputSchema.safeParse({
+    ...base,
+    startDate: "2026-01-01",
+    endDate: "2028-12-31",
+    recurrence: { kind: "rrule", rrules: ["FREQ=WEEKLY;BYDAY=FR"] }
+  }).success, true);
+  assert.equal(contactRuleInputSchema.safeParse({
+    ...base,
+    startDate: "2026-01-01",
+    endDate: "2029-01-01",
+    recurrence: { kind: "rrule", rrules: ["FREQ=WEEKLY;BYDAY=FR"] }
+  }).success, false);
+});
+
+test("bounded rule sync covers the complete configured date range", () => {
+  withDatabase((database) => {
+    insertChild(database);
+    const rule = upsertContactRule({
+      id: "rule-bounded",
+      rule: {
+        name: "Ganzjahresregel",
+        startDate: "2026-01-01",
+        endDate: "2026-12-31",
+        timezone: "Europe/Berlin",
+        recurrence: { kind: "rrule", rrules: ["FREQ=MONTHLY;BYMONTHDAY=15"] },
+        segments: [{
+          id: "day",
+          startDayOffset: 0,
+          startTime: "10:00",
+          endDayOffset: 0,
+          endTime: "18:00"
+        }],
+        syncHorizonMonths: 12,
+        childIds: ["child-a"],
+        active: true
+      },
+      createdBy: "tester",
+      updatedBy: "tester",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      database
+    });
+
+    const summary = syncContactRule(rule.id, {
+      database,
+      userEmail: "tester",
+      now: timestamp
+    });
+    const months = (database.prepare(`
+      SELECT substr(start_datetime, 1, 7) AS month
+      FROM care_entries
+      WHERE contact_rule_id = ? AND deleted_at IS NULL
+      ORDER BY start_datetime
+    `).all(rule.id) as Array<{ month: string }>).map((row) => row.month);
+
+    assert.deepEqual([summary.startDate, summary.endDate, summary.created], [
+      "2026-01-01",
+      "2026-12-31",
+      12
+    ]);
+    assert.deepEqual(
+      [months[0], months[5], months[6], months[11]],
+      ["2026-01", "2026-06", "2026-07", "2026-12"]
+    );
+  });
+});
+
+test("open-ended rule sync keeps the rolling future horizon", () => {
+  withDatabase((database) => {
+    insertChild(database);
+    const rule = upsertContactRule({
+      id: "rule-open",
+      rule: {
+        name: "Offene Regel",
+        startDate: "2026-01-01",
+        timezone: "Europe/Berlin",
+        recurrence: { kind: "rrule", rrules: ["FREQ=MONTHLY;BYMONTHDAY=15"] },
+        segments: [{
+          id: "day",
+          startDayOffset: 0,
+          startTime: "10:00",
+          endDayOffset: 0,
+          endTime: "18:00"
+        }],
+        syncHorizonMonths: 12,
+        childIds: ["child-a"],
+        active: true
+      },
+      createdBy: "tester",
+      updatedBy: "tester",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      database
+    });
+
+    const summary = syncContactRule(rule.id, {
+      database,
+      userEmail: "tester",
+      now: timestamp
+    });
+
+    assert.deepEqual([summary.startDate, summary.endDate], ["2026-07-01", "2027-06-30"]);
+  });
+});
+
+test("sync rejects stored bounded rules beyond the 36 month safety limit", () => {
+  withDatabase((database) => {
+    insertChild(database);
+    const rule = upsertContactRule({
+      id: "rule-too-long",
+      rule: {
+        name: "Zu lange Regel",
+        startDate: "2026-01-01",
+        endDate: "2029-01-01",
+        timezone: "Europe/Berlin",
+        recurrence: { kind: "rrule", rrules: ["FREQ=MONTHLY;BYMONTHDAY=15"] },
+        segments: [{
+          id: "day",
+          startDayOffset: 0,
+          startTime: "10:00",
+          endDayOffset: 0,
+          endTime: "18:00"
+        }],
+        syncHorizonMonths: 12,
+        childIds: ["child-a"],
+        active: true
+      },
+      createdBy: "tester",
+      updatedBy: "tester",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      database
+    });
+
+    assert.throws(
+      () => syncContactRule(rule.id, { database, userEmail: "tester", now: timestamp }),
+      /höchstens 36 Monate/
+    );
+  });
 });
 
 test("sync creates planned entries from a legacy pattern and does not duplicate them", () => {

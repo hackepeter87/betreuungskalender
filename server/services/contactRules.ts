@@ -548,10 +548,20 @@ export function upsertContactRule(input: {
 }
 
 function syncWindow(rule: ApiContactRule, options: ContactRuleSyncOptions): { startDate: string; endDate: string } {
+  if (rule.endDate) {
+    const maximumEndDate = addDays(addMonths(rule.startDate, 36), -1);
+    if (rule.endDate > maximumEndDate) {
+      throw new Error("Der vollständige Regelzeitraum darf höchstens 36 Monate umfassen.");
+    }
+    return {
+      startDate: options.startDate ?? rule.startDate,
+      endDate: options.endDate ?? rule.endDate
+    };
+  }
   const currentMonth = firstDayOfMonth((options.now ?? nowIso()).slice(0, 10));
   const startDate = options.startDate ?? (rule.startDate > currentMonth ? rule.startDate : currentMonth);
   const defaultEnd = addDays(addMonths(startDate, rule.syncHorizonMonths), -1);
-  const endDate = options.endDate ?? (rule.endDate && rule.endDate < defaultEnd ? rule.endDate : defaultEnd);
+  const endDate = options.endDate ?? defaultEnd;
   return { startDate, endDate };
 }
 

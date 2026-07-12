@@ -438,7 +438,10 @@ async function sendPushForRequest(row: RequestRow, eventType: ApiNotificationEve
   return delivered;
 }
 
-export async function sendDueCareConfirmationPushes(referenceTime = new Date()): Promise<number> {
+export async function sendDueCareConfirmationPushes(
+  referenceTime = new Date(),
+  deliverPush = sendPushForRequest
+): Promise<number> {
   const now = referenceTime.toISOString();
   const rows = db.prepare(`
     SELECT *
@@ -451,20 +454,36 @@ export async function sendDueCareConfirmationPushes(referenceTime = new Date()):
       )
     ORDER BY due_at, id
   `).all(now, now) as RequestRow[];
-  let sent = 0;
+  const rowsByUser = new Map<string, RequestRow[]>();
   for (const row of rows) {
-    const eventType = row.status === "snoozed" ? "care_confirmation_reminder" : "care_confirmation_due";
-    const delivered = await sendPushForRequest(row, eventType);
+    const userRows = rowsByUser.get(row.user_id) ?? [];
+    userRows.push(row);
+    rowsByUser.set(row.user_id, userRows);
+  }
+
+  let sent = 0;
+  for (const userRows of rowsByUser.values()) {
+    const representative = userRows.find((row) => row.status === "open") ?? userRows[0];
+    if (!representative) continue;
+    const eventType = representative.status === "snoozed"
+      ? "care_confirmation_reminder"
+      : "care_confirmation_due";
+    const delivered = await deliverPush(representative, eventType);
     const timestamp = nowIso();
-    db.prepare(`
-      UPDATE care_confirmation_requests
-      SET sent_at = COALESCE(sent_at, ?),
-        status = 'open',
-        reminder_count = reminder_count + ?,
-        next_reminder_at = NULL,
-        updated_at = ?
-      WHERE id = ?
-    `).run(timestamp, delivered ? 1 : 0, timestamp, row.id);
+    const update = db.prepare(`
+        UPDATE care_confirmation_requests
+        SET sent_at = COALESCE(sent_at, ?),
+          status = 'open',
+          reminder_count = reminder_count + ?,
+          next_reminder_at = NULL,
+          updated_at = ?
+        WHERE id = ?
+      `);
+    db.transaction(() => {
+      for (const row of userRows) {
+        update.run(timestamp, delivered ? 1 : 0, timestamp, row.id);
+      }
+    })();
     if (delivered) sent += 1;
   }
   return sent;

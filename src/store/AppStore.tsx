@@ -98,6 +98,7 @@ interface AppStoreValue {
   removeUnavailablePeriod: (id: string) => Promise<boolean>;
   saveContactPattern: (input: PatternInput) => Promise<PatternSaveResult | null>;
   saveContactRule: (input: ContactRuleInput) => Promise<ContactRuleSaveResult | null>;
+  syncContactRule: (id: string) => Promise<ContactRuleSaveResult | null>;
   removeContactPattern: (id: string) => Promise<boolean>;
   generateContactEntries: (
     patternId: string,
@@ -612,6 +613,15 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     [performWrite]
   );
 
+  const syncContactRule = useCallback(
+    async (id: string) =>
+      performWrite(async () => {
+        const synced = await api.syncContactRule(id);
+        return { id: synced.id, syncSummary: synced.syncSummary };
+      }, null),
+    [performWrite]
+  );
+
   const removeContactPattern = useCallback(
     async (id: string) =>
       performWrite(async () => {
@@ -748,6 +758,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       removeUnavailablePeriod,
       saveContactPattern,
       saveContactRule,
+      syncContactRule,
       removeContactPattern,
       generateContactEntries,
       replaceData,
@@ -786,6 +797,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       saveCareParty,
       saveContactPattern,
       saveContactRule,
+      syncContactRule,
       saveEntry,
       saveHolidayPeriod,
       saveUnavailablePeriod,

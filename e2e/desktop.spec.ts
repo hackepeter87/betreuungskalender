@@ -1198,9 +1198,10 @@ test("generates recurring weekend contact dates and shows them in the calendar",
   await expect(page.getByTestId("contact-generated-list")).toContainText(
     "geändert - bleibt beim Speichern der Regel erhalten"
   );
-  await page.getByTestId("contact-pattern-save").click();
+  await expect(page.getByTestId("contact-pattern-sync")).toBeVisible();
+  await page.getByTestId("contact-pattern-sync").click();
   await expect(page.getByTestId("contact-message")).toContainText(
-    "Umgangsregel gespeichert"
+    "geplante Termine wurden"
   );
 
   const changedAfterResyncResponse = await request.get("/api/care-entries");

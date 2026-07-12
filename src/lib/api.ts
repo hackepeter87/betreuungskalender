@@ -551,6 +551,12 @@ export const api = {
       { method: "PUT", body: JSON.stringify(input) }
     );
   },
+  syncContactRule(id: string) {
+    return request<ApiContactRule>(
+      `/api/contact-rules/${encodeURIComponent(id)}/sync`,
+      { method: "POST" }
+    );
+  },
   deleteContactRule(id: string) {
     return request<void>(`/api/contact-rules/${encodeURIComponent(id)}`, {
       method: "DELETE"

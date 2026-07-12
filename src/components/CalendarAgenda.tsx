@@ -35,6 +35,8 @@ export function CalendarAgenda({
   unavailablePeriods,
   externalEvents = [],
   holidayPeriods = [],
+  visibleStartDate,
+  visibleEndDate,
   children,
   onSelectDate,
   onSelectEntry,
@@ -45,6 +47,8 @@ export function CalendarAgenda({
   unavailablePeriods: UnavailablePeriod[];
   externalEvents?: ExternalCalendarEvent[];
   holidayPeriods?: HolidayPeriod[];
+  visibleStartDate: string;
+  visibleEndDate: string;
   children: Child[];
   onSelectDate: (date: string) => void;
   onSelectEntry: (entry: CareEntry) => void;
@@ -61,8 +65,11 @@ export function CalendarAgenda({
       string,
       { entries: CareEntry[]; unavailable: UnavailablePeriod[]; external: ExternalCalendarEvent[]; holidays: HolidayPeriod[] }
     >();
+    const firstVisibleDate = (date: string) =>
+      date < visibleStartDate ? visibleStartDate : date;
     for (const entry of entries.slice().sort((a, b) => a.startDateTime.localeCompare(b.startDateTime))) {
-      const date = entry.startDateTime.slice(0, 10);
+      const date = firstVisibleDate(entry.startDateTime.slice(0, 10));
+      if (date > visibleEndDate) continue;
       const group = groups.get(date) ?? { entries: [], unavailable: [], external: [], holidays: [] };
       group.entries.push(entry);
       groups.set(date, group);
@@ -71,26 +78,31 @@ export function CalendarAgenda({
       .filter((item) => !item.deletedAt)
       .slice()
       .sort((a, b) => a.startDateTime.localeCompare(b.startDateTime))) {
-      const date = period.startDateTime.slice(0, 10);
+      const date = firstVisibleDate(period.startDateTime.slice(0, 10));
+      if (date > visibleEndDate) continue;
       const group = groups.get(date) ?? { entries: [], unavailable: [], external: [], holidays: [] };
       group.unavailable.push(period);
       groups.set(date, group);
     }
     for (const event of externalEvents) {
-      const date = event.startDateTime.slice(0, 10);
+      const date = firstVisibleDate(event.startDateTime.slice(0, 10));
+      if (date > visibleEndDate) continue;
       const group = groups.get(date) ?? { entries: [], unavailable: [], external: [], holidays: [] };
       group.external.push(event);
       groups.set(date, group);
     }
     for (const period of holidayPeriods.filter((item) => !item.deletedAt)) {
-      for (const date of enumerateDateKeys(period.startDate, period.endDate)) {
+      const clippedStart = period.startDate < visibleStartDate ? visibleStartDate : period.startDate;
+      const clippedEnd = period.endDate > visibleEndDate ? visibleEndDate : period.endDate;
+      if (clippedEnd < clippedStart) continue;
+      for (const date of enumerateDateKeys(clippedStart, clippedEnd)) {
         const group = groups.get(date) ?? { entries: [], unavailable: [], external: [], holidays: [] };
         group.holidays.push(period);
         groups.set(date, group);
       }
     }
     return Array.from(groups.entries()).sort(([a], [b]) => a.localeCompare(b));
-  }, [entries, unavailablePeriods, externalEvents, holidayPeriods]);
+  }, [entries, unavailablePeriods, externalEvents, holidayPeriods, visibleEndDate, visibleStartDate]);
 
   if (!grouped.length) {
     return (
@@ -109,7 +121,7 @@ export function CalendarAgenda({
   return (
     <div className="agenda-list">
       {grouped.map(([date, group]) => (
-        <section className="agenda-day" key={date}>
+        <section className="agenda-day" key={date} data-testid={`agenda-day-${date}`}>
           <header className="agenda-day__header">
             <div>
               <strong>{formatShortDate(date, intlLocale)}</strong>
