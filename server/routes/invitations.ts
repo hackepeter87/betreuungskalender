@@ -13,6 +13,7 @@ import {
 } from "../services/memberManagement.js";
 import {
   InvitationEmailError,
+  invitationEmailAvailable,
   sendInvitationEmail
 } from "../services/invitationEmail.js";
 import { getStoredSettings } from "../services/settings.js";
@@ -69,6 +70,19 @@ function invitationSenderName(): string | undefined {
 }
 
 export async function invitationRoutes(app: FastifyInstance): Promise<void> {
+  app.get("/api/invitations/capabilities", readLimit, async (request, reply) => {
+    try {
+      assertCanAdministerMembers(request.user);
+    } catch (error) {
+      const normalized = normalizeMemberError(error);
+      return reply.code(normalized.statusCode).send({
+        error: normalized.error,
+        message: normalized.message
+      });
+    }
+    return { emailDeliveryAvailable: invitationEmailAvailable(config) };
+  });
+
   app.get("/api/invitations", readLimit, async (request, reply) => {
     try {
       assertCanAdministerMembers(request.user);

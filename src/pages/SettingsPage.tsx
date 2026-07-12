@@ -239,6 +239,7 @@ function MemberInvitationManager() {
   const [inviteRole, setInviteRole] = useState<ApiAuthRole>("parent");
   const [expiresDays, setExpiresDays] = useState(7);
   const [sendEmail, setSendEmail] = useState(false);
+  const [emailDeliveryAvailable, setEmailDeliveryAvailable] = useState(false);
   const [createdToken, setCreatedToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [ownerForbidden, setOwnerForbidden] = useState(false);
@@ -248,12 +249,14 @@ function MemberInvitationManager() {
   const loadOwnerData = async () => {
     if (session.user?.role !== "admin") return;
     try {
-      const [nextMembers, nextInvitations] = await Promise.all([
+      const [nextMembers, nextInvitations, capabilities] = await Promise.all([
         api.listMembers(),
-        api.listInvitations()
+        api.listInvitations(),
+        api.invitationCapabilities().catch(() => ({ emailDeliveryAvailable: false }))
       ]);
       setMembers(nextMembers);
       setInvitations(nextInvitations);
+      setEmailDeliveryAvailable(capabilities.emailDeliveryAvailable);
       setOwnerForbidden(false);
       setError(null);
     } catch (reason) {
@@ -421,7 +424,7 @@ function MemberInvitationManager() {
                   value={inviteEmail}
                   onChange={(event) => {
                     setInviteEmail(event.target.value);
-                    if (!event.target.value.trim()) setSendEmail(false);
+                    setSendEmail(Boolean(event.target.value.trim()) && emailDeliveryAvailable);
                   }}
                   placeholder="name@example.invalid"
                 />
@@ -440,7 +443,7 @@ function MemberInvitationManager() {
                   <input data-testid="invitation-expires-days" type="number" min="1" max="30" value={expiresDays} onChange={(event) => setExpiresDays(Number(event.target.value))} />
                 </label>
               </div>
-              <label className="toggle-card toggle-card--compact">
+              {emailDeliveryAvailable ? <label className="toggle-card toggle-card--compact">
                 <input
                   data-testid="invitation-send-email"
                   type="checkbox"
@@ -452,7 +455,9 @@ function MemberInvitationManager() {
                   <strong>{copy(locale, "settings", "invitationSendEmail")}</strong>
                   <small>{copy(locale, "settings", "invitationSendEmailDescription")}</small>
                 </span>
-              </label>
+              </label> : (
+                <small>{copy(locale, "settings", "invitationSendEmailDescription")}</small>
+              )}
               <button className="button button--primary" type="submit" disabled={busy}>
                 <Icon name="plus" size={17} />
                 {copy(locale, "settings", "invitationCreateAction")}

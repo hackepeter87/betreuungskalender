@@ -670,6 +670,11 @@ export const api = {
       { method: "DELETE" }
     );
   },
+  invitationCapabilities() {
+    return request<import("../../shared/api").ApiInvitationCapabilities>(
+      "/api/invitations/capabilities"
+    );
+  },
   listInvitations() {
     return request<ApiInvitation[]>("/api/invitations");
   },

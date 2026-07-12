@@ -386,6 +386,9 @@ test("manages member invitations from settings", async ({ page }) => {
       if (pathname === "/api/invitations" && method === "GET") {
         return json(invitations);
       }
+      if (pathname === "/api/invitations/capabilities" && method === "GET") {
+        return json({ emailDeliveryAvailable: true });
+      }
       if (pathname === "/api/invitations" && method === "POST") {
         const body = readBody(init);
         const invitation: Invitation = {

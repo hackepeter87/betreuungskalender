@@ -287,6 +287,10 @@ export interface ApiCreatedInvitation {
   };
 }
 
+export interface ApiInvitationCapabilities {
+  emailDeliveryAvailable: boolean;
+}
+
 export interface ApiMember {
   id: string;
   displayName: string;
