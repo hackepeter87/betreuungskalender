@@ -16,7 +16,6 @@ import {
   OwnerSetupTokenError,
   OwnerSetupTokenStore
 } from "../services/ownerSetupTokens.js";
-import { buildSetupState } from "../services/setupState.js";
 import { upsertAuthenticatedUser } from "../services/users.js";
 import {
   acceptInvitationByHash,
@@ -113,7 +112,6 @@ export async function nativeOidcRoutes(
   const sessions = options.sessions ?? new OidcSessionStore();
   const upsertUser = options.upsertUser ?? upsertAuthenticatedUser;
   const resolveMembership = options.applyMembershipRole ?? applyMembershipRole;
-  const isSetupRequired = options.isSetupRequired ?? (() => buildSetupState().required);
   const ownerSetupTokens = options.ownerSetupTokens ?? new OwnerSetupTokenStore({
     tokenFile: options.config.ownerSetupTokenFile ?? "/run/secrets/owner-setup-token",
     ttlSeconds: options.config.ownerSetupTokenTtlSeconds ?? 86_400
@@ -221,7 +219,8 @@ export async function nativeOidcRoutes(
         invitationFlow.accept(claims.loginContext.tokenHash, auth.user);
       }
       const membership = resolveMembership(auth.user);
-      if (auth.reason === "missing_role" && !membership.membershipRole && !isSetupRequired()) {
+      const onboardingContext = claims.loginContext.type !== "normal";
+      if (auth.reason === "missing_role" && !membership.membershipRole && !onboardingContext) {
         throw new NativeOidcError(
           "authorization_required",
           403,

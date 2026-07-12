@@ -669,7 +669,7 @@ test("native OIDC callback accepts users with app membership without role groups
   }
 });
 
-test("native OIDC callback allows provisional setup sessions without role groups", async () => {
+test("native OIDC callback rejects normal setup login without role groups", async () => {
   const { database, cleanup } = testDatabase();
   const app = Fastify({ logger: false });
   const sessions = new OidcSessionStore(database);
@@ -717,12 +717,9 @@ test("native OIDC callback allows provisional setup sessions without role groups
       url: "/auth/callback?code=code-123&state=state-123"
     });
 
-    assert.equal(callback.statusCode, 302);
-    assert.equal(callback.headers.location, "/");
-    const setCookie = String(callback.headers["set-cookie"]);
-    const sessionToken = setCookie.split(";")[0]?.split("=")[1];
-    assert.equal(Boolean(sessionToken), true);
-    assert.equal(sessions.findByToken(sessionToken)?.externalSubject, "subject-setup");
+    assert.equal(callback.statusCode, 403);
+    assert.equal(callback.headers["set-cookie"], undefined);
+    assert.equal(sessions.findByToken("missing"), undefined);
   } finally {
     await app.close();
     cleanup();

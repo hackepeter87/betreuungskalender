@@ -244,6 +244,13 @@ SQLite. The link is accepted only while first-use setup is incomplete and the
 authenticated OIDC subject is bound to the resulting owner membership. The raw
 value must not be placed in environment files or logs.
 
+An incomplete setup does not weaken normal native OIDC authorization. A normal
+login still requires a configured group role or an existing app membership.
+Only a validated owner-setup or invitation context may establish the matching
+membership without a pre-existing role claim. Completed installations continue
+to use app memberships first and configured OIDC groups as compatibility
+fallback.
+
 ## Operator responsibility
 
 The operator remains responsible for server hardening, TLS, authentication,
