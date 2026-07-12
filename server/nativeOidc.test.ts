@@ -422,6 +422,13 @@ test("native OIDC routes redirect login and keep callback responses token-free",
     },
     ownerSetupTokens: {
       begin: (token) => {
+        if (token === "consumed-owner-token") {
+          throw new NativeOidcError(
+            "owner_setup_consumed",
+            409,
+            "Der Owner-Setup-Link wurde bereits verwendet."
+          );
+        }
         assert.equal(token, "fictional-owner-token");
         return ownerHash;
       },
@@ -431,6 +438,13 @@ test("native OIDC routes redirect login and keep callback responses token-free",
     },
     invitationFlow: {
       begin: (token) => {
+        if (token === "expired-invitation-token") {
+          throw new NativeOidcError(
+            "invitation_expired",
+            410,
+            "Die Einladung ist abgelaufen."
+          );
+        }
         assert.equal(token, "fictional-invitation-token");
         return invitationHash;
       },
@@ -452,24 +466,58 @@ test("native OIDC routes redirect login and keep callback responses token-free",
       method: "GET",
       url: "/setup?token=fictional-owner-token"
     });
-    assert.equal(setup.statusCode, 302);
-    assert.equal(setup.headers.location, "https://idp.example.test/auth?state=state-123");
+    assert.equal(setup.statusCode, 200);
+    assert.match(setup.headers["content-type"] ?? "", /text\/html/);
+    assert.match(setup.payload, /Installation einrichten/);
+    assert.match(setup.payload, /\/setup\/continue\?token=fictional-owner-token/);
+    assert.equal(setup.payload.includes("idp.example.test"), false);
+
+    const setupContinue = await app.inject({
+      method: "GET",
+      url: "/setup/continue?token=fictional-owner-token"
+    });
+    assert.equal(setupContinue.statusCode, 302);
+    assert.equal(setupContinue.headers.location, "https://idp.example.test/auth?state=state-123");
     assert.deepEqual(loginContexts, [
       { type: "normal" },
       { type: "owner_setup", tokenHash: ownerHash }
     ]);
-    assert.equal(String(setup.headers.location).includes("fictional-owner-token"), false);
+    assert.equal(String(setupContinue.headers.location).includes("fictional-owner-token"), false);
 
     const invitation = await app.inject({
       method: "GET",
       url: "/invite?token=fictional-invitation-token"
     });
-    assert.equal(invitation.statusCode, 302);
-    assert.equal(String(invitation.headers.location).includes("fictional-invitation-token"), false);
+    assert.equal(invitation.statusCode, 200);
+    assert.match(invitation.payload, /Einladung annehmen/);
+    assert.match(invitation.payload, /\/invite\/continue\?token=fictional-invitation-token/);
+
+    const invitationContinue = await app.inject({
+      method: "GET",
+      url: "/invite/continue?token=fictional-invitation-token"
+    });
+    assert.equal(invitationContinue.statusCode, 302);
+    assert.equal(String(invitationContinue.headers.location).includes("fictional-invitation-token"), false);
     assert.deepEqual(loginContexts.at(-1), {
       type: "invitation",
       tokenHash: invitationHash
     });
+
+    const consumedSetup = await app.inject({
+      method: "GET",
+      url: "/setup?token=consumed-owner-token"
+    });
+    assert.equal(consumedSetup.statusCode, 409);
+    assert.match(consumedSetup.payload, /bereits verwendet/);
+    assert.equal(consumedSetup.payload.includes("consumed-owner-token"), false);
+
+    const expiredInvitation = await app.inject({
+      method: "GET",
+      url: "/invite?token=expired-invitation-token"
+    });
+    assert.equal(expiredInvitation.statusCode, 410);
+    assert.match(expiredInvitation.payload, /abgelaufen/);
+    assert.equal(expiredInvitation.payload.includes("expired-invitation-token"), false);
 
     const callback = await app.inject({
       method: "GET",

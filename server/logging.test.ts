@@ -28,6 +28,10 @@ test("request URL sanitizer redacts bearer feed tokens and OIDC callback paramet
     "/invite?[redacted]"
   );
   assert.equal(
+    sanitizeRequestUrl("/setup/continue?token=owner-secret"),
+    "/setup/continue?[redacted]"
+  );
+  assert.equal(
     sanitizeRequestUrl("/setup?token=owner-secret&unexpected=private"),
     "/setup?[redacted]"
   );
