@@ -84,6 +84,64 @@ function sanitizedError(error: unknown): NativeOidcError {
   );
 }
 
+type OnboardingFlow = "owner_setup" | "invitation";
+
+function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => ({
+    "&": "&amp;",
+    "<": "&lt;",
+    ">": "&gt;",
+    "\"": "&quot;",
+    "'": "&#39;"
+  })[character] ?? character);
+}
+
+function onboardingPage(input: {
+  flow: OnboardingFlow;
+  token?: string;
+  error?: NativeOidcError;
+}): string {
+  const ownerSetup = input.flow === "owner_setup";
+  const title = input.error
+    ? ownerSetup ? "Einrichtung nicht möglich" : "Einladung nicht verfügbar"
+    : ownerSetup ? "Installation einrichten" : "Einladung annehmen";
+  const description = input.error?.message ?? (ownerSetup
+    ? "Melde dich an, um diese Installation als verantwortliche Person einzurichten."
+    : "Melde dich an, um der Installation mit der vorgesehenen Rolle beizutreten.");
+  const action = ownerSetup ? "/setup/continue" : "/invite/continue";
+  const continueUrl = input.token
+    ? `${action}?token=${encodeURIComponent(input.token)}`
+    : undefined;
+  return `<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>${escapeHtml(title)} · Betreuungskalender</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #14213d; background: #f4f7f8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+    main { width: min(100%, 560px); background: #fff; border: 1px solid #d8e0e7; border-radius: 8px; padding: 32px; box-shadow: 0 10px 30px rgba(20, 33, 61, .08); }
+    .mark { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 8px; background: #e3f3f1; color: #087f7a; font-size: 24px; font-weight: 700; }
+    h1 { margin: 20px 0 8px; font-size: clamp(1.65rem, 5vw, 2.15rem); line-height: 1.15; }
+    p { margin: 0; color: #5b677d; line-height: 1.6; }
+    a { margin-top: 28px; min-height: 48px; display: inline-flex; align-items: center; justify-content: center; width: 100%; padding: 12px 18px; border-radius: 6px; background: #07877f; color: #fff; font-weight: 700; text-decoration: none; }
+    .hint { margin-top: 20px; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <main data-onboarding-state="${input.error ? "error" : "ready"}">
+    <div class="mark" aria-hidden="true">${input.error ? "!" : "✓"}</div>
+    <h1>${escapeHtml(title)}</h1>
+    <p>${escapeHtml(description)}</p>
+    ${continueUrl ? `<a href="${escapeHtml(continueUrl)}">Weiter zur Anmeldung</a>` : ""}
+    <p class="hint">${input.error ? "Bitte fordere bei Bedarf einen neuen Link an." : "Der Link ist persönlich und nur einmal verwendbar."}</p>
+  </main>
+</body>
+</html>`;
+}
+
 export async function nativeOidcRoutes(
   app: FastifyInstance,
   options: NativeOidcRoutesOptions
@@ -163,19 +221,61 @@ export async function nativeOidcRoutes(
           "Der Owner-Setup-Link ist ungültig."
         );
       }
+      ownerSetupTokens.begin(token);
+      return reply.type("text/html; charset=utf-8").send(onboardingPage({
+        flow: "owner_setup",
+        token
+      }));
+    } catch (error) {
+      const normalized = sanitizedError(error);
+      return reply
+        .code(normalized.statusCode)
+        .type("text/html; charset=utf-8")
+        .send(onboardingPage({ flow: "owner_setup", error: normalized }));
+    }
+  });
+
+  app.get<{ Querystring: { token?: string } }>("/setup/continue", authRateLimit, async (request, reply) => {
+    if (options.config.authMode !== "native-oidc") return notFound(reply);
+    try {
+      const token = request.query.token?.trim();
+      if (!token) {
+        throw new NativeOidcError("owner_setup_invalid", 400, "Der Owner-Setup-Link ist ungültig.");
+      }
       const tokenHash = ownerSetupTokens.begin(token);
       const redirectUrl = await service.createLoginRedirect({ type: "owner_setup", tokenHash });
       return reply.redirect(redirectUrl.href);
     } catch (error) {
       const normalized = sanitizedError(error);
-      return reply.code(normalized.statusCode).send({
-        error: normalized.code,
-        message: normalized.message
-      });
+      return reply
+        .code(normalized.statusCode)
+        .type("text/html; charset=utf-8")
+        .send(onboardingPage({ flow: "owner_setup", error: normalized }));
     }
   });
 
   app.get<{ Querystring: { token?: string } }>("/invite", authRateLimit, async (request, reply) => {
+    if (options.config.authMode !== "native-oidc") return notFound(reply);
+    try {
+      const token = request.query.token?.trim();
+      if (!token) {
+        throw new NativeOidcError("invalid_invitation", 400, "Die Einladung ist ungültig.");
+      }
+      invitationFlow.begin(token);
+      return reply.type("text/html; charset=utf-8").send(onboardingPage({
+        flow: "invitation",
+        token
+      }));
+    } catch (error) {
+      const normalized = sanitizedError(error);
+      return reply
+        .code(normalized.statusCode)
+        .type("text/html; charset=utf-8")
+        .send(onboardingPage({ flow: "invitation", error: normalized }));
+    }
+  });
+
+  app.get<{ Querystring: { token?: string } }>("/invite/continue", authRateLimit, async (request, reply) => {
     if (options.config.authMode !== "native-oidc") return notFound(reply);
     try {
       const token = request.query.token?.trim();
@@ -187,10 +287,10 @@ export async function nativeOidcRoutes(
       return reply.redirect(redirectUrl.href);
     } catch (error) {
       const normalized = sanitizedError(error);
-      return reply.code(normalized.statusCode).send({
-        error: normalized.code,
-        message: normalized.message
-      });
+      return reply
+        .code(normalized.statusCode)
+        .type("text/html; charset=utf-8")
+        .send(onboardingPage({ flow: "invitation", error: normalized }));
     }
   });
 
