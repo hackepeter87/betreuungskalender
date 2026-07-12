@@ -16,6 +16,7 @@ import {
 } from "./services/invitations.js";
 import {
   InvitationEmailError,
+  invitationEmailAvailable,
   invitationSenderAddress,
   sendInvitationEmail,
   type InvitationEmailConfig
@@ -261,6 +262,25 @@ test("invitation email delivery uses a provider-neutral test transport", async (
   assert.equal(sent[0]?.subject, "Einladung zum Betreuungskalender");
   assert.match(sent[0]?.text ?? "", /https:\/\/bk\.example\.test\/invite\?token=test-token-mail-delivery-000000/);
   assert.match(sent[0]?.text ?? "", /Rolle: Bearbeiten/);
+});
+
+test("invitation email capability requires enabled host and sender configuration", () => {
+  assert.equal(invitationEmailAvailable({
+    invitationEmailEnabled: true,
+    invitationPublicBaseUrl: "https://bk.example.test",
+    smtpHost: "smtp.example.test",
+    smtpPort: 587,
+    smtpSecure: false,
+    smtpFrom: "no-reply@example.test"
+  }), true);
+  assert.equal(invitationEmailAvailable({
+    invitationEmailEnabled: false,
+    invitationPublicBaseUrl: "https://bk.example.test",
+    smtpHost: "smtp.example.test",
+    smtpPort: 587,
+    smtpSecure: false,
+    smtpFrom: "no-reply@example.test"
+  }), false);
 });
 
 test("invitation email delivery can use the installation label as sender display name", async () => {

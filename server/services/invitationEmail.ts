@@ -14,6 +14,14 @@ export interface InvitationEmailConfig {
   smtpFromName?: string;
 }
 
+export function invitationEmailAvailable(config: InvitationEmailConfig): boolean {
+  return Boolean(
+    config.invitationEmailEnabled &&
+    config.smtpHost?.trim() &&
+    config.smtpFrom?.trim()
+  );
+}
+
 export interface InvitationEmailInput {
   to?: string;
   token: string;
@@ -77,7 +85,7 @@ function assertMailConfig(mailConfig: InvitationEmailConfig): asserts mailConfig
   smtpHost: string;
   smtpFrom: string;
 } {
-  if (!mailConfig.invitationEmailEnabled || !mailConfig.smtpHost || !mailConfig.smtpFrom) {
+  if (!invitationEmailAvailable(mailConfig)) {
     throw new InvitationEmailError(
       "mail_not_configured",
       "Einladungs-E-Mail konnte nicht gesendet werden: Mailversand ist nicht konfiguriert."
