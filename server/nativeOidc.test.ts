@@ -112,13 +112,16 @@ test("native OIDC login stores server-side state and redirects with PKCE and non
     assert.equal(redirect.searchParams.get("nonce"), "nonce-123");
 
     const row = database.prepare(`
-      SELECT state, nonce, pkce_verifier, redirect_uri, consumed_at
+      SELECT state, nonce, pkce_verifier, redirect_uri, context_type,
+             context_token_hash, consumed_at
       FROM native_oidc_login_states
     `).get() as {
       state: string;
       nonce: string;
       pkce_verifier: string;
       redirect_uri: string;
+      context_type: string;
+      context_token_hash: string | null;
       consumed_at: string | null;
     };
     assert.deepEqual(row, {
@@ -126,8 +129,64 @@ test("native OIDC login stores server-side state and redirects with PKCE and non
       nonce: "nonce-123",
       pkce_verifier: "verifier-123",
       redirect_uri: "https://bk.example.test/auth/callback",
+      context_type: "normal",
+      context_token_hash: null,
       consumed_at: null
     });
+  } finally {
+    cleanup();
+  }
+});
+
+test("native OIDC login stores only hashed onboarding context", async () => {
+  const { database, cleanup } = testDatabase();
+  try {
+    const tokenHash = "a".repeat(64);
+    const service = new NativeOidcService({
+      config: nativeConfig(),
+      loginStates: new OidcLoginStateStore(database),
+      library: fakeLibrary()
+    });
+
+    await service.createLoginRedirect({ type: "invitation", tokenHash });
+
+    const row = database.prepare(`
+      SELECT context_type, context_token_hash
+      FROM native_oidc_login_states
+    `).get() as { context_type: string; context_token_hash: string | null };
+    assert.deepEqual(row, {
+      context_type: "invitation",
+      context_token_hash: tokenHash
+    });
+    const result = await service.validateCallback(
+      "/auth/callback?code=code-123&state=state-123"
+    );
+    assert.deepEqual(result.loginContext, { type: "invitation", tokenHash });
+  } finally {
+    cleanup();
+  }
+});
+
+test("native OIDC login rejects raw onboarding tokens as context", async () => {
+  const { database, cleanup } = testDatabase();
+  try {
+    const service = new NativeOidcService({
+      config: nativeConfig(),
+      loginStates: new OidcLoginStateStore(database),
+      library: fakeLibrary()
+    });
+
+    await assert.rejects(
+      () => service.createLoginRedirect({
+        type: "owner_setup",
+        tokenHash: "raw-owner-token"
+      }),
+      /SHA-256 hex digest/
+    );
+    const count = database.prepare(
+      "SELECT COUNT(*) AS count FROM native_oidc_login_states"
+    ).get() as { count: number };
+    assert.equal(count.count, 0);
   } finally {
     cleanup();
   }
@@ -194,7 +253,8 @@ test("native OIDC callback validates state nonce and PKCE through the client lib
       subject: "subject-123",
       email: "parent@example.net",
       displayName: "Example Parent",
-      groups: ["/betreuungskalender/parents", "/other"]
+      groups: ["/betreuungskalender/parents", "/other"],
+      loginContext: { type: "normal" }
     });
     assert.equal(grantCalls.length, 1);
     assert.equal(grantCalls[0]?.currentUrl.href, "https://bk.example.test/auth/callback?code=code-123&state=state-123");
@@ -344,7 +404,8 @@ test("native OIDC routes redirect login and keep callback responses token-free",
         subject: "subject-123",
         email: "parent@example.net",
         displayName: "Example Parent",
-        groups: ["/betreuungskalender/parents"]
+        groups: ["/betreuungskalender/parents"],
+        loginContext: { type: "normal" }
       })
     },
     sessions,
@@ -451,7 +512,8 @@ test("native OIDC callback rejects claims without a configured role group", asyn
       createLogoutRedirect: async () => new URL("https://idp.example.test/logout"),
       validateCallback: async () => ({
         subject: "subject-123",
-        groups: ["/other"]
+        groups: ["/other"],
+        loginContext: { type: "normal" }
       })
     },
     sessions: new OidcSessionStore(database),
@@ -509,7 +571,8 @@ test("native OIDC callback accepts users with app membership without role groups
         subject: "subject-member",
         email: "member@example.net",
         displayName: "Known Member",
-        groups: ["/other"]
+        groups: ["/other"],
+        loginContext: { type: "normal" }
       })
     },
     sessions,
@@ -574,7 +637,8 @@ test("native OIDC callback allows provisional setup sessions without role groups
         subject: "subject-setup",
         email: "setup@example.net",
         displayName: "Setup User",
-        groups: ["/other"]
+        groups: ["/other"],
+        loginContext: { type: "normal" }
       })
     },
     sessions,
