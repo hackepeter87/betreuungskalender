@@ -166,6 +166,12 @@ Onboarding contexts may contain only a SHA-256 token hash. The table never
 stores raw onboarding tokens, ID tokens, access tokens, refresh tokens, client
 secrets, or browser session identifiers.
 
+`owner_setup_tokens` stores only the SHA-256 hash, validity window, and optional
+single-use consumption metadata for an initial owner setup link. Claiming a
+valid token binds the authenticated app user to the owner membership. It does
+not mark first-use setup complete; the setup wizard remains the authoritative
+completion step.
+
 `native_oidc_sessions` stores server-side native OIDC sessions. Browser cookies
 contain only random opaque tokens; SQLite stores their SHA-256 hashes, the OIDC
 subject, creation time, optional last-seen time, expiry time, and optional

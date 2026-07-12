@@ -12,6 +12,10 @@ import {
   type MembershipResolution
 } from "../services/memberships.js";
 import { OidcSessionStore } from "../services/oidcSessions.js";
+import {
+  OwnerSetupTokenError,
+  OwnerSetupTokenStore
+} from "../services/ownerSetupTokens.js";
 import { buildSetupState } from "../services/setupState.js";
 import { upsertAuthenticatedUser } from "../services/users.js";
 
@@ -35,7 +39,7 @@ type NativeOidcRouteConfig = Pick<
   | "nodeEnv"
   | "rateLimitSensitiveMax"
   | "rateLimitWindowMs"
->;
+> & Partial<Pick<typeof appConfig, "ownerSetupTokenFile" | "ownerSetupTokenTtlSeconds">>;
 
 interface NativeOidcRoutesOptions {
   config: NativeOidcRouteConfig;
@@ -47,6 +51,7 @@ interface NativeOidcRoutesOptions {
   upsertUser?: (user: RequestUser) => void;
   applyMembershipRole?: (user: RequestUser) => MembershipResolution;
   isSetupRequired?: () => boolean;
+  ownerSetupTokens?: Pick<OwnerSetupTokenStore, "begin" | "consumeAndClaim">;
 }
 
 function notFound(reply: FastifyReply) {
@@ -58,6 +63,9 @@ function notFound(reply: FastifyReply) {
 
 function sanitizedError(error: unknown): NativeOidcError {
   if (error instanceof NativeOidcError) return error;
+  if (error instanceof OwnerSetupTokenError) {
+    return new NativeOidcError(error.code, error.statusCode, error.message);
+  }
   return new NativeOidcError(
     "native_oidc_request_failed",
     500,
@@ -94,6 +102,10 @@ export async function nativeOidcRoutes(
   const upsertUser = options.upsertUser ?? upsertAuthenticatedUser;
   const resolveMembership = options.applyMembershipRole ?? applyMembershipRole;
   const isSetupRequired = options.isSetupRequired ?? (() => buildSetupState().required);
+  const ownerSetupTokens = options.ownerSetupTokens ?? new OwnerSetupTokenStore({
+    tokenFile: options.config.ownerSetupTokenFile ?? "/run/secrets/owner-setup-token",
+    ttlSeconds: options.config.ownerSetupTokenTtlSeconds ?? 86_400
+  });
 
   const providerLogoutUrl = async (
     log: FastifyInstance["log"]
@@ -124,6 +136,29 @@ export async function nativeOidcRoutes(
     }
   });
 
+  app.get<{ Querystring: { token?: string } }>("/setup", authRateLimit, async (request, reply) => {
+    if (options.config.authMode !== "native-oidc") return notFound(reply);
+    try {
+      const token = request.query.token?.trim();
+      if (!token) {
+        throw new NativeOidcError(
+          "owner_setup_invalid",
+          400,
+          "Der Owner-Setup-Link ist ungültig."
+        );
+      }
+      const tokenHash = ownerSetupTokens.begin(token);
+      const redirectUrl = await service.createLoginRedirect({ type: "owner_setup", tokenHash });
+      return reply.redirect(redirectUrl.href);
+    } catch (error) {
+      const normalized = sanitizedError(error);
+      return reply.code(normalized.statusCode).send({
+        error: normalized.code,
+        message: normalized.message
+      });
+    }
+  });
+
   app.get("/auth/callback", authRateLimit, async (request, reply) => {
     if (options.config.authMode !== "native-oidc") return notFound(reply);
     try {
@@ -143,6 +178,9 @@ export async function nativeOidcRoutes(
         );
       }
       upsertUser(auth.user);
+      if (claims.loginContext.type === "owner_setup") {
+        ownerSetupTokens.consumeAndClaim(claims.loginContext.tokenHash, auth.user);
+      }
       const membership = resolveMembership(auth.user);
       if (auth.reason === "missing_role" && !membership.membershipRole && !isSetupRequired()) {
         throw new NativeOidcError(

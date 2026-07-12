@@ -375,6 +375,9 @@ test("native OIDC routes redirect login and keep callback responses token-free",
   const { database, cleanup } = testDatabase();
   const app = Fastify({ logger: false });
   const sessions = new OidcSessionStore(database);
+  const ownerHash = "b".repeat(64);
+  const loginContexts: unknown[] = [];
+  const ownerClaims: Array<{ tokenHash: string; userId: string }> = [];
   await app.register(nativeOidcRoutes, {
     config: {
       authMode: "native-oidc",
@@ -397,7 +400,10 @@ test("native OIDC routes redirect login and keep callback responses token-free",
       rateLimitWindowMs: 60_000
     },
     service: {
-      createLoginRedirect: async () => new URL("https://idp.example.test/auth?state=state-123"),
+      createLoginRedirect: async (context = { type: "normal" as const }) => {
+        loginContexts.push(context);
+        return new URL("https://idp.example.test/auth?state=state-123");
+      },
       createLogoutRedirect: async () =>
         new URL("https://idp.example.test/logout?client_id=betreuungskalender"),
       validateCallback: async () => ({
@@ -405,8 +411,17 @@ test("native OIDC routes redirect login and keep callback responses token-free",
         email: "parent@example.net",
         displayName: "Example Parent",
         groups: ["/betreuungskalender/parents"],
-        loginContext: { type: "normal" }
+        loginContext: { type: "owner_setup", tokenHash: ownerHash }
       })
+    },
+    ownerSetupTokens: {
+      begin: (token) => {
+        assert.equal(token, "fictional-owner-token");
+        return ownerHash;
+      },
+      consumeAndClaim: (tokenHash, user) => {
+        ownerClaims.push({ tokenHash, userId: user.id });
+      }
     },
     sessions,
     upsertUser: (user) => upsertAuthenticatedUser(user, new Date().toISOString(), database),
@@ -418,6 +433,18 @@ test("native OIDC routes redirect login and keep callback responses token-free",
     assert.equal(login.statusCode, 302);
     assert.equal(login.headers.location, "https://idp.example.test/auth?state=state-123");
 
+    const setup = await app.inject({
+      method: "GET",
+      url: "/setup?token=fictional-owner-token"
+    });
+    assert.equal(setup.statusCode, 302);
+    assert.equal(setup.headers.location, "https://idp.example.test/auth?state=state-123");
+    assert.deepEqual(loginContexts, [
+      { type: "normal" },
+      { type: "owner_setup", tokenHash: ownerHash }
+    ]);
+    assert.equal(String(setup.headers.location).includes("fictional-owner-token"), false);
+
     const callback = await app.inject({
       method: "GET",
       url: "/auth/callback?code=code-123&state=state-123"
@@ -426,6 +453,7 @@ test("native OIDC routes redirect login and keep callback responses token-free",
     assert.equal(callback.headers.location, "/");
     assert.equal(callback.payload.includes("subject-123"), false);
     assert.equal(callback.payload.includes("code-123"), false);
+    assert.deepEqual(ownerClaims, [{ tokenHash: ownerHash, userId: "user_e8725703d28a2972830e5502" }]);
     const setCookie = String(callback.headers["set-cookie"]);
     assert.match(setCookie, /^betreuungskalender_session=[^;]+;/);
     assert.match(setCookie, /HttpOnly/);
