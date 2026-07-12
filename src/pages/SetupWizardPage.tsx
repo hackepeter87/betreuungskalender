@@ -134,7 +134,7 @@ export function SetupWizardPage() {
                     <h3>{copy(locale, "setup", "ownCarePartyTitle")}</h3>
                     <p>{copy(locale, "setup", "ownCarePartyHint")}</p>
                   </div>
-                  <label className="toggle setup-primary-toggle">
+                  <label className="toggle setup-primary-toggle" data-testid="setup-primary-care-party-own-toggle">
                     <input
                       data-testid="setup-primary-care-party-own"
                       type="radio"
@@ -184,7 +184,7 @@ export function SetupWizardPage() {
                     <h3>{copy(locale, "setup", "secondaryCarePartyName")}</h3>
                     <p>{copy(locale, "setup", "secondaryCarePartyDescription")}</p>
                   </div>
-                  <label className="toggle setup-primary-toggle">
+                  <label className="toggle setup-primary-toggle" data-testid="setup-primary-care-party-secondary-toggle">
                     <input
                       data-testid="setup-primary-care-party-secondary"
                       type="radio"

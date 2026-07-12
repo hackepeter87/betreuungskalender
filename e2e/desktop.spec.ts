@@ -662,7 +662,7 @@ test("guides fresh installations through first-use setup before showing navigati
   await page.getByTestId("setup-care-party-kind").selectOption("father");
   await page.getByTestId("setup-secondary-care-party-name").fill("Mutter");
   await page.getByTestId("setup-secondary-care-party-kind").selectOption("mother");
-  await page.getByTestId("setup-default-care-party").selectOption("secondary");
+  await page.getByTestId("setup-primary-care-party-secondary-toggle").click();
   await page.getByTestId("setup-child-name").fill("Setup Kind");
   await expect(page.getByTestId("setup-calendar-feed-discovery")).toContainText("Kalenderfeed");
   await expect(page.getByTestId("setup-calendar-import-discovery")).toContainText("Externe Kalender");
@@ -695,8 +695,10 @@ test("guides fresh installations through first-use setup before showing navigati
   )).toBe(true);
 
   await navigate(page, "settings");
+  await expect(page.getByTestId("settings-primary-care-party")).toHaveValue(/party_/);
+  await expect(page.getByTestId("settings-primary-care-party")).toContainText("Mutter");
   await expect(page.getByTestId("settings-default-responsible-party")).toHaveValue(/party_/);
-  await expect(page.getByTestId("settings-default-responsible-party")).toContainText("Mutter");
+  await expect(page.getByTestId("settings-default-responsible-party")).toContainText("Vater");
 });
 
 test("shows useful empty states after first-use setup without domain data", async ({
