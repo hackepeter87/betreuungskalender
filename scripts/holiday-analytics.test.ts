@@ -88,13 +88,12 @@ function unavailable(overrides: Partial<UnavailablePeriod>): UnavailablePeriod {
 }
 
 test("holiday stats count care entries inside holiday periods by care party", () => {
-  const stats = calculateHolidayStats(
-    [holiday()],
-    "2026-07-01",
-    "2026-07-03",
-    undefined,
-    [],
-    [
+  const stats = calculateHolidayStats({
+    periods: [holiday()],
+    startDate: "2026-07-01",
+    endDate: "2026-07-03",
+    allChildIds: ["child-a", "child-b"],
+    entries: [
       entry({
         id: "entry-main-a",
         responsiblePartyId: "party-main",
@@ -117,74 +116,69 @@ test("holiday stats count care entries inside holiday periods by care party", ()
         endDateTime: "2026-07-03T18:00:00.000Z"
       })
     ],
-    parties,
-    "party-main"
-  );
+    careParties: parties,
+    defaultResponsiblePartyId: "party-main"
+  });
 
-  assert.equal(stats.totalDays, 6);
+  assert.equal(stats.totalDays, 3);
   assert.deepEqual(
     stats.byCareParty.map((share) => [share.carePartyId, share.days, share.quote]),
     [
-      ["party-main", 2, 33.3],
-      ["party-father", 1, 16.7]
+      ["party-main", 2.5, 83.3],
+      ["party-father", 0.5, 16.7]
     ]
   );
-  assert.equal(stats.fatherDays, 1);
+  assert.equal(stats.fatherDays, 0.5);
   assert.equal(stats.motherDays, 0);
   assert.equal(stats.unassignedDays, 0);
 });
 
 test("holiday stats use default responsible care party when no care entries exist", () => {
-  const stats = calculateHolidayStats(
-    [holiday()],
-    "2026-07-01",
-    "2026-07-03",
-    undefined,
-    [],
-    [],
-    parties,
-    "party-main"
-  );
+  const stats = calculateHolidayStats({
+    periods: [holiday()],
+    startDate: "2026-07-01",
+    endDate: "2026-07-03",
+    allChildIds: ["child-a", "child-b"],
+    careParties: parties,
+    defaultResponsiblePartyId: "party-main"
+  });
 
-  assert.equal(stats.totalDays, 6);
+  assert.equal(stats.totalDays, 3);
   assert.equal(stats.fatherDays, 0);
   assert.equal(stats.motherDays, 0);
   assert.deepEqual(
     stats.byCareParty.map((share) => [share.carePartyId, share.days, share.quote]),
-    [["party-main", 6, 100]]
+    [["party-main", 3, 100]]
   );
 });
 
 test("holiday stats use primary care party fallback separately from new-entry default", () => {
-  const stats = calculateHolidayStats(
-    [holiday()],
-    "2026-07-01",
-    "2026-07-03",
-    undefined,
-    [],
-    [],
-    parties,
-    "party-main",
-    "party-father"
-  );
+  const stats = calculateHolidayStats({
+    periods: [holiday()],
+    startDate: "2026-07-01",
+    endDate: "2026-07-03",
+    allChildIds: ["child-a", "child-b"],
+    careParties: parties,
+    defaultResponsiblePartyId: "party-main",
+    primaryCarePartyId: "party-father"
+  });
 
-  assert.equal(stats.totalDays, 6);
-  assert.equal(stats.fatherDays, 6);
+  assert.equal(stats.totalDays, 3);
+  assert.equal(stats.fatherDays, 3);
   assert.equal(stats.motherDays, 0);
   assert.deepEqual(
     stats.byCareParty.map((share) => [share.carePartyId, share.days, share.quote]),
-    [["party-father", 6, 100]]
+    [["party-father", 3, 100]]
   );
 });
 
 test("holiday stats use actual children, time, and care party for partial care", () => {
-  const stats = calculateHolidayStats(
-    [holiday()],
-    "2026-07-01",
-    "2026-07-03",
-    undefined,
-    [],
-    [
+  const stats = calculateHolidayStats({
+    periods: [holiday()],
+    startDate: "2026-07-01",
+    endDate: "2026-07-03",
+    allChildIds: ["child-a", "child-b"],
+    entries: [
       entry({
         id: "entry-partial",
         status: "partial",
@@ -198,17 +192,103 @@ test("holiday stats use actual children, time, and care party for partial care",
         actualEndDateTime: "2026-07-02T18:00:00.000Z"
       })
     ],
-    parties,
-    "party-main"
-  );
+    careParties: parties,
+    defaultResponsiblePartyId: "party-main"
+  });
 
-  assert.equal(stats.totalDays, 6);
+  assert.equal(stats.totalDays, 3);
   assert.deepEqual(
     stats.byCareParty.map((share) => [share.carePartyId, share.days, share.quote]),
-    [["party-father", 1, 16.7]]
+    [
+      ["party-main", 2.5, 83.3],
+      ["party-father", 0.5, 16.7]
+    ]
   );
-  assert.equal(stats.fatherDays, 1);
+  assert.equal(stats.fatherDays, 0.5);
   assert.equal(stats.motherDays, 0);
+});
+
+test("holiday stats prefer actual care and deduplicate overlapping entries", () => {
+  const stats = calculateHolidayStats({
+    periods: [holiday({ startDate: "2026-07-01", endDate: "2026-07-01" })],
+    startDate: "2026-07-01",
+    endDate: "2026-07-01",
+    allChildIds: ["child-a", "child-b"],
+    entries: [
+      entry({
+        id: "planned-main",
+        status: "planned",
+        responsiblePartyId: "party-main",
+        childIds: ["child-a"]
+      }),
+      entry({
+        id: "completed-father",
+        responsiblePartyId: "party-father",
+        childIds: ["child-a"]
+      }),
+      entry({
+        id: "completed-father-additional",
+        responsiblePartyId: "party-father",
+        childIds: ["child-a"],
+        additionalCare: true
+      })
+    ],
+    careParties: parties,
+    defaultResponsiblePartyId: "party-main"
+  });
+
+  assert.equal(stats.totalDays, 1);
+  assert.deepEqual(
+    stats.byCareParty.map((share) => [share.carePartyId, share.days, share.quote]),
+    [
+      ["party-main", 0.5, 50],
+      ["party-father", 0.5, 50]
+    ]
+  );
+});
+
+test("holiday stats split conflicting explicit parties without double counting", () => {
+  const stats = calculateHolidayStats({
+    periods: [holiday({ startDate: "2026-07-01", endDate: "2026-07-01", childIds: ["child-a"] })],
+    startDate: "2026-07-01",
+    endDate: "2026-07-01",
+    allChildIds: ["child-a"],
+    entries: [
+      entry({ id: "completed-main", responsiblePartyId: "party-main" }),
+      entry({ id: "completed-father", responsiblePartyId: "party-father" })
+    ],
+    careParties: parties,
+    primaryCarePartyId: "party-main"
+  });
+
+  assert.equal(stats.totalDays, 1);
+  assert.deepEqual(
+    stats.byCareParty.map((share) => [share.carePartyId, share.days, share.quote]),
+    [
+      ["party-main", 0.5, 50],
+      ["party-father", 0.5, 50]
+    ]
+  );
+});
+
+test("holiday stats merge overlapping holiday periods by calendar day", () => {
+  const stats = calculateHolidayStats({
+    periods: [
+      holiday({ id: "holiday-a", startDate: "2026-07-01", endDate: "2026-07-02" }),
+      holiday({ id: "holiday-b", startDate: "2026-07-02", endDate: "2026-07-03" })
+    ],
+    startDate: "2026-07-01",
+    endDate: "2026-07-03",
+    allChildIds: ["child-a", "child-b"],
+    careParties: parties,
+    primaryCarePartyId: "party-main"
+  });
+
+  assert.equal(stats.totalDays, 3);
+  assert.deepEqual(
+    stats.byCareParty.map((share) => [share.carePartyId, share.days, share.quote]),
+    [["party-main", 3, 100]]
+  );
 });
 
 test("contact stats distinguish external contact blocks from own duty unavailability", () => {

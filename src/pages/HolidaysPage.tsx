@@ -216,17 +216,18 @@ export function HolidaysPage() {
   const [editing, setEditing] = useState<HolidayPeriod | "new" | null>(null);
   const stats = useMemo(
     () =>
-      calculateHolidayStats(
-        data.holidayPeriods,
-        selection.startDate,
-        selection.endDate,
-        undefined,
-        data.unavailablePeriods,
-        data.entries,
-        data.careParties,
-        data.settings.defaultResponsiblePartyId
-      ),
-    [data.careParties, data.entries, data.holidayPeriods, data.settings.defaultResponsiblePartyId, data.unavailablePeriods, selection.endDate, selection.startDate]
+      calculateHolidayStats({
+        periods: data.holidayPeriods,
+        startDate: selection.startDate,
+        endDate: selection.endDate,
+        allChildIds: data.children.map((child) => child.id),
+        unavailablePeriods: data.unavailablePeriods,
+        entries: data.entries,
+        careParties: data.careParties,
+        defaultResponsiblePartyId: data.settings.defaultResponsiblePartyId,
+        primaryCarePartyId: data.settings.primaryCarePartyId
+      }),
+    [data.careParties, data.children, data.entries, data.holidayPeriods, data.settings.defaultResponsiblePartyId, data.settings.primaryCarePartyId, data.unavailablePeriods, selection.endDate, selection.startDate]
   );
 
   const periods = useMemo(

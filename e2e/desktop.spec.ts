@@ -66,6 +66,78 @@ test("covers the core documentation and export flows", async ({ page }) => {
   await expect(page.getByTestId("export-entries-csv")).toBeVisible();
 });
 
+test("keeps holiday totals at calendar-day scope with primary-care fallback", async ({
+  page,
+  request
+}) => {
+  const partiesResponse = await request.get("/api/care-parties");
+  const parties = await partiesResponse.json() as Array<{ id: string; name: string }>;
+  const primary = parties.find((party) => party.name === "Hauptbetreuung");
+  expect(primary).toBeTruthy();
+
+  const fatherResponse = await request.post("/api/care-parties", {
+    data: { name: "Vater Beispiel", kind: "father" }
+  });
+  expect(fatherResponse.ok()).toBeTruthy();
+  const father = await fatherResponse.json() as { id: string };
+  const settingsResponse = await request.put("/api/settings", {
+    data: { primaryCarePartyId: primary!.id }
+  });
+  expect(settingsResponse.ok()).toBeTruthy();
+
+  const childIds: string[] = [];
+  for (const name of ["Ferienkind A", "Ferienkind B"]) {
+    const response = await request.post("/api/children", {
+      data: { name, birthMonth: 1, birthYear: 2018, color: "#0f8b83" }
+    });
+    expect(response.ok()).toBeTruthy();
+    childIds.push(((await response.json()) as { id: string }).id);
+  }
+
+  const date = dateInCurrentMonth(18);
+  const holidayResponse = await request.post("/api/holiday-periods", {
+    data: {
+      name: "Fiktiver gemeinsamer Ferientag",
+      startDate: date,
+      endDate: date,
+      childIds,
+      assignedTo: "shared"
+    }
+  });
+  expect(holidayResponse.ok()).toBeTruthy();
+  const entryResponse = await request.post("/api/care-entries", {
+    data: {
+      startDateTime: `${date}T08:00`,
+      endDateTime: `${date}T18:00`,
+      childIds: [childIds[0]],
+      responsiblePartyId: father.id,
+      status: "completed",
+      careScope: "full_day",
+      overnight: false,
+      schoolHandover: false,
+      holiday: false,
+      weekend: false,
+      additionalCare: false,
+      location: "commuterApartment",
+      handoverFrom: "mother",
+      handoverTo: "mother",
+      hasEvidence: false,
+      trips: [],
+      costs: []
+    }
+  });
+  expect(entryResponse.ok()).toBeTruthy();
+
+  await openApp(page);
+  await navigate(page, "holidays");
+  const summary = page.locator(".summary-strip--five");
+  await expect(summary.locator(":scope > div").first()).toContainText("1");
+  const shares = page.locator(".stats-grid");
+  await expect(shares).toContainText("Hauptbetreuung");
+  await expect(shares).toContainText("Vater Beispiel");
+  await expect(shares.getByText("0.5 / 50 %")).toHaveCount(2);
+});
+
 test("switches to read-only mode when the API is unavailable", async ({
   context,
   page

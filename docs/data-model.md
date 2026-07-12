@@ -277,7 +277,13 @@ compatibility, but new UI flows treat holiday credit as normal care entries
 whose dates overlap a holiday block and whose `responsible_party_id` identifies
 the credited care party. This allows long holidays to be split into several
 regular care entries, for example one week with one care party and later weeks
-with another.
+with another. Aggregate holiday statistics count calendar days, not one full
+day per child. Where several children are covered, each child's assignment
+contributes an equal share of the calendar day. Completed or partial care takes
+precedence over planned care; uncovered shares fall back to
+`primaryCarePartyId`. Duplicate entries for the same care party do not increase
+the credited share, and overlapping holiday blocks do not increase the number
+of holiday days.
 
 Unavailable periods record category, duty relationship, effects on contact or
 holiday planning, location, notes, and evidence reference. The `scope` field
