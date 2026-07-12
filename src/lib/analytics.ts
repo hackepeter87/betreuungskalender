@@ -199,7 +199,8 @@ export function calculateHolidayStats(
   unavailablePeriods: UnavailablePeriod[] = [],
   entries: CareEntry[] = [],
   careParties: CareParty[] = [],
-  defaultResponsiblePartyId?: string
+  defaultResponsiblePartyId?: string,
+  primaryCarePartyId = defaultResponsiblePartyId
 ): HolidayStats {
   const holidaySlots = new Set<string>();
   const legacyAssignments = new Map<string, HolidayPeriod["assignedTo"]>();
@@ -272,18 +273,18 @@ export function calculateHolidayStats(
   }
 
   const hasCareEntryAssignments = entryAssignments.size > 0;
-  if (!hasCareEntryAssignments && defaultResponsiblePartyId && holidaySlots.size > 0) {
-    daysByParty.set(defaultResponsiblePartyId, holidaySlots.size);
+  if (!hasCareEntryAssignments && primaryCarePartyId && holidaySlots.size > 0) {
+    daysByParty.set(primaryCarePartyId, holidaySlots.size);
   }
   const fatherDays = hasCareEntryAssignments
     ? Array.from(daysByParty.entries()).reduce((sum, [partyId, days]) => sum + (carePartyById.get(partyId)?.kind === "father" ? days : 0), 0)
-    : defaultResponsiblePartyId
-      ? (carePartyById.get(defaultResponsiblePartyId)?.kind === "father" ? holidaySlots.size : 0)
+    : primaryCarePartyId
+      ? (carePartyById.get(primaryCarePartyId)?.kind === "father" ? holidaySlots.size : 0)
       : legacyFatherDays;
   const motherDays = hasCareEntryAssignments
     ? Array.from(daysByParty.entries()).reduce((sum, [partyId, days]) => sum + (carePartyById.get(partyId)?.kind === "mother" ? days : 0), 0)
-    : defaultResponsiblePartyId
-      ? (carePartyById.get(defaultResponsiblePartyId)?.kind === "mother" ? holidaySlots.size : 0)
+    : primaryCarePartyId
+      ? (carePartyById.get(primaryCarePartyId)?.kind === "mother" ? holidaySlots.size : 0)
       : legacyMotherDays;
 
   const totalDays = holidaySlots.size;
@@ -441,7 +442,8 @@ function calculateEntityStats(
     data.unavailablePeriods,
     data.entries,
     data.careParties,
-    data.settings.defaultResponsiblePartyId
+    data.settings.defaultResponsiblePartyId,
+    data.settings.primaryCarePartyId
   );
 
   return {
@@ -510,7 +512,8 @@ export function calculatePeriodStats(
       data.unavailablePeriods,
       data.entries,
       data.careParties,
-      data.settings.defaultResponsiblePartyId
+      data.settings.defaultResponsiblePartyId,
+      data.settings.primaryCarePartyId
     ),
     costsByCategory,
     byChild: data.children.map((child) =>

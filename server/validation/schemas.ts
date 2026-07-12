@@ -43,11 +43,15 @@ export const setupFirstUseInputSchema = z.object({
   ownerConfirmed: z.literal(true),
   careParty: carePartyInputSchema,
   secondaryCareParty: carePartyInputSchema.optional(),
+  primaryCareParty: z.enum(["primary", "secondary"]).default("primary"),
   defaultCareParty: z.enum(["primary", "secondary"]).default("primary"),
   child: childInputSchema.optional()
 }).refine((setup) => setup.defaultCareParty === "primary" || Boolean(setup.secondaryCareParty), {
   path: ["defaultCareParty"],
   message: "Eine zweite betreuende Person ist erforderlich, wenn sie als Standard verwendet werden soll."
+}).refine((setup) => setup.primaryCareParty === "primary" || Boolean(setup.secondaryCareParty), {
+  path: ["primaryCareParty"],
+  message: "Eine zweite betreuende Person ist erforderlich, wenn sie als Hauptbetreuung verwendet werden soll."
 });
 
 export const invitationInputSchema = z.object({

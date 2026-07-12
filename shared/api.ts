@@ -246,6 +246,7 @@ export interface ApiSetupFirstUseInput {
     name: string;
     kind: ApiCarePartyKind;
   };
+  primaryCareParty?: "primary" | "secondary";
   defaultCareParty: "primary" | "secondary";
   child?: {
     name: string;
@@ -259,6 +260,7 @@ export interface ApiSetupFirstUse extends ApiSetupOwnerBootstrap {
   created: {
     carePartyId: string;
     secondaryCarePartyId?: string;
+    primaryCarePartyId: string;
     defaultCarePartyId: string;
     childId?: string;
   };

@@ -124,6 +124,7 @@ export interface FirstUseSetupInput {
     name: string;
     kind: ApiCarePartyKind;
   };
+  primaryCareParty?: "primary" | "secondary";
   defaultCareParty: "primary" | "secondary";
   child?: {
     name: string;
@@ -195,6 +196,9 @@ export function completeFirstUseSetup(
         "secondary_care_party_created"
       )
       : undefined;
+    const primaryCarePartyId = input.primaryCareParty === "secondary" && secondaryCarePartyId
+      ? secondaryCarePartyId
+      : carePartyId;
     const defaultCarePartyId = input.defaultCareParty === "secondary" && secondaryCarePartyId
       ? secondaryCarePartyId
       : carePartyId;
@@ -223,6 +227,7 @@ export function completeFirstUseSetup(
       }, timestamp);
     }
 
+    upsertSetting(database, "primaryCarePartyId", primaryCarePartyId, user.id, timestamp);
     upsertSetting(database, "defaultResponsiblePartyId", defaultCarePartyId, user.id, timestamp);
     if (input.installationLabel) {
       upsertSetting(database, "setup.installationLabel", input.installationLabel, user.id, timestamp);
@@ -234,6 +239,7 @@ export function completeFirstUseSetup(
       created: {
         carePartyId,
         ...(secondaryCarePartyId ? { secondaryCarePartyId } : {}),
+        primaryCarePartyId,
         defaultCarePartyId,
         ...(childId ? { childId } : {})
       }

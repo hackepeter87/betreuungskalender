@@ -1175,6 +1175,31 @@ export function SettingsPage() {
             />
           </label>
           <label className="field">
+            <FieldHelpLabel fieldId="settings.primaryCareParty">
+              {copy(locale, "settings", "primaryCareParty")}
+            </FieldHelpLabel>
+            <select
+              data-testid="settings-primary-care-party"
+              value={data.settings.primaryCarePartyId ?? data.settings.defaultResponsiblePartyId ?? ""}
+              disabled={!canWrite || isSaving || !data.careParties.length}
+              onChange={(event) =>
+                void updateSettings({
+                  primaryCarePartyId: event.target.value || undefined
+                })
+              }
+            >
+              {data.careParties.length ? null : (
+                <option value="">{copy(locale, "settings", "noCareParties")}</option>
+              )}
+              {data.careParties.map((party) => (
+                <option key={party.id} value={party.id}>
+                  {party.name}
+                </option>
+              ))}
+            </select>
+            <small>{copy(locale, "settings", "primaryCarePartyDescription")}</small>
+          </label>
+          <label className="field">
             <FieldHelpLabel fieldId="settings.defaultResponsibleParty">
               {copy(locale, "settings", "defaultResponsibleParty")}
             </FieldHelpLabel>

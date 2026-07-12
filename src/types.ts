@@ -289,6 +289,7 @@ export interface AppSettings {
   defaultLocation: CareLocation;
   defaultHandoverFrom: HandoverParty;
   defaultHandoverTo: HandoverParty;
+  primaryCarePartyId?: string;
   defaultResponsiblePartyId?: string;
   rhythmStartDate?: string;
 }

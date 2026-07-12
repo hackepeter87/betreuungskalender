@@ -155,6 +155,28 @@ test("holiday stats use default responsible care party when no care entries exis
   );
 });
 
+test("holiday stats use primary care party fallback separately from new-entry default", () => {
+  const stats = calculateHolidayStats(
+    [holiday()],
+    "2026-07-01",
+    "2026-07-03",
+    undefined,
+    [],
+    [],
+    parties,
+    "party-main",
+    "party-father"
+  );
+
+  assert.equal(stats.totalDays, 6);
+  assert.equal(stats.fatherDays, 6);
+  assert.equal(stats.motherDays, 0);
+  assert.deepEqual(
+    stats.byCareParty.map((share) => [share.carePartyId, share.days, share.quote]),
+    [["party-father", 6, 100]]
+  );
+});
+
 test("holiday stats use actual children, time, and care party for partial care", () => {
   const stats = calculateHolidayStats(
     [holiday()],
