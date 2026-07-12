@@ -252,7 +252,7 @@ function MemberInvitationManager() {
       const [nextMembers, nextInvitations, capabilities] = await Promise.all([
         api.listMembers(),
         api.listInvitations(),
-        api.invitationCapabilities()
+        api.invitationCapabilities().catch(() => ({ emailDeliveryAvailable: false }))
       ]);
       setMembers(nextMembers);
       setInvitations(nextInvitations);
