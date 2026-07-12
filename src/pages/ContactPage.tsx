@@ -23,6 +23,7 @@ import {
 import { statusLabels } from "../lib/labels";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy, copyList } from "../i18n/catalog";
+import { contactSyncMessage } from "../i18n/contactSyncMessages";
 import { useAppStore } from "../store/AppStore";
 import type { CareEntry } from "../types";
 import type {
@@ -213,6 +214,7 @@ export function ContactPage({
   const {
     data,
     saveContactRule,
+    syncContactRule,
     updateEntryStatus,
     canWrite,
     isSaving
@@ -409,6 +411,21 @@ export function ContactPage({
           : copy(locale, "contact", "saved")
       );
     }
+  };
+
+  const syncSavedRule = async () => {
+    if (!ruleId) return;
+    const synced = await syncContactRule(ruleId);
+    if (!synced?.syncSummary) return;
+    const changed = synced.syncSummary.created + synced.syncSummary.updated;
+    setMessage(
+      changed
+        ? contactSyncMessage(locale, "completed", {
+            count: changed,
+            to: formatDate(synced.syncSummary.endDate, intlLocale)
+          })
+        : contactSyncMessage(locale, "noChanges")
+    );
   };
 
   const confirmCancellation = async (event: FormEvent) => {
@@ -655,10 +672,18 @@ export function ContactPage({
               <span />
               <FieldHelpLabel fieldId="contactPattern.active" />
             </label>
-            <button className="button button--primary" type="submit" data-testid="contact-pattern-save" disabled={!data.children.length || !canWrite || isSaving}>
-              <Icon name="check" size={17} />
-              {copy(locale, "contact", "save")}
-            </button>
+            <div className="form-actions__right">
+              {ruleId ? (
+                <button className="button button--secondary" type="button" data-testid="contact-pattern-sync" onClick={() => void syncSavedRule()} disabled={!canWrite || isSaving}>
+                  <Icon name="repeat" size={17} />
+                  {contactSyncMessage(locale, "action")}
+                </button>
+              ) : null}
+              <button className="button button--primary" type="submit" data-testid="contact-pattern-save" disabled={!data.children.length || !canWrite || isSaving}>
+                <Icon name="check" size={17} />
+                {copy(locale, "contact", "save")}
+              </button>
+            </div>
           </div>
         </form>
 
@@ -674,7 +699,7 @@ export function ContactPage({
               <Icon name="repeat" />
               <div>
                 <strong>{copy(locale, "contact", "flowTitle")}</strong>
-                <p>{copy(locale, "contact", "flowDescription")}</p>
+                <p>{contactSyncMessage(locale, "flow")}</p>
               </div>
             </div>
             <div className="form-grid form-grid--two">

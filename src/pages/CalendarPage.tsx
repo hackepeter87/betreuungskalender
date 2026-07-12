@@ -46,19 +46,20 @@ export function CalendarPage({
     UnavailablePeriod | "new" | null
   >(null);
   const [externalEvents, setExternalEvents] = useState<ExternalCalendarEvent[]>([]);
+  const visibleRange = useMemo(() => rangeForMonth(monthKey), [monthKey]);
   const entries = useMemo(() => entriesForMonth(data.entries, monthKey), [data.entries, monthKey]);
   const holidayPeriods = useMemo(
     () => holidayPeriodsForMonth(data.holidayPeriods, monthKey),
     [data.holidayPeriods, monthKey]
   );
-  const unavailablePeriods = useMemo(() => {
-    const range = rangeForMonth(monthKey);
-    return unavailablePeriodsForRange(
+  const unavailablePeriods = useMemo(
+    () => unavailablePeriodsForRange(
       data.unavailablePeriods,
-      range.startDate,
-      range.endDate
-    );
-  }, [data.unavailablePeriods, monthKey]);
+      visibleRange.startDate,
+      visibleRange.endDate
+    ),
+    [data.unavailablePeriods, visibleRange.endDate, visibleRange.startDate]
+  );
   const hasCalendarContent =
     entries.length > 0 ||
     holidayPeriods.length > 0 ||
@@ -66,9 +67,8 @@ export function CalendarPage({
     externalEvents.length > 0;
 
   useEffect(() => {
-    const range = rangeForMonth(monthKey);
-    void api.listExternalCalendarEvents(`${range.startDate}T00:00:00.000Z`, `${range.endDate}T23:59:59.999Z`).then(setExternalEvents).catch(() => setExternalEvents([]));
-  }, [monthKey]);
+    void api.listExternalCalendarEvents(`${visibleRange.startDate}T00:00:00.000Z`, `${visibleRange.endDate}T23:59:59.999Z`).then(setExternalEvents).catch(() => setExternalEvents([]));
+  }, [visibleRange.endDate, visibleRange.startDate]);
 
   useEffect(() => {
     setView(isMobile ? "agenda" : "month");
@@ -144,6 +144,8 @@ export function CalendarPage({
           unavailablePeriods={unavailablePeriods}
           externalEvents={externalEvents}
           holidayPeriods={holidayPeriods}
+          visibleStartDate={visibleRange.startDate}
+          visibleEndDate={visibleRange.endDate}
           children={data.children}
           onSelectDate={(date) => onNewEntry(date || undefined)}
           onSelectEntry={onEditEntry}

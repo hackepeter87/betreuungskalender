@@ -85,7 +85,7 @@ async function jsonRequest<T>(
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
-      "content-type": "application/json",
+      ...(init.body ? { "content-type": "application/json" } : {}),
       ...init.headers
     }
   });
@@ -536,6 +536,10 @@ test("shared care-party assignments restrict care entries and contact rules by e
     method: "DELETE",
     headers: betaHeaders
   });
+  await expectStatus(baseUrl, `/api/contact-rules/${alphaRule.id}/sync`, 400, {
+    method: "POST",
+    headers: betaHeaders
+  });
   const afterDeniedRuleDelete = await jsonRequest<ApiContactRule[]>(baseUrl, "/api/contact-rules", {
     method: "GET",
     headers: alphaHeaders
@@ -554,4 +558,11 @@ test("shared care-party assignments restrict care entries and contact rules by e
   });
   assert.equal(alphaUpdatedRule.name, "Alpha Umgang angepasst");
   assert.equal(alphaUpdatedRule.responsiblePartyId, alphaParty.id);
+  const alphaSyncedRule = await jsonRequest<ApiContactRule>(
+    baseUrl,
+    `/api/contact-rules/${alphaRule.id}/sync`,
+    { method: "POST", headers: alphaHeaders }
+  );
+  assert.equal(alphaSyncedRule.id, alphaRule.id);
+  assert.ok(alphaSyncedRule.syncSummary);
 });

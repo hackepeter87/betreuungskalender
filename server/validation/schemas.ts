@@ -299,6 +299,12 @@ const contactRuleSegmentSchema = z
     message: "Das Ende der Zeitspanne muss nach dem Beginn liegen."
   });
 
+function contactRuleRangeWithinMonths(startDate: string, endDate: string, months: number): boolean {
+  const [year = 0, month = 1, day = 1] = startDate.split("-").map(Number);
+  const exclusiveEnd = new Date(Date.UTC(year, month - 1 + months, day, 12));
+  return endDate < exclusiveEnd.toISOString().slice(0, 10);
+}
+
 export const contactRuleInputSchema = z
   .object({
     name: z.string().trim().min(1).max(200),
@@ -315,7 +321,14 @@ export const contactRuleInputSchema = z
   .refine((rule) => !rule.endDate || rule.endDate >= rule.startDate, {
     path: ["endDate"],
     message: "Das Ende darf nicht vor dem Beginn liegen."
-  });
+  })
+  .refine(
+    (rule) => !rule.endDate || contactRuleRangeWithinMonths(rule.startDate, rule.endDate, 36),
+    {
+      path: ["endDate"],
+      message: "Der vollständige Regelzeitraum darf höchstens 36 Monate umfassen."
+    }
+  );
 
 export const settingsInputSchema = z.record(z.string(), z.unknown());
 

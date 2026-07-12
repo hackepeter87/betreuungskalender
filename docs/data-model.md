@@ -262,11 +262,16 @@ original `contact_patterns` table. The recurrence and segments are stored as
 validated JSON, using local civil dates and `HH:mm` times. `v1.6.0` adds an
 RRULE-compatible recurrence shape (`kind: "rrule"`, `rrules: string[]`) for
 daily, weekly, and monthly rules while continuing to read the earlier weekly
-and monthly JSON shapes. The initial sync window defaults to 12 months and
-creates planned `care_entries` when a rule is saved. Existing legacy
+and monthly JSON shapes. Rules with an explicit end date synchronize their
+complete configured range up to 36 months. Open-ended rules retain a rolling
+future window controlled by `sync_horizon_months`, which defaults to 12 months.
+Saving a rule creates planned `care_entries`; an explicit synchronization action
+can bring an existing rule up to date without changing its definition. Existing legacy
 `contact_patterns` are mirrored into `contact_rules` with a weekly recurrence,
 two-week interval, Friday anchor, and a Friday-to-Sunday segment.
 `responsible_party_id` is copied from the rule to generated planned entries.
+Occurrence keys keep synchronization idempotent, while cancelled or manually
+changed entries are preserved as exceptions.
 
 ## Holidays and unavailable periods
 

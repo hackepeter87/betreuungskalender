@@ -117,6 +117,17 @@ because provider URLs can contain bearer-like query tokens. Imported summary,
 description, and location values are stored as data and must not be logged or
 rendered as trusted HTML.
 
+Contact-rule writes and explicit synchronization use the normal write rate
+limit and care-party authorization checks. Fully bounded rules are limited to
+36 months before recurrence expansion to avoid excessive database work. The
+sync remains idempotent and does not overwrite cancelled or manually changed
+entries.
+
+Care-confirmation push messages remain generic and exclude child names, exact
+times, notes, and other case details. When several confirmations become due in
+the same sweep, the service sends at most one push per user while retaining all
+individual tasks in the authenticated in-app notification view.
+
 Care parties are domain records, not authentication principals. Optional
 app-user to care-party assignments restrict non-admin shared users once at
 least one assignment exists, but they do not replace `app_users.role`.

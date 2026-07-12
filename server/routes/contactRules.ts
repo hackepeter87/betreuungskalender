@@ -119,6 +119,23 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
     return { ...getContactRule(request.params.id), syncSummary };
   });
 
+  app.post<{ Params: { id: string } }>("/api/contact-rules/:id/sync", writeLimit, async (request, reply) => {
+    const rule = getContactRule(request.params.id);
+    if (!rule) return reply.code(404).send({ error: "not_found" });
+    try {
+      assertCanUseCareParty(request.user, rule.responsiblePartyId);
+      const syncSummary = db.transaction(() =>
+        syncContactRule(request.params.id, { userEmail: request.userEmail })
+      )();
+      return { ...getContactRule(request.params.id), syncSummary };
+    } catch (error) {
+      return reply.code(400).send({
+        error: "invalid_relation",
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
   app.delete<{ Params: { id: string } }>("/api/contact-rules/:id", writeLimit, async (request, reply) => {
     const before = getContactRule(request.params.id);
     if (!before) return reply.code(404).send({ error: "not_found" });

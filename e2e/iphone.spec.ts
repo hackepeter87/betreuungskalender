@@ -84,6 +84,8 @@ test("keeps mobile agenda scoped to the selected month", async ({
   await expect(page.getByText("Juli 2026").first()).toBeVisible();
   await expect(page.getByText("Osterferien 2026 Nordrhein-Westfalen")).toHaveCount(0);
   await expect(page.getByText("Sommerferien 2026 Nordrhein-Westfalen").first()).toBeVisible();
+  await expect(page.getByTestId("agenda-day-2026-08-01")).toHaveCount(0);
+  await expect(page.getByTestId("agenda-day-2026-08-04")).toHaveCount(0);
   await expectNoDocumentHorizontalOverflow(page);
 });
 

@@ -19,6 +19,7 @@ const {
   getNotificationPreferences,
   listOpenCareConfirmations,
   savePushSubscription,
+  sendDueCareConfirmationPushes,
   updateNotificationPreferences
 } = await import("./services/careConfirmations.js");
 
@@ -201,6 +202,51 @@ test("creates one due confirmation request for an unconfirmed past planned entry
   assert.equal(open.length, 1);
   assert.equal(open[0]?.entry.id, "entry-confirmation-a");
   assert.equal(open[0]?.entry.confirmationState, "unconfirmed");
+});
+
+test("batches multiple due confirmations into one push per user", async () => {
+  insertPastPlannedEntry();
+  db.prepare(`
+    INSERT INTO care_entries (
+      id, start_datetime, end_datetime, status, care_scope,
+      overnight, school_handover, holiday, weekend, additional_care,
+      responsible_party_id, duration_minutes, is_contact_time, created_by, updated_by,
+      created_at, updated_at
+    )
+    SELECT ?, start_datetime, end_datetime, status, care_scope,
+      overnight, school_handover, holiday, weekend, additional_care,
+      responsible_party_id, duration_minutes, is_contact_time, created_by, updated_by,
+      created_at, updated_at
+    FROM care_entries WHERE id = ?
+  `).run("entry-confirmation-b", "entry-confirmation-a");
+  db.prepare(`
+    INSERT INTO care_entry_children (
+      care_entry_id, child_id, created_at, updated_at
+    )
+    SELECT ?, child_id, created_at, updated_at
+    FROM care_entry_children WHERE care_entry_id = ?
+  `).run("entry-confirmation-b", "entry-confirmation-a");
+  createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z"));
+
+  let deliveries = 0;
+  const sent = await sendDueCareConfirmationPushes(
+    new Date("2026-07-03T08:05:00.000Z"),
+    async () => {
+      deliveries += 1;
+      return true;
+    }
+  );
+  const rows = db.prepare(`
+    SELECT sent_at AS sentAt, reminder_count AS reminderCount
+    FROM care_confirmation_requests
+    WHERE user_id = 'local-dev'
+    ORDER BY care_entry_id
+  `).all() as Array<{ sentAt: string | null; reminderCount: number }>;
+
+  assert.equal(sent, 1);
+  assert.equal(deliveries, 1);
+  assert.equal(rows.length, 2);
+  assert.equal(rows.every((row) => Boolean(row.sentAt) && row.reminderCount === 1), true);
 });
 
 test("answers a confirmation request and stores partial status with audit metadata", () => {
