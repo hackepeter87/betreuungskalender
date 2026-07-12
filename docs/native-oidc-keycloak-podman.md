@@ -143,6 +143,28 @@ unless a reviewed SMTP relay is configured. If enabled, keep `SMTP_PASSWORD`
 only in private deployment state and set `INVITATION_PUBLIC_BASE_URL` to the
 public HTTPS app origin; invitation links contain one-time bearer tokens.
 
+For a fresh installation, create and mount the one-time owner setup value. The
+standard Compose file does not require this mount so existing installations can
+continue unchanged:
+
+```bash
+mkdir -p secrets
+openssl rand -base64 32 > secrets/owner-setup-token
+chmod 600 secrets/owner-setup-token
+```
+
+```yaml
+services:
+  betreuungskalender:
+    volumes:
+      - ./secrets/owner-setup-token:/run/secrets/owner-setup-token:ro
+```
+
+Keep `OWNER_SETUP_TOKEN_FILE=/run/secrets/owner-setup-token`, open the
+one-time `/setup?token=...` link, and remove the mounted file after the owner
+claim succeeds. The setup value must not be placed in committed environment or
+Compose files.
+
 Do not set `TRUST_PROXY_AUTH=true` in native mode. The application rejects that
 combination because native OIDC must not accept forged proxy identity headers
 as authentication.

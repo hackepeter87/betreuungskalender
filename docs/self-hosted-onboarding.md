@@ -31,6 +31,41 @@ The normal `/api/session` response exposes only minimal setup state for the UI:
 whether setup is complete and whether setup is currently required. Detailed
 instance-readiness information is restricted to admin users in Settings.
 
+### Initial owner link with native OIDC
+
+For a fresh native OIDC installation, generate a random owner setup value
+outside the repository and write it to a private file. Mount that file read
+only at the path configured by `OWNER_SETUP_TOKEN_FILE`:
+
+```bash
+mkdir -p secrets
+openssl rand -base64 32 > secrets/owner-setup-token
+chmod 600 secrets/owner-setup-token
+```
+
+```yaml
+services:
+  betreuungskalender:
+    volumes:
+      - ./secrets/owner-setup-token:/run/secrets/owner-setup-token:ro
+```
+
+Open the one-time URL using the exact value from that file:
+
+```text
+https://betreuung.example.net/setup?token=<one-time-value>
+```
+
+The landing page validates the link before offering the sign-in action. After
+the validated OIDC callback, the authenticated user receives the owner/admin
+membership. The setup wizard remains open until the required app data is
+completed. The link expires according to `OWNER_SETUP_TOKEN_TTL_SECONDS`, can
+be used only once, and is rejected after an owner has been established.
+
+Do not put the value itself in `.env`, Compose YAML, shell history, issue text,
+or application logs. Rotate the file to issue a new link before ownership has
+been claimed. Remove the mounted file after a successful owner claim.
+
 ## Identity and authorization model
 
 OIDC or trusted-proxy authentication identifies the signed-in user. The app
@@ -88,10 +123,11 @@ The server stores:
 - accepted user and acceptance timestamp
 - audit metadata
 
-Opening an invitation link starts native OIDC login when needed and accepts the
-invitation after the validated callback. Manual token acceptance remains
-available as a compatibility fallback. Expired, revoked, already accepted, or
-malformed invitations are rejected.
+Opening an invitation link first shows a neutral landing page. Continuing from
+that page starts native OIDC login and accepts the invitation after the
+validated callback. Expired, revoked, already accepted, or malformed links
+show an understandable error without exposing the raw token. Manual token
+acceptance remains available as a compatibility fallback.
 
 ## Invitation email delivery
 
@@ -110,6 +146,24 @@ When email delivery is enabled:
 The email contains the same one-time bearer invitation link that manual sharing
 would provide. Treat sent invitation email like any other password-equivalent
 delivery channel.
+
+## Upgrade compatibility
+
+Existing installations keep their current authorization behavior after an
+upgrade:
+
+- active app memberships continue to take precedence
+- configured OIDC groups remain the fallback when no membership exists
+- installations without an explicit owner retain the documented admin
+  compatibility path until ownership is set
+- existing invitations and sessions remain valid according to their original
+  expiry and revocation state
+- an already configured installation cannot be claimed through an owner setup
+  link
+
+Do not remove working group mappings during the same update that introduces
+app memberships. Verify owner access and a second member login first, then
+tighten provider-side group assignments in a separate change.
 
 ## Recommended first-run checklist
 
