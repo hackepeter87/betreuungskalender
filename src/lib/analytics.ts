@@ -191,19 +191,35 @@ function clippedOvernightCount(
   return daysBetween(clippedStart, clippedEnd);
 }
 
-export function calculateHolidayStats(
-  periods: HolidayPeriod[],
-  startDate: string,
-  endDate: string,
-  childId?: string,
-  unavailablePeriods: UnavailablePeriod[] = [],
-  entries: CareEntry[] = [],
-  careParties: CareParty[] = [],
-  defaultResponsiblePartyId?: string,
+export interface HolidayStatsOptions {
+  periods: HolidayPeriod[];
+  startDate: string;
+  endDate: string;
+  childId?: string;
+  allChildIds?: string[];
+  unavailablePeriods?: UnavailablePeriod[];
+  entries?: CareEntry[];
+  careParties?: CareParty[];
+  defaultResponsiblePartyId?: string;
+  primaryCarePartyId?: string;
+}
+
+export function calculateHolidayStats({
+  periods,
+  startDate,
+  endDate,
+  childId,
+  allChildIds = [],
+  unavailablePeriods = [],
+  entries = [],
+  careParties = [],
+  defaultResponsiblePartyId,
   primaryCarePartyId = defaultResponsiblePartyId
-): HolidayStats {
+}: HolidayStatsOptions): HolidayStats {
   const holidaySlots = new Set<string>();
+  const holidayChildrenByDate = new Map<string, Set<string>>();
   const legacyAssignments = new Map<string, HolidayPeriod["assignedTo"]>();
+  const activeChildIds = [...new Set(allChildIds)];
 
   for (const period of periods) {
     if (period.deletedAt) continue;
@@ -212,23 +228,37 @@ export function calculateHolidayStats(
     const clippedStart = period.startDate > startDate ? period.startDate : startDate;
     const clippedEnd = period.endDate < endDate ? period.endDate : endDate;
     for (const dateKey of enumerateDateKeys(clippedStart, clippedEnd)) {
-      const childKeys = childId ? [childId] : period.childIds.length ? period.childIds : ["__all"];
+      const childKeys = childId
+        ? [childId]
+        : period.childIds.length
+          ? period.childIds
+          : activeChildIds.length
+            ? activeChildIds
+            : ["__all"];
+      const dateChildren = holidayChildrenByDate.get(dateKey) ?? new Set<string>();
       for (const periodChildId of childKeys) {
         const slotKey = `${dateKey}|${periodChildId}`;
         holidaySlots.add(slotKey);
+        dateChildren.add(periodChildId);
         const existing = legacyAssignments.get(slotKey);
         legacyAssignments.set(
           slotKey,
           existing && existing !== period.assignedTo ? "shared" : period.assignedTo
         );
       }
+      holidayChildrenByDate.set(dateKey, dateChildren);
     }
   }
 
   const carePartyById = new Map(careParties.map((party) => [party.id, party]));
-  const entryAssignments = new Map<string, Set<string>>();
-  const holidaySlotMatches = (dateKey: string, entryChildId: string) =>
-    holidaySlots.has(`${dateKey}|${entryChildId}`) || holidaySlots.has(`${dateKey}|__all`);
+  const actualAssignments = new Map<string, Set<string>>();
+  const plannedAssignments = new Map<string, Set<string>>();
+  const matchingHolidaySlot = (dateKey: string, entryChildId: string) => {
+    const childSlot = `${dateKey}|${entryChildId}`;
+    if (holidaySlots.has(childSlot)) return childSlot;
+    const allChildrenSlot = `${dateKey}|__all`;
+    return holidaySlots.has(allChildrenSlot) ? allChildrenSlot : undefined;
+  };
 
   for (const entry of entries) {
     if (entry.deletedAt || entry.status === "cancelled") continue;
@@ -237,57 +267,73 @@ export function calculateHolidayStats(
     const startDateTime = actualStartDateTime(entry);
     const endDateTime = actualEndDateTime(entry);
     if (!rangesOverlap(startDateTime.slice(0, 10), endDateTime.slice(0, 10), startDate, endDate)) continue;
-    const responsiblePartyId = actualResponsiblePartyId(entry) ?? defaultResponsiblePartyId ?? "__unassigned";
+    const responsiblePartyId = actualResponsiblePartyId(entry) ?? defaultResponsiblePartyId;
+    if (!responsiblePartyId) continue;
+    const assignments = entry.status === "planned" ? plannedAssignments : actualAssignments;
     for (const dateKey of entryDateKeys(startDateTime, endDateTime)) {
       if (dateKey < startDate || dateKey > endDate) continue;
       const scopedChildIds = childId ? [childId] : entryChildIds;
       for (const entryChildId of scopedChildIds) {
-        if (!holidaySlotMatches(dateKey, entryChildId)) continue;
-        const slotKey = `${dateKey}|${entryChildId}`;
-        const current = entryAssignments.get(slotKey) ?? new Set<string>();
+        const slotKey = matchingHolidaySlot(dateKey, entryChildId);
+        if (!slotKey) continue;
+        const current = assignments.get(slotKey) ?? new Set<string>();
         current.add(responsiblePartyId);
-        entryAssignments.set(slotKey, current);
+        assignments.set(slotKey, current);
       }
     }
   }
 
   const daysByParty = new Map<string, number>();
   let unassignedDays = 0;
-  for (const parties of entryAssignments.values()) {
-    const share = 1 / Math.max(1, parties.size);
-    for (const partyId of parties) {
-      if (partyId === "__unassigned") unassignedDays += share;
-      else daysByParty.set(partyId, (daysByParty.get(partyId) ?? 0) + share);
-    }
-  }
-
   let legacyFatherDays = 0;
   let legacyMotherDays = 0;
-  for (const assignment of legacyAssignments.values()) {
-    if (assignment === "father") legacyFatherDays += 1;
-    if (assignment === "mother") legacyMotherDays += 1;
-    if (assignment === "shared") {
-      legacyFatherDays += 0.5;
-      legacyMotherDays += 0.5;
+
+  for (const [dateKey, dateChildren] of holidayChildrenByDate) {
+    const childShare = 1 / Math.max(1, dateChildren.size);
+    for (const dateChildId of dateChildren) {
+      const slotKey = `${dateKey}|${dateChildId}`;
+      const actualParties = actualAssignments.get(slotKey);
+      const plannedParties = plannedAssignments.get(slotKey);
+      const explicitParties = actualParties?.size ? actualParties : plannedParties;
+
+      if (explicitParties?.size) {
+        const partyShare = childShare / explicitParties.size;
+        for (const partyId of explicitParties) {
+          daysByParty.set(partyId, (daysByParty.get(partyId) ?? 0) + partyShare);
+        }
+        continue;
+      }
+
+      if (primaryCarePartyId) {
+        daysByParty.set(
+          primaryCarePartyId,
+          (daysByParty.get(primaryCarePartyId) ?? 0) + childShare
+        );
+        continue;
+      }
+
+      const legacyAssignment = legacyAssignments.get(slotKey);
+      if (legacyAssignment === "father") legacyFatherDays += childShare;
+      else if (legacyAssignment === "mother") legacyMotherDays += childShare;
+      else if (legacyAssignment === "shared") {
+        legacyFatherDays += childShare / 2;
+        legacyMotherDays += childShare / 2;
+      } else {
+        unassignedDays += childShare;
+      }
     }
   }
 
-  const hasCareEntryAssignments = entryAssignments.size > 0;
-  if (!hasCareEntryAssignments && primaryCarePartyId && holidaySlots.size > 0) {
-    daysByParty.set(primaryCarePartyId, holidaySlots.size);
-  }
-  const fatherDays = hasCareEntryAssignments
-    ? Array.from(daysByParty.entries()).reduce((sum, [partyId, days]) => sum + (carePartyById.get(partyId)?.kind === "father" ? days : 0), 0)
-    : primaryCarePartyId
-      ? (carePartyById.get(primaryCarePartyId)?.kind === "father" ? holidaySlots.size : 0)
-      : legacyFatherDays;
-  const motherDays = hasCareEntryAssignments
-    ? Array.from(daysByParty.entries()).reduce((sum, [partyId, days]) => sum + (carePartyById.get(partyId)?.kind === "mother" ? days : 0), 0)
-    : primaryCarePartyId
-      ? (carePartyById.get(primaryCarePartyId)?.kind === "mother" ? holidaySlots.size : 0)
-      : legacyMotherDays;
+  const fatherDays = legacyFatherDays + Array.from(daysByParty.entries()).reduce(
+    (sum, [partyId, days]) => sum + (carePartyById.get(partyId)?.kind === "father" ? days : 0),
+    0
+  );
+  const motherDays = legacyMotherDays + Array.from(daysByParty.entries()).reduce(
+    (sum, [partyId, days]) => sum + (carePartyById.get(partyId)?.kind === "mother" ? days : 0),
+    0
+  );
 
-  const totalDays = holidaySlots.size;
+  const totalDays = holidayChildrenByDate.size;
   const halfTarget = totalDays / 2;
   const relevantHolidayPeriods = periods.filter(
     (period) =>
@@ -434,17 +480,18 @@ function calculateEntityStats(
   }
 
   const totalDays = daysBetween(startDate, endDate);
-  const holidayStats = calculateHolidayStats(
-    data.holidayPeriods,
+  const holidayStats = calculateHolidayStats({
+    periods: data.holidayPeriods,
     startDate,
     endDate,
     childId,
-    data.unavailablePeriods,
-    data.entries,
-    data.careParties,
-    data.settings.defaultResponsiblePartyId,
-    data.settings.primaryCarePartyId
-  );
+    allChildIds: data.children.map((child) => child.id),
+    unavailablePeriods: data.unavailablePeriods,
+    entries: data.entries,
+    careParties: data.careParties,
+    defaultResponsiblePartyId: data.settings.defaultResponsiblePartyId,
+    primaryCarePartyId: data.settings.primaryCarePartyId
+  });
 
   return {
     childId,
@@ -504,17 +551,17 @@ export function calculatePeriodStats(
       startDate,
       endDate
     ),
-    holidays: calculateHolidayStats(
-      data.holidayPeriods,
+    holidays: calculateHolidayStats({
+      periods: data.holidayPeriods,
       startDate,
       endDate,
-      undefined,
-      data.unavailablePeriods,
-      data.entries,
-      data.careParties,
-      data.settings.defaultResponsiblePartyId,
-      data.settings.primaryCarePartyId
-    ),
+      allChildIds: data.children.map((child) => child.id),
+      unavailablePeriods: data.unavailablePeriods,
+      entries: data.entries,
+      careParties: data.careParties,
+      defaultResponsiblePartyId: data.settings.defaultResponsiblePartyId,
+      primaryCarePartyId: data.settings.primaryCarePartyId
+    }),
     costsByCategory,
     byChild: data.children.map((child) =>
       calculateEntityStats(data, entries, startDate, endDate, child.id)
