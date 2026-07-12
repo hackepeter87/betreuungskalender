@@ -6,6 +6,34 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-07-12
+
+### Added
+
+- Added provider-neutral landing pages for owner setup and invitation links,
+  including clear continuation and invalid, expired, revoked, or used states.
+- Added an admin-only invitation delivery capability so the email option is
+  shown only when outbound mail is fully configured.
+
+### Changed
+
+- Invitation creation now defaults to email delivery when a recipient address
+  and working mail configuration are available, while manual code sharing
+  remains available.
+- Normal native OIDC login now requires either an application membership or a
+  configured role claim even while first-use setup is incomplete. Only a
+  validated owner-setup or invitation context may create its intended
+  membership.
+- Expanded the self-hosted onboarding documentation with owner secret mounts,
+  membership precedence, group fallback, and upgrade compatibility guidance.
+
+### Security
+
+- Onboarding continuation URLs are redacted from request logs, and error pages
+  never include the submitted bearer value.
+- Invitation email availability fails closed when mail configuration cannot be
+  confirmed without blocking member administration.
+
 ## [1.16.0] - 2026-07-12
 
 ### Added
