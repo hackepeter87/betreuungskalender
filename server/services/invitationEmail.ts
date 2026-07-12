@@ -49,8 +49,8 @@ function roleLabel(role: AuthRole): string {
 }
 
 export function invitationUrl(token: string, baseUrl: string): string {
-  const url = new URL("/settings", baseUrl);
-  url.searchParams.set("invitation", token);
+  const url = new URL("/invite", baseUrl);
+  url.searchParams.set("token", token);
   return url.href;
 }
 
@@ -65,7 +65,7 @@ export function invitationEmailText(input: InvitationEmailInput, baseUrl: string
     `Rolle: ${roleLabel(input.role)}`,
     `Gültig bis: ${expiresAt}`,
     "",
-    "Öffne diesen Link, melde dich an und nimm die Einladung in den Einstellungen an:",
+    "Öffne diesen Link und melde dich an. Die Einladung wird danach automatisch angenommen:",
     invitationUrl(input.token, baseUrl),
     "",
     "Wenn du diese Einladung nicht erwartet hast, ignoriere diese E-Mail.",

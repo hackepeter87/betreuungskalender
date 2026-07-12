@@ -376,8 +376,14 @@ test("native OIDC routes redirect login and keep callback responses token-free",
   const app = Fastify({ logger: false });
   const sessions = new OidcSessionStore(database);
   const ownerHash = "b".repeat(64);
+  const invitationHash = "c".repeat(64);
   const loginContexts: unknown[] = [];
   const ownerClaims: Array<{ tokenHash: string; userId: string }> = [];
+  const invitationClaims: Array<{ tokenHash: string; userId: string }> = [];
+  let callbackContext: { type: "owner_setup" | "invitation"; tokenHash: string } = {
+    type: "owner_setup",
+    tokenHash: ownerHash
+  };
   await app.register(nativeOidcRoutes, {
     config: {
       authMode: "native-oidc",
@@ -411,7 +417,7 @@ test("native OIDC routes redirect login and keep callback responses token-free",
         email: "parent@example.net",
         displayName: "Example Parent",
         groups: ["/betreuungskalender/parents"],
-        loginContext: { type: "owner_setup", tokenHash: ownerHash }
+        loginContext: callbackContext
       })
     },
     ownerSetupTokens: {
@@ -421,6 +427,15 @@ test("native OIDC routes redirect login and keep callback responses token-free",
       },
       consumeAndClaim: (tokenHash, user) => {
         ownerClaims.push({ tokenHash, userId: user.id });
+      }
+    },
+    invitationFlow: {
+      begin: (token) => {
+        assert.equal(token, "fictional-invitation-token");
+        return invitationHash;
+      },
+      accept: (tokenHash, user) => {
+        invitationClaims.push({ tokenHash, userId: user.id });
       }
     },
     sessions,
@@ -445,6 +460,17 @@ test("native OIDC routes redirect login and keep callback responses token-free",
     ]);
     assert.equal(String(setup.headers.location).includes("fictional-owner-token"), false);
 
+    const invitation = await app.inject({
+      method: "GET",
+      url: "/invite?token=fictional-invitation-token"
+    });
+    assert.equal(invitation.statusCode, 302);
+    assert.equal(String(invitation.headers.location).includes("fictional-invitation-token"), false);
+    assert.deepEqual(loginContexts.at(-1), {
+      type: "invitation",
+      tokenHash: invitationHash
+    });
+
     const callback = await app.inject({
       method: "GET",
       url: "/auth/callback?code=code-123&state=state-123"
@@ -454,6 +480,16 @@ test("native OIDC routes redirect login and keep callback responses token-free",
     assert.equal(callback.payload.includes("subject-123"), false);
     assert.equal(callback.payload.includes("code-123"), false);
     assert.deepEqual(ownerClaims, [{ tokenHash: ownerHash, userId: "user_e8725703d28a2972830e5502" }]);
+    callbackContext = { type: "invitation", tokenHash: invitationHash };
+    const invitationCallback = await app.inject({
+      method: "GET",
+      url: "/auth/callback?code=code-456&state=state-456"
+    });
+    assert.equal(invitationCallback.statusCode, 302);
+    assert.deepEqual(invitationClaims, [{
+      tokenHash: invitationHash,
+      userId: "user_e8725703d28a2972830e5502"
+    }]);
     const setCookie = String(callback.headers["set-cookie"]);
     assert.match(setCookie, /^betreuungskalender_session=[^;]+;/);
     assert.match(setCookie, /HttpOnly/);

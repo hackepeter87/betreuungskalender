@@ -49,7 +49,7 @@ export class InvitationError extends Error {
   }
 }
 
-function tokenHash(token: string): string {
+export function invitationTokenHash(token: string): string {
   return createHash("sha256").update(token, "utf8").digest("hex");
 }
 
@@ -77,7 +77,21 @@ function selectInvitationByToken(
     FROM app_invitations
     WHERE token_hash = ?
       AND deleted_at IS NULL
-  `).get(tokenHash(token)) as InvitationRow | undefined;
+  `).get(invitationTokenHash(token)) as InvitationRow | undefined;
+}
+
+function selectInvitationByHash(
+  hash: string,
+  database: Database.Database
+): InvitationRow | undefined {
+  if (!/^[0-9a-f]{64}$/.test(hash)) return undefined;
+  return database.prepare(`
+    SELECT id, token_hash, email_hint, role, expires_at, accepted_user_id,
+      accepted_at, revoked_at, created_at, updated_at
+    FROM app_invitations
+    WHERE token_hash = ?
+      AND deleted_at IS NULL
+  `).get(hash) as InvitationRow | undefined;
 }
 
 function selectInvitationById(
@@ -134,7 +148,7 @@ export function createInvitation(
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
-    tokenHash(token),
+    invitationTokenHash(token),
     normalizeEmailHint(input.emailHint) ?? null,
     input.role,
     input.expiresAt,
@@ -166,6 +180,16 @@ export function acceptInvitation(
   return database.transaction(() => {
     assertKnownUser(user.id, database);
     const invitation = selectInvitationByToken(token, database);
+    return acceptSelectedInvitation(invitation, user, timestamp, database);
+  })();
+}
+
+function acceptSelectedInvitation(
+  invitation: InvitationRow | undefined,
+  user: RequestUser,
+  timestamp: string,
+  database: Database.Database
+): InvitationSummary {
     if (!invitation) {
       throw new InvitationError(
         "invalid_invitation",
@@ -214,6 +238,48 @@ export function acceptInvitation(
       );
     }
     return mapInvitation(accepted);
+}
+
+export function prepareInvitationLogin(
+  token: string,
+  timestamp = new Date().toISOString(),
+  database: Database.Database = db
+): string {
+  const hash = invitationTokenHash(token.trim());
+  const invitation = selectInvitationByHash(hash, database);
+  if (!invitation) {
+    throw new InvitationError("invalid_invitation", 404, "Die Einladung ist ungültig.");
+  }
+  if (invitation.revoked_at) {
+    throw new InvitationError("invitation_revoked", 410, "Die Einladung wurde widerrufen.");
+  }
+  if (invitation.accepted_at) {
+    throw new InvitationError(
+      "invitation_already_accepted",
+      409,
+      "Die Einladung wurde bereits angenommen."
+    );
+  }
+  if (Date.parse(invitation.expires_at) <= Date.parse(timestamp)) {
+    throw new InvitationError("invitation_expired", 410, "Die Einladung ist abgelaufen.");
+  }
+  return hash;
+}
+
+export function acceptInvitationByHash(
+  hash: string,
+  user: RequestUser,
+  timestamp = new Date().toISOString(),
+  database: Database.Database = db
+): InvitationSummary {
+  return database.transaction(() => {
+    assertKnownUser(user.id, database);
+    return acceptSelectedInvitation(
+      selectInvitationByHash(hash, database),
+      user,
+      timestamp,
+      database
+    );
   })();
 }
 

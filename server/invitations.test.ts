@@ -8,8 +8,10 @@ import { permissionsForRole, type RequestUser } from "./auth.js";
 import { migrateDatabase } from "./db/migrationRunner.js";
 import {
   acceptInvitation,
+  acceptInvitationByHash,
   createInvitation,
   InvitationError,
+  prepareInvitationLogin,
   revokeInvitation
 } from "./services/invitations.js";
 import {
@@ -88,6 +90,36 @@ test("valid invitations can be accepted by authenticated users", () => {
     assert.equal(accepted.emailHint, "user_invited@example.invalid");
     assert.equal(accepted.acceptedUserId, user.id);
     assert.equal(accepted.acceptedAt, "2026-07-05T11:00:00.000Z");
+    assert.equal(membershipRoleForUser(user.id, database), "parent");
+  });
+});
+
+test("invitation login uses a hash and accepts after authentication", () => {
+  withDatabase((database) => {
+    const user = insertUser(database);
+    const created = createInvitation({
+      role: "parent",
+      expiresAt: "2026-07-06T10:00:00.000Z",
+      actorId: "local-dev",
+      token: "test-token-login-flow-000000",
+      timestamp: "2026-07-05T10:00:00.000Z"
+    }, database);
+
+    const hash = prepareInvitationLogin(
+      created.token,
+      "2026-07-05T10:30:00.000Z",
+      database
+    );
+    assert.match(hash, /^[0-9a-f]{64}$/);
+    assert.notEqual(hash, created.token);
+
+    const accepted = acceptInvitationByHash(
+      hash,
+      user,
+      "2026-07-05T11:00:00.000Z",
+      database
+    );
+    assert.equal(accepted.acceptedUserId, user.id);
     assert.equal(membershipRoleForUser(user.id, database), "parent");
   });
 });
@@ -227,7 +259,7 @@ test("invitation email delivery uses a provider-neutral test transport", async (
   assert.equal(sent[0]?.from, "Betreuungskalender <no-reply@example.test>");
   assert.equal(sent[0]?.to, "invited@example.test");
   assert.equal(sent[0]?.subject, "Einladung zum Betreuungskalender");
-  assert.match(sent[0]?.text ?? "", /https:\/\/bk\.example\.test\/settings\?invitation=test-token-mail-delivery-000000/);
+  assert.match(sent[0]?.text ?? "", /https:\/\/bk\.example\.test\/invite\?token=test-token-mail-delivery-000000/);
   assert.match(sent[0]?.text ?? "", /Rolle: Bearbeiten/);
 });
 

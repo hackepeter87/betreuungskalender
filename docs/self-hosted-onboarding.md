@@ -88,8 +88,10 @@ The server stores:
 - accepted user and acceptance timestamp
 - audit metadata
 
-A user must authenticate first, then accept the invitation in the app. Expired,
-revoked, already accepted, or malformed invitations are rejected.
+Opening an invitation link starts native OIDC login when needed and accepts the
+invitation after the validated callback. Manual token acceptance remains
+available as a compatibility fallback. Expired, revoked, already accepted, or
+malformed invitations are rejected.
 
 ## Invitation email delivery
 
