@@ -6,6 +6,33 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-07-13
+
+### Added
+
+- Added a shared care-conflict model for planned and actual care entries across
+  calendar, agenda, entry lists, reports, and exports.
+- Added transactional validation that rejects overlapping completed or partial
+  care for the same child while keeping planned overlaps visible for review.
+- Added a guided four-step mobile flow for defining custom recurring contact
+  rules with a live occurrence preview.
+
+### Changed
+
+- Reports and holiday allocations now merge same-party time and expose
+  ambiguous cross-party actual-care overlap instead of counting it twice.
+- Care lifecycle actions are handled from the entry workflow; contact-rule
+  authoring remains focused on recurrence, preview, synchronization, and
+  preserved exceptions.
+- Calendar, agenda, and entry views use the same neutral conflict status and
+  link users to the editable entry.
+
+### Security
+
+- Actual-care conflict checks execute in the same serialized write transaction
+  as the update and return a generic conflict response without disclosing
+  inaccessible entries.
+
 ## [1.17.1] - 2026-07-13
 
 ### Changed
