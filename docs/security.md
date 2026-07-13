@@ -123,6 +123,12 @@ limit and care-party authorization checks. Fully bounded rules are limited to
 sync remains idempotent and does not overwrite cancelled or manually changed
 entries.
 
+Derived care-conflict responses enforce fixed candidate, child-association,
+and result budgets. When a complete overview cannot be produced within these
+budgets, the API returns an explicit incomplete state instead of a partial
+result. Actual-care write validation remains transactional and limits its query
+to matching children and overlapping actual intervals.
+
 Care-confirmation push messages remain generic and exclude child names, exact
 times, notes, and other case details. When several confirmations become due in
 the same sweep, the service sends at most one push per user while retaining all

@@ -24,6 +24,17 @@ interface NormalizedConflictEntry {
   actual: boolean;
 }
 
+export interface CareConflictDetectionOptions {
+  maxConflicts?: number;
+}
+
+export class CareConflictDetectionLimitError extends Error {
+  constructor() {
+    super("Care conflict result limit exceeded.");
+    this.name = "CareConflictDetectionLimitError";
+  }
+}
+
 function isActualStatus(status: ApiEntryStatus): boolean {
   return status === "completed" || status === "partial";
 }
@@ -40,12 +51,16 @@ function normalizeEntry(entry: CareConflictEntry): NormalizedConflictEntry | und
   const endDateTime = partial && entry.actualEndDateTime
     ? entry.actualEndDateTime
     : entry.endDateTime;
-  if (!childIds.length || Date.parse(startDateTime) >= Date.parse(endDateTime)) return undefined;
+  const startTimestamp = Date.parse(startDateTime);
+  const endTimestamp = Date.parse(endDateTime);
+  if (!childIds.length || !Number.isFinite(startTimestamp) || startTimestamp >= endTimestamp) {
+    return undefined;
+  }
   return {
     id: entry.id,
     status: entry.status,
-    startDateTime,
-    endDateTime,
+    startDateTime: new Date(startTimestamp).toISOString(),
+    endDateTime: new Date(endTimestamp).toISOString(),
     childIds: [...new Set(childIds)].sort(),
     actual: isActualStatus(entry.status)
   };
@@ -58,7 +73,12 @@ function conflictSeverity(
   return first.actual && second.actual ? "unresolved_actual" : "planned_warning";
 }
 
-export function detectCareConflicts(entries: CareConflictEntry[]): ApiCareConflict[] {
+export function detectCareConflicts(
+  entries: CareConflictEntry[],
+  options: CareConflictDetectionOptions = {}
+): ApiCareConflict[] {
+  const maxConflicts = options.maxConflicts ?? Number.POSITIVE_INFINITY;
+  if (!(maxConflicts > 0)) throw new RangeError("maxConflicts must be greater than zero.");
   const entriesByChild = new Map<string, NormalizedConflictEntry[]>();
   for (const source of entries) {
     const entry = normalizeEntry(source);
@@ -95,6 +115,9 @@ export function detectCareConflicts(entries: CareConflictEntry[]): ApiCareConfli
         if (existing) {
           if (!existing.childIds.includes(childId)) existing.childIds.push(childId);
           continue;
+        }
+        if (conflicts.size >= maxConflicts) {
+          throw new CareConflictDetectionLimitError();
         }
         conflicts.set(key, {
           id: key,
