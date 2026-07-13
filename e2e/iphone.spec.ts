@@ -391,12 +391,7 @@ test("keeps mobile contact rule time spans inside their card", async ({
   await expect(generatedEntry).toBeVisible();
   const generatedEntryBox = await generatedEntry.boundingBox();
   expect(generatedEntryBox).toBeTruthy();
-  for (const action of await generatedEntry.locator(".rule-entry__actions > *").all()) {
-    const actionBox = await action.boundingBox();
-    expect(actionBox).toBeTruthy();
-    expect(actionBox!.x).toBeGreaterThanOrEqual(generatedEntryBox!.x - 1);
-    expect(actionBox!.x + actionBox!.width).toBeLessThanOrEqual(generatedEntryBox!.x + generatedEntryBox!.width + 1);
-  }
+  await expect(generatedEntry.locator(".rule-entry__actions")).toHaveCount(0);
   await expectNoDocumentHorizontalOverflow(page);
 });
 

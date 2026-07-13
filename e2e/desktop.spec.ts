@@ -1186,8 +1186,8 @@ test("generates recurring weekend contact dates and shows them in the calendar",
 
   const changedEntry = julyGeneratedEntries[0];
   await page.getByTestId(`calendar-entry-${changedEntry.id}`).first().click();
-  await expect(page.getByTestId("rule-entry-edit-choice")).toBeVisible();
-  await page.getByTestId("edit-rule-entry-single").click();
+  await expect(page.getByTestId("entry-form")).toBeVisible();
+  await expect(page.getByTestId("rule-entry-edit-choice")).toHaveCount(0);
   await page.getByTestId("entry-start-time").fill("17:00");
   await page.getByTestId("entry-submit").click();
   await expect(page.getByTestId("entry-form")).toBeHidden();
@@ -1229,8 +1229,80 @@ test("generates recurring weekend contact dates and shows them in the calendar",
   await navigate(page, "calendar");
   await page.getByTestId("month-picker").fill("2026-07");
   await page.getByTestId(`calendar-entry-${julyGeneratedEntries[1].id}`).first().click();
-  await page.getByTestId("edit-rule-entry-series").click();
+  await expect(page.getByTestId("entry-form")).toBeVisible();
+  await page.getByTestId("entry-form").getByRole("button", { name: "Abbrechen" }).click();
+  await navigate(page, "contact");
   await expect(page.getByTestId("page-contact")).toBeVisible();
+  await expect(page.getByTestId("contact-generated-entry").first().locator(".rule-entry__actions")).toHaveCount(0);
+});
+
+test("shows planned care conflicts consistently across care views", async ({
+  page,
+  request
+}) => {
+  const childResponse = await request.post("/api/children", {
+    data: {
+      name: "Konflikttest Kind",
+      birthMonth: 1,
+      birthYear: 2018,
+      color: "#0f8b83"
+    }
+  });
+  expect(childResponse.ok()).toBeTruthy();
+  const child = await childResponse.json() as { id: string };
+  const date = dateInCurrentMonth(22);
+  const baseEntry = {
+    childIds: [child.id],
+    status: "planned",
+    careScope: "hourly",
+    overnight: false,
+    schoolHandover: false,
+    holiday: false,
+    weekend: false,
+    additionalCare: false,
+    location: "other",
+    handoverFrom: "mother",
+    handoverTo: "mother",
+    hasEvidence: false,
+    trips: [],
+    costs: []
+  };
+  const firstResponse = await request.post("/api/care-entries", {
+    data: {
+      ...baseEntry,
+      startDateTime: `${date}T14:00`,
+      endDateTime: `${date}T17:00`
+    }
+  });
+  const secondResponse = await request.post("/api/care-entries", {
+    data: {
+      ...baseEntry,
+      startDateTime: `${date}T16:00`,
+      endDateTime: `${date}T19:00`
+    }
+  });
+  expect(firstResponse.ok()).toBeTruthy();
+  expect(secondResponse.ok()).toBeTruthy();
+  const first = await firstResponse.json() as { id: string };
+
+  await openApp(page);
+  await navigate(page, "calendar");
+  if (await page.getByTestId("calendar-view-month").isVisible()) {
+    await page.getByTestId("calendar-view-month").click();
+  }
+  await expect(page.getByTestId(`calendar-entry-${first.id}`).first())
+    .toHaveClass(/calendar-event--conflict-planned_warning/);
+
+  await page.setViewportSize({ width: 700, height: 900 });
+  await expect(page.getByTestId("calendar-view-agenda")).toBeVisible();
+  await expect(page.getByTestId(`care-conflict-${first.id}`))
+    .toContainText("Geplante Überschneidung");
+
+  await navigate(page, "entries");
+  await expect(page.getByTestId(`care-conflict-${first.id}`))
+    .toContainText("Geplante Überschneidung");
+  await page.getByTestId(`entry-row-${first.id}`).click();
+  await expect(page.getByTestId("entry-form")).toBeVisible();
 });
 
 test("uses a weekly multi-day contact rule builder with calendar preview", async ({

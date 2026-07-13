@@ -1,6 +1,7 @@
 import { formatDate, formatDateTime, formatTime } from "../lib/date";
 import { deviationLabel, locationLabels, statusLabels } from "../lib/labels";
-import type { CareEntry, Child } from "../types";
+import type { CareConflict, CareEntry, Child } from "../types";
+import { CareConflictIndicator } from "./CareConflictIndicator";
 import { Icon } from "./Icon";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
@@ -8,11 +9,15 @@ import { copy } from "../i18n/catalog";
 export function EntryRow({
   entry,
   children,
+  conflicts,
+  canWrite,
   updatedByLabel,
   onClick
 }: {
   entry: CareEntry;
   children: Child[];
+  conflicts: CareConflict[];
+  canWrite: boolean;
   updatedByLabel: string;
   onClick: () => void;
 }) {
@@ -48,6 +53,7 @@ export function EntryRow({
               date: formatDateTime(entry.updatedAt, intlLocale)
             })}
           </small>
+          <CareConflictIndicator conflicts={conflicts} entryId={entry.id} canWrite={canWrite} compact />
         </span>
       </span>
       <span className="entry-row__flags">

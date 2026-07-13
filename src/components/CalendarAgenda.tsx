@@ -7,8 +7,9 @@ import {
   statusLabels,
   unavailableCategoryLabels
 } from "../lib/labels";
-import type { CareEntry, Child, ExternalCalendarEvent, HolidayPeriod, UnavailablePeriod } from "../types";
+import type { CareConflict, CareEntry, Child, ExternalCalendarEvent, HolidayPeriod, UnavailablePeriod } from "../types";
 import { Icon } from "./Icon";
+import { CareConflictIndicator } from "./CareConflictIndicator";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
 
@@ -47,6 +48,8 @@ export function CalendarAgenda({
   visibleStartDate,
   visibleEndDate,
   children,
+  conflicts = [],
+  canWrite = true,
   onSelectDate,
   onSelectEntry,
   onSelectUnavailable,
@@ -59,6 +62,8 @@ export function CalendarAgenda({
   visibleStartDate: string;
   visibleEndDate: string;
   children: Child[];
+  conflicts?: CareConflict[];
+  canWrite?: boolean;
   onSelectDate: (date: string) => void;
   onSelectEntry: (entry: CareEntry) => void;
   onSelectUnavailable: (period: UnavailablePeriod) => void;
@@ -234,6 +239,7 @@ export function CalendarAgenda({
                       <span><Icon name="home" size={15} />{entry.customLocation || locationLabels[entry.location]}</span>
                     </span>
                     <span className="agenda-card__flags">
+                      <CareConflictIndicator conflicts={conflicts} entryId={entry.id} canWrite={canWrite} />
                       {entry.overnight ? <span><Icon name="moon" size={14} />{copy(locale, "agenda", "overnight")}</span> : null}
                       {entry.additionalCare ? <span><Icon name="plus" size={14} />{copy(locale, "agenda", "additionalCare")}</span> : null}
                       {entry.holiday ? <span><Icon name="sun" size={14} />{copy(locale, "agenda", "holiday")}</span> : null}

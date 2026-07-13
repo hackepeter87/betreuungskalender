@@ -593,25 +593,6 @@ export const fieldHelpById = {
     commonMistakes: "Nicht manuell doppelte Soll-Termine für denselben Zeitraum anlegen.",
     requirementLevel: required
   }),
-  "contactPattern.confirmCompleted": help("contactPattern.confirmCompleted", {
-    label: "Durchführung bestätigen",
-    shortHelp: "Setzt einen geplanten Soll-Termin auf tatsächlich durchgeführt.",
-    whyRelevant: "Nur aktualisierte Statuswerte ermöglichen einen belastbaren Soll-Ist-Vergleich.",
-    usedFor: "Soll-Ist-Auswertung und Monatsabschluss.",
-    inputGuidance: "Bestätige erst nach dem tatsächlichen Termin und korrigiere bei Bedarf die realen Zeiten.",
-    commonMistakes: "Nicht vorab als durchgeführt markieren.",
-    requirementLevel: required
-  }),
-  "contactPattern.markCancelled": help("contactPattern.markCancelled", {
-    label: "Ausfall markieren",
-    shortHelp: "Dokumentiert einen nicht stattgefundenen Soll-Termin mit Grund.",
-    whyRelevant: "Der Termin bleibt für den Soll-Ist-Vergleich sichtbar.",
-    usedFor: "Ausfallstatistik, Bericht und Datenqualität.",
-    inputGuidance: "Wähle ausgefallen und trage einen sachlichen Grund ein.",
-    commonMistakes: "Einen ausgefallenen Termin nicht löschen.",
-    requirementLevel: required
-  }),
-
   "unavailable.startDateTime": help("unavailable.startDateTime", {
     label: "Beginn der Nichtverfügbarkeit",
     shortHelp: "Tatsächlicher Start des Zeitraums, in dem keine Verfügbarkeit bestand.",
