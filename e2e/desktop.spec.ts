@@ -391,6 +391,8 @@ test("manages member invitations from settings", async ({ page }) => {
       }
       if (pathname === "/api/invitations" && method === "POST") {
         const body = readBody(init);
+        (window as typeof window & { __lastInvitationRequest?: Record<string, unknown> })
+          .__lastInvitationRequest = body;
         const invitation: Invitation = {
           id: "invitation-created-e2e",
           role: body.role === "admin" || body.role === "readonly" ? body.role : "parent",
@@ -461,11 +463,18 @@ test("manages member invitations from settings", async ({ page }) => {
   await manager.getByTestId("invitation-email-hint").fill("new-user@example.invalid");
   await manager.getByTestId("invitation-role").selectOption("readonly");
   await manager.getByTestId("invitation-expires-days").fill("14");
-  await manager.getByTestId("invitation-send-email").check();
+  await expect(manager.getByTestId("invitation-send-email")).toBeChecked();
+  await manager.getByTestId("invitation-send-email").uncheck();
+  await manager.getByTestId("invitation-email-hint").fill("corrected-user@example.invalid");
+  await expect(manager.getByTestId("invitation-send-email")).not.toBeChecked();
   await manager.getByRole("button", { name: "Einladung erstellen" }).click();
-  await expect(manager).toContainText("Einladung wurde erstellt und per E-Mail versendet.");
+  await expect(manager).toContainText("Einladung wurde erstellt.");
   await expect(manager.getByTestId("invitation-created-token")).toHaveValue("invite_e2e_created_token");
-  await expect(manager.getByTestId("invitation-list")).toContainText("new-user@example.invalid");
+  await expect(manager.getByTestId("invitation-list")).toContainText("corrected-user@example.invalid");
+  expect(await page.evaluate(() =>
+    (window as typeof window & { __lastInvitationRequest?: { sendEmail?: boolean } })
+      .__lastInvitationRequest?.sendEmail
+  )).toBe(false);
 
   const memberRow = manager.getByTestId("member-row-user-member-e2e");
   await memberRow.getByTestId("member-role-select").selectOption("readonly");

@@ -31,6 +31,13 @@ function tokenHash(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
+function hashesEqual(left: string, right: string): boolean {
+  if (!/^[0-9a-f]{64}$/.test(left) || !/^[0-9a-f]{64}$/.test(right)) {
+    return false;
+  }
+  return timingSafeEqual(Buffer.from(left, "hex"), Buffer.from(right, "hex"));
+}
+
 function setting(database: Database.Database, key: string): unknown {
   const row = database.prepare(`
     SELECT value_json
@@ -83,15 +90,7 @@ export class OwnerSetupTokenStore {
     this.#ttlSeconds = options.ttlSeconds;
   }
 
-  begin(rawToken: string, now = new Date()): string {
-    if (buildSetupState(this.#database).complete) {
-      throw new OwnerSetupTokenError(
-        "setup_already_complete",
-        409,
-        "Die Installation wurde bereits eingerichtet."
-      );
-    }
-
+  #currentToken(now: Date): { hash: string; createdAt: Date; expiresAt: Date } {
     let configuredToken: string;
     let createdAt: Date;
     try {
@@ -104,17 +103,7 @@ export class OwnerSetupTokenStore {
         "Der Owner-Setup-Link ist nicht verfügbar."
       );
     }
-    if (!configuredToken || !rawToken.trim()) {
-      throw new OwnerSetupTokenError(
-        "owner_setup_invalid",
-        403,
-        "Der Owner-Setup-Link ist ungültig."
-      );
-    }
-
-    const configuredHash = tokenHash(configuredToken);
-    const candidateHash = tokenHash(rawToken.trim());
-    if (!timingSafeEqual(Buffer.from(configuredHash), Buffer.from(candidateHash))) {
+    if (!configuredToken) {
       throw new OwnerSetupTokenError(
         "owner_setup_invalid",
         403,
@@ -130,12 +119,64 @@ export class OwnerSetupTokenStore {
         "Der Owner-Setup-Link ist abgelaufen."
       );
     }
+    return {
+      hash: tokenHash(configuredToken),
+      createdAt,
+      expiresAt
+    };
+  }
+
+  #rejectStaleContext(now: Date): never {
+    recordAudit(
+      this.#database,
+      "system",
+      "owner_setup_context_rejected",
+      now.toISOString()
+    );
+    throw new OwnerSetupTokenError(
+      "owner_setup_invalid",
+      403,
+      "Der Owner-Setup-Link ist ungültig, abgelaufen oder nicht mehr verfügbar."
+    );
+  }
+
+  begin(rawToken: string, now = new Date()): string {
+    if (buildSetupState(this.#database).complete) {
+      throw new OwnerSetupTokenError(
+        "setup_already_complete",
+        409,
+        "Die Installation wurde bereits eingerichtet."
+      );
+    }
+
+    if (!rawToken.trim()) {
+      throw new OwnerSetupTokenError(
+        "owner_setup_invalid",
+        403,
+        "Der Owner-Setup-Link ist ungültig."
+      );
+    }
+
+    const currentToken = this.#currentToken(now);
+    const configuredHash = currentToken.hash;
+    const candidateHash = tokenHash(rawToken.trim());
+    if (!hashesEqual(configuredHash, candidateHash)) {
+      throw new OwnerSetupTokenError(
+        "owner_setup_invalid",
+        403,
+        "Der Owner-Setup-Link ist ungültig."
+      );
+    }
 
     this.#database.prepare(`
       INSERT INTO owner_setup_tokens (token_hash, created_at, expires_at)
       VALUES (?, ?, ?)
       ON CONFLICT(token_hash) DO NOTHING
-    `).run(configuredHash, createdAt.toISOString(), expiresAt.toISOString());
+    `).run(
+      configuredHash,
+      currentToken.createdAt.toISOString(),
+      currentToken.expiresAt.toISOString()
+    );
 
     const row = this.#database.prepare(`
       SELECT consumed_at, expires_at
@@ -168,6 +209,16 @@ export class OwnerSetupTokenStore {
   }
 
   consumeAndClaim(tokenDigest: string, user: RequestUser, now = new Date()): void {
+    let currentToken: { hash: string; createdAt: Date; expiresAt: Date };
+    try {
+      currentToken = this.#currentToken(now);
+    } catch {
+      this.#rejectStaleContext(now);
+    }
+    if (!hashesEqual(currentToken.hash, tokenDigest)) {
+      this.#rejectStaleContext(now);
+    }
+
     this.#database.transaction(() => {
       if (buildSetupState(this.#database).complete || setting(this.#database, "setup.ownerUserId")) {
         throw new OwnerSetupTokenError(

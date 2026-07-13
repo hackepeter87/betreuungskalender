@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, unlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
@@ -68,6 +68,15 @@ function insertSetting(database: Database.Database, key: string, value: unknown)
       key, value_json, created_by, updated_by, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?)
   `).run(key, JSON.stringify(value), "tester", "tester", timestamp, timestamp);
+}
+
+function settingValue(database: Database.Database, key: string): unknown {
+  const row = database.prepare(`
+    SELECT value_json AS valueJson
+    FROM settings
+    WHERE key = ? AND deleted_at IS NULL
+  `).get(key) as { valueJson: string } | undefined;
+  return row ? JSON.parse(row.valueJson) : undefined;
 }
 
 function setupUser(): RequestUser {
@@ -240,6 +249,65 @@ test("owner setup token claims an owner once without completing the wizard", () 
         "owner_bootstrap",
         "owner_setup_reuse_rejected"
       ]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
+
+test("owner setup rejects a pending context after the mounted token rotates", () => {
+  withDatabase((database) => {
+    const directory = mkdtempSync(join(tmpdir(), "betreuungskalender-owner-rotation-"));
+    const tokenFile = join(directory, "owner-token");
+    try {
+      const issuedAt = new Date("2026-07-05T11:00:00.000Z");
+      writeFileSync(tokenFile, "fictional-owner-secret-a\n", { mode: 0o600 });
+      utimesSync(tokenFile, issuedAt, issuedAt);
+      const store = new OwnerSetupTokenStore({ tokenFile, ttlSeconds: 3600, database });
+      const hash = store.begin("fictional-owner-secret-a", new Date("2026-07-05T11:05:00.000Z"));
+
+      writeFileSync(tokenFile, "fictional-owner-secret-b\n", { mode: 0o600 });
+      utimesSync(tokenFile, issuedAt, issuedAt);
+
+      assert.throws(
+        () => store.consumeAndClaim(hash, setupUser(), new Date("2026-07-05T11:10:00.000Z")),
+        (error) => error instanceof OwnerSetupTokenError && error.code === "owner_setup_invalid"
+      );
+      assert.equal(membershipRoleForUser("local-dev", database), undefined);
+      assert.equal(settingValue(database, "setup.ownerUserId"), undefined);
+      const audits = database.prepare(`
+        SELECT field_name AS fieldName, new_value AS newValue
+        FROM audit_log
+        WHERE entity_type = 'setup'
+      `).all() as Array<{ fieldName: string; newValue: string }>;
+      assert.deepEqual(audits.map((row) => row.fieldName), ["owner_setup_context_rejected"]);
+      assert.equal(JSON.stringify(audits).includes("fictional-owner-secret"), false);
+      assert.equal(JSON.stringify(audits).includes(hash), false);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
+
+test("owner setup rejects a pending context after the mounted token is removed", () => {
+  withDatabase((database) => {
+    const directory = mkdtempSync(join(tmpdir(), "betreuungskalender-owner-removal-"));
+    const tokenFile = join(directory, "owner-token");
+    try {
+      const issuedAt = new Date("2026-07-05T11:00:00.000Z");
+      writeFileSync(tokenFile, "fictional-owner-secret\n", { mode: 0o600 });
+      utimesSync(tokenFile, issuedAt, issuedAt);
+      const store = new OwnerSetupTokenStore({ tokenFile, ttlSeconds: 3600, database });
+      const hash = store.begin("fictional-owner-secret", new Date("2026-07-05T11:05:00.000Z"));
+
+      unlinkSync(tokenFile);
+
+      assert.throws(
+        () => store.consumeAndClaim(hash, setupUser(), new Date("2026-07-05T11:10:00.000Z")),
+        (error) => error instanceof OwnerSetupTokenError && error.code === "owner_setup_invalid"
+      );
+      assert.equal(membershipRoleForUser("local-dev", database), undefined);
+      assert.equal(settingValue(database, "setup.ownerUserId"), undefined);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

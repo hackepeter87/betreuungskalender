@@ -29,8 +29,8 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `OIDC_SCOPES` | Native OIDC scopes requested at login | `openid email profile` | Optional for `AUTH_MODE=native-oidc` | `openid email profile` | Keep minimal; add only the provider scopes required to emit configured claims |
 | `OIDC_GROUPS_CLAIM` | Native OIDC claim containing group or role values | `groups` | Recommended for `AUTH_MODE=native-oidc` | `groups` | Used for server-side native authorization |
 | `OIDC_LOGIN_STATE_TTL_SECONDS` | Native OIDC login transaction lifetime | `600` | Optional for `AUTH_MODE=native-oidc` | `600` | Short-lived state, nonce, and PKCE verifier records limit replay windows |
-| `OWNER_SETUP_TOKEN_FILE` | Mounted file containing the one-time initial owner setup token | `/run/secrets/owner-setup-token` | Optional for fresh native OIDC installations | Same | Secret file; do not place the token itself in app environment files |
-| `OWNER_SETUP_TOKEN_TTL_SECONDS` | Initial owner setup link lifetime from the secret file modification time | `86400` | Optional | `86400` | Limits exposure of an unused setup link; rotate the file to issue a new token before owner claim |
+| `OWNER_SETUP_TOKEN_FILE` | Mounted file containing the one-time initial owner setup token | `/run/secrets/owner-setup-token` | Optional for fresh native OIDC installations | Same | Keep the secret file mounted until the owner claim completes; do not place the token itself in app environment files |
+| `OWNER_SETUP_TOKEN_TTL_SECONDS` | Initial owner setup link lifetime from the secret file modification time | `86400` | Optional | `86400` | Replacing or removing the file invalidates an unfinished owner setup flow |
 | `SESSION_COOKIE_NAME` | Native OIDC opaque session cookie name | `betreuungskalender_session` | Optional for `AUTH_MODE=native-oidc` | `betreuungskalender_session` | Cookie value is opaque and never stores claims or tokens |
 | `SESSION_TTL_SECONDS` | Native OIDC server-side session lifetime | `2419200` | Optional for `AUTH_MODE=native-oidc` | `2419200` | Limits how long an unreused opaque session can remain valid |
 | `RECOVERY_ADMIN_ENABLED` | Enable explicit break-glass recovery admin login | `false` | Optional emergency feature | `false` | Keep disabled unless the operator intentionally needs an identity-provider fallback |
@@ -218,6 +218,8 @@ For initial owner setup, mount a private random value at
 landing page, then starts OIDC only after the user continues. The raw value is
 never stored in SQLite and is redacted from request logs. See
 [self-hosted-onboarding.md](self-hosted-onboarding.md) for the complete flow.
+Keep the same file mounted until the authenticated owner claim has completed.
+Replacing or removing it invalidates any unfinished setup flow.
 
 In native mode, unauthenticated `/api/session` responses include
 `loginUrl: "/auth/login"`. Authenticated native sessions include
