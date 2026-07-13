@@ -1293,7 +1293,8 @@ test("shows planned care conflicts consistently across care views", async ({
   await expect(page.getByTestId(`calendar-entry-${first.id}`).first())
     .toHaveClass(/calendar-event--conflict-planned_warning/);
 
-  await page.getByTestId("calendar-view-agenda").click();
+  await page.setViewportSize({ width: 700, height: 900 });
+  await expect(page.getByTestId("calendar-view-agenda")).toBeVisible();
   await expect(page.getByTestId(`care-conflict-${first.id}`))
     .toContainText("Geplante Überschneidung");
 
