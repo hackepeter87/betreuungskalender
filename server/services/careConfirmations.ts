@@ -13,6 +13,7 @@ import { config } from "../config.js";
 import { markClosedMonthsChanged, recordAudit, recordFieldChanges } from "./audit.js";
 import { assertCanUseCareParty } from "./carePartyAccess.js";
 import { assertActiveCareParty } from "./careParties.js";
+import { assertNoActualCareConflict } from "./careConflicts.js";
 import { assertActiveChildren, bool, makeId, nowIso, syncJunction } from "./common.js";
 
 const notificationEvents: ApiNotificationEventType[] = [
@@ -549,6 +550,16 @@ export function answerCareConfirmation(
     }
   }
   db.transaction(() => {
+    assertNoActualCareConflict({
+      id: before.id,
+      status: answer.status,
+      startDateTime: before.start_datetime,
+      endDateTime: before.end_datetime,
+      childIds: childIds(before.id),
+      actualStartDateTime: actualStartDateTime ?? undefined,
+      actualEndDateTime: actualEndDateTime ?? undefined,
+      actualChildIds: resolvedActualChildIds
+    }, db);
     db.prepare(`
       UPDATE care_entries
       SET status = ?, confirmation_note = ?, confirmed_at = ?, confirmed_by = ?,

@@ -318,6 +318,45 @@ test("answers a confirmation request and stores partial status with audit metada
   assert.equal(openCount.count, 0);
 });
 
+test("rejects confirmation when actual care would overlap an existing actual entry", () => {
+  insertPastPlannedEntry();
+  db.prepare(`
+    INSERT INTO care_entries (
+      id, start_datetime, end_datetime, status, care_scope,
+      overnight, school_handover, holiday, weekend, additional_care,
+      responsible_party_id, duration_minutes, is_contact_time, created_by, updated_by,
+      created_at, updated_at
+    )
+    SELECT ?, start_datetime, end_datetime, 'completed', care_scope,
+      overnight, school_handover, holiday, weekend, additional_care,
+      responsible_party_id, duration_minutes, is_contact_time, created_by, updated_by,
+      created_at, updated_at
+    FROM care_entries WHERE id = ?
+  `).run("entry-confirmation-conflict", "entry-confirmation-a");
+  db.prepare(`
+    INSERT INTO care_entry_children (care_entry_id, child_id, created_at, updated_at)
+    SELECT ?, child_id, created_at, updated_at
+    FROM care_entry_children WHERE care_entry_id = ?
+  `).run("entry-confirmation-conflict", "entry-confirmation-a");
+  createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z"));
+  const request = db.prepare(`
+    SELECT id FROM care_confirmation_requests
+    WHERE care_entry_id = ? AND user_id = ?
+  `).get("entry-confirmation-a", "local-dev") as { id: string };
+
+  assert.throws(
+    () => answerCareConfirmation(request.id, "local-dev", { status: "completed" }),
+    (error: unknown) => (error as { code?: string }).code === "care_entry_conflict"
+  );
+  const entry = db.prepare("SELECT status FROM care_entries WHERE id = ?")
+    .get("entry-confirmation-a") as { status: string };
+  const confirmation = db.prepare("SELECT status, answered_at AS answeredAt FROM care_confirmation_requests WHERE id = ?")
+    .get(request.id) as { status: string; answeredAt: string | null };
+  assert.equal(entry.status, "planned");
+  assert.equal(confirmation.status, "open");
+  assert.equal(confirmation.answeredAt, null);
+});
+
 test("partial confirmation rejects actual care parties outside the assigned shared context", () => {
   insertPastPlannedEntry();
   insertCareParty("party-confirmation-b", "Nicht zugeordnet");

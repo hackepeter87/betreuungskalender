@@ -136,6 +136,19 @@ configured, non-admin users must write care entries and contact rules for one
 of their assigned care parties. Admin users remain unrestricted so they can
 repair assignments and data.
 
+## Derived care conflicts
+
+Care conflicts are derived from active `care_entries`; they are not stored in a
+separate table and do not rewrite existing records. The API groups entries by
+child and treats intervals as half open, so an entry ending at 18:00 does not
+conflict with one beginning at 18:00.
+
+Overlapping planned entries remain writable and are returned as warnings.
+Creating or changing completed or partially completed care is rejected when
+its actual children and actual time overlap another actual entry. Cancelled and
+soft-deleted entries are ignored. Existing contradictory actual entries remain
+readable and are reported as unresolved conflicts for later correction.
+
 ## Personal calendar feeds
 
 `calendar_feed_tokens` stores revocable per-user feed credentials. The raw

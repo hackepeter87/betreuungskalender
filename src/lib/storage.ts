@@ -183,6 +183,7 @@ export function normalizeBackupData(value: unknown): AppData {
       deletedAt:
         typeof entry.deletedAt === "string" ? entry.deletedAt : undefined
     })),
+    careConflicts: [],
     holidayPeriods: Array.isArray(value.holidayPeriods)
       ? value.holidayPeriods
           .filter(isObject)
@@ -405,7 +406,7 @@ export function createBackup(data: AppData): BackupEnvelope {
   return {
     application: "betreuungskalender",
     exportedAt: nowIso(),
-    data
+    data: { ...data, careConflicts: [] }
   };
 }
 
