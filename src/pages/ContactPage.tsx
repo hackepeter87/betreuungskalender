@@ -41,6 +41,7 @@ function nextFriday(): string {
 
 type RecurrenceFrequency = "daily" | "weekly" | "monthly";
 type MonthlyMode = "month-day" | "nth-weekday";
+type MobileRuleStep = 1 | 2 | 3 | 4;
 
 const weekdays: ContactRuleWeekday[] = ["MO", "TU", "WE", "TH", "FR", "SA", "SU"];
 const monthlyOrdinals: ContactRuleMonthlyOrdinal[] = [1, 2, 3, 4, 5, -1];
@@ -261,6 +262,7 @@ export function ContactPage({
   const [generationStart, setGenerationStart] = useState(defaultRange.startDate);
   const [generationEnd, setGenerationEnd] = useState(defaultRange.endDate);
   const [message, setMessage] = useState("");
+  const [mobileRuleStep, setMobileRuleStep] = useState<MobileRuleStep>(1);
   const recurrence = useMemo<ContactRuleRecurrence>(() => {
     return {
       kind: "rrule",
@@ -276,9 +278,17 @@ export function ContactPage({
       ]
     };
   }, [frequency, interval, monthDay, monthlyMode, selectedOrdinals, selectedWeekdays]);
+  const recurrenceSelectionComplete =
+    frequency === "daily" ||
+    (frequency === "weekly" && selectedWeekdays.length > 0) ||
+    (frequency === "monthly" && (
+      monthlyMode === "month-day" ||
+      (selectedWeekdays.length > 0 && selectedOrdinals.length > 0)
+    ));
   const previewEntries = useMemo(
-    () =>
-      expandContactRule({
+    () => {
+      if (!recurrenceSelectionComplete) return [];
+      return expandContactRule({
         startDate,
         endDate: endDate || undefined,
         recurrence,
@@ -295,8 +305,9 @@ export function ContactPage({
               !existing.deletedAt
             )
           : true
-      ),
-    [active, childIds, data.entries, endDate, generationEnd, generationStart, recurrence, ruleId, segments, startDate]
+      );
+    },
+    [active, childIds, data.entries, endDate, generationEnd, generationStart, recurrence, recurrenceSelectionComplete, ruleId, segments, startDate]
   );
   const existingPreviewEntries = useMemo(
     () =>
@@ -442,7 +453,7 @@ export function ContactPage({
       ) : null}
 
       <div className="two-column-layout">
-        <form className="panel rule-form" onSubmit={saveRule}>
+        <form className="panel rule-form" data-mobile-step={mobileRuleStep} onSubmit={saveRule}>
           <div className="panel__header">
             <div>
               <h2>{copy(locale, "contact", "ruleTitle")}</h2>
@@ -450,13 +461,47 @@ export function ContactPage({
             </div>
           </div>
           <div className="panel-form">
-            <label className="field">
+            <nav className="mobile-rule-steps" aria-label={copy(locale, "contactFlow", "stepsLabel")}>
+              {([
+                [1, copy(locale, "contactFlow", "stepRange")],
+                [2, copy(locale, "contactFlow", "stepRecurrence")],
+                [3, copy(locale, "contactFlow", "stepTimes")],
+                [4, copy(locale, "contactFlow", "stepAssignment")]
+              ] as Array<[MobileRuleStep, string]>).map(([step, label]) => (
+                <button
+                  className={mobileRuleStep === step ? "is-active" : ""}
+                  data-testid={`contact-mobile-step-${step}`}
+                  type="button"
+                  aria-current={mobileRuleStep === step ? "step" : undefined}
+                  onClick={() => setMobileRuleStep(step)}
+                  key={step}
+                >
+                  <span>{step}</span>
+                  {label}
+                </button>
+              ))}
+            </nav>
+            <aside className="mobile-rule-live-preview" data-testid="contact-mobile-live-preview" aria-live="polite">
+              <Icon name="calendar" size={16} />
+              <span>
+                <strong>{copy(locale, "contact", "previewTitle")}</strong>
+                <small>
+                  {previewCalendarItems.length
+                    ? copy(locale, "contactFlow", "mobilePreviewSummary", {
+                        count: previewCalendarItems.length,
+                        date: formatShortDate(previewCalendarItems[0].startDate, intlLocale)
+                      })
+                    : copy(locale, "contact", "previewEmpty")}
+                </small>
+              </span>
+            </aside>
+            <label className="field mobile-rule-step-panel" data-rule-step="1">
               <FieldHelpLabel fieldId="contactPattern.name">{copy(locale, "contact", "name")}</FieldHelpLabel>
               <input data-testid="contact-pattern-name" value={name} onChange={(event) => setName(event.target.value)} />
             </label>
-            <fieldset className="inline-fieldset recurrence-builder">
+            <fieldset className="inline-fieldset recurrence-builder mobile-rule-step-panel" data-rule-step="1">
               <legend className="field-label-row">
-                <span>{copy(locale, "contact", "recurrence")}</span>
+                <span>{copy(locale, "contactFlow", "stepRange")}</span>
               </legend>
               <label className="field">
                 <FieldHelpLabel fieldId="contactPattern.startDate">
@@ -468,6 +513,11 @@ export function ContactPage({
                 <FieldHelpLabel fieldId="contactPattern.generationRange">{copy(locale, "contact", "endDate")}</FieldHelpLabel>
                 <input data-testid="contact-pattern-end-date" type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
               </label>
+            </fieldset>
+            <fieldset className="inline-fieldset recurrence-builder mobile-rule-step-panel" data-rule-step="2">
+              <legend className="field-label-row">
+                <span>{copy(locale, "contact", "recurrence")}</span>
+              </legend>
               <label className="field">
                 <FieldHelpLabel fieldId="contactPattern.frequency">{copy(locale, "contact", "frequency")}</FieldHelpLabel>
                 <select data-testid="contact-recurrence-frequency" value={frequency} onChange={(event) => setFrequency(event.target.value as RecurrenceFrequency)}>
@@ -484,7 +534,7 @@ export function ContactPage({
               </label>
             </fieldset>
             {frequency === "weekly" || (frequency === "monthly" && monthlyMode === "nth-weekday") ? (
-              <fieldset className="inline-fieldset">
+              <fieldset className="inline-fieldset mobile-rule-step-panel" data-rule-step="2">
                 <legend className="field-label-row">
                   <span>{copy(locale, "contact", "weekdays")}</span>
                   <FieldHelpButton fieldId="contactPattern.weekdays" />
@@ -513,7 +563,7 @@ export function ContactPage({
               </fieldset>
             ) : null}
             {frequency === "monthly" ? (
-              <fieldset className="inline-fieldset recurrence-builder">
+              <fieldset className="inline-fieldset recurrence-builder mobile-rule-step-panel" data-rule-step="2">
                 <legend className="field-label-row">
                   <span>{copy(locale, "contact", "monthlyPattern")}</span>
                   <FieldHelpButton fieldId="contactPattern.monthlyPattern" />
@@ -565,7 +615,7 @@ export function ContactPage({
                 )}
               </fieldset>
             ) : null}
-            <fieldset className="inline-fieldset">
+            <fieldset className="inline-fieldset mobile-rule-step-panel" data-rule-step="3">
               <legend className="field-label-row">
                 <span>{copy(locale, "contact", "timeSpans")}</span>
               </legend>
@@ -604,7 +654,7 @@ export function ContactPage({
                 {copy(locale, "contact", "addTimeSpan")}
               </button>
             </fieldset>
-            <fieldset className="inline-fieldset">
+            <fieldset className="inline-fieldset mobile-rule-step-panel" data-rule-step="4">
               <legend className="field-label-row">
                 <span>{copy(locale, "contact", "children")}</span>
                 <FieldHelpButton fieldId="contactPattern.children" />
@@ -633,7 +683,7 @@ export function ContactPage({
               </div>
             </fieldset>
             {data.careParties.length ? (
-              <label className="field">
+              <label className="field mobile-rule-step-panel" data-rule-step="4">
                 <FieldHelpLabel fieldId="contactPattern.responsibleParty">
                   {copy(locale, "contact", "responsibleParty")}
                 </FieldHelpLabel>
@@ -651,12 +701,12 @@ export function ContactPage({
                 </select>
               </label>
             ) : null}
-            <label className="toggle">
+            <label className="toggle mobile-rule-step-panel" data-rule-step="4">
               <input type="checkbox" checked={active} onChange={(event) => setActive(event.target.checked)} />
               <span />
               <FieldHelpLabel fieldId="contactPattern.active" />
             </label>
-            <div className="form-actions__right">
+            <div className="form-actions__right mobile-rule-step-panel" data-rule-step="4">
               {ruleId ? (
                 <button className="button button--secondary" type="button" data-testid="contact-pattern-sync" onClick={() => void syncSavedRule()} disabled={!canWrite || isSaving}>
                   <Icon name="repeat" size={17} />
@@ -667,6 +717,28 @@ export function ContactPage({
                 <Icon name="check" size={17} />
                 {copy(locale, "contact", "save")}
               </button>
+            </div>
+            <div className="mobile-rule-step-actions">
+              <button
+                className="button button--secondary"
+                type="button"
+                onClick={() => setMobileRuleStep((current) => Math.max(1, current - 1) as MobileRuleStep)}
+                disabled={mobileRuleStep === 1}
+              >
+                <Icon name="chevronLeft" size={17} />
+                {copy(locale, "contactFlow", "previousStep")}
+              </button>
+              {mobileRuleStep < 4 ? (
+                <button
+                  className="button button--primary"
+                  data-testid="contact-mobile-next-step"
+                  type="button"
+                  onClick={() => setMobileRuleStep((current) => Math.min(4, current + 1) as MobileRuleStep)}
+                >
+                  {copy(locale, "contactFlow", "nextStep")}
+                  <Icon name="chevronRight" size={17} />
+                </button>
+              ) : null}
             </div>
           </div>
         </form>
