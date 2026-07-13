@@ -30,6 +30,15 @@ function durationLabel(entry: CareEntry, locale: "de" | "en"): string {
   });
 }
 
+function unavailableRangeLabel(period: UnavailablePeriod, intlLocale: string): string {
+  const startDate = period.startDateTime.slice(0, 10);
+  const endDate = period.endDateTime.slice(0, 10);
+  if (startDate === endDate) {
+    return `${formatTime(period.startDateTime, intlLocale)}–${formatTime(period.endDateTime, intlLocale)}`;
+  }
+  return `${formatShortDate(startDate, intlLocale)}, ${formatTime(period.startDateTime, intlLocale)} – ${formatShortDate(endDate, intlLocale)}, ${formatTime(period.endDateTime, intlLocale)}`;
+}
+
 export function CalendarAgenda({
   entries,
   unavailablePeriods,
@@ -176,7 +185,7 @@ export function CalendarAgenda({
                     </span>
                   </span>
                   <span className="agenda-card__details">
-                    <span><Icon name="clock" size={15} />{formatTime(period.startDateTime, intlLocale)}–{formatTime(period.endDateTime, intlLocale)}</span>
+                    <span data-testid={`agenda-unavailable-range-${period.id}`}><Icon name="calendar" size={15} />{unavailableRangeLabel(period, intlLocale)}</span>
                     {period.location ? <span><Icon name="home" size={15} />{period.location}</span> : null}
                   </span>
                   <span className="agenda-card__flags">

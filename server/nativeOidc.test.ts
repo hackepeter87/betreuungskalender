@@ -550,7 +550,7 @@ test("native OIDC routes redirect login and keep callback responses token-free",
       url: "/auth/callback?code=code-123&state=state-123"
     });
     assert.equal(callback.statusCode, 302);
-    assert.equal(callback.headers.location, "/");
+    assert.equal(callback.headers.location, "/?onboarding=owner-setup");
     assert.equal(callback.payload.includes("subject-123"), false);
     assert.equal(callback.payload.includes("code-123"), false);
     assert.deepEqual(ownerClaims, [{ tokenHash: ownerHash, userId: "user_e8725703d28a2972830e5502" }]);
@@ -560,6 +560,7 @@ test("native OIDC routes redirect login and keep callback responses token-free",
       url: "/auth/callback?code=code-456&state=state-456"
     });
     assert.equal(invitationCallback.statusCode, 302);
+    assert.equal(invitationCallback.headers.location, "/?onboarding=invitation");
     assert.deepEqual(invitationClaims, [{
       tokenHash: invitationHash,
       userId: "user_e8725703d28a2972830e5502"

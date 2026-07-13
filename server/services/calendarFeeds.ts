@@ -37,8 +37,26 @@ interface FeedEntryRow {
   status: "planned" | "completed" | "partial";
   location: string | null;
   custom_location: string | null;
+  child_names: string;
   updated_at: string;
 }
+
+const FEED_ENTRY_SELECT = `
+  SELECT
+    e.id, e.start_datetime, e.end_datetime, e.status, e.location,
+    e.custom_location, e.updated_at,
+    COALESCE((
+      SELECT GROUP_CONCAT(child_name, ' und ')
+      FROM (
+        SELECT c.name AS child_name
+        FROM care_entry_children ec
+        JOIN children c ON c.id = ec.child_id AND c.deleted_at IS NULL
+        WHERE ec.care_entry_id = e.id AND ec.deleted_at IS NULL
+        ORDER BY c.name, c.id
+      )
+    ), '') AS child_names
+  FROM care_entries e
+`;
 
 const CARE_LOCATION_LABELS: Record<string, string> = {
   commuterApartment: "Pendlerwohnung",
@@ -191,42 +209,34 @@ function feedEntriesForToken(token: TokenRow): FeedEntryRow[] {
     : assignedCarePartyIds(token.user_id);
   const scope = scopeFromRow(token);
   if (scope === "legacy") {
-    return db.prepare(`
-      SELECT id, start_datetime, end_datetime, status, location, custom_location, updated_at
-      FROM care_entries
-      WHERE deleted_at IS NULL
-        AND status IN ('planned', 'completed', 'partial')
-        AND created_by = ?
-      ORDER BY start_datetime, id
+    return db.prepare(`${FEED_ENTRY_SELECT}
+      WHERE e.deleted_at IS NULL
+        AND e.status IN ('planned', 'completed', 'partial')
+        AND e.created_by = ?
+      ORDER BY e.start_datetime, e.id
     `).all(token.user_id) as FeedEntryRow[];
   }
   if (scope.startsWith("party:")) {
-    return db.prepare(`
-      SELECT id, start_datetime, end_datetime, status, location, custom_location, updated_at
-      FROM care_entries
-      WHERE deleted_at IS NULL
-        AND status IN ('planned', 'completed', 'partial')
-        AND responsible_party_id = ?
-      ORDER BY start_datetime, id
+    return db.prepare(`${FEED_ENTRY_SELECT}
+      WHERE e.deleted_at IS NULL
+        AND e.status IN ('planned', 'completed', 'partial')
+        AND e.responsible_party_id = ?
+      ORDER BY e.start_datetime, e.id
     `).all(token.scope_party_id) as FeedEntryRow[];
   }
   if (assignedIds.length > 0) {
     const placeholders = assignedIds.map(() => "?").join(", ");
-    return db.prepare(`
-      SELECT id, start_datetime, end_datetime, status, location, custom_location, updated_at
-      FROM care_entries
-      WHERE deleted_at IS NULL
-        AND status IN ('planned', 'completed', 'partial')
-        AND responsible_party_id IN (${placeholders})
-      ORDER BY start_datetime, id
+    return db.prepare(`${FEED_ENTRY_SELECT}
+      WHERE e.deleted_at IS NULL
+        AND e.status IN ('planned', 'completed', 'partial')
+        AND e.responsible_party_id IN (${placeholders})
+      ORDER BY e.start_datetime, e.id
     `).all(...assignedIds) as FeedEntryRow[];
   }
-  return db.prepare(`
-    SELECT id, start_datetime, end_datetime, status, location, custom_location, updated_at
-    FROM care_entries
-    WHERE deleted_at IS NULL
-      AND status IN ('planned', 'completed', 'partial')
-    ORDER BY start_datetime, id
+  return db.prepare(`${FEED_ENTRY_SELECT}
+    WHERE e.deleted_at IS NULL
+      AND e.status IN ('planned', 'completed', 'partial')
+    ORDER BY e.start_datetime, e.id
   `).all() as FeedEntryRow[];
 }
 
@@ -297,13 +307,16 @@ export function buildPersonalCalendarFeed(input: {
   ];
   for (const entry of feedEntriesForToken(input.token)) {
     const location = feedLocation(entry);
+    const eventTitle = entry.child_names
+      ? `${entry.child_names} · ${title}`
+      : title;
     lines.push(
       "BEGIN:VEVENT",
       `UID:${escapeText(`${entry.id}@betreuungskalender`)}`,
       `DTSTAMP:${utcDateTimeValue(generatedAt)}`,
       `DTSTART:${localDateTimeValue(entry.start_datetime)}`,
       `DTEND:${localDateTimeValue(entry.end_datetime)}`,
-      `SUMMARY:${escapeText(title)}`,
+      `SUMMARY:${escapeText(eventTitle)}`,
       ...(location ? [`LOCATION:${escapeText(location)}`] : []),
       `LAST-MODIFIED:${utcDateTimeValue(entry.updated_at)}`,
       `CATEGORIES:${entry.status === "planned" ? "Geplant" : entry.status === "partial" ? "Teilweise" : "Durchgeführt"}`,

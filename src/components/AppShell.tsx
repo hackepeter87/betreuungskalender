@@ -492,7 +492,7 @@ export function AppShell({
               onLogout={() => void logout()}
               t={t}
             />
-            {!setupMode ? (
+            {!setupMode && activePage !== "calendar" ? (
               <button
                 className="button button--primary button--icon-mobile"
                 type="button"

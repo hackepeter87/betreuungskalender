@@ -95,11 +95,11 @@ export function CalendarPage({
       </div>
 
       <div className="calendar-quick-actions">
-        <button className="button button--primary" type="button" onClick={() => onNewEntry()} disabled={!canWrite}>
+        <button className="button button--primary" data-testid="calendar-add-entry" type="button" onClick={() => onNewEntry()} disabled={!canWrite}>
           <Icon name="plus" size={17} />
           {copy(locale, "calendarPage", "care")}
         </button>
-        <button className="button button--secondary" type="button" onClick={() => setEditingUnavailable("new")} disabled={!canWrite}>
+        <button className="button button--secondary" data-testid="calendar-add-unavailable" type="button" onClick={() => setEditingUnavailable("new")} disabled={!canWrite}>
           <Icon name="briefcase" size={17} />
           {copy(locale, "calendarPage", "unavailability")}
         </button>
@@ -110,10 +110,6 @@ export function CalendarPage({
           <span><Icon name="calendar" size={25} /></span>
           <h2>{copy(locale, "calendarPage", "emptyTitle")}</h2>
           <p>{copy(locale, "calendarPage", "emptyDescription")}</p>
-          <button className="button button--primary" type="button" onClick={() => onNewEntry()} disabled={!canWrite}>
-            <Icon name="plus" size={17} />
-            {copy(locale, "calendarPage", "createEntry")}
-          </button>
         </section>
       ) : null}
 
@@ -180,10 +176,6 @@ export function CalendarPage({
         </>
       )}
 
-      <button className="mobile-fab" data-testid="calendar-add-entry" type="button" onClick={() => onNewEntry()} disabled={!canWrite} aria-label={copy(locale, "calendarPage", "addEntryAria")}>
-        <Icon name="plus" size={21} />
-        {copy(locale, "calendarPage", "addEntry")}
-      </button>
       {editingUnavailable ? (
         <Modal
           title={

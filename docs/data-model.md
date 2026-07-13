@@ -154,6 +154,9 @@ Feed scopes are:
   matches the selected care party.
 
 Notes, evidence references, trips, costs, and audit data are not exported.
+Each exported event title includes the assigned child names followed by the
+calendar scope label so subscriptions remain distinguishable in calendar
+clients. Existing feed URLs and token scopes remain unchanged.
 
 ## Native OIDC login state
 
