@@ -10,6 +10,11 @@ import {
 } from "../services/audit.js";
 import { assertCanUseCareParty } from "../services/carePartyAccess.js";
 import { assertActiveCareParty } from "../services/careParties.js";
+import {
+  assertNoActualCareConflict,
+  isCareEntryConflictError,
+  listCareConflicts
+} from "../services/careConflicts.js";
 import { assertActiveChildren, bool, makeId, nowIso, syncJunction } from "../services/common.js";
 import { getDefaultResponsiblePartyId } from "../services/settings.js";
 import { careEntryInputSchema } from "../validation/schemas.js";
@@ -389,6 +394,20 @@ function persistEntry(
     assertActiveCareParty(actualResponsiblePartyId);
     assertCanUseCareParty(user, actualResponsiblePartyId);
   }
+  assertNoActualCareConflict({
+    id,
+    status: input.status,
+    startDateTime: input.startDateTime,
+    endDateTime: input.endDateTime,
+    childIds: input.childIds,
+    actualStartDateTime: input.status === "partial"
+      ? input.actualStartDateTime ?? existing?.actualStartDateTime ?? input.startDateTime
+      : undefined,
+    actualEndDateTime: input.status === "partial"
+      ? input.actualEndDateTime ?? existing?.actualEndDateTime ?? input.endDateTime
+      : undefined,
+    actualChildIds
+  }, db);
 
   if (existing) {
     const generatedByPatternId = input.generatedByPatternId ?? existing.generatedByPatternId ?? null;
@@ -520,6 +539,8 @@ function persistEntry(
 }
 
 export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
+  app.get("/api/care-conflicts", readLimit, async () => listCareConflicts(db));
+
   app.get<{ Querystring: { startDate?: string; endDate?: string } }>(
     "/api/care-entries",
     readLimit,
@@ -555,6 +576,9 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
     try {
       db.transaction(() => persistEntry(id, parsed.data, request.userEmail, undefined, request.user))();
     } catch (error) {
+      if (isCareEntryConflictError(error)) {
+        return reply.code(409).send({ error: "care_entry_conflict" });
+      }
       return reply.code(400).send({ error: "invalid_relation", message: error instanceof Error ? error.message : String(error) });
     }
     return reply.code(201).send(getEntry(id));
@@ -568,6 +592,9 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
     try {
       db.transaction(() => persistEntry(request.params.id, parsed.data, request.userEmail, existing, request.user))();
     } catch (error) {
+      if (isCareEntryConflictError(error)) {
+        return reply.code(409).send({ error: "care_entry_conflict" });
+      }
       return reply.code(400).send({ error: "invalid_relation", message: error instanceof Error ? error.message : String(error) });
     }
     return getEntry(request.params.id);

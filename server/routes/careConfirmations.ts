@@ -9,6 +9,7 @@ import {
   savePushSubscription,
   updateNotificationPreferences
 } from "../services/careConfirmations.js";
+import { isCareEntryConflictError } from "../services/careConflicts.js";
 import {
   careConfirmationAnswerSchema,
   careConfirmationRemindLaterSchema,
@@ -36,6 +37,9 @@ export async function careConfirmationRoutes(app: FastifyInstance): Promise<void
     try {
       result = answerCareConfirmation(request.params.id, request.user, parsed.data);
     } catch (error) {
+      if (isCareEntryConflictError(error)) {
+        return reply.code(409).send({ error: "care_entry_conflict" });
+      }
       return reply.code(400).send({
         error: "invalid_relation",
         message: error instanceof Error ? error.message : String(error)

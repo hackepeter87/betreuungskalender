@@ -1,4 +1,10 @@
-import type { ApiCareDeviationType, ApiCareParty, ApiContactRule, ApiUnavailableScope } from "../shared/api";
+import type {
+  ApiCareConflict,
+  ApiCareDeviationType,
+  ApiCareParty,
+  ApiContactRule,
+  ApiUnavailableScope
+} from "../shared/api";
 
 export const SCHEMA_VERSION = 6 as const;
 
@@ -59,6 +65,7 @@ export interface Child {
 }
 
 export type CareParty = ApiCareParty;
+export type CareConflict = ApiCareConflict;
 
 export interface Trip {
   id: string;
@@ -362,6 +369,7 @@ export interface AppData {
   children: Child[];
   careParties: CareParty[];
   entries: CareEntry[];
+  careConflicts: CareConflict[];
   holidayPeriods: HolidayPeriod[];
   unavailablePeriods: UnavailablePeriod[];
   externalCalendarSources: ExternalCalendarSource[];

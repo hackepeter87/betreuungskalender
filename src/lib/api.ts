@@ -4,6 +4,7 @@ import type {
   ApiCalendarFeedStatus,
   ApiCalendarFeedScope,
   ApiCreatedInvitation,
+  ApiCareConflict,
   ApiCareConfirmationAnswer,
   ApiCareConfirmationRequest,
   ApiCareEntry,
@@ -108,6 +109,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
+}
+
+async function requestOptionalList<T>(path: string): Promise<T[]> {
+  try {
+    return await request<T[]>(path);
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 404) return [];
+    throw error;
+  }
 }
 
 export async function checkServer(): Promise<boolean> {
@@ -328,6 +338,7 @@ export async function loadAppData(): Promise<AppData> {
     children,
     careParties,
     entries,
+    careConflicts,
     holidayPeriods,
     unavailablePeriods,
     contactPatterns,
@@ -340,6 +351,7 @@ export async function loadAppData(): Promise<AppData> {
     request<ApiChild[]>("/api/children"),
     request<ApiCareParty[]>("/api/care-parties"),
     request<ApiCareEntry[]>("/api/care-entries"),
+    requestOptionalList<ApiCareConflict>("/api/care-conflicts"),
     request<ApiHolidayPeriod[]>("/api/holiday-periods"),
     request<ApiUnavailablePeriod[]>("/api/unavailable-periods"),
     request<ApiContactPattern[]>("/api/contact-patterns"),
@@ -361,6 +373,7 @@ export async function loadAppData(): Promise<AppData> {
     children: children as Child[],
     careParties: careParties as CareParty[],
     entries: mappedEntries,
+    careConflicts,
     holidayPeriods,
     unavailablePeriods: mappedUnavailable,
     externalCalendarSources,

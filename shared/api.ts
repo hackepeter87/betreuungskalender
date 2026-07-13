@@ -14,6 +14,7 @@ export const careScopes = [
 
 export type CareScope = (typeof careScopes)[number];
 export type ApiEntryStatus = "planned" | "completed" | "cancelled" | "partial";
+export type ApiCareConflictSeverity = "planned_warning" | "unresolved_actual";
 export type ApiAuthRole = "admin" | "parent" | "readonly";
 export type ApiCareDeviationType =
   | "cancelled"
@@ -143,6 +144,15 @@ export interface ApiCareEntry {
   updatedAt: string;
   trips: ApiTrip[];
   costs: ApiCost[];
+}
+
+export interface ApiCareConflict {
+  id: string;
+  entryIds: [string, string];
+  childIds: string[];
+  startDateTime: string;
+  endDateTime: string;
+  severity: ApiCareConflictSeverity;
 }
 
 export interface ApiCareConfirmationRequest {
