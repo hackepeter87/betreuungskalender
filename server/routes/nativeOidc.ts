@@ -339,6 +339,11 @@ export async function nativeOidcRoutes(
         );
       }
       const session = sessions.create(membership.user.externalSubject, options.config.sessionTtlSeconds);
+      const completionPath = claims.loginContext.type === "owner_setup"
+        ? "/?onboarding=owner-setup"
+        : claims.loginContext.type === "invitation"
+          ? "/?onboarding=invitation"
+          : "/";
       return reply
         .header("set-cookie", serializeSessionCookie({
           name: options.config.sessionCookieName,
@@ -346,7 +351,7 @@ export async function nativeOidcRoutes(
           maxAgeSeconds: options.config.sessionTtlSeconds,
           secure: secureCookie
         }))
-        .redirect("/");
+        .redirect(completionPath);
     } catch (error) {
       const normalized = sanitizedError(error);
       request.log.warn(

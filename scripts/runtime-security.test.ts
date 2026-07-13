@@ -852,11 +852,23 @@ test("runtime serves revocable personal iCalendar feeds without broader token ac
   });
   assert.equal(child.status, 201);
   const childBody = await child.json() as { id: string };
+  const secondChild = await fetch(`${baseUrl}/api/children`, {
+    method: "POST",
+    headers: { ...jsonHeaders, ...alphaHeaders },
+    body: JSON.stringify({
+      name: "Second Feed Child",
+      birthMonth: 8,
+      birthYear: 2020,
+      color: "#635bdb"
+    })
+  });
+  assert.equal(secondChild.status, 201);
+  const secondChildBody = await secondChild.json() as { id: string };
 
-  const entry = (start: string, end: string, status = "planned") => ({
+  const entry = (start: string, end: string, status = "planned", childIds = [childBody.id]) => ({
     startDateTime: start,
     endDateTime: end,
-    childIds: [childBody.id],
+    childIds,
     status,
     careScope: "overnight",
     overnight: true,
@@ -879,6 +891,16 @@ test("runtime serves revocable personal iCalendar feeds without broader token ac
     method: "POST",
     headers: { ...jsonHeaders, ...alphaHeaders },
     body: JSON.stringify(entry("2026-08-07T16:00:00.000Z", "2026-08-09T18:00:00.000Z"))
+  })).status, 201);
+  assert.equal((await fetch(`${baseUrl}/api/care-entries`, {
+    method: "POST",
+    headers: { ...jsonHeaders, ...alphaHeaders },
+    body: JSON.stringify(entry(
+      "2026-08-10T16:00:00.000Z",
+      "2026-08-10T20:00:00.000Z",
+      "planned",
+      [childBody.id, secondChildBody.id]
+    ))
   })).status, 201);
   assert.equal((await fetch(`${baseUrl}/api/care-entries`, {
     method: "POST",
@@ -914,7 +936,8 @@ test("runtime serves revocable personal iCalendar feeds without broader token ac
   assert.match(calendarResponse.headers.get("content-type") ?? "", /text\/calendar/);
   const calendarText = await calendarResponse.text();
   new ICAL.Component(ICAL.parse(calendarText));
-  assert.match(calendarText, /SUMMARY:Kinder bei Alpha Parent/);
+  assert.match(calendarText, /SUMMARY:Feed Test Child · Kinder bei Alpha Parent/);
+  assert.match(calendarText, /SUMMARY:Feed Test Child und Second Feed Child · Kinder bei Alpha/);
   assert.match(calendarText, /LOCATION:Pendlerwohnung/);
   assert.match(calendarText, /DTSTART:20260807T160000/);
   assert.doesNotMatch(calendarText, /20260814T160000/);

@@ -144,7 +144,7 @@ test("keeps critical mobile pages within the viewport", async ({
   await request.post("/api/unavailable-periods", {
     data: {
       startDateTime: "2026-07-02T08:00:00.000Z",
-      endDateTime: "2026-07-02T17:00:00.000Z",
+      endDateTime: "2026-07-04T17:00:00.000Z",
       category: "duty",
       dutyRelated: true,
       affectsContact: false,
@@ -157,6 +157,11 @@ test("keeps critical mobile pages within the viewport", async ({
 
   await openApp(page);
   await navigate(page, "calendar");
+  await expect(page.getByTestId("mobile-entry-create")).toHaveCount(0);
+  await expect(page.getByTestId("calendar-add-entry")).toBeVisible();
+  const unavailableRange = page.locator('[data-testid^="agenda-unavailable-range-"]').first();
+  await expect(unavailableRange).toContainText("02.07.");
+  await expect(unavailableRange).toContainText("04.07.");
   await page.getByTestId("calendar-add-entry").click();
   const entryForm = page.getByTestId("entry-form");
   await expect(entryForm).toBeVisible();
@@ -213,7 +218,7 @@ test("keeps critical mobile pages within the viewport", async ({
   }
 
   await navigate(page, "entries");
-  const entryStatusFilters = page.locator(".list-toolbar .segmented-control").first();
+  const entryStatusFilters = page.getByTestId("entries-status-filter");
   await entryStatusFilters.scrollIntoViewIfNeeded();
   await expect(entryStatusFilters).toBeVisible();
   const filterMetrics = await entryStatusFilters.evaluate((element) => ({
@@ -331,6 +336,21 @@ test("keeps critical mobile pages within the viewport", async ({
     expect(statCardBox!.x + statCardBox!.width).toBeLessThanOrEqual(statsGridBox!.x + statsGridBox!.width + 1);
   }
   await expectNoDocumentHorizontalOverflow(page);
+});
+
+test("shows link-based onboarding completion once without retaining the query", async ({
+  page
+}) => {
+  await page.goto("/?onboarding=invitation");
+  await expect(page.getByTestId("app-loading")).toBeHidden();
+
+  const notice = page.getByTestId("onboarding-completion-notice");
+  await expect(notice).toBeVisible();
+  await expect(notice).toContainText("Einladung wurde angenommen");
+  await expect(page).toHaveURL(/\/$/);
+
+  await notice.getByRole("button", { name: "Schließen" }).click();
+  await expect(notice).toHaveCount(0);
 });
 
 test("keeps mobile contact rule time spans inside their card", async ({

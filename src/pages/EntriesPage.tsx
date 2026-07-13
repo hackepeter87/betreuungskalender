@@ -90,7 +90,7 @@ export function EntriesPage({
             <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={copy(locale, "entries", "searchPlaceholder")} />
           </label>
           <FieldHelpButton fieldId="entries.search" />
-          <div className="segmented-control">
+          <div className="segmented-control entries-status-filter" role="group" aria-label={copy(locale, "entries", "filterStatus")} data-testid="entries-status-filter">
             {(
               [
                 ["all", copy(locale, "entries", "all")],
@@ -100,7 +100,7 @@ export function EntriesPage({
                 ["cancelled", statusLabel("cancelled", locale)]
               ] as Array<[EntryStatus | "all", string]>
             ).map(([value, label]) => (
-              <button type="button" key={value} className={status === value ? "is-active" : ""} onClick={() => setStatus(value)}>
+              <button type="button" key={value} className={status === value ? "is-active" : ""} aria-pressed={status === value} onClick={() => setStatus(value)}>
                 {label}
               </button>
             ))}

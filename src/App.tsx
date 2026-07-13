@@ -36,6 +36,8 @@ interface EntryDialogState {
   additionalCare?: boolean;
 }
 
+type OnboardingNotice = "owner-setup" | "invitation";
+
 export function App() {
   const { locale } = useI18n();
   const { data, isLoading, serverStatus, openConfirmations, session } = useAppStore();
@@ -44,11 +46,23 @@ export function App() {
   const [entryDialog, setEntryDialog] = useState<EntryDialogState | null>(null);
   const [ruleEntryChoice, setRuleEntryChoice] = useState<CareEntry | null>(null);
   const [focusedContactRuleId, setFocusedContactRuleId] = useState<string | undefined>();
+  const [onboardingNotice, setOnboardingNotice] = useState<OnboardingNotice | null>(() => {
+    const value = new URLSearchParams(window.location.search).get("onboarding");
+    return value === "owner-setup" || value === "invitation" ? value : null;
+  });
   const [legacyMigration, setLegacyMigration] = useState<{
     legacy: LegacyBrowserData;
     database: LegacyDatabaseSummary;
   } | null>(null);
   const migrationChecked = useRef(false);
+
+  useEffect(() => {
+    if (!onboardingNotice) return;
+    const params = new URLSearchParams(window.location.search);
+    params.delete("onboarding");
+    const nextQuery = params.toString();
+    window.history.replaceState({}, "", `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`);
+  }, [onboardingNotice]);
 
   useEffect(() => {
     if (migrationChecked.current || isLoading || serverStatus !== "online") return;
@@ -179,6 +193,18 @@ export function App() {
         onOpenEntry={openEditEntry}
         setupMode={setupMode}
       >
+        {onboardingNotice ? (
+          <div className="notice notice--success app-onboarding-notice" role="status" data-testid="onboarding-completion-notice">
+            <Icon name="check" size={18} />
+            <div>
+              <strong>{copy(locale, "app", onboardingNotice === "owner-setup" ? "ownerSetupComplete" : "invitationComplete")}</strong>
+              <p>{copy(locale, "app", onboardingNotice === "owner-setup" ? "ownerSetupNext" : "invitationNext")}</p>
+            </div>
+            <button className="icon-button" type="button" onClick={() => setOnboardingNotice(null)} aria-label={copy(locale, "common", "close")}>
+              <Icon name="close" size={17} />
+            </button>
+          </div>
+        ) : null}
         {page}
       </AppShell>
       {entryDialog ? (
