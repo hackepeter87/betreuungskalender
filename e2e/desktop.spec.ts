@@ -1306,11 +1306,18 @@ test("shows planned care conflicts consistently across care views", async ({
 });
 
 test("keeps care views usable when the conflict overview is incomplete", async ({ page }) => {
-  await page.route("**/api/care-conflicts", async (route) => {
-    await route.fulfill({
-      contentType: "application/json",
-      body: JSON.stringify({ items: [], complete: false })
-    });
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+      if (new URL(url, window.location.origin).pathname === "/api/care-conflicts") {
+        return Promise.resolve(new Response(JSON.stringify({ items: [], complete: false }), {
+          status: 200,
+          headers: { "Content-Type": "application/json" }
+        }));
+      }
+      return originalFetch(input, init);
+    };
   });
   await openApp(page);
   await navigate(page, "calendar");
