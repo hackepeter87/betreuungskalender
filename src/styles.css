@@ -4483,47 +4483,6 @@ button.metric-card {
   line-height: 1.4;
 }
 
-.rule-entry__actions {
-  display: flex;
-  padding-right: 12px;
-}
-
-.rule-entry__actions .button {
-  min-height: 36px;
-  padding-inline: 10px;
-}
-
-.choice-dialog {
-  display: grid;
-  gap: 18px;
-  padding: 20px;
-  background: var(--surface);
-}
-
-.choice-dialog p {
-  margin: 0;
-  color: var(--muted);
-  line-height: 1.6;
-}
-
-.choice-dialog__actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-}
-
-@media (max-width: 640px) {
-  .choice-dialog {
-    min-height: 100%;
-    align-content: start;
-    padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
-  }
-
-  .choice-dialog__actions {
-    grid-template-columns: 1fr;
-  }
-}
-
 .holiday-list {
   padding: 0 16px;
 }
@@ -4917,25 +4876,6 @@ button.metric-card {
   .rule-entry__main > .status-label {
     grid-column: 2;
     grid-row: 1 / span 2;
-  }
-
-  .rule-entry__actions {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr)) repeat(2, 40px);
-    gap: 8px;
-    align-items: center;
-    justify-content: stretch;
-    padding: 0 10px 10px;
-  }
-
-  .rule-entry__actions .button {
-    min-width: 0;
-    padding-inline: 8px;
-    white-space: normal;
-  }
-
-  .rule-entry__actions .field-help-trigger {
-    justify-self: end;
   }
 
   .recurrence-builder,
@@ -6510,6 +6450,50 @@ button.metric-card {
 .agenda-card__warning--neutral {
   background: #f2f5f9;
   color: var(--muted);
+}
+
+.care-conflict {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 9px;
+  border: 1px solid #e5b854;
+  border-radius: 6px;
+  background: var(--amber-soft);
+  color: #80530c;
+  font-size: 0.65rem;
+  font-weight: 750;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.care-conflict small {
+  color: inherit;
+  font-size: 0.61rem;
+  font-weight: 600;
+}
+
+.care-conflict--unresolved_actual {
+  border-color: #d88c96;
+  background: var(--coral-soft);
+  color: #8f3340;
+}
+
+.care-conflict--compact {
+  width: fit-content;
+  max-width: 100%;
+  margin-top: 5px;
+  padding: 3px 6px;
+  font-size: 0.59rem;
+}
+
+.calendar-event--conflict-planned_warning {
+  box-shadow: inset 0 0 0 1px #d89b23;
+}
+
+.calendar-event--conflict-unresolved_actual {
+  box-shadow: inset 0 0 0 2px #c44f5d;
 }
 
 .notice--recommendation {

@@ -112,6 +112,8 @@ export function EntriesPage({
               key={entry.id}
               entry={entry}
               children={data.children}
+              conflicts={data.careConflicts}
+              canWrite={canWrite}
               updatedByLabel={actorDisplayName(data, entry.updatedBy)}
               onClick={() => onEditEntry(entry)}
             />

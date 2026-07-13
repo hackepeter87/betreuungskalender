@@ -143,6 +143,8 @@ export function CalendarPage({
           visibleStartDate={visibleRange.startDate}
           visibleEndDate={visibleRange.endDate}
           children={data.children}
+          conflicts={data.careConflicts}
+          canWrite={canWrite}
           onSelectDate={(date) => onNewEntry(date || undefined)}
           onSelectEntry={onEditEntry}
           onSelectUnavailable={setEditingUnavailable}
@@ -158,6 +160,7 @@ export function CalendarPage({
               externalEvents={externalEvents}
               holidayPeriods={holidayPeriods}
               children={data.children}
+              conflicts={data.careConflicts}
               onSelectDate={onNewEntry}
               onSelectEntry={onEditEntry}
               onSelectUnavailable={setEditingUnavailable}

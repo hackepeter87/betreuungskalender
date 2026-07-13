@@ -2,7 +2,8 @@ import { useMemo } from "react";
 import { unavailableForEntry } from "../lib/analytics";
 import { entryDateKeys, enumerateDateKeys, formatTime, getCalendarDays } from "../lib/date";
 import { statusLabel, unavailableCategoryLabels } from "../lib/labels";
-import type { CareEntry, Child, ExternalCalendarEvent, HolidayPeriod, UnavailablePeriod } from "../types";
+import { conflictSeverityForEntry } from "../lib/careConflictPresentation";
+import type { CareConflict, CareEntry, Child, ExternalCalendarEvent, HolidayPeriod, UnavailablePeriod } from "../types";
 import { Icon } from "./Icon";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy, copyList } from "../i18n/catalog";
@@ -14,6 +15,7 @@ export function CalendarGrid({
   unavailablePeriods = [],
   externalEvents = [],
   holidayPeriods = [],
+  conflicts = [],
   onSelectDate,
   onSelectEntry,
   onSelectUnavailable,
@@ -25,6 +27,7 @@ export function CalendarGrid({
   unavailablePeriods?: UnavailablePeriod[];
   externalEvents?: ExternalCalendarEvent[];
   holidayPeriods?: HolidayPeriod[];
+  conflicts?: CareConflict[];
   onSelectDate: (dateKey: string) => void;
   onSelectEntry: (entry: CareEntry) => void;
   onSelectUnavailable?: (period: UnavailablePeriod) => void;
@@ -189,6 +192,7 @@ export function CalendarGrid({
                       affectsContactOnly: true
                     }).length > 0;
                   const hasHolidayOverlap = isRuleEntry && dayHolidays.length > 0;
+                  const conflictSeverity = conflictSeverityForEntry(conflicts, entry.id);
                   return (
                   <button
                     className={[
@@ -197,13 +201,16 @@ export function CalendarGrid({
                       isRuleEntry ? "calendar-event--rule" : "",
                       isRuleException ? "calendar-event--exception" : "",
                       hasOverlap ? "calendar-event--overlap" : "",
-                      hasHolidayOverlap ? "calendar-event--holiday-overlap" : ""
+                      hasHolidayOverlap ? "calendar-event--holiday-overlap" : "",
+                      conflictSeverity ? `calendar-event--conflict-${conflictSeverity}` : ""
                     ].filter(Boolean).join(" ")}
                     type="button"
                     key={entry.id}
                     data-testid={`calendar-entry-${entry.id}`}
                     onClick={() => onSelectEntry(entry)}
-                    title={hasOverlap
+                    title={conflictSeverity
+                      ? copy(locale, "careConflict", conflictSeverity === "unresolved_actual" ? "unresolvedActual" : "plannedWarning")
+                      : hasOverlap
                       ? copy(locale, "agenda", "overlap")
                       : hasHolidayOverlap
                         ? copy(locale, "calendar", "holidayOverlap")
@@ -218,7 +225,7 @@ export function CalendarGrid({
                       {entryLabel}
                     </span>
                     {entry.overnight ? <Icon name="moon" size={13} /> : null}
-                    {hasOverlap ? <Icon name="alert" size={13} /> : hasHolidayOverlap ? <Icon name="sun" size={13} /> : isRuleException ? <Icon name="edit" size={13} /> : isRuleEntry ? <Icon name="repeat" size={13} /> : null}
+                    {conflictSeverity || hasOverlap ? <Icon name="alert" size={13} /> : hasHolidayOverlap ? <Icon name="sun" size={13} /> : isRuleException ? <Icon name="edit" size={13} /> : isRuleEntry ? <Icon name="repeat" size={13} /> : null}
                   </button>
                   );
                 })}

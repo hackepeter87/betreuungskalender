@@ -1,7 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "../components/Icon";
 import { FieldHelpButton, FieldHelpLabel } from "../components/FieldHelp";
-import { Modal } from "../components/Modal";
 import {
   calculateContactStats,
   entriesForRange,
@@ -203,11 +202,9 @@ function previewItemFromRuleEntry(
 }
 
 export function ContactPage({
-  focusedRuleId,
   onEditEntry,
   onNewEntry
 }: {
-  focusedRuleId?: string;
   onEditEntry: (entry: CareEntry) => void;
   onNewEntry: () => void;
 }) {
@@ -215,13 +212,11 @@ export function ContactPage({
     data,
     saveContactRule,
     syncContactRule,
-    updateEntryStatus,
     canWrite,
     isSaving
   } = useAppStore();
   const { locale, intlLocale } = useI18n();
-  const existingRule =
-    data.contactRules.find((rule) => rule.id === focusedRuleId) ?? data.contactRules[0];
+  const existingRule = data.contactRules[0];
   const currentYear = new Date().getFullYear();
   const defaultRange = rangeForYear(currentYear);
   const existingBuilder = recurrenceBuilderFromRule(existingRule);
@@ -266,8 +261,6 @@ export function ContactPage({
   const [generationStart, setGenerationStart] = useState(defaultRange.startDate);
   const [generationEnd, setGenerationEnd] = useState(defaultRange.endDate);
   const [message, setMessage] = useState("");
-  const [cancelEntry, setCancelEntry] = useState<CareEntry | null>(null);
-  const [cancelReason, setCancelReason] = useState("");
   const recurrence = useMemo<ContactRuleRecurrence>(() => {
     return {
       kind: "rrule",
@@ -426,15 +419,6 @@ export function ContactPage({
           })
         : contactSyncMessage(locale, "noChanges")
     );
-  };
-
-  const confirmCancellation = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!cancelEntry || !cancelReason.trim()) return;
-    if (await updateEntryStatus(cancelEntry.id, "cancelled", cancelReason)) {
-      setCancelEntry(null);
-      setCancelReason("");
-    }
   };
 
   return (
@@ -843,20 +827,6 @@ export function ContactPage({
                   </span>
                 ) : null}
               </button>
-              {isRuleEntry ? (
-                <div className="rule-entry__actions">
-                  <button className="button button--quiet" type="button" onClick={() => void updateEntryStatus(entry.id, "completed")} disabled={!canWrite || isSaving}>
-                    <Icon name="check" size={15} />
-                    {copy(locale, "contact", "completed")}
-                  </button>
-                  <button className="button button--danger-quiet" type="button" onClick={() => { setCancelEntry(entry); setCancelReason(entry.cancellationReason ?? ""); }} disabled={!canWrite || isSaving}>
-                    <Icon name="close" size={15} />
-                    {copy(locale, "contact", "cancelled")}
-                  </button>
-                  <FieldHelpButton fieldId="contactPattern.confirmCompleted" showRequirement={false} />
-                  <FieldHelpButton fieldId="contactPattern.markCancelled" showRequirement={false} />
-                </div>
-              ) : null}
             </article>
             );
           })}
@@ -864,23 +834,6 @@ export function ContactPage({
         </div>
       </section>
 
-      {cancelEntry ? (
-        <Modal title={copy(locale, "contact", "cancelTitle")} onClose={() => setCancelEntry(null)}>
-          <form className="child-form" onSubmit={confirmCancellation}>
-            <label className="field">
-              <FieldHelpLabel fieldId="careEntry.cancellationReason" />
-              <textarea autoFocus required rows={4} value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} />
-            </label>
-            <footer className="form-actions">
-              <span />
-              <div className="form-actions__right">
-                <button className="button button--secondary" type="button" onClick={() => setCancelEntry(null)}>{copy(locale, "common", "cancel")}</button>
-                <button className="button button--primary" type="submit" disabled={!canWrite || isSaving}>{copy(locale, "contact", "saveCancellation")}</button>
-              </div>
-            </footer>
-          </form>
-        </Modal>
-      ) : null}
     </div>
   );
 }
