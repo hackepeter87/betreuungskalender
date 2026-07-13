@@ -370,6 +370,7 @@ export interface AppData {
   careParties: CareParty[];
   entries: CareEntry[];
   careConflicts: CareConflict[];
+  careConflictsComplete: boolean;
   holidayPeriods: HolidayPeriod[];
   unavailablePeriods: UnavailablePeriod[];
   externalCalendarSources: ExternalCalendarSource[];

@@ -149,6 +149,12 @@ its actual children and actual time overlap another actual entry. Cancelled and
 soft-deleted entries are ignored. Existing contradictory actual entries remain
 readable and are reported as unresolved conflicts for later correction.
 
+The conflict endpoint returns `{ items, complete }`. `complete: false` means the
+derived overview exceeded its processing budget; no partial conflict list is
+presented as complete. Care entries remain readable and writable under their
+normal authorization rules. Actual-care write validation queries only entries
+for the same children and overlapping actual interval and remains fail closed.
+
 Analytics merge overlapping actual intervals so the same care time is counted
 only once. Overlap assigned to different care parties is not silently credited
 to either party: reports expose that duration, and holiday allocation keeps the

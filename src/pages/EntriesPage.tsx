@@ -82,6 +82,13 @@ export function EntriesPage({
         </div>
       </div>
 
+      {!data.careConflictsComplete ? (
+        <div className="notice notice--warning" role="status" data-testid="care-conflicts-limited">
+          <Icon name="alert" />
+          <span>{copy(locale, "careConflict", "limited")}</span>
+        </div>
+      ) : null}
+
       <section className="panel">
         <div className="list-toolbar">
           <label className="search-field">

@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { ApiCareEntry, ApiCost, ApiTrip } from "../../shared/api.js";
+import type { ApiCareConflictList, ApiCareEntry, ApiCost, ApiTrip } from "../../shared/api.js";
 import type { RequestUser } from "../auth.js";
 import { config } from "../config.js";
 import { db } from "../db/connection.js";
@@ -12,6 +12,7 @@ import { assertCanUseCareParty } from "../services/carePartyAccess.js";
 import { assertActiveCareParty } from "../services/careParties.js";
 import {
   assertNoActualCareConflict,
+  isCareConflictWorkLimitError,
   isCareEntryConflictError,
   listCareConflicts
 } from "../services/careConflicts.js";
@@ -539,7 +540,16 @@ function persistEntry(
 }
 
 export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/care-conflicts", readLimit, async () => listCareConflicts(db));
+  app.get("/api/care-conflicts", readLimit, async (): Promise<ApiCareConflictList> => {
+    try {
+      return { items: listCareConflicts(db), complete: true };
+    } catch (error) {
+      if (isCareConflictWorkLimitError(error)) {
+        return { items: [], complete: false };
+      }
+      throw error;
+    }
+  });
 
   app.get<{ Querystring: { startDate?: string; endDate?: string } }>(
     "/api/care-entries",

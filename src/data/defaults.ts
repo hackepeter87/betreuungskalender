@@ -11,6 +11,7 @@ export function createEmptyData(): AppData {
     careParties: [],
     entries: [],
     careConflicts: [],
+    careConflictsComplete: true,
     holidayPeriods: [],
     unavailablePeriods: [],
     externalCalendarSources: [],
