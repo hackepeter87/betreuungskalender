@@ -353,13 +353,29 @@ test("shows link-based onboarding completion once without retaining the query", 
   await expect(notice).toHaveCount(0);
 });
 
-test("keeps mobile contact rule time spans inside their card", async ({
+test("guides a custom non-14-day contact rule through the mobile flow", async ({
   page
 }) => {
   await openApp(page);
   await createChild(page, "Regel Layout Kind");
 
   await navigate(page, "contact");
+  await expect(page.getByTestId("contact-mobile-live-preview")).toBeVisible();
+  await page.getByTestId("contact-pattern-start-date").fill("2026-07-01");
+  await page.getByTestId("contact-pattern-end-date").fill("2026-12-31");
+
+  await page.getByTestId("contact-mobile-next-step").click();
+  await expect(page.getByTestId("contact-mobile-step-2")).toHaveAttribute("aria-current", "step");
+  await page.getByTestId("contact-recurrence-frequency").selectOption("weekly");
+  await page.getByTestId("contact-recurrence-interval").fill("3");
+  await page.getByTestId("contact-weekday-FR").click();
+  await expect(page.getByTestId("contact-mobile-live-preview")).toContainText(/keine neuen Termine/i);
+  await page.getByTestId("contact-weekday-MO").click();
+  await page.getByTestId("contact-weekday-TH").click();
+  await expect(page.getByTestId("contact-mobile-live-preview")).toContainText("Termin");
+
+  await page.getByTestId("contact-mobile-next-step").click();
+  await expect(page.getByTestId("contact-mobile-step-3")).toHaveAttribute("aria-current", "step");
   const segmentRow = page.locator(".rule-segment-row").first();
   await segmentRow.scrollIntoViewIfNeeded();
   await expect(segmentRow).toBeVisible();
@@ -373,6 +389,11 @@ test("keeps mobile contact rule time spans inside their card", async ({
     expect(inputBox!.x + inputBox!.width).toBeLessThanOrEqual(rowBox!.x + rowBox!.width + 1);
   }
 
+  await page.getByTestId("contact-mobile-next-step").click();
+  await expect(page.getByTestId("contact-mobile-step-4")).toHaveAttribute("aria-current", "step");
+  await page.getByTestId("contact-pattern-save").click();
+  await expect(page.getByTestId("contact-message")).toContainText("Umgangsregel gespeichert");
+
   const summary = page.locator(".summary-strip--seven").first();
   await summary.scrollIntoViewIfNeeded();
   await expect(summary).toBeVisible();
@@ -384,8 +405,6 @@ test("keeps mobile contact rule time spans inside their card", async ({
   expect(finalMetricBox!.x + finalMetricBox!.width).toBeLessThanOrEqual(summaryBox!.x + summaryBox!.width + 1);
   expect(finalMetricBox!.width).toBeGreaterThan(summaryBox!.width * 0.9);
 
-  await page.getByTestId("contact-pattern-save").click();
-  await expect(page.getByTestId("contact-message")).toContainText("Umgangsregel gespeichert");
   const generatedEntry = page.getByTestId("contact-generated-entry").first();
   await generatedEntry.scrollIntoViewIfNeeded();
   await expect(generatedEntry).toBeVisible();

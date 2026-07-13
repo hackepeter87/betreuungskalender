@@ -69,6 +69,16 @@ const de = {
     openToReview: "Öffne den Eintrag, um die Zeiten zu prüfen.",
     readOnly: "Nur lesbar. Eine Person mit Schreibrechten muss den Eintrag prüfen."
   },
+  contactFlow: {
+    stepsLabel: "Schritte der Regelanlage",
+    stepRange: "Zeitraum",
+    stepRecurrence: "Rhythmus",
+    stepTimes: "Zeiten",
+    stepAssignment: "Zuordnung",
+    previousStep: "Zurück",
+    nextStep: "Weiter",
+    mobilePreviewSummary: "{count} Termin(e), erster am {date}"
+  },
   calendar: {
     weekdays: ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"],
     addEntryOnDate: "Eintrag am {date} erfassen",
@@ -382,6 +392,7 @@ const en = {
   analytics: { ...de.analytics, context: "Period analysis", title: "Analytics", csvPeriod: "Period CSV", creatingPdf: "Creating PDF …", pdfReport: "PDF report", emptyTitle: "No entries to analyze yet", emptyDescription: "After care entries are saved, times, nights, trips, and costs appear here.", careDays: "Care days", careHours: "Care hours", unresolvedCareHours: "Unresolved overlap", overnights: "Overnights", additionalCare: "Additional care", tripKm: "Trip kilometres", costs: "Costs", byChild: "Analysis by child and combined", byChildDescription: "Costs and trips from shared entries are allocated proportionally to child rows.", analysis: "Analysis", days: "Days", nights: "Nights", weekends: "Weekends", weekdayNights: "Weekday nights", additional: "Additional", holidayDays: "Holiday days", dayQuote: "Day share", nightQuote: "Night share", kilometres: "Kilometres", travelCosts: "Travel costs", combined: "Combined", plannedActual: "Planned/actual and additional care", plannedActualDescription: "Planned contact dates in the period", plannedDates: "Planned contact dates", pending: "Still pending", completed: "Completed", cancelledDuty: "Cancelled due to duty", cancelledOther: "Other cancellations", externallyBlocked: "Externally blocked", overlaps: "Overlaps", trips: "Trips", rate: "Rate: {rate} EUR/km", drivenKm: "Driven kilometres", calculatedTravelCost: "Calculated travel costs", reimbursements: "Documented reimbursements", costsByCategory: "Costs by category", completedEntries: "Completed care entries", total: "Total", holidayAllocation: "Holiday allocation", holidayDescription: "Holiday shares are calculated from care entries inside recorded holiday periods.", fatherDays: "With father", motherDays: "With mother", fatherQuote: "Father share", dutyUnavailability: "Duty-related unavailability", neutralTitle: "Factual analysis", neutralDescription: "Shares relate to all calendar days or nights in the selected period. The analysis does not provide a legal assessment." },
   agenda: { ...de.agenda, emptyTitle: "No entries in this month yet", emptyDescription: "Create the first care entry directly from the agenda.", addEntry: "Add entry", documentationCount: "{count} records", addEntryForDate: "Add entry for {date}", dutyRelated: "Duty-related", unavailable: "Unavailable", externalBlock: "Externally blocked", affectsContact: "Affects contact", affectsHolidays: "Affects holidays", overnight: "Overnight", additionalCare: "Additional care", holiday: "Holiday day", holidayPeriod: "Holiday period", overlap: "This planned contact overlaps with documented unavailability.", holidayOverlap: "Inside holiday period", holidayOverlapNotice: "This rule date is inside a holiday period. Holidays do not automatically replace planned contact; edit, confirm, or cancel the date deliberately.", durationDaysHours: "{days} d {hours} h", durationDays: "{days} days", durationHours: "{hours} h", originalPlan: "Originally planned: {date}, {start}-{end}" },
   careConflict: { ...de.careConflict, plannedWarning: "Planned overlap", unresolvedActual: "Unresolved actual overlap", openToReview: "Open the entry to review its times.", readOnly: "Read only. A person with write access must review the entry." },
+  contactFlow: { ...de.contactFlow, stepsLabel: "Rule setup steps", stepRange: "Range", stepRecurrence: "Recurrence", stepTimes: "Times", stepAssignment: "Assignment", previousStep: "Back", nextStep: "Next", mobilePreviewSummary: "{count} date(s), first on {date}" },
   calendar: { ...de.calendar, weekdays: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"], addEntryOnDate: "Create entry on {date}", dutyAbsence: "Duty-related absence", unavailability: "Unavailability", externalBlock: "Externally blocked", completed: "Completed", planned: "Planned", cancelled: "Cancelled", bothChildren: "Both children", entry: "Entry", more: "+{count} more", ruleRegular: "Regular rule date", ruleChanged: "Changed rule date", ruleCancelled: "Cancelled rule date", holidayOverlap: "Rule date inside holiday period" },
   monthToolbar: { label: "Month selection", previous: "Previous month", choose: "Choose month", next: "Next month" },
   periodSelector: { label: "Analysis period", month: "Month", quarter: "Quarter", year: "Year", custom: "Custom", anchorMonth: "Reference month", startDate: "From", endDate: "To" },
