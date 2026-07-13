@@ -8,15 +8,15 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `NODE_ENV` | Runtime mode and production error handling | `production` | Recommended | `development` | Production hides internal error details |
 | `HOST` | Listener address | `127.0.0.1` | Optional | `127.0.0.1` | Use loopback when a local proxy is in front |
 | `PORT` | HTTP port | `3000` | Optional | `3000` | Expose only through the intended firewall/proxy |
-| `APP_RELEASE_VERSION` | Release Compose image tag | `1.10.2` | Required for `deploy/compose.yml` | None | Must match the extracted release package version |
-| `APP_RELEASE_DIR` | Release Compose build context | `/opt/svc_betreuung/betreuungskalender/releases/v1.10.2` | Required for `deploy/compose.yml` | None | Must point at the verified extracted release directory |
+| `APP_RELEASE_VERSION` | Local image tag for the archive-based release Compose runtime | `X.Y.Z` | Required for `deploy/compose.yml` | None | Must match the extracted release package version without the leading `v` |
+| `APP_RELEASE_DIR` | Release Compose build context | `/opt/svc_betreuung/betreuungskalender/releases/vX.Y.Z` | Required for `deploy/compose.yml` | None | Must point at the verified extracted release directory |
 | `APP_COMPOSE_FILE` | Compose file managed by the update tool | `compose.oidc.yml` | Required only when not using `compose.yml` | `compose.yml` | Must be `compose.yml` or `compose.oidc.yml` |
 | `OAUTH2_PROXY_IMAGE` | oauth2-proxy image used by `deploy/compose.oidc.yml` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.3` | Optional for OIDC Compose | Same | Pin and review oauth2-proxy updates like other runtime dependencies |
 | `HOST_BIND_ADDRESS` | Host address published by release Compose | `127.0.0.1` | Recommended for `deploy/compose.yml` | `127.0.0.1` | Use loopback only when the reverse proxy is on the same host |
 | `HOST_PORT` | Host port published by release Compose | `3000` | Recommended for `deploy/compose.yml` | `3000` | Expose only through the intended firewall/proxy |
 | `DATABASE_PATH` | SQLite database file | `/var/lib/betreuungskalender/app.sqlite` | Recommended | `./data/app.sqlite` | Contains sensitive API data; protect permissions and disk |
 | `BACKUP_DIR` | Destination for SQLite backups | `/var/backups/betreuungskalender` | Recommended | `./backups` | Contains sensitive copies; use mode `0700` |
-| `AUTH_MODE` | Authentication implementation mode | `trusted-proxy` | Optional | Derived from `TRUST_PROXY_AUTH` | Selects the only authentication implementation the API will accept |
+| `AUTH_MODE` | Authentication implementation mode | `native-oidc` | Optional | Derived from `TRUST_PROXY_AUTH` | Selects the only authentication implementation the API will accept |
 | `REQUIRE_AUTH` | Require a trusted identity for API routes | `true` | Recommended in production | `false` | Must be `true` for protected reverse-proxy operation |
 | `TRUST_PROXY_AUTH` | Legacy trusted-proxy switch and header-trust flag | `true` | Required with `AUTH_MODE=trusted-proxy` | `false` | Only valid for trusted-proxy auth; never enable when clients can directly reach the app |
 | `TRUSTED_PROXY_CIDRS` | Optional comma-separated trusted source IPs or CIDRs for trusted-proxy identity headers | `127.0.0.1,10.88.0.0/16` | Recommended with `AUTH_MODE=trusted-proxy` | Empty | When set, proxy identity headers are accepted only from matching socket source addresses |
@@ -179,7 +179,7 @@ oauth2-proxy. Do not add an app `ports:` mapping while `TRUST_PROXY_AUTH=true`.
 
 ### Native OIDC
 
-`AUTH_MODE=native-oidc` is the target architecture for the v1.4 workstream. It
+`AUTH_MODE=native-oidc` is the recommended direct OIDC architecture. It
 validates Authorization Code + PKCE callbacks with `openid-client`, stores
 short-lived server-side login state, and creates server-side sessions with an
 opaque browser cookie. The browser cookie contains only a random session token;

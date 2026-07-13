@@ -182,7 +182,7 @@ Complete guide: [docs/deployment-lxc.md](docs/deployment-lxc.md)
 ## Configuration
 
 All settings are environment based. `.env.example` contains production-shaped
-example values for the direct Compose/systemd path using `example.net` only. Use
+values for the direct Compose/systemd path using reserved example domains. Use
 `deploy/.env.oidc.example` instead for the oauth2-proxy/OIDC Compose topology.
 For native OIDC without oauth2-proxy, keep the direct Compose path and set
 `AUTH_MODE=native-oidc`.

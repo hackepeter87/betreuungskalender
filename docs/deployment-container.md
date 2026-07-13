@@ -1,6 +1,8 @@
 # Container deployment
 
-The repository supports three container paths:
+The repository supports several container paths. Choose one deployment model
+and do not mix its Compose file, environment file, and update procedure with
+another model:
 
 - `Dockerfile` plus root-level `compose.yaml` for local evaluation and CI-style
   container checks from a checkout.
@@ -76,9 +78,9 @@ host-side `./data:/data` and `./backups:/backups` bind mounts.
 
 For testing and production machines that should not build from release
 archives, install the matching image Compose file as `compose.yml` and keep
-private settings in `app.env`. Use `deploy/compose.testing.yml` only on the demo
-machine, currently `bk-demo.saas-lab.de`. Use `deploy/compose.production.yml`
-only on the production machine. Do not use `latest` in deployment Compose files;
+private settings in `app.env`. Use `deploy/compose.testing.yml` only on a
+non-production test installation and `deploy/compose.production.yml` only on
+the production installation. Do not use `latest` in deployment Compose files;
 it is not a release gate.
 
 The image-based path is documented in [image-promotion.md](image-promotion.md).
