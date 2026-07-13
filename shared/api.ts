@@ -155,6 +155,11 @@ export interface ApiCareConflict {
   severity: ApiCareConflictSeverity;
 }
 
+export interface ApiCareConflictList {
+  items: ApiCareConflict[];
+  complete: boolean;
+}
+
 export interface ApiCareConfirmationRequest {
   id: string;
   careEntryId: string;

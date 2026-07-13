@@ -1305,6 +1305,23 @@ test("shows planned care conflicts consistently across care views", async ({
   await expect(page.getByTestId("entry-form")).toBeVisible();
 });
 
+test("keeps care views usable when the conflict overview is incomplete", async ({ page }) => {
+  await page.route("**/api/care-conflicts", async (route) => {
+    await route.fulfill({
+      contentType: "application/json",
+      body: JSON.stringify({ items: [], complete: false })
+    });
+  });
+  await openApp(page);
+  await navigate(page, "calendar");
+  await expect(page.getByTestId("page-calendar")).toBeVisible();
+  await expect(page.getByTestId("care-conflicts-limited")).toBeVisible();
+
+  await navigate(page, "entries");
+  await expect(page.getByTestId("page-entries")).toBeVisible();
+  await expect(page.getByTestId("care-conflicts-limited")).toBeVisible();
+});
+
 test("uses a weekly multi-day contact rule builder with calendar preview", async ({
   page,
   request

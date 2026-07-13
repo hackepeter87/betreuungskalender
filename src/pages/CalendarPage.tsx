@@ -94,6 +94,13 @@ export function CalendarPage({
         </div>
       </div>
 
+      {!data.careConflictsComplete ? (
+        <div className="notice notice--warning" role="status" data-testid="care-conflicts-limited">
+          <Icon name="alert" />
+          <span>{copy(locale, "careConflict", "limited")}</span>
+        </div>
+      ) : null}
+
       <div className="calendar-quick-actions">
         <button className="button button--primary" data-testid="calendar-add-entry" type="button" onClick={() => onNewEntry()} disabled={!canWrite}>
           <Icon name="plus" size={17} />

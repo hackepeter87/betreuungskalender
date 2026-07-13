@@ -26,6 +26,8 @@ project follows semantic versioning where practical.
   preserved exceptions.
 - Calendar, agenda, and entry views use the same neutral conflict status and
   link users to the editable entry.
+- Derived conflict responses use fixed processing budgets and expose an
+  explicit completeness state instead of returning partial results as complete.
 
 ### Security
 

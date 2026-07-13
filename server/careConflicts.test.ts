@@ -6,8 +6,14 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import test from "node:test";
-import type { ApiCareConflict, ApiCareEntry, ApiCareParty, ApiChild } from "../shared/api.js";
-import { detectCareConflicts } from "./services/careConflicts.js";
+import Database from "better-sqlite3";
+import type { ApiCareConflictList, ApiCareEntry, ApiCareParty, ApiChild } from "../shared/api.js";
+import {
+  CareConflictDetectionLimitError,
+  CareEntryConflictError,
+  assertNoActualCareConflict,
+  detectCareConflicts
+} from "./services/careConflicts.js";
 
 const projectRoot = resolve(import.meta.dirname, "..");
 
@@ -71,6 +77,88 @@ test("ignores adjacent, cancelled, and different-child entries", () => {
     entry({ id: "entry-other-child", status: "completed", childIds: ["child-b"] })
   ]);
   assert.deepEqual(conflicts, []);
+});
+
+test("stops conflict materialization at the configured result budget", () => {
+  const denseEntries = Array.from({ length: 20 }, (_, index) => entry({
+    id: `entry-${index}`
+  }));
+  assert.throws(
+    () => detectCareConflicts(denseEntries, { maxConflicts: 25 }),
+    CareConflictDetectionLimitError
+  );
+  assert.equal(
+    detectCareConflicts(denseEntries.slice(0, 5), { maxConflicts: 25 }).length,
+    10
+  );
+});
+
+test("actual conflict validation only considers matching children and times", () => {
+  const database = new Database(":memory:");
+  database.exec(`
+    CREATE TABLE care_entries (
+      id TEXT PRIMARY KEY,
+      status TEXT NOT NULL,
+      start_datetime TEXT NOT NULL,
+      end_datetime TEXT NOT NULL,
+      actual_start_datetime TEXT,
+      actual_end_datetime TEXT,
+      deleted_at TEXT
+    );
+    CREATE TABLE care_entry_children (
+      care_entry_id TEXT NOT NULL,
+      child_id TEXT NOT NULL,
+      deleted_at TEXT
+    );
+    CREATE TABLE care_entry_actual_children (
+      care_entry_id TEXT NOT NULL,
+      child_id TEXT NOT NULL,
+      deleted_at TEXT
+    );
+  `);
+  const insertEntry = database.prepare(`
+    INSERT INTO care_entries (
+      id, status, start_datetime, end_datetime,
+      actual_start_datetime, actual_end_datetime, deleted_at
+    ) VALUES (?, 'completed', ?, ?, NULL, NULL, NULL)
+  `);
+  const insertChild = database.prepare(`
+    INSERT INTO care_entry_children (care_entry_id, child_id, deleted_at)
+    VALUES (?, ?, NULL)
+  `);
+  database.transaction(() => {
+    for (let index = 0; index < 1_100; index += 1) {
+      const id = `unrelated-${index}`;
+      insertEntry.run(id, "2026-07-04T16:00:00.000Z", "2026-07-04T18:00:00.000Z");
+      insertChild.run(id, "child-b");
+    }
+  })();
+
+  const candidate = entry({ id: "candidate", status: "completed", childIds: ["child-a"] });
+  assert.doesNotThrow(() => assertNoActualCareConflict(candidate, database));
+
+  insertEntry.run("matching", "2026-07-04T17:00:00.000Z", "2026-07-04T19:00:00.000Z");
+  insertChild.run("matching", "child-a");
+  assert.throws(
+    () => assertNoActualCareConflict(candidate, database),
+    CareEntryConflictError
+  );
+
+  database.prepare("DELETE FROM care_entry_children WHERE care_entry_id = 'matching'").run();
+  database.prepare("DELETE FROM care_entries WHERE id = 'matching'").run();
+  insertEntry.run("offset-matching", "2026-07-04T16:30:00.000Z", "2026-07-04T17:30:00.000Z");
+  insertChild.run("offset-matching", "child-a");
+  assert.throws(
+    () => assertNoActualCareConflict(entry({
+      id: "offset-candidate",
+      status: "completed",
+      childIds: ["child-a"],
+      startDateTime: "2026-07-04T18:00:00+02:00",
+      endDateTime: "2026-07-04T19:00:00+02:00"
+    }), database),
+    CareEntryConflictError
+  );
+  database.close();
 });
 
 async function freePort(): Promise<number> {
@@ -196,10 +284,11 @@ test("care-entry API serializes actual writes and returns generic conflicts", as
     method: "POST",
     body: JSON.stringify({ ...baseInput, status: "planned" })
   });
-  const conflicts = await jsonRequest<ApiCareConflict[]>(baseUrl, "/api/care-conflicts");
-  assert.equal(conflicts.length, 1);
-  assert.equal(conflicts[0]?.severity, "planned_warning");
-  assert.equal(conflicts[0]?.entryIds.includes(planned.id), true);
+  const conflicts = await jsonRequest<ApiCareConflictList>(baseUrl, "/api/care-conflicts");
+  assert.equal(conflicts.complete, true);
+  assert.equal(conflicts.items.length, 1);
+  assert.equal(conflicts.items[0]?.severity, "planned_warning");
+  assert.equal(conflicts.items[0]?.entryIds.includes(planned.id), true);
 
   const actualUpdate = await fetch(`${baseUrl}/api/care-entries/${planned.id}`, {
     method: "PUT",
@@ -221,4 +310,36 @@ test("care-entry API serializes actual writes and returns generic conflicts", as
     method: "POST",
     body: JSON.stringify({ ...baseInput, childIds: [otherChild.id] })
   });
+
+  const direct = new Database(join(root, "app.sqlite"));
+  const insertDenseEntry = direct.prepare(`
+    INSERT INTO care_entries (
+      id, start_datetime, end_datetime, status, care_scope,
+      duration_minutes, created_by, updated_by, created_at, updated_at
+    ) VALUES (?, ?, ?, 'planned', 'hourly', 120, 'test', 'test', ?, ?)
+  `);
+  const insertDenseChild = direct.prepare(`
+    INSERT INTO care_entry_children (
+      care_entry_id, child_id, created_at, updated_at
+    ) VALUES (?, ?, ?, ?)
+  `);
+  const timestamp = "2030-01-01T00:00:00.000Z";
+  direct.transaction(() => {
+    for (let index = 0; index < 102; index += 1) {
+      const id = `dense-${index}`;
+      insertDenseEntry.run(
+        id,
+        "2030-01-01T16:00:00.000Z",
+        "2030-01-01T18:00:00.000Z",
+        timestamp,
+        timestamp
+      );
+      insertDenseChild.run(id, child.id, timestamp, timestamp);
+    }
+  })();
+  direct.close();
+
+  const limited = await jsonRequest<ApiCareConflictList>(baseUrl, "/api/care-conflicts");
+  assert.equal(limited.complete, false);
+  assert.deepEqual(limited.items, []);
 });
