@@ -213,6 +213,7 @@ export function ReportPage() {
               <div><dt>{messages.cancelledOther}</dt><dd>{stats.contact.cancelledOther}</dd></div>
               <div><dt>{messages.externallyBlocked}</dt><dd>{stats.contact.externallyBlocked}</dd></div>
               <div><dt>{messages.overlaps}</dt><dd>{stats.contact.unavailableOverlaps}</dd></div>
+              <div><dt>{messages.unresolvedCare}</dt><dd>{stats.unresolvedCareHours} h</dd></div>
               <div><dt>{messages.additionalDates}</dt><dd>{stats.contact.additional}</dd></div>
             </dl>
           </div>
@@ -229,6 +230,9 @@ export function ReportPage() {
               ))}
               {stats.holidays.unassignedDays > 0 ? (
                 <div><dt>{copy(locale, "holiday", "unassignedDays")}</dt><dd>{stats.holidays.unassignedDays}</dd></div>
+              ) : null}
+              {stats.holidays.unresolvedDays > 0 ? (
+                <div><dt>{messages.unresolvedHoliday}</dt><dd>{stats.holidays.unresolvedDays}</dd></div>
               ) : null}
             </dl>
           </div>

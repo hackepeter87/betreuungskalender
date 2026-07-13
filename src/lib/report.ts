@@ -144,12 +144,21 @@ export async function exportPdfReport(
     maxWidth: 180
   });
 
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8);
+  doc.text(
+    `${messages.unresolvedCare}: ${stats.unresolvedCareHours} h · ${messages.unresolvedHoliday}: ${stats.holidays.unresolvedDays}`,
+    14,
+    124,
+    { maxWidth: 180 }
+  );
+
   doc.setFont("helvetica", "bold");
   doc.setFontSize(11);
-  doc.text(messages.dailyList, 14, 129);
+  doc.text(messages.dailyList, 14, 133);
 
   autoTable(doc, {
-    startY: 133,
+    startY: 137,
     head: [[messages.period, messages.children, `${messages.status} / ${messages.classification}`, `${messages.days} / ${messages.nights}`, `km / ${messages.costs}`, messages.notesOrReason]],
     body: entries.map((entry) => {
       const entryCosts = entry.costs
@@ -164,10 +173,16 @@ export async function exportPdfReport(
       const originalPlan = entry.plannedStartDateTime && entry.plannedEndDateTime
         ? `\n${messages.originalPlan}: ${formatDate(entry.plannedStartDateTime, intlLocale)} ${formatTime(entry.plannedStartDateTime, intlLocale)}-${formatTime(entry.plannedEndDateTime, intlLocale)}`
         : "";
+      const entryConflicts = data.careConflicts.filter((conflict) => conflict.entryIds.includes(entry.id));
+      const conflictLabel = entryConflicts.some((conflict) => conflict.severity === "unresolved_actual")
+        ? `\n${messages.actualConflict}`
+        : entryConflicts.length
+          ? `\n${messages.plannedConflict}`
+          : "";
       return [
         `${formatDate(entry.startDateTime, intlLocale)} ${formatTime(entry.startDateTime, intlLocale)}\n${messages.through} ${formatDate(entry.endDateTime, intlLocale)} ${formatTime(entry.endDateTime, intlLocale)}`,
         namesForEntry(data, entry.childIds),
-        `${statusLabel(entry.status, options.locale)}${entry.additionalCare ? `\n${messages.additionalCare}` : ""}${entry.generatedByPatternId ? `\n${messages.plannedDate}` : ""}${deviation}${originalPlan}`,
+        `${statusLabel(entry.status, options.locale)}${entry.additionalCare ? `\n${messages.additionalCare}` : ""}${entry.generatedByPatternId ? `\n${messages.plannedDate}` : ""}${deviation}${originalPlan}${conflictLabel}`,
         `${entry.overnight ? messages.overnight : messages.dayCare}${entry.schoolHandover ? `\n${messages.schoolHandover}` : ""}${entry.holiday ? `\n${messages.holiday}` : ""}`,
         `${entryKm.toFixed(1)} km\n${euro.format(entryCosts)}`,
         entry.deviationNote || entry.cancellationReason || entry.notes || "–"
