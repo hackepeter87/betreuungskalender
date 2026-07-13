@@ -69,6 +69,13 @@ function notFound(reply: FastifyReply) {
   });
 }
 
+function preventOnboardingCache(reply: FastifyReply): FastifyReply {
+  return reply
+    .header("cache-control", "no-store, max-age=0")
+    .header("pragma", "no-cache")
+    .header("expires", "0");
+}
+
 function sanitizedError(error: unknown): NativeOidcError {
   if (error instanceof NativeOidcError) return error;
   if (error instanceof OwnerSetupTokenError) {
@@ -211,7 +218,8 @@ export async function nativeOidcRoutes(
   });
 
   app.get<{ Querystring: { token?: string } }>("/setup", authRateLimit, async (request, reply) => {
-    if (options.config.authMode !== "native-oidc") return notFound(reply);
+    const onboardingReply = preventOnboardingCache(reply);
+    if (options.config.authMode !== "native-oidc") return notFound(onboardingReply);
     try {
       const token = request.query.token?.trim();
       if (!token) {
@@ -222,13 +230,13 @@ export async function nativeOidcRoutes(
         );
       }
       ownerSetupTokens.begin(token);
-      return reply.type("text/html; charset=utf-8").send(onboardingPage({
+      return onboardingReply.type("text/html; charset=utf-8").send(onboardingPage({
         flow: "owner_setup",
         token
       }));
     } catch (error) {
       const normalized = sanitizedError(error);
-      return reply
+      return onboardingReply
         .code(normalized.statusCode)
         .type("text/html; charset=utf-8")
         .send(onboardingPage({ flow: "owner_setup", error: normalized }));
@@ -236,7 +244,8 @@ export async function nativeOidcRoutes(
   });
 
   app.get<{ Querystring: { token?: string } }>("/setup/continue", authRateLimit, async (request, reply) => {
-    if (options.config.authMode !== "native-oidc") return notFound(reply);
+    const onboardingReply = preventOnboardingCache(reply);
+    if (options.config.authMode !== "native-oidc") return notFound(onboardingReply);
     try {
       const token = request.query.token?.trim();
       if (!token) {
@@ -244,10 +253,10 @@ export async function nativeOidcRoutes(
       }
       const tokenHash = ownerSetupTokens.begin(token);
       const redirectUrl = await service.createLoginRedirect({ type: "owner_setup", tokenHash });
-      return reply.redirect(redirectUrl.href);
+      return onboardingReply.redirect(redirectUrl.href);
     } catch (error) {
       const normalized = sanitizedError(error);
-      return reply
+      return onboardingReply
         .code(normalized.statusCode)
         .type("text/html; charset=utf-8")
         .send(onboardingPage({ flow: "owner_setup", error: normalized }));
@@ -255,20 +264,21 @@ export async function nativeOidcRoutes(
   });
 
   app.get<{ Querystring: { token?: string } }>("/invite", authRateLimit, async (request, reply) => {
-    if (options.config.authMode !== "native-oidc") return notFound(reply);
+    const onboardingReply = preventOnboardingCache(reply);
+    if (options.config.authMode !== "native-oidc") return notFound(onboardingReply);
     try {
       const token = request.query.token?.trim();
       if (!token) {
         throw new NativeOidcError("invalid_invitation", 400, "Die Einladung ist ungültig.");
       }
       invitationFlow.begin(token);
-      return reply.type("text/html; charset=utf-8").send(onboardingPage({
+      return onboardingReply.type("text/html; charset=utf-8").send(onboardingPage({
         flow: "invitation",
         token
       }));
     } catch (error) {
       const normalized = sanitizedError(error);
-      return reply
+      return onboardingReply
         .code(normalized.statusCode)
         .type("text/html; charset=utf-8")
         .send(onboardingPage({ flow: "invitation", error: normalized }));
@@ -276,7 +286,8 @@ export async function nativeOidcRoutes(
   });
 
   app.get<{ Querystring: { token?: string } }>("/invite/continue", authRateLimit, async (request, reply) => {
-    if (options.config.authMode !== "native-oidc") return notFound(reply);
+    const onboardingReply = preventOnboardingCache(reply);
+    if (options.config.authMode !== "native-oidc") return notFound(onboardingReply);
     try {
       const token = request.query.token?.trim();
       if (!token) {
@@ -284,10 +295,10 @@ export async function nativeOidcRoutes(
       }
       const tokenHash = invitationFlow.begin(token);
       const redirectUrl = await service.createLoginRedirect({ type: "invitation", tokenHash });
-      return reply.redirect(redirectUrl.href);
+      return onboardingReply.redirect(redirectUrl.href);
     } catch (error) {
       const normalized = sanitizedError(error);
-      return reply
+      return onboardingReply
         .code(normalized.statusCode)
         .type("text/html; charset=utf-8")
         .send(onboardingPage({ flow: "invitation", error: normalized }));

@@ -519,6 +519,32 @@ test("native OIDC routes redirect login and keep callback responses token-free",
     assert.match(expiredInvitation.payload, /abgelaufen/);
     assert.equal(expiredInvitation.payload.includes("expired-invitation-token"), false);
 
+    const invalidSetupContinue = await app.inject({
+      method: "GET",
+      url: "/setup/continue"
+    });
+    assert.equal(invalidSetupContinue.statusCode, 400);
+    const invalidInvitationContinue = await app.inject({
+      method: "GET",
+      url: "/invite/continue"
+    });
+    assert.equal(invalidInvitationContinue.statusCode, 400);
+
+    for (const onboardingResponse of [
+      setup,
+      setupContinue,
+      invitation,
+      invitationContinue,
+      consumedSetup,
+      expiredInvitation,
+      invalidSetupContinue,
+      invalidInvitationContinue
+    ]) {
+      assert.equal(onboardingResponse.headers["cache-control"], "no-store, max-age=0");
+      assert.equal(onboardingResponse.headers.pragma, "no-cache");
+      assert.equal(onboardingResponse.headers.expires, "0");
+    }
+
     const callback = await app.inject({
       method: "GET",
       url: "/auth/callback?code=code-123&state=state-123"

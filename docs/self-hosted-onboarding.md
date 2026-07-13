@@ -62,9 +62,13 @@ membership. The setup wizard remains open until the required app data is
 completed. The link expires according to `OWNER_SETUP_TOKEN_TTL_SECONDS`, can
 be used only once, and is rejected after an owner has been established.
 
+Keep the secret file mounted and unchanged until the authenticated owner claim
+has completed. Replacing or removing it invalidates an unfinished flow. After
+the claim succeeds, remove the mounted file.
+
 Do not put the value itself in `.env`, Compose YAML, shell history, issue text,
-or application logs. Rotate the file to issue a new link before ownership has
-been claimed. Remove the mounted file after a successful owner claim.
+or application logs. Replace the file to issue a new link when an unfinished
+flow must be discarded.
 
 ## Identity and authorization model
 

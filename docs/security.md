@@ -242,7 +242,10 @@ Initial owner setup uses a one-time bearer value from a mounted secret file.
 Only its SHA-256 hash, validity window, and consumption metadata are stored in
 SQLite. The link is accepted only while first-use setup is incomplete and the
 authenticated OIDC subject is bound to the resulting owner membership. The raw
-value must not be placed in environment files or logs.
+value must not be placed in environment files or logs. The mounted secret is
+validated again before the owner membership is assigned, so replacing or
+removing the file invalidates an unfinished setup flow. Setup and invitation
+landing pages and redirects are returned with explicit no-store cache headers.
 
 An incomplete setup does not weaken normal native OIDC authorization. A normal
 login still requires a configured group role or an existing app membership.

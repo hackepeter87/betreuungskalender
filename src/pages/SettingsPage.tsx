@@ -238,13 +238,15 @@ function MemberInvitationManager() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<ApiAuthRole>("parent");
   const [expiresDays, setExpiresDays] = useState(7);
-  const [sendEmail, setSendEmail] = useState(false);
+  const [sendEmailOverride, setSendEmailOverride] = useState<boolean>();
   const [emailDeliveryAvailable, setEmailDeliveryAvailable] = useState(false);
   const [createdToken, setCreatedToken] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [ownerForbidden, setOwnerForbidden] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const hasInviteEmail = Boolean(inviteEmail.trim());
+  const sendEmail = emailDeliveryAvailable && hasInviteEmail && (sendEmailOverride ?? true);
 
   const loadOwnerData = async () => {
     if (session.user?.role !== "admin") return;
@@ -311,7 +313,7 @@ function MemberInvitationManager() {
       setInvitations((items) => [created.invitation, ...items]);
       setCreatedToken(created.token);
       setInviteEmail("");
-      setSendEmail(false);
+      setSendEmailOverride(undefined);
       if (created.emailDelivery?.status === "sent") {
         setMessage(copy(locale, "settings", "invitationEmailSent"));
       } else if (created.emailDelivery?.status === "failed") {
@@ -422,10 +424,7 @@ function MemberInvitationManager() {
                   data-testid="invitation-email-hint"
                   type="email"
                   value={inviteEmail}
-                  onChange={(event) => {
-                    setInviteEmail(event.target.value);
-                    setSendEmail(Boolean(event.target.value.trim()) && emailDeliveryAvailable);
-                  }}
+                  onChange={(event) => setInviteEmail(event.target.value)}
                   placeholder="name@example.invalid"
                 />
               </label>
@@ -448,8 +447,8 @@ function MemberInvitationManager() {
                   data-testid="invitation-send-email"
                   type="checkbox"
                   checked={sendEmail}
-                  onChange={(event) => setSendEmail(event.target.checked)}
-                  disabled={!inviteEmail.trim()}
+                  onChange={(event) => setSendEmailOverride(event.target.checked)}
+                  disabled={!hasInviteEmail}
                 />
                 <span>
                   <strong>{copy(locale, "settings", "invitationSendEmail")}</strong>
