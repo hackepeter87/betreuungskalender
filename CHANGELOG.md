@@ -6,6 +6,25 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.17.1] - 2026-07-13
+
+### Changed
+
+- Multi-day unavailability now shows its complete date and time range in the
+  mobile agenda.
+- Mobile entry status filters remain fully visible without horizontal
+  scrolling, and the calendar uses one contextual create action.
+- Personal calendar feed event titles include the assigned child labels while
+  existing feed URLs, tokens, and scopes remain unchanged.
+- Link-based onboarding now shows a dismissible completion message after the
+  user returns to the application.
+
+### Fixed
+
+- Improved reliability of first-use and invitation completion.
+- Preserved an explicit invitation email opt-out while the recipient address
+  is edited.
+
 ## [1.17.0] - 2026-07-12
 
 ### Added
