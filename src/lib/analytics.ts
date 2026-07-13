@@ -13,6 +13,7 @@ import type {
   PeriodStats,
   UnavailablePeriod
 } from "../types";
+import { detectCareConflicts } from "../../shared/careConflicts";
 import {
   addDays,
   countEntryOvernights,
@@ -76,6 +77,163 @@ export function actualResponsiblePartyId(entry: CareEntry): string | undefined {
   return entry.status === "partial" && entry.actualResponsiblePartyId
     ? entry.actualResponsiblePartyId
     : entry.responsiblePartyId;
+}
+
+interface CareAllocation {
+  hasCoverage: boolean;
+  partyShares: Map<string, number>;
+  unresolvedShare: number;
+  unassignedShare: number;
+}
+
+interface TimedPartyInterval {
+  start: number;
+  end: number;
+  partyId?: string;
+}
+
+function resolveTimedAllocation(
+  intervals: TimedPartyInterval[],
+  unresolvedOnMultipleParties: boolean
+): CareAllocation {
+  const boundaries = [...new Set(intervals.flatMap((interval) => [interval.start, interval.end]))]
+    .sort((first, second) => first - second);
+  const partyDuration = new Map<string, number>();
+  let coveredDuration = 0;
+  let unresolvedDuration = 0;
+  let unassignedDuration = 0;
+
+  for (let index = 0; index < boundaries.length - 1; index += 1) {
+    const start = boundaries[index];
+    const end = boundaries[index + 1];
+    if (start === undefined || end === undefined || start >= end) continue;
+    const active = intervals.filter((interval) => interval.start < end && interval.end > start);
+    if (!active.length) continue;
+    const duration = end - start;
+    coveredDuration += duration;
+    const partyIds = [...new Set(active.map((interval) => interval.partyId).filter(Boolean))] as string[];
+    const hasUnassigned = active.some((interval) => !interval.partyId);
+    if (hasUnassigned && !partyIds.length) {
+      unassignedDuration += duration;
+    } else if (unresolvedOnMultipleParties && (hasUnassigned || partyIds.length > 1)) {
+      unresolvedDuration += duration;
+    } else if (partyIds.length) {
+      const share = duration / partyIds.length;
+      for (const partyId of partyIds) {
+        partyDuration.set(partyId, (partyDuration.get(partyId) ?? 0) + share);
+      }
+    }
+  }
+
+  if (!coveredDuration) {
+    return {
+      hasCoverage: false,
+      partyShares: new Map(),
+      unresolvedShare: 0,
+      unassignedShare: 0
+    };
+  }
+  return {
+    hasCoverage: true,
+    partyShares: new Map(
+      [...partyDuration].map(([partyId, duration]) => [partyId, duration / coveredDuration])
+    ),
+    unresolvedShare: unresolvedDuration / coveredDuration,
+    unassignedShare: unassignedDuration / coveredDuration
+  };
+}
+
+function careAllocationForDay(
+  entries: CareEntry[],
+  dateKey: string,
+  childId: string,
+  status: "actual" | "planned",
+  defaultResponsiblePartyId?: string
+): CareAllocation {
+  const dayStart = new Date(`${dateKey}T00:00:00`).getTime();
+  const dayEndDate = new Date(`${dateKey}T00:00:00`);
+  dayEndDate.setDate(dayEndDate.getDate() + 1);
+  const dayEnd = dayEndDate.getTime();
+  const intervals: TimedPartyInterval[] = [];
+
+  for (const entry of entries) {
+    const matchesStatus = status === "actual"
+      ? entry.status === "completed" || entry.status === "partial"
+      : entry.status === "planned";
+    if (entry.deletedAt || !matchesStatus || !actualChildIds(entry).includes(childId)) continue;
+    const start = Math.max(dayStart, Date.parse(actualStartDateTime(entry)));
+    const end = Math.min(dayEnd, Date.parse(actualEndDateTime(entry)));
+    if (start >= end) continue;
+    intervals.push({
+      start,
+      end,
+      partyId: actualResponsiblePartyId(entry) ?? defaultResponsiblePartyId
+    });
+  }
+
+  return resolveTimedAllocation(intervals, status === "actual");
+}
+
+function unionDuration(intervals: Array<{ start: number; end: number }>): number {
+  const sorted = intervals
+    .filter((interval) => interval.start < interval.end)
+    .sort((first, second) => first.start - second.start || first.end - second.end);
+  let duration = 0;
+  let currentStart: number | undefined;
+  let currentEnd: number | undefined;
+  for (const interval of sorted) {
+    if (currentStart === undefined || currentEnd === undefined) {
+      currentStart = interval.start;
+      currentEnd = interval.end;
+    } else if (interval.start <= currentEnd) {
+      currentEnd = Math.max(currentEnd, interval.end);
+    } else {
+      duration += currentEnd - currentStart;
+      currentStart = interval.start;
+      currentEnd = interval.end;
+    }
+  }
+  if (currentStart !== undefined && currentEnd !== undefined) duration += currentEnd - currentStart;
+  return duration;
+}
+
+function clippedInterval(
+  startDateTime: string,
+  endDateTime: string,
+  rangeStart: number,
+  rangeEnd: number
+): { start: number; end: number } {
+  return {
+    start: Math.max(Date.parse(startDateTime), rangeStart),
+    end: Math.min(Date.parse(endDateTime), rangeEnd)
+  };
+}
+
+function unresolvedCareDuration(
+  entries: CareEntry[],
+  rangeStart: number,
+  rangeEnd: number,
+  defaultResponsiblePartyId?: string
+): number {
+  const entriesById = new Map(entries.map((entry) => [entry.id, entry]));
+  const intervals = detectCareConflicts(entries)
+    .filter((conflict) => conflict.severity === "unresolved_actual")
+    .filter((conflict) => {
+      const partyIds = new Set(
+        conflict.entryIds.map((entryId) => {
+          const entry = entriesById.get(entryId);
+          return entry ? actualResponsiblePartyId(entry) ?? defaultResponsiblePartyId : undefined;
+        })
+      );
+      return partyIds.size > 1;
+    })
+    .map((conflict) => clippedInterval(
+      conflict.startDateTime,
+      conflict.endDateTime,
+      rangeStart,
+      rangeEnd
+    ));
+  return unionDuration(intervals);
 }
 
 export function isEntryComplete(entry: CareEntry): boolean {
@@ -216,7 +374,6 @@ export function calculateHolidayStats({
   defaultResponsiblePartyId,
   primaryCarePartyId = defaultResponsiblePartyId
 }: HolidayStatsOptions): HolidayStats {
-  const holidaySlots = new Set<string>();
   const holidayChildrenByDate = new Map<string, Set<string>>();
   const legacyAssignments = new Map<string, HolidayPeriod["assignedTo"]>();
   const activeChildIds = [...new Set(allChildIds)];
@@ -238,7 +395,6 @@ export function calculateHolidayStats({
       const dateChildren = holidayChildrenByDate.get(dateKey) ?? new Set<string>();
       for (const periodChildId of childKeys) {
         const slotKey = `${dateKey}|${periodChildId}`;
-        holidaySlots.add(slotKey);
         dateChildren.add(periodChildId);
         const existing = legacyAssignments.get(slotKey);
         legacyAssignments.set(
@@ -251,40 +407,9 @@ export function calculateHolidayStats({
   }
 
   const carePartyById = new Map(careParties.map((party) => [party.id, party]));
-  const actualAssignments = new Map<string, Set<string>>();
-  const plannedAssignments = new Map<string, Set<string>>();
-  const matchingHolidaySlot = (dateKey: string, entryChildId: string) => {
-    const childSlot = `${dateKey}|${entryChildId}`;
-    if (holidaySlots.has(childSlot)) return childSlot;
-    const allChildrenSlot = `${dateKey}|__all`;
-    return holidaySlots.has(allChildrenSlot) ? allChildrenSlot : undefined;
-  };
-
-  for (const entry of entries) {
-    if (entry.deletedAt || entry.status === "cancelled") continue;
-    const entryChildIds = actualChildIds(entry);
-    if (childId && !entryChildIds.includes(childId)) continue;
-    const startDateTime = actualStartDateTime(entry);
-    const endDateTime = actualEndDateTime(entry);
-    if (!rangesOverlap(startDateTime.slice(0, 10), endDateTime.slice(0, 10), startDate, endDate)) continue;
-    const responsiblePartyId = actualResponsiblePartyId(entry) ?? defaultResponsiblePartyId;
-    if (!responsiblePartyId) continue;
-    const assignments = entry.status === "planned" ? plannedAssignments : actualAssignments;
-    for (const dateKey of entryDateKeys(startDateTime, endDateTime)) {
-      if (dateKey < startDate || dateKey > endDate) continue;
-      const scopedChildIds = childId ? [childId] : entryChildIds;
-      for (const entryChildId of scopedChildIds) {
-        const slotKey = matchingHolidaySlot(dateKey, entryChildId);
-        if (!slotKey) continue;
-        const current = assignments.get(slotKey) ?? new Set<string>();
-        current.add(responsiblePartyId);
-        assignments.set(slotKey, current);
-      }
-    }
-  }
-
   const daysByParty = new Map<string, number>();
   let unassignedDays = 0;
+  let unresolvedDays = 0;
   let legacyFatherDays = 0;
   let legacyMotherDays = 0;
 
@@ -292,15 +417,30 @@ export function calculateHolidayStats({
     const childShare = 1 / Math.max(1, dateChildren.size);
     for (const dateChildId of dateChildren) {
       const slotKey = `${dateKey}|${dateChildId}`;
-      const actualParties = actualAssignments.get(slotKey);
-      const plannedParties = plannedAssignments.get(slotKey);
-      const explicitParties = actualParties?.size ? actualParties : plannedParties;
+      const actualAllocation = careAllocationForDay(
+        entries,
+        dateKey,
+        dateChildId,
+        "actual",
+        defaultResponsiblePartyId
+      );
+      const allocation = actualAllocation.hasCoverage
+        ? actualAllocation
+        : careAllocationForDay(
+            entries,
+            dateKey,
+            dateChildId,
+            "planned",
+            defaultResponsiblePartyId
+          );
 
-      if (explicitParties?.size) {
-        const partyShare = childShare / explicitParties.size;
-        for (const partyId of explicitParties) {
-          daysByParty.set(partyId, (daysByParty.get(partyId) ?? 0) + partyShare);
+      if (allocation.hasCoverage) {
+        for (const [partyId, share] of allocation.partyShares) {
+          daysByParty.set(partyId, (daysByParty.get(partyId) ?? 0) + childShare * share);
         }
+        const unresolvedShare = childShare * allocation.unresolvedShare;
+        unresolvedDays += unresolvedShare;
+        unassignedDays += unresolvedShare + childShare * allocation.unassignedShare;
         continue;
       }
 
@@ -371,7 +511,8 @@ export function calculateHolidayStats({
         quote: totalDays ? Math.round((days / totalDays) * 1000) / 10 : 0
       }))
       .sort((a, b) => b.days - a.days || a.name.localeCompare(b.name)),
-    unassignedDays: Math.round(unassignedDays * 10) / 10
+    unassignedDays: Math.round(unassignedDays * 10) / 10,
+    unresolvedDays: Math.round(unresolvedDays * 10) / 10
   };
 }
 
@@ -438,7 +579,6 @@ function calculateEntityStats(
   const weekendDays = new Set<string>();
   const weekends = new Set<string>();
   let overnights = 0;
-  let careHours = 0;
   let schoolHandovers = 0;
   let weekdayOvernights = 0;
   let tripKm = 0;
@@ -446,14 +586,23 @@ function calculateEntityStats(
   let reimbursedAmount = 0;
   let costsTotal = 0;
 
+  const rangeStart = new Date(`${startDate}T00:00:00`).getTime();
+  const rangeEnd = new Date(`${addDays(endDate, 1)}T00:00:00`).getTime();
+  const careHours = unionDuration(completed.map((entry) => clippedInterval(
+    actualStartDateTime(entry),
+    actualEndDateTime(entry),
+    rangeStart,
+    rangeEnd
+  ))) / 3_600_000;
+  const unresolvedCareHours = unresolvedCareDuration(
+    completed,
+    rangeStart,
+    rangeEnd,
+    data.settings.defaultResponsiblePartyId
+  ) / 3_600_000;
+
   for (const entry of completed) {
-    const rangeStart = new Date(`${startDate}T00:00:00`).getTime();
-    const rangeEnd = new Date(`${addDays(endDate, 1)}T00:00:00`).getTime();
     const startDateTime = actualStartDateTime(entry);
-    const endDateTime = actualEndDateTime(entry);
-    const clippedStart = Math.max(new Date(startDateTime).getTime(), rangeStart);
-    const clippedEnd = Math.min(new Date(endDateTime).getTime(), rangeEnd);
-    careHours += Math.max(0, clippedEnd - clippedStart) / 3_600_000;
 
     for (const dateKey of clippedEntryDates(entry, startDate, endDate)) {
       careDays.add(dateKey);
@@ -496,6 +645,7 @@ function calculateEntityStats(
   return {
     childId,
     careHours: Math.round(careHours * 10) / 10,
+    unresolvedCareHours: Math.round(unresolvedCareHours * 10) / 10,
     careDays: careDays.size,
     overnights,
     weekendDays: weekendDays.size,

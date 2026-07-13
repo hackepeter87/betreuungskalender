@@ -92,6 +92,15 @@ export function AnalyticsPage({ monthKey }: { monthKey: string }) {
         <div><small>{copy(locale, "analytics", "tripKm")}</small><strong>{stats.tripKm.toFixed(1)}</strong></div>
         <div><small>{copy(locale, "analytics", "costs")}</small><strong>{euro.format(stats.costsTotal)}</strong></div>
       </section>
+      {stats.unresolvedCareHours > 0 ? (
+        <section className="notice notice--recommendation">
+          <Icon name="info" />
+          <div>
+            <strong>{copy(locale, "analytics", "unresolvedCareHours")}</strong>
+            <p>{stats.unresolvedCareHours.toLocaleString(intlLocale)} h</p>
+          </div>
+        </section>
+      ) : null}
 
       <details className="panel analytics-section analytics-details" open>
         <summary className="panel__header">
@@ -228,6 +237,9 @@ export function AnalyticsPage({ monthKey }: { monthKey: string }) {
             ))}
             {stats.holidays.unassignedDays > 0 ? (
               <div><dt>{copy(locale, "holiday", "unassignedDays")}</dt><dd>{stats.holidays.unassignedDays}</dd></div>
+            ) : null}
+            {stats.holidays.unresolvedDays > 0 ? (
+              <div><dt>{copy(locale, "holiday", "unresolvedDays")}</dt><dd>{stats.holidays.unresolvedDays}</dd></div>
             ) : null}
           </dl>
         </section>

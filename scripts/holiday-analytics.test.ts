@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calculateContactStats, calculateHolidayStats } from "../src/lib/analytics";
+import {
+  calculateContactStats,
+  calculateHolidayStats,
+  calculatePeriodStats
+} from "../src/lib/analytics";
+import { createEmptyData } from "../src/data/defaults";
 import type { CareEntry, CareParty, HolidayPeriod, UnavailablePeriod } from "../src/types";
 
 const parties: CareParty[] = [
@@ -247,7 +252,7 @@ test("holiday stats prefer actual care and deduplicate overlapping entries", () 
   );
 });
 
-test("holiday stats split conflicting explicit parties without double counting", () => {
+test("holiday stats keep conflicting actual party shares unresolved", () => {
   const stats = calculateHolidayStats({
     periods: [holiday({ startDate: "2026-07-01", endDate: "2026-07-01", childIds: ["child-a"] })],
     startDate: "2026-07-01",
@@ -262,13 +267,91 @@ test("holiday stats split conflicting explicit parties without double counting",
   });
 
   assert.equal(stats.totalDays, 1);
+  assert.deepEqual(stats.byCareParty, []);
+  assert.equal(stats.unassignedDays, 1);
+  assert.equal(stats.unresolvedDays, 1);
+});
+
+test("holiday stats merge same-party overlap and weight non-overlapping care", () => {
+  const stats = calculateHolidayStats({
+    periods: [holiday({ startDate: "2026-07-01", endDate: "2026-07-01", childIds: ["child-a"] })],
+    startDate: "2026-07-01",
+    endDate: "2026-07-01",
+    allChildIds: ["child-a"],
+    entries: [
+      entry({
+        id: "main-a",
+        responsiblePartyId: "party-main",
+        startDateTime: "2026-07-01T08:00:00.000Z",
+        endDateTime: "2026-07-01T10:00:00.000Z"
+      }),
+      entry({
+        id: "main-overlap",
+        responsiblePartyId: "party-main",
+        startDateTime: "2026-07-01T09:00:00.000Z",
+        endDateTime: "2026-07-01T10:00:00.000Z"
+      }),
+      entry({
+        id: "father",
+        responsiblePartyId: "party-father",
+        startDateTime: "2026-07-01T10:00:00.000Z",
+        endDateTime: "2026-07-01T16:00:00.000Z"
+      })
+    ],
+    careParties: parties,
+    primaryCarePartyId: "party-main"
+  });
+
   assert.deepEqual(
     stats.byCareParty.map((share) => [share.carePartyId, share.days, share.quote]),
     [
-      ["party-main", 0.5, 50],
-      ["party-father", 0.5, 50]
+      ["party-father", 0.8, 75],
+      ["party-main", 0.3, 25]
     ]
   );
+  assert.equal(stats.unresolvedDays, 0);
+});
+
+test("period stats count overlapping care once and expose cross-party overlap", () => {
+  const first = entry({
+    id: "completed-main",
+    responsiblePartyId: "party-main",
+    startDateTime: "2026-07-01T08:00:00.000Z",
+    endDateTime: "2026-07-01T12:00:00.000Z"
+  });
+  const sameParty = entry({
+    id: "completed-main-overlap",
+    responsiblePartyId: "party-main",
+    startDateTime: "2026-07-01T10:00:00.000Z",
+    endDateTime: "2026-07-01T14:00:00.000Z"
+  });
+  const otherParty = entry({
+    id: "completed-father-overlap",
+    responsiblePartyId: "party-father",
+    startDateTime: "2026-07-01T13:00:00.000Z",
+    endDateTime: "2026-07-01T15:00:00.000Z"
+  });
+  const data = createEmptyData();
+  data.children = [{
+    id: "child-a",
+    name: "Testkind A",
+    birthMonth: 1,
+    birthYear: 2018,
+    color: "#0d9488",
+    createdBy: "test",
+    updatedBy: "test",
+    createdAt: "2026-07-01T00:00:00.000Z",
+    updatedAt: "2026-07-01T00:00:00.000Z"
+  }];
+  data.careParties = parties;
+  data.entries = [first, sameParty, otherParty];
+  data.settings.defaultResponsiblePartyId = "party-main";
+
+  const stats = calculatePeriodStats(data, "2026-07-01", "2026-07-01");
+  assert.equal(stats.careHours, 7);
+  assert.equal(stats.unresolvedCareHours, 1);
+  assert.equal(stats.byChild[0]?.careHours, 7);
+  assert.equal(stats.byChild[0]?.unresolvedCareHours, 1);
 });
 
 test("holiday stats merge overlapping holiday periods by calendar day", () => {

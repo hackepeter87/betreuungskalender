@@ -58,6 +58,7 @@ export function exportEntriesCsv(data: AppData): void {
       "Kinder",
       "Kinder-IDs",
       "Status",
+      "Konfliktstatus",
       "Zusatzbetreuung",
       "Regel-ID",
       "Soll-Termin",
@@ -82,6 +83,12 @@ export function exportEntriesCsv(data: AppData): void {
   ];
 
   for (const entry of data.entries) {
+    const conflicts = data.careConflicts.filter((conflict) => conflict.entryIds.includes(entry.id));
+    const conflictStatus = conflicts.some((conflict) => conflict.severity === "unresolved_actual")
+      ? "ungeklärte tatsächliche Überschneidung"
+      : conflicts.length
+        ? "geplante Überschneidung"
+        : "";
     rows.push([
       entry.id,
       entry.date,
@@ -90,6 +97,7 @@ export function exportEntriesCsv(data: AppData): void {
       childNames(data, entry.childIds),
       entry.childIds.join(","),
       statusLabels[entry.status],
+      conflictStatus,
       entry.additionalCare,
       entry.generatedByPatternId,
       entry.ruleOccurrenceDate,

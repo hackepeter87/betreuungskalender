@@ -441,11 +441,13 @@ export interface HolidayStats {
     quote: number;
   }>;
   unassignedDays: number;
+  unresolvedDays: number;
 }
 
 export interface PeriodChildStats {
   childId?: string;
   careHours: number;
+  unresolvedCareHours: number;
   careDays: number;
   overnights: number;
   weekendDays: number;

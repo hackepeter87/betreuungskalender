@@ -149,6 +149,11 @@ its actual children and actual time overlap another actual entry. Cancelled and
 soft-deleted entries are ignored. Existing contradictory actual entries remain
 readable and are reported as unresolved conflicts for later correction.
 
+Analytics merge overlapping actual intervals so the same care time is counted
+only once. Overlap assigned to different care parties is not silently credited
+to either party: reports expose that duration, and holiday allocation keeps the
+holiday frame while listing the affected child share as unresolved.
+
 ## Personal calendar feeds
 
 `calendar_feed_tokens` stores revocable per-user feed credentials. The raw

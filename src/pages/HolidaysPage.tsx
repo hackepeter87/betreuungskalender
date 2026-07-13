@@ -294,6 +294,12 @@ export function HolidaysPage() {
                 <strong>{stats.unassignedDays}</strong>
               </div>
             ) : null}
+            {stats.unresolvedDays > 0 ? (
+              <div>
+                <small>{copy(locale, "holiday", "unresolvedDays")}</small>
+                <strong>{stats.unresolvedDays}</strong>
+              </div>
+            ) : null}
           </div>
         </section>
       ) : null}
