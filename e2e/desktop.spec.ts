@@ -16,6 +16,36 @@ test.beforeEach(async ({ request }) => {
   await resetApp(request);
 });
 
+test("offers PWA installation only after the browser reports availability", async ({
+  page
+}) => {
+  await openApp(page);
+  await expect(page.getByTestId("pwa-install-prompt")).toHaveCount(0);
+
+  await page.evaluate(() => {
+    const installEvent = new Event("beforeinstallprompt", { cancelable: true });
+    const browserWindow = window as Window & { __pwaPromptCalls?: number };
+    Object.defineProperties(installEvent, {
+      prompt: {
+        value: async () => {
+          browserWindow.__pwaPromptCalls = (browserWindow.__pwaPromptCalls ?? 0) + 1;
+        }
+      },
+      userChoice: {
+        value: Promise.resolve({ outcome: "accepted", platform: "web" })
+      }
+    });
+    window.dispatchEvent(installEvent);
+  });
+
+  await expect(page.getByTestId("pwa-install-prompt")).toBeVisible();
+  await page.getByTestId("pwa-install-action").click();
+  await expect.poll(() => page.evaluate(() => (
+    window as Window & { __pwaPromptCalls?: number }
+  ).__pwaPromptCalls)).toBe(1);
+  await expect(page.getByTestId("pwa-install-prompt")).toHaveCount(0);
+});
+
 test("covers the core documentation and export flows", async ({ page }) => {
   const childName = "Alex Beispiel";
   await openApp(page);
