@@ -26,6 +26,7 @@ import { SettingsPage } from "./pages/SettingsPage";
 import { SetupWizardPage } from "./pages/SetupWizardPage";
 import { UnavailablePeriodsPage } from "./pages/UnavailablePeriodsPage";
 import { Icon } from "./components/Icon";
+import { PwaInstallPrompt } from "./components/PwaInstallPrompt";
 import type { CareEntry } from "./types";
 import type { LegacyDatabaseSummary } from "../shared/migration";
 import { useAppStore } from "./store/AppStore";
@@ -183,6 +184,9 @@ export function App() {
               <Icon name="close" size={17} />
             </button>
           </div>
+        ) : null}
+        {!setupMode && !onboardingNotice && (session.authenticated || !session.authRequired) ? (
+          <PwaInstallPrompt />
         ) : null}
         {page}
       </AppShell>

@@ -337,6 +337,10 @@ recovery, and direct Node.js fallback guidance:
 - iPhone uses a compact agenda and safe-area-aware bottom navigation.
 - iPad and desktop retain calendar and side navigation layouts.
 - Forms use native date/time inputs and touch targets.
+- Supported browsers offer a dismissible install suggestion after setup. On
+  Chromium-based browsers it uses the browser's native install prompt; on
+  iPhone and iPad it points to the “Add to Home Screen” share action. The hint
+  stays hidden in an installed app and after dismissal for 30 days.
 - Export actions are available on mobile; saving behavior depends on the iOS
   browser and Files/Share Sheet.
 - The service worker provides an offline frontend shell. When the API is

@@ -5107,6 +5107,87 @@ button.metric-card {
   align-self: start;
 }
 
+.pwa-install-prompt {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  margin: 18px clamp(20px, 4vw, 56px) 0;
+  padding: 14px 16px;
+  border: 1px solid #b9deda;
+  border-radius: 8px;
+  background: var(--teal-soft);
+  color: #23324a;
+}
+
+.pwa-install-prompt__icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 50%;
+  background: #fff;
+  color: var(--teal-strong);
+}
+
+.pwa-install-prompt__content {
+  min-width: 0;
+}
+
+.pwa-install-prompt__content strong {
+  display: block;
+  font-size: 0.82rem;
+}
+
+.pwa-install-prompt__content p {
+  margin: 2px 0 0;
+  color: #516079;
+  font-size: 0.72rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.pwa-install-prompt__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pwa-install-prompt__actions .button {
+  min-height: 38px;
+  padding: 8px 13px;
+  white-space: nowrap;
+}
+
+.pwa-install-prompt__close {
+  align-self: start;
+}
+
+@media (max-width: 767px) {
+  .pwa-install-prompt {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    margin: 12px 20px 0;
+    padding: 13px;
+  }
+
+  .pwa-install-prompt__actions {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .pwa-install-prompt__close {
+    grid-row: 1;
+    grid-column: 3;
+  }
+
+  .pwa-install-prompt__actions .button {
+    flex: 1 1 0;
+  }
+}
+
 .offline-banner > span {
   display: grid;
   gap: 2px;

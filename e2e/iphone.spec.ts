@@ -13,6 +13,22 @@ test.beforeEach(async ({ request }) => {
   await resetApp(request);
 });
 
+test("explains the iOS home-screen installation without blocking the app", async ({
+  page
+}) => {
+  await openApp(page);
+  const prompt = page.getByTestId("pwa-install-prompt");
+  await expect(prompt).toBeVisible();
+  await expect(prompt).toContainText("Zum Home-Bildschirm");
+  await expectNoDocumentHorizontalOverflow(page);
+
+  await prompt.getByRole("button", { name: "Verstanden" }).click();
+  await expect(prompt).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByTestId("app-shell")).toBeVisible();
+  await expect(page.getByTestId("pwa-install-prompt")).toHaveCount(0);
+});
+
 test("uses mobile navigation and the agenda for entry creation", async ({
   page
 }) => {
