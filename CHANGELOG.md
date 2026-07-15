@@ -6,6 +6,22 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.18.1] - 2026-07-15
+
+### Added
+
+- Added a dismissible installation suggestion for supported browsers so the
+  application can be added to the device as a PWA without obscuring the main
+  workflow.
+
+### Changed
+
+- Chromium-based browsers use the browser-provided install prompt only after
+  installation is available, while iPhone and iPad users receive concise
+  platform-specific guidance.
+- Installation guidance is hidden in standalone mode and during setup or
+  invitation onboarding, and a dismissal is remembered locally for 30 days.
+
 ## [1.18.0] - 2026-07-13
 
 ### Added
