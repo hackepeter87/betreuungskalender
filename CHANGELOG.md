@@ -6,6 +6,17 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.18.2] - 2026-07-26
+
+### Changed
+
+- Updated the Fastify server, static asset delivery, PDF sanitation, and build
+  tooling dependencies to maintained compatible versions.
+- Pinned npm 11.18.0 in every Node-based GitHub Actions job so CI uses the same
+  package-manager version as local and container release builds.
+- Added regression coverage that keeps the workflow npm version aligned with
+  the version declared by the project.
+
 ## [1.18.1] - 2026-07-15
 
 ### Added

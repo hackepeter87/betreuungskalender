@@ -223,6 +223,27 @@ test("defines the local security baseline script", () => {
   assert.match(script, /npm run release:check/);
 });
 
+test("pins the required npm version in Node-based GitHub workflows", () => {
+  const workflowPaths = [
+    ".github/workflows/ci.yml",
+    ".github/workflows/container.yml",
+    ".github/workflows/release.yml",
+    ".github/workflows/publish-release-image.yml"
+  ];
+
+  for (const workflowPath of workflowPaths) {
+    const workflow = readFileSync(resolve(workflowPath), "utf8");
+    const setupNodeSteps = workflow.match(/actions\/setup-node@v6/g) ?? [];
+    const pinnedNpmSteps = workflow.match(/npm install --global npm@11\.18\.0/g) ?? [];
+
+    assert.equal(
+      pinnedNpmSteps.length,
+      setupNodeSteps.length,
+      `${workflowPath} must pin npm 11.18.0 after every setup-node step`
+    );
+  }
+});
+
 test("reads environment values from release examples", () => {
   assert.equal(parseEnvValue("TRUST_PROXY_AUTH=false\n", "TRUST_PROXY_AUTH"), "false");
   assert.equal(parseEnvValue("  TRUST_PROXY_AUTH=true\n", "TRUST_PROXY_AUTH"), "true");

@@ -18,6 +18,7 @@ jobs:
         with:
           node-version: 24.18.0
           cache: npm
+      - run: npm install --global npm@11.18.0
       - run: npm ci
       - run: npm audit
       - run: npm run release:check
@@ -35,6 +36,7 @@ jobs:
         with:
           node-version: 24.18.0
           cache: npm
+      - run: npm install --global npm@11.18.0
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps chromium
@@ -59,6 +61,7 @@ jobs:
         with:
           node-version: 24.18.0
           cache: npm
+      - run: npm install --global npm@11.18.0
       - run: npm ci
       - run: npm run test:security-runtime
 
@@ -71,5 +74,6 @@ jobs:
         with:
           node-version: 24.18.0
           cache: npm
+      - run: npm install --global npm@11.18.0
       - run: npm ci
       - run: npx tsx --test scripts/update.test.js

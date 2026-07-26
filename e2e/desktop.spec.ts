@@ -344,7 +344,8 @@ test("manages member invitations from settings", async ({ page }) => {
       emailHint?: string;
       revokedAt?: string;
     };
-    const now = "2026-07-05T10:00:00.000Z";
+    const now = new Date().toISOString();
+    const existingInvitationExpiry = new Date(Date.now() + 14 * 86_400_000).toISOString();
     let members: Member[] = [
       {
         id: "user-owner-e2e",
@@ -371,7 +372,7 @@ test("manages member invitations from settings", async ({ page }) => {
         id: "invitation-existing-e2e",
         role: "readonly",
         emailHint: "readonly@example.invalid",
-        expiresAt: "2026-07-20T10:00:00.000Z",
+        expiresAt: existingInvitationExpiry,
         createdAt: now,
         updatedAt: now
       }
@@ -427,7 +428,9 @@ test("manages member invitations from settings", async ({ page }) => {
           id: "invitation-created-e2e",
           role: body.role === "admin" || body.role === "readonly" ? body.role : "parent",
           emailHint: typeof body.emailHint === "string" ? body.emailHint : undefined,
-          expiresAt: typeof body.expiresAt === "string" ? body.expiresAt : "2026-07-12T10:00:00.000Z",
+          expiresAt: typeof body.expiresAt === "string"
+            ? body.expiresAt
+            : new Date(Date.now() + 7 * 86_400_000).toISOString(),
           createdAt: now,
           updatedAt: now
         };
