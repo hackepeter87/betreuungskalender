@@ -166,6 +166,12 @@ Server-side authorization is enforced for `/api/*` routes before route
 handlers run. UI visibility is only a convenience layer and must not be treated
 as the security boundary.
 
+The workspace-scoped role model and complete protected route classification
+are defined in [ADR 0005](adr/0005-workspace-permissions.md) and the
+[API permission inventory](api-permissions.md). New protected routes must
+declare a recognized named permission; omission is a denial, not a fallback to
+the request method.
+
 | Request class | Unauthenticated | Readonly | Parent | Admin |
 | --- | --- | --- | --- | --- |
 | `/api/health`, `/api/ready`, `/api/session` | Allowed for health or session discovery | Allowed | Allowed | Allowed |
