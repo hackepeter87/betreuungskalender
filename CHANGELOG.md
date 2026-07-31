@@ -6,6 +6,28 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.20.0] - 2026-07-31
+
+### Added
+
+- Added a production-ready Helm chart for deploying the application on
+  Kubernetes with configurable images, ingress, TLS, persistent storage,
+  probes, resources, scheduling constraints, labels, and annotations.
+- Added Helm deployment guidance and an architecture decision record covering
+  the supported SQLite, storage, security-context, and upgrade model.
+- Added automated Helm linting and rendering checks to continuous integration
+  and release validation.
+
+### Changed
+
+- Release archives now include the Helm chart and validate that its application
+  version matches the packaged application version.
+- Kubernetes deployments run with one application replica and a `Recreate`
+  strategy because the embedded SQLite database supports one application
+  writer rather than horizontally scaled pods.
+- The chart defaults to a non-root container, a read-only root filesystem, and
+  dedicated writable mounts for application data, backups, and temporary data.
+
 ## [1.19.0] - 2026-07-31
 
 ### Added
