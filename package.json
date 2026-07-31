@@ -1,7 +1,7 @@
 {
   "name": "betreuungskalender",
   "private": true,
-  "version": "1.19.0",
+  "version": "1.20.0",
   "type": "module",
   "packageManager": "npm@11.18.0",
   "engines": {
