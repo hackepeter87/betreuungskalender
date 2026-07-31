@@ -1,0 +1,200 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "betreuungskalender.fullname" . }}
+  labels:
+    {{- include "betreuungskalender.labels" . | nindent 4 }}
+  {{- with .Values.deploymentAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  strategy:
+    type: {{ .Values.strategy.type }}
+  selector:
+    matchLabels:
+      {{- include "betreuungskalender.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "betreuungskalender.selectorLabels" . | nindent 8 }}
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        {{- if .Values.config }}
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "betreuungskalender.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automountServiceAccountToken }}
+      terminationGracePeriodSeconds: {{ .Values.terminationGracePeriodSeconds }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: betreuungskalender
+          image: {{ include "betreuungskalender.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.runtime.port }}
+              protocol: TCP
+          env:
+            - name: NODE_ENV
+              value: {{ .Values.runtime.nodeEnv | quote }}
+            - name: HOST
+              value: {{ .Values.runtime.host | quote }}
+            - name: PORT
+              value: {{ .Values.runtime.port | quote }}
+            - name: DATABASE_PATH
+              value: {{ .Values.runtime.databasePath | quote }}
+            - name: BACKUP_DIR
+              value: {{ .Values.runtime.backupDir | quote }}
+            - name: TMPDIR
+              value: {{ .Values.runtime.tmpDir | quote }}
+            - name: HOME
+              value: {{ .Values.runtime.tmpDir | quote }}
+            - name: XDG_CACHE_HOME
+              value: {{ printf "%s/.cache" (trimSuffix "/" .Values.runtime.tmpDir) | quote }}
+            {{- if .Values.ownerSetupSecret.existingSecret }}
+            - name: OWNER_SETUP_TOKEN_FILE
+              value: /run/secrets/owner-setup/{{ .Values.ownerSetupSecret.key }}
+            {{- end }}
+            {{- if .Values.recoveryAdminSecret.existingSecret }}
+            - name: RECOVERY_ADMIN_INITIAL_PASSWORD_FILE
+              value: /run/secrets/recovery-admin/{{ .Values.recoveryAdminSecret.key }}
+            {{- end }}
+            {{- with .Values.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- if or .Values.config .Values.extraEnvFrom }}
+          envFrom:
+            {{- if .Values.config }}
+            - configMapRef:
+                name: {{ include "betreuungskalender.fullname" . }}
+            {{- end }}
+            {{- with .Values.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          {{- end }}
+          volumeMounts:
+            - name: data
+              mountPath: {{ .Values.persistence.data.mountPath }}
+            - name: backups
+              mountPath: {{ .Values.persistence.backups.mountPath }}
+            - name: tmp
+              mountPath: {{ .Values.persistence.tmp.mountPath }}
+            {{- if .Values.ownerSetupSecret.existingSecret }}
+            - name: owner-setup-token
+              mountPath: /run/secrets/owner-setup
+              readOnly: true
+            {{- end }}
+            {{- if .Values.recoveryAdminSecret.existingSecret }}
+            - name: recovery-admin-password
+              mountPath: /run/secrets/recovery-admin
+              readOnly: true
+            {{- end }}
+            {{- with .Values.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.startupProbe.enabled }}
+          startupProbe:
+            httpGet:
+              path: {{ .Values.startupProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.startupProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.startupProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.startupProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.startupProbe.failureThreshold }}
+            successThreshold: {{ .Values.startupProbe.successThreshold }}
+          {{- end }}
+          {{- if .Values.livenessProbe.enabled }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.livenessProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+            successThreshold: {{ .Values.livenessProbe.successThreshold }}
+          {{- end }}
+          {{- if .Values.readinessProbe.enabled }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.readinessProbe.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+            periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+            timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds }}
+            failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+            successThreshold: {{ .Values.readinessProbe.successThreshold }}
+          {{- end }}
+      volumes:
+        - name: data
+          {{- if .Values.persistence.data.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "betreuungskalender.dataClaimName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: backups
+          {{- if .Values.persistence.backups.enabled }}
+          persistentVolumeClaim:
+            claimName: {{ include "betreuungskalender.backupClaimName" . }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}
+        - name: tmp
+          emptyDir:
+            sizeLimit: {{ .Values.persistence.tmp.sizeLimit }}
+        {{- if .Values.ownerSetupSecret.existingSecret }}
+        - name: owner-setup-token
+          secret:
+            secretName: {{ .Values.ownerSetupSecret.existingSecret }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.ownerSetupSecret.key }}
+                path: {{ .Values.ownerSetupSecret.key }}
+        {{- end }}
+        {{- if .Values.recoveryAdminSecret.existingSecret }}
+        - name: recovery-admin-password
+          secret:
+            secretName: {{ .Values.recoveryAdminSecret.existingSecret }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.recoveryAdminSecret.key }}
+                path: {{ .Values.recoveryAdminSecret.key }}
+        {{- end }}
+        {{- with .Values.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

@@ -5,6 +5,17 @@
 Betreuungskalender is a private self-hosted documentation application. It is
 not a multi-tenant cloud service and does not provide legal advice.
 
+## Kubernetes boundary
+
+The Helm chart runs the release image as a non-root user with a read-only root
+filesystem, dropped capabilities, disabled service-account token mounting and
+separate writable data, backup and temporary mounts. It enforces one application
+pod and a `Recreate` rollout because SQLite is a single-writer deployment
+boundary. Kubernetes Secrets must be referenced rather than copied into values
+files or ConfigMaps. Cluster-specific ingress, egress, storage encryption and
+backup-copy policies remain deployment responsibilities. See
+[deployment-helm.md](deployment-helm.md).
+
 ## Stored data
 
 Depending on use, the application may store:

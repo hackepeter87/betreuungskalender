@@ -25,6 +25,13 @@ jobs:
 
       - run: npm ci
 
+      - uses: azure/setup-helm@v4
+        with:
+          version: v3.17.3
+
+      - name: Validate Helm chart
+        run: npm run test:helm
+
       - name: Strict release validation
         run: npm run release:check:strict
 
@@ -34,7 +41,7 @@ jobs:
       - name: Create runtime archive
         run: |
           tar -czf betreuungskalender-${GITHUB_REF_NAME}.tar.gz \
-            dist dist-server scripts deploy Dockerfile.release package.json \
+            dist dist-server scripts deploy charts Dockerfile.release package.json \
             package-lock.json .env.example README.md LICENSE CHANGELOG.md docs
           sha256sum betreuungskalender-${GITHUB_REF_NAME}.tar.gz \
             > betreuungskalender-${GITHUB_REF_NAME}.tar.gz.sha256

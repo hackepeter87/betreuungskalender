@@ -40,6 +40,7 @@ the matching `vX.Y.Z` tag.
 
 ```bash
 npm run build
+npm run test:helm
 npm run release:check:strict
 ```
 
@@ -75,10 +76,11 @@ git push origin vX.Y.Z
 
 Pushing a `v*` tag starts `.github/workflows/release.yml`. The workflow:
 
+- lints and renders the Helm chart, including its safety constraints;
 - runs `npm run release:check:strict` before packaging;
 - builds and starts the production container, then checks `/api/health`;
 - creates `betreuungskalender-vX.Y.Z.tar.gz` and a SHA-256 checksum;
-- includes the minimal runtime `Dockerfile.release`, `deploy/compose.yml`, and
+- includes the Helm chart, minimal runtime `Dockerfile.release`, `deploy/compose.yml`, and
   `deploy/compose.oidc.yml`, oauth2-proxy examples, and operational
   update/verification scripts required by the supported Compose update path;
 - confirms that `docs/release-notes/vX.Y.Z.md` is present in the archive; and
