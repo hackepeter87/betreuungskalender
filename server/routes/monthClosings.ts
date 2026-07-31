@@ -7,10 +7,10 @@ import { makeId, nowIso } from "../services/common.js";
 import { monthlyClosingInputSchema } from "../validation/schemas.js";
 
 const readLimit = {
-  config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
+  config: { permission: "reports:view" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
 };
 const writeLimit = {
-  config: { rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
+  config: { permission: "reports:view" as const, rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
 };
 
 interface ClosingRow {

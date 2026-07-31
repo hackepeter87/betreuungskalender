@@ -3,23 +3,30 @@ import { config } from "../config.js";
 import { db } from "../db/connection.js";
 import { recordFieldChanges } from "../services/audit.js";
 import { nowIso } from "../services/common.js";
-import { getStoredSettings } from "../services/settings.js";
+import { getClientSettings, isClientSettingKey } from "../services/settings.js";
 import { settingsInputSchema } from "../validation/schemas.js";
 
 const readLimit = {
-  config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
+  config: { permission: "settings:view" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
 };
 const writeLimit = {
-  config: { rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
+  config: { permission: "settings:manage" as const, rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
 };
 
 export async function settingsRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/settings", readLimit, async () => getStoredSettings());
+  app.get("/api/settings", readLimit, async () => getClientSettings());
 
   app.put("/api/settings", writeLimit, async (request, reply) => {
     const parsed = settingsInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
-    const before = getStoredSettings();
+    const protectedKey = Object.keys(parsed.data).find((key) => !isClientSettingKey(key));
+    if (protectedKey) {
+      return reply.code(400).send({
+        error: "validation_error",
+        message: "Diese Einstellung kann nicht ueber die allgemeine Einstellungs-API geaendert werden."
+      });
+    }
+    const before = getClientSettings();
     const timestamp = nowIso();
     db.transaction(() => {
       const upsert = db.prepare(`
@@ -49,6 +56,6 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
         { ...before, ...parsed.data }
       );
     })();
-    return getStoredSettings();
+    return getClientSettings();
   });
 }

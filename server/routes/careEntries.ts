@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import type { ApiCareConflictList, ApiCareEntry, ApiCost, ApiTrip } from "../../shared/api.js";
+import type { ApiCareConflictList, ApiCareEntry, ApiCost, ApiScheduleEntry, ApiTrip } from "../../shared/api.js";
 import type { RequestUser } from "../auth.js";
 import { config } from "../config.js";
 import { db } from "../db/connection.js";
@@ -9,6 +9,7 @@ import {
   recordFieldChanges
 } from "../services/audit.js";
 import { assertCanUseCareParty } from "../services/carePartyAccess.js";
+import { assignedCarePartyIds } from "../services/carePartyAccess.js";
 import { assertActiveCareParty } from "../services/careParties.js";
 import {
   assertNoActualCareConflict,
@@ -18,14 +19,44 @@ import {
 } from "../services/careConflicts.js";
 import { assertActiveChildren, bool, makeId, nowIso, syncJunction } from "../services/common.js";
 import { getDefaultResponsiblePartyId } from "../services/settings.js";
-import { careEntryInputSchema } from "../validation/schemas.js";
+import { careEntryInputSchema, schedulerCareEntryInputSchema } from "../validation/schemas.js";
 
 const readLimit = {
-  config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
+  config: { permission: "notes:view" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
 };
-const writeLimit = {
-  config: { rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
+const createLimit = {
+  config: { permission: "appointments:create" as const, rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
 };
+const editLimit = {
+  config: { permission: "appointments:edit" as const, rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
+};
+const deleteLimit = {
+  config: { permission: "appointments:delete" as const, rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
+};
+const scheduleLimit = {
+  config: { permission: "appointments:view" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
+};
+
+const scheduleLocations = new Set([
+  "commuterApartment",
+  "mainResidence",
+  "mother",
+  "school",
+  "ogs"
+]);
+
+function scheduleLocation(value: string | null): string | undefined {
+  return value && scheduleLocations.has(value) ? value : undefined;
+}
+
+function scheduleConflictEntryIds(): Set<string> {
+  try {
+    return new Set(listCareConflicts(db).flatMap((conflict) => conflict.entryIds));
+  } catch (error) {
+    if (isCareConflictWorkLimitError(error)) return new Set();
+    throw error;
+  }
+}
 
 interface EntryRow {
   id: string;
@@ -215,6 +246,113 @@ function getEntry(id: string): ApiCareEntry | undefined {
     WHERE id = ? AND deleted_at IS NULL
   `).get(id) as EntryRow | undefined;
   return row ? mapEntry(row) : undefined;
+}
+
+function getScheduleEntry(id: string): ApiScheduleEntry | undefined {
+  const row = db.prepare(`
+    SELECT entries.id, entries.start_datetime AS startDateTime,
+      entries.end_datetime AS endDateTime, entries.status,
+      entries.location, entries.responsible_party_id AS responsiblePartyId,
+      parties.name AS responsiblePartyName
+    FROM care_entries entries
+    LEFT JOIN care_parties parties
+      ON parties.id = entries.responsible_party_id AND parties.deleted_at IS NULL
+    WHERE entries.id = ? AND entries.deleted_at IS NULL
+  `).get(id) as {
+    id: string;
+    startDateTime: string;
+    endDateTime: string;
+    status: ApiCareEntry["status"];
+    location: string | null;
+    responsiblePartyId: string | null;
+    responsiblePartyName: string | null;
+  } | undefined;
+  if (!row) return undefined;
+  const children = db.prepare(`
+    SELECT children.id, children.name, children.color
+    FROM care_entry_children links
+    JOIN children ON children.id = links.child_id AND children.deleted_at IS NULL
+    WHERE links.care_entry_id = ? AND links.deleted_at IS NULL
+    ORDER BY children.name COLLATE NOCASE
+  `).all(id) as ApiScheduleEntry["children"];
+  const hasConflict = scheduleConflictEntryIds().has(id);
+  const location = scheduleLocation(row.location);
+  return {
+    id: row.id,
+    children,
+    startDateTime: row.startDateTime,
+    endDateTime: row.endDateTime,
+    status: row.status,
+    ...(row.responsiblePartyId && row.responsiblePartyName
+      ? { responsibleParty: { id: row.responsiblePartyId, name: row.responsiblePartyName } }
+      : {}),
+    ...(location ? { location } : {}),
+    hasConflict
+  };
+}
+
+function schedulerWriteAllowed(
+  user: RequestUser | undefined,
+  responsiblePartyId: string,
+  submittedStartDateTime: string,
+  existing?: ApiCareEntry
+): boolean {
+  if (user?.workspaceRole !== "scheduler") return true;
+  const assigned = new Set(assignedCarePartyIds(user.id));
+  if (!assigned.has(responsiblePartyId)) return false;
+  if (existing?.responsiblePartyId && !assigned.has(existing.responsiblePartyId)) return false;
+  if (Date.parse(submittedStartDateTime) <= Date.now()) return false;
+  if (existing && (existing.status !== "planned" || Date.parse(existing.startDateTime) <= Date.now())) return false;
+  return true;
+}
+
+function schedulingInput(
+  input: ReturnType<typeof schedulerCareEntryInputSchema.parse>,
+  existing?: ApiCareEntry
+): ReturnType<typeof careEntryInputSchema.parse> {
+  const durationMinutes = (Date.parse(input.endDateTime) - Date.parse(input.startDateTime)) / 60_000;
+  return careEntryInputSchema.parse({
+    startDateTime: input.startDateTime,
+    endDateTime: input.endDateTime,
+    childIds: input.childIds,
+    responsiblePartyId: input.responsiblePartyId,
+    status: "planned",
+    careScope: existing?.careScope ?? (durationMinutes >= 12 * 60 ? "full_day" : durationMinutes >= 5 * 60 ? "half_day" : "hourly"),
+    generatedByPatternId: existing?.generatedByPatternId,
+    ruleOccurrenceDate: existing?.ruleOccurrenceDate,
+    contactRuleId: existing?.contactRuleId,
+    contactRuleSegmentId: existing?.contactRuleSegmentId,
+    contactRuleOccurrenceKey: existing?.contactRuleOccurrenceKey,
+    contactRuleSyncState: existing?.contactRuleSyncState,
+    plannedStartDateTime: existing?.plannedStartDateTime,
+    plannedEndDateTime: existing?.plannedEndDateTime,
+    deviationType: existing?.deviationType,
+    deviationNote: existing?.deviationNote,
+    overnight: existing?.overnight ?? false,
+    schoolHandover: existing?.schoolHandover ?? false,
+    holiday: existing?.holiday ?? false,
+    weekend: existing?.weekend ?? [input.startDateTime, input.endDateTime].some((value) => {
+      const day = new Date(value).getDay();
+      return day === 0 || day === 6;
+    }),
+    additionalCare: existing?.additionalCare ?? false,
+    location: input.location ?? existing?.location,
+    customLocation: input.location ? undefined : existing?.customLocation,
+    handoverFrom: existing?.handoverFrom,
+    handoverTo: existing?.handoverTo,
+    notes: existing?.notes,
+    evidenceReference: existing?.evidenceReference,
+    hasEvidence: existing?.hasEvidence ?? false,
+    trips: existing?.trips ?? [],
+    costs: existing?.costs ?? []
+  });
+}
+
+function schedulerForbidden(reply: { code(status: number): { send(payload: unknown): unknown } }) {
+  return reply.code(403).send({
+    error: "forbidden",
+    message: "Für diese Aktion fehlt die erforderliche Berechtigung."
+  });
 }
 
 function syncTrips(
@@ -540,6 +678,65 @@ function persistEntry(
 }
 
 export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
+  app.get<{ Querystring: { startDate?: string; endDate?: string } }>(
+    "/api/care-entries/schedule",
+    scheduleLimit,
+    async (request): Promise<ApiScheduleEntry[]> => {
+      const conditions = ["entries.deleted_at IS NULL"];
+      const values: string[] = [];
+      if (request.query.startDate) {
+        conditions.push("entries.end_datetime >= ?");
+        values.push(`${request.query.startDate}T00:00:00.000Z`);
+      }
+      if (request.query.endDate) {
+        conditions.push("entries.start_datetime <= ?");
+        values.push(`${request.query.endDate}T23:59:59.999Z`);
+      }
+      const conflicts = scheduleConflictEntryIds();
+      const rows = db.prepare(`
+        SELECT entries.id, entries.start_datetime AS startDateTime,
+          entries.end_datetime AS endDateTime, entries.status,
+          entries.location, entries.responsible_party_id AS responsiblePartyId,
+          parties.name AS responsiblePartyName
+        FROM care_entries entries
+        LEFT JOIN care_parties parties
+          ON parties.id = entries.responsible_party_id AND parties.deleted_at IS NULL
+        WHERE ${conditions.join(" AND ")}
+        ORDER BY entries.start_datetime, entries.id
+      `).all(...values) as Array<{
+        id: string;
+        startDateTime: string;
+        endDateTime: string;
+        status: ApiCareEntry["status"];
+        location: string | null;
+        responsiblePartyId: string | null;
+        responsiblePartyName: string | null;
+      }>;
+      const childStatement = db.prepare(`
+        SELECT children.id, children.name, children.color
+        FROM care_entry_children links
+        JOIN children ON children.id = links.child_id AND children.deleted_at IS NULL
+        WHERE links.care_entry_id = ? AND links.deleted_at IS NULL
+        ORDER BY children.name COLLATE NOCASE
+      `);
+      return rows.map((row) => {
+        const location = scheduleLocation(row.location);
+        return ({
+        id: row.id,
+        children: childStatement.all(row.id) as ApiScheduleEntry["children"],
+        startDateTime: row.startDateTime,
+        endDateTime: row.endDateTime,
+        status: row.status,
+        ...(row.responsiblePartyId && row.responsiblePartyName
+          ? { responsibleParty: { id: row.responsiblePartyId, name: row.responsiblePartyName } }
+          : {}),
+        ...(location ? { location } : {}),
+        hasConflict: conflicts.has(row.id)
+        });
+      });
+    }
+  );
+
   app.get("/api/care-conflicts", readLimit, async (): Promise<ApiCareConflictList> => {
     try {
       return { items: listCareConflicts(db), complete: true };
@@ -579,38 +776,52 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
     return entry ?? reply.code(404).send({ error: "not_found" });
   });
 
-  app.post("/api/care-entries", writeLimit, async (request, reply) => {
-    const parsed = careEntryInputSchema.safeParse(request.body);
+  app.post("/api/care-entries", createLimit, async (request, reply) => {
+    const scheduler = request.user?.workspaceRole === "scheduler";
+    const parsed = scheduler
+      ? schedulerCareEntryInputSchema.safeParse(request.body)
+      : careEntryInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
+    const input = scheduler
+      ? schedulingInput(parsed.data as ReturnType<typeof schedulerCareEntryInputSchema.parse>)
+      : parsed.data as ReturnType<typeof careEntryInputSchema.parse>;
+    if (!schedulerWriteAllowed(request.user, input.responsiblePartyId ?? "", input.startDateTime)) return schedulerForbidden(reply);
     const id = makeId("entry");
     try {
-      db.transaction(() => persistEntry(id, parsed.data, request.userEmail, undefined, request.user))();
+      db.transaction(() => persistEntry(id, input, request.userEmail, undefined, request.user))();
     } catch (error) {
       if (isCareEntryConflictError(error)) {
         return reply.code(409).send({ error: "care_entry_conflict" });
       }
       return reply.code(400).send({ error: "invalid_relation", message: error instanceof Error ? error.message : String(error) });
     }
-    return reply.code(201).send(getEntry(id));
+    return reply.code(201).send(scheduler ? getScheduleEntry(id) : getEntry(id));
   });
 
-  app.put<{ Params: { id: string } }>("/api/care-entries/:id", writeLimit, async (request, reply) => {
+  app.put<{ Params: { id: string } }>("/api/care-entries/:id", editLimit, async (request, reply) => {
     const existing = getEntry(request.params.id);
     if (!existing) return reply.code(404).send({ error: "not_found" });
-    const parsed = careEntryInputSchema.safeParse(request.body);
+    const scheduler = request.user?.workspaceRole === "scheduler";
+    const parsed = scheduler
+      ? schedulerCareEntryInputSchema.safeParse(request.body)
+      : careEntryInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
+    const input = scheduler
+      ? schedulingInput(parsed.data as ReturnType<typeof schedulerCareEntryInputSchema.parse>, existing)
+      : parsed.data as ReturnType<typeof careEntryInputSchema.parse>;
+    if (!schedulerWriteAllowed(request.user, input.responsiblePartyId ?? "", input.startDateTime, existing)) return schedulerForbidden(reply);
     try {
-      db.transaction(() => persistEntry(request.params.id, parsed.data, request.userEmail, existing, request.user))();
+      db.transaction(() => persistEntry(request.params.id, input, request.userEmail, existing, request.user))();
     } catch (error) {
       if (isCareEntryConflictError(error)) {
         return reply.code(409).send({ error: "care_entry_conflict" });
       }
       return reply.code(400).send({ error: "invalid_relation", message: error instanceof Error ? error.message : String(error) });
     }
-    return getEntry(request.params.id);
+    return scheduler ? getScheduleEntry(request.params.id) : getEntry(request.params.id);
   });
 
-  app.delete<{ Params: { id: string } }>("/api/care-entries/:id", writeLimit, async (request, reply) => {
+  app.delete<{ Params: { id: string } }>("/api/care-entries/:id", deleteLimit, async (request, reply) => {
     const existing = getEntry(request.params.id);
     if (!existing) return reply.code(404).send({ error: "not_found" });
     try {

@@ -9,12 +9,16 @@ import {
 import { getCareParty, mapCareParty, type CarePartyRow } from "../services/careParties.js";
 import { makeId, nowIso } from "../services/common.js";
 import { carePartyInputSchema } from "../validation/schemas.js";
+import { assignedCarePartyIds } from "../services/carePartyAccess.js";
 
 const readLimit = {
-  config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
+  config: { permission: "planning:view" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
 };
 const writeLimit = {
-  config: { rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
+  config: { permission: "planning:manage" as const, rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
+};
+const summaryLimit = {
+  config: { permission: "appointments:view" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
 };
 
 function assignedUsageCount(id: string): number {
@@ -35,6 +39,20 @@ function assignedUsageCount(id: string): number {
 }
 
 export async function carePartyRoutes(app: FastifyInstance): Promise<void> {
+  app.get("/api/care-parties/summary", summaryLimit, async (request) => {
+    const assigned = request.user?.workspaceRole === "scheduler"
+      ? assignedCarePartyIds(request.user.id)
+      : [];
+    if (request.user?.workspaceRole === "scheduler" && assigned.length === 0) return [];
+    return db.prepare(`
+      SELECT id, name
+      FROM care_parties
+      WHERE deleted_at IS NULL
+        ${request.user?.workspaceRole === "scheduler" ? `AND id IN (${assigned.map(() => "?").join(", ")})` : ""}
+      ORDER BY name COLLATE NOCASE
+    `).all(...assigned);
+  });
+
   app.get("/api/care-parties", readLimit, async () => {
     const rows = db.prepare(`
       SELECT id, name, kind, created_by, updated_by, created_at, updated_at

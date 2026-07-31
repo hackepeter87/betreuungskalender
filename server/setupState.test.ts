@@ -192,7 +192,7 @@ test("does not allow silent owner takeover after setup completion", () => {
         error.code === "setup_already_complete" &&
         error.statusCode === 409
     );
-    assert.equal(membershipRoleForUser("local-dev", database), undefined);
+    assert.equal(membershipRoleForUser("local-dev", database), "admin");
   });
 });
 
@@ -273,7 +273,7 @@ test("owner setup rejects a pending context after the mounted token rotates", ()
         () => store.consumeAndClaim(hash, setupUser(), new Date("2026-07-05T11:10:00.000Z")),
         (error) => error instanceof OwnerSetupTokenError && error.code === "owner_setup_invalid"
       );
-      assert.equal(membershipRoleForUser("local-dev", database), undefined);
+      assert.equal(membershipRoleForUser("local-dev", database), "admin");
       assert.equal(settingValue(database, "setup.ownerUserId"), undefined);
       const audits = database.prepare(`
         SELECT field_name AS fieldName, new_value AS newValue
@@ -306,7 +306,7 @@ test("owner setup rejects a pending context after the mounted token is removed",
         () => store.consumeAndClaim(hash, setupUser(), new Date("2026-07-05T11:10:00.000Z")),
         (error) => error instanceof OwnerSetupTokenError && error.code === "owner_setup_invalid"
       );
-      assert.equal(membershipRoleForUser("local-dev", database), undefined);
+      assert.equal(membershipRoleForUser("local-dev", database), "admin");
       assert.equal(settingValue(database, "setup.ownerUserId"), undefined);
     } finally {
       rmSync(directory, { recursive: true, force: true });

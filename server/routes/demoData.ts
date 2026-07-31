@@ -8,7 +8,7 @@ import {
 } from "../services/demoFixtures.js";
 
 export async function demoDataRoutes(app: FastifyInstance): Promise<void> {
-  app.post("/api/demo-data/edge-cases", async (request, reply) => {
+  app.post("/api/demo-data/edge-cases", { config: { permission: "admin:destructive" } }, async (request, reply) => {
     if (!config.demoDatasetsEnabled) {
       return reply.code(404).send({
         error: "not_found",

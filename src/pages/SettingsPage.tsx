@@ -14,7 +14,7 @@ import { formatDateTime } from "../lib/date";
 import { handoverLabel, locationLabel } from "../lib/labels";
 import { useAppStore } from "../store/AppStore";
 import {
-  type ApiAuthRole,
+  type ApiWorkspaceRole,
   carePartyKinds,
   type ApiAppUser,
   type ApiCalendarFeedScope,
@@ -23,6 +23,7 @@ import {
   type ApiInvitation,
   type ApiInstanceReadiness,
   type ApiMember,
+  type ApiSession,
   type ApiUserCarePartyAssignment
 } from "../../shared/api";
 import type { CareLocation, CareParty, Child, HandoverParty, NotificationEventType, NotificationPreference } from "../types";
@@ -106,10 +107,13 @@ function NotificationPreferencesSection() {
     notificationPreferences,
     updateNotificationPreferences,
     registerPushSubscription,
-    canWrite,
+    session,
     isSaving
   } = useAppStore();
   const preferences = notificationPreferences?.preferences ?? [];
+  const canManageNotifications = session.permissions
+    ? session.permissions.includes("notifications:manage-own")
+    : true;
 
   const patchPreference = (eventType: NotificationEventType, patch: Partial<NotificationPreference>) => {
     const next = preferences.map((preference) =>
@@ -127,7 +131,7 @@ function NotificationPreferencesSection() {
           <h2>{copy(locale, "notifications", "title")}</h2>
           <p>{copy(locale, "notifications", "description")}</p>
         </div>
-        <button className="button button--secondary" type="button" disabled={!canWrite || isSaving || !notificationPreferences?.pushAvailable} onClick={() => void registerPushSubscription()}>
+        <button className="button button--secondary" type="button" disabled={!canManageNotifications || isSaving || !notificationPreferences?.pushAvailable} onClick={() => void registerPushSubscription()}>
           <Icon name="bell" size={17} />
           {copy(locale, "notifications", "enablePush")}
         </button>
@@ -153,7 +157,7 @@ function NotificationPreferencesSection() {
               <input
                 type="checkbox"
                 checked={preference.pushEnabled}
-                disabled={!canWrite || isSaving}
+                disabled={!canManageNotifications || isSaving}
                 onChange={(event) => patchPreference(preference.eventType, { pushEnabled: event.target.checked })}
               />
               <span />
@@ -214,9 +218,9 @@ function FirstRunOwnerBootstrapSection() {
   );
 }
 
-const memberRoles: ApiAuthRole[] = ["admin", "parent", "readonly"];
+const memberRoles: ApiWorkspaceRole[] = ["admin", "editor", "scheduler", "viewer"];
 
-function memberRoleLabel(role: ApiAuthRole, locale: "de" | "en") {
+function memberRoleLabel(role: ApiWorkspaceRole, locale: "de" | "en") {
   return copy(locale, "settings", `memberRole_${role}` as CatalogKey<"settings">);
 }
 
@@ -236,7 +240,7 @@ function MemberInvitationManager() {
     new URLSearchParams(window.location.search).get("invitation") ?? ""
   );
   const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<ApiAuthRole>("parent");
+  const [inviteRole, setInviteRole] = useState<ApiWorkspaceRole>("editor");
   const [expiresDays, setExpiresDays] = useState(7);
   const [sendEmailOverride, setSendEmailOverride] = useState<boolean>();
   const [emailDeliveryAvailable, setEmailDeliveryAvailable] = useState(false);
@@ -249,7 +253,7 @@ function MemberInvitationManager() {
   const sendEmail = emailDeliveryAvailable && hasInviteEmail && (sendEmailOverride ?? true);
 
   const loadOwnerData = async () => {
-    if (session.user?.role !== "admin") return;
+    if (!session.isOwner) return;
     try {
       const [nextMembers, nextInvitations, capabilities] = await Promise.all([
         api.listMembers(),
@@ -272,9 +276,9 @@ function MemberInvitationManager() {
 
   useEffect(() => {
     void loadOwnerData();
-  }, [session.user?.role, session.user?.id]);
+  }, [session.isOwner, session.user?.id]);
 
-  if (!session.authenticated) return null;
+  if (!session.authenticated || !session.isOwner) return null;
 
   const acceptInvitation = async (event: FormEvent) => {
     event.preventDefault();
@@ -328,7 +332,7 @@ function MemberInvitationManager() {
     }
   };
 
-  const changeRole = async (member: ApiMember, role: ApiAuthRole) => {
+  const changeRole = async (member: ApiMember, role: ApiWorkspaceRole) => {
     setBusy(true);
     setMessage(null);
     setError(null);
@@ -382,7 +386,7 @@ function MemberInvitationManager() {
   };
 
   const currentUserId = session.user?.id;
-  const showOwnerControls = session.user?.role === "admin" && !ownerForbidden;
+  const showOwnerControls = Boolean(session.isOwner && !ownerForbidden);
 
   return (
     <section className="panel settings-section" data-testid="member-invitations">
@@ -431,7 +435,7 @@ function MemberInvitationManager() {
               <div className="member-invite-card__row">
                 <label className="field">
                   <span>{copy(locale, "settings", "memberRole")}</span>
-                  <select data-testid="invitation-role" value={inviteRole} onChange={(event) => setInviteRole(event.target.value as ApiAuthRole)}>
+                  <select data-testid="invitation-role" value={inviteRole} onChange={(event) => setInviteRole(event.target.value as ApiWorkspaceRole)}>
                     {memberRoles.map((role) => (
                       <option key={role} value={role}>{memberRoleLabel(role, locale)}</option>
                     ))}
@@ -499,7 +503,7 @@ function MemberInvitationManager() {
                     data-testid="member-role-select"
                     value={member.effectiveRole}
                     disabled={busy || member.owner || member.id === currentUserId}
-                    onChange={(event) => void changeRole(member, event.target.value as ApiAuthRole)}
+                    onChange={(event) => void changeRole(member, event.target.value as ApiWorkspaceRole)}
                   >
                     {memberRoles.map((role) => (
                       <option key={role} value={role}>{memberRoleLabel(role, locale)}</option>
@@ -758,9 +762,12 @@ function UserCarePartyAssignmentManager() {
   const [assignments, setAssignments] = useState<ApiUserCarePartyAssignment[]>([]);
   const [busyUserId, setBusyUserId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const canManageMembers = session.permissions
+    ? session.permissions.includes("members:manage")
+    : true;
 
   const load = async () => {
-    if (session.user?.role !== "admin") return;
+    if (!canManageMembers) return;
     try {
       const [nextUsers, nextAssignments] = await Promise.all([
         api.listAppUsers(),
@@ -776,9 +783,9 @@ function UserCarePartyAssignmentManager() {
 
   useEffect(() => {
     void load();
-  }, [session.user?.role]);
+  }, [canManageMembers]);
 
-  if (session.user?.role !== "admin") return null;
+  if (!canManageMembers) return null;
 
   const assignmentFor = (userId: string) =>
     assignments.find((assignment) => assignment.userId === userId)?.carePartyIds ?? [];
@@ -851,9 +858,12 @@ function InstanceReadinessSection() {
   const { session } = useAppStore();
   const [readiness, setReadiness] = useState<ApiInstanceReadiness | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const canInspectInstance = session.permissions
+    ? session.permissions.includes("instance:inspect")
+    : true;
 
   useEffect(() => {
-    if (session.user?.role !== "admin") return;
+    if (!canInspectInstance) return;
     let cancelled = false;
     api.getInstanceReadiness()
       .then((next) => {
@@ -868,9 +878,9 @@ function InstanceReadinessSection() {
     return () => {
       cancelled = true;
     };
-  }, [locale, session.user?.role]);
+  }, [canInspectInstance, locale]);
 
-  if (session.user?.role !== "admin") return null;
+  if (!canInspectInstance) return null;
 
   const featureLabels = readiness
     ? [
@@ -965,6 +975,14 @@ export function SettingsPage() {
     canWrite,
     isSaving
   } = useAppStore();
+  const hasPermission = (permission: NonNullable<ApiSession["permissions"]>[number]) =>
+    session.permissions?.includes(permission) ?? true;
+  const canManagePlanning = hasPermission("planning:manage");
+  const canManageChildren = hasPermission("children:manage");
+  const canManageSettings = hasPermission("settings:manage");
+  const canViewPlanning = hasPermission("planning:view");
+  const canManageFeeds = hasPermission("feeds:manage-own");
+  const canManageNotifications = hasPermission("notifications:manage-own");
   const [editingChild, setEditingChild] = useState<Child | "new" | null>(null);
   const [editingCareParty, setEditingCareParty] = useState<CareParty | "new" | null>(null);
 
@@ -1075,7 +1093,7 @@ export function SettingsPage() {
 
       <FirstRunOwnerBootstrapSection />
 
-      <NotificationPreferencesSection />
+      {canManageNotifications ? <NotificationPreferencesSection /> : null}
 
       <InstanceReadinessSection />
 
@@ -1083,7 +1101,7 @@ export function SettingsPage() {
 
       <UserCarePartyAssignmentManager />
 
-      <section className="panel settings-section">
+      {canManagePlanning ? <section className="panel settings-section">
         <div className="panel__header">
           <div>
             <h2>{copy(locale, "settings", "careParties")}</h2>
@@ -1118,9 +1136,9 @@ export function SettingsPage() {
           ))}
           {data.careParties.length === 0 ? <p className="empty-copy empty-copy--padded">{copy(locale, "settings", "noCareParties")}</p> : null}
         </div>
-      </section>
+      </section> : null}
 
-      <section className="panel settings-section">
+      {canManageChildren ? <section className="panel settings-section">
         <div className="panel__header">
           <div>
             <h2>{copy(locale, "settings", "children")}</h2>
@@ -1155,9 +1173,9 @@ export function SettingsPage() {
           ))}
           {data.children.length === 0 ? <p className="empty-copy empty-copy--padded">{copy(locale, "settings", "noChildren")}</p> : null}
         </div>
-      </section>
+      </section> : null}
 
-      <section className="panel settings-section">
+      {canManageSettings ? <section className="panel settings-section">
         <div className="panel__header panel__header--compact">
           <div>
             <h2>{copy(locale, "settings", "defaults")}</h2>
@@ -1251,10 +1269,11 @@ export function SettingsPage() {
             </select>
           </label>
         </div>
-      </section>
+      </section> : null}
 
-      <section className="panel settings-section">
-        <div className="panel__header panel__header--compact">
+      {hasPermission("admin:destructive") ? (
+        <section className="panel settings-section">
+          <div className="panel__header panel__header--compact">
           <div>
             <h2>{copy(locale, "settings", "demoData")}</h2>
             <p>{copy(locale, "settings", "demoDataDescription")}</p>
@@ -1262,23 +1281,24 @@ export function SettingsPage() {
         </div>
         <div className="data-actions">
           <button className="button button--secondary" type="button" onClick={() => void loadExamples()} disabled={!canWrite || isSaving}>{copy(locale, "settings", "loadDemo")}</button>
-          {session.demoDatasetsEnabled && session.user?.role === "admin" ? (
+          {session.demoDatasetsEnabled && hasPermission("admin:destructive") ? (
             <button className="button button--secondary" data-testid="settings-load-edge-case-demo" type="button" onClick={() => void loadEdgeCases()} disabled={!canWrite || isSaving}>{copy(locale, "settings", "loadEdgeCaseDemo")}</button>
           ) : null}
           <button className="button button--danger-quiet" type="button" onClick={() => void clearData()} disabled={!canWrite || isSaving}><Icon name="trash" size={17} />{copy(locale, "settings", "clearData")}</button>
         </div>
-      </section>
+        </section>
+      ) : null}
 
-      <ExternalCalendarManager />
+      {canViewPlanning ? <ExternalCalendarManager /> : null}
 
-      <CalendarFeedManager />
+      {canManageFeeds ? <CalendarFeedManager /> : null}
 
-      {editingChild ? (
+      {canManageChildren && editingChild ? (
         <Modal title={editingChild === "new" ? copy(locale, "settings", "addChild") : copy(locale, "settings", "editChild")} onClose={() => setEditingChild(null)}>
           <ChildForm child={editingChild === "new" ? undefined : editingChild} onDone={() => setEditingChild(null)} />
         </Modal>
       ) : null}
-      {editingCareParty ? (
+      {canManagePlanning && editingCareParty ? (
         <Modal title={editingCareParty === "new" ? copy(locale, "settings", "addCareParty") : copy(locale, "settings", "editCareParty")} onClose={() => setEditingCareParty(null)}>
           <CarePartyForm party={editingCareParty === "new" ? undefined : editingCareParty} onDone={() => setEditingCareParty(null)} />
         </Modal>

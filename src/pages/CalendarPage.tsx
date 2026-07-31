@@ -36,7 +36,7 @@ export function CalendarPage({
   onNewEntry: (date?: string) => void;
   onEditEntry: (entry: CareEntry) => void;
 }) {
-  const { data, canWrite } = useAppStore();
+  const { data, canWrite, session } = useAppStore();
   const { locale, intlLocale } = useI18n();
   const isMobile = useMediaQuery("(max-width: 767px)");
   const [view, setView] = useState<"agenda" | "month">(() =>
@@ -46,6 +46,9 @@ export function CalendarPage({
     UnavailablePeriod | "new" | null
   >(null);
   const [externalEvents, setExternalEvents] = useState<ExternalCalendarEvent[]>([]);
+  const canCreateAppointments = session.permissions?.includes("appointments:create") ?? true;
+  const canManagePlanning = session.permissions?.includes("planning:manage") ?? true;
+  const canViewPlanning = session.permissions?.includes("planning:view") ?? true;
   const visibleRange = useMemo(() => rangeForMonth(monthKey), [monthKey]);
   const entries = useMemo(() => entriesForMonth(data.entries, monthKey), [data.entries, monthKey]);
   const holidayPeriods = useMemo(
@@ -67,8 +70,12 @@ export function CalendarPage({
     externalEvents.length > 0;
 
   useEffect(() => {
+    if (!canViewPlanning) {
+      setExternalEvents([]);
+      return;
+    }
     void api.listExternalCalendarEvents(`${visibleRange.startDate}T00:00:00.000Z`, `${visibleRange.endDate}T23:59:59.999Z`).then(setExternalEvents).catch(() => setExternalEvents([]));
-  }, [visibleRange.endDate, visibleRange.startDate]);
+  }, [canViewPlanning, visibleRange.endDate, visibleRange.startDate]);
 
   useEffect(() => {
     setView(isMobile ? "agenda" : "month");
@@ -83,14 +90,14 @@ export function CalendarPage({
         </div>
         <div className="page-header__actions">
           <MonthToolbar monthKey={monthKey} onChange={onMonthChange} />
-          <button className="button button--primary desktop-only" type="button" onClick={() => onNewEntry()} disabled={!canWrite}>
+          {canCreateAppointments ? <button className="button button--primary desktop-only" type="button" onClick={() => onNewEntry()} disabled={!canWrite}>
             <Icon name="plus" />
             {copy(locale, "calendarPage", "createEntry")}
-          </button>
-          <button className="button button--secondary desktop-only" type="button" onClick={() => setEditingUnavailable("new")} disabled={!canWrite}>
+          </button> : null}
+          {canManagePlanning ? <button className="button button--secondary desktop-only" type="button" onClick={() => setEditingUnavailable("new")}>
             <Icon name="briefcase" />
             {copy(locale, "calendarPage", "unavailability")}
-          </button>
+          </button> : null}
         </div>
       </div>
 
@@ -102,14 +109,14 @@ export function CalendarPage({
       ) : null}
 
       <div className="calendar-quick-actions">
-        <button className="button button--primary" data-testid="calendar-add-entry" type="button" onClick={() => onNewEntry()} disabled={!canWrite}>
+        {canCreateAppointments ? <button className="button button--primary" data-testid="calendar-add-entry" type="button" onClick={() => onNewEntry()} disabled={!canWrite}>
           <Icon name="plus" size={17} />
           {copy(locale, "calendarPage", "care")}
-        </button>
-        <button className="button button--secondary" data-testid="calendar-add-unavailable" type="button" onClick={() => setEditingUnavailable("new")} disabled={!canWrite}>
+        </button> : null}
+        {canManagePlanning ? <button className="button button--secondary" data-testid="calendar-add-unavailable" type="button" onClick={() => setEditingUnavailable("new")}>
           <Icon name="briefcase" size={17} />
           {copy(locale, "calendarPage", "unavailability")}
-        </button>
+        </button> : null}
       </div>
 
       {!hasCalendarContent ? (
@@ -154,8 +161,8 @@ export function CalendarPage({
           canWrite={canWrite}
           onSelectDate={(date) => onNewEntry(date || undefined)}
           onSelectEntry={onEditEntry}
-          onSelectUnavailable={setEditingUnavailable}
-          allowCreate={canWrite}
+          onSelectUnavailable={canManagePlanning ? setEditingUnavailable : undefined}
+          allowCreate={canCreateAppointments && canWrite}
         />
       ) : (
         <>
@@ -170,8 +177,8 @@ export function CalendarPage({
               conflicts={data.careConflicts}
               onSelectDate={onNewEntry}
               onSelectEntry={onEditEntry}
-              onSelectUnavailable={setEditingUnavailable}
-              allowCreate={canWrite}
+              onSelectUnavailable={canManagePlanning ? setEditingUnavailable : undefined}
+              allowCreate={canCreateAppointments && canWrite}
             />
             <div className="calendar-legend">
               {data.children.map((child) => (
@@ -186,7 +193,7 @@ export function CalendarPage({
         </>
       )}
 
-      {editingUnavailable ? (
+      {editingUnavailable && canManagePlanning ? (
         <Modal
           title={
             editingUnavailable === "new"

@@ -47,7 +47,7 @@ membership through member administration.
 The application uses the following fixed permission vocabulary:
 
 - `appointments:view`, `appointments:create`, `appointments:edit`,
-  `appointments:delete`
+  `appointments:delete`, `appointments:confirm`
 - `children:view-basic`, `children:view-sensitive`, `children:manage`
 - `notes:view`
 - `planning:view`, `planning:manage`
@@ -69,7 +69,7 @@ in the future, and both its existing and submitted responsible care parties
 are assigned to the scheduler.
 
 Scheduler writes are limited to children, start and end, responsible care
-party, and predefined location and handover fields. Notes, evidence references,
+party, and predefined location fields. Notes, evidence references,
 custom free-text locations, trips, costs, actual-care fields, confirmation
 fields, cancellation fields, and deletion are rejected. These restrictions
 are validated against the parsed server input, not inferred from UI controls.
@@ -116,6 +116,12 @@ Removing a member soft-deletes the membership and, in the same transaction,
 revokes personal calendar-feed tokens and push subscriptions. Confirmation
 generation and delivery select active members only. A browser session may
 remain authenticated, but the next protected request is rejected.
+
+Role and care-party assignment changes also take effect on the next request.
+Capabilities that no longer apply cannot be retained through an existing feed
+or pending confirmation request. Installation ownership and other setup
+metadata are internal settings and cannot be changed through the general
+settings API.
 
 ## Consequences
 

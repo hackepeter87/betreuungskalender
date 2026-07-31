@@ -78,15 +78,15 @@ test("explicit installation owner can update another member role", () => {
     const updated = updateMemberRole(
       owner,
       invited.id,
-      "parent",
+      "editor",
       "2026-07-05T11:00:00.000Z",
       database
     );
 
     assert.equal(updated.id, invited.id);
-    assert.equal(updated.effectiveRole, "parent");
-    assert.equal(updated.membershipRole, "parent");
-    assert.equal(membershipRoleForUser(invited.id, database), "parent");
+    assert.equal(updated.effectiveRole, "editor");
+    assert.equal(updated.membershipRole, "editor");
+    assert.equal(membershipRoleForUser(invited.id, database), "editor");
     assert.deepEqual(database.prepare(`
       SELECT user_email AS userEmail, entity_type AS entityType, entity_id AS entityId,
         field_name AS fieldName, new_value AS newValue
@@ -97,7 +97,7 @@ test("explicit installation owner can update another member role", () => {
       entityType: "app_member",
       entityId: invited.id,
       fieldName: "membershipRole",
-      newValue: "\"parent\""
+      newValue: "\"editor\""
     });
   });
 });
@@ -114,7 +114,7 @@ test("non-owners cannot administer members when an owner is configured", () => {
 
     assert.equal(canAdministerMembers(otherAdmin, database), false);
     assert.throws(
-      () => updateMemberRole(otherAdmin, target.id, "parent", timestamp, database),
+      () => updateMemberRole(otherAdmin, target.id, "editor", timestamp, database),
       (error) =>
         error instanceof MemberManagementError &&
         error.code === "member_admin_required" &&
@@ -132,9 +132,9 @@ test("admin fallback can administer members before an explicit owner exists", ()
     insertUser(database, target);
 
     assert.equal(canAdministerMembers(admin, database), true);
-    updateMemberRole(admin, target.id, "parent", timestamp, database);
+    updateMemberRole(admin, target.id, "editor", timestamp, database);
 
-    assert.equal(membershipRoleForUser(target.id, database), "parent");
+    assert.equal(membershipRoleForUser(target.id, database), "editor");
   });
 });
 
@@ -145,7 +145,7 @@ test("users cannot change their own role through member management", () => {
     setOwner(database, owner.id);
 
     assert.throws(
-      () => updateMemberRole(owner, owner.id, "readonly", timestamp, database),
+      () => updateMemberRole(owner, owner.id, "viewer", timestamp, database),
       (error) =>
         error instanceof MemberManagementError &&
         error.code === "self_role_change_rejected" &&
@@ -161,14 +161,14 @@ test("member listing exposes claim and effective roles without tokens", () => {
     const target = user("user_target", "readonly");
     insertUser(database, admin);
     insertUser(database, target);
-    updateMemberRole(admin, target.id, "parent", timestamp, database);
+    updateMemberRole(admin, target.id, "editor", timestamp, database);
 
     const members = listMembers(database);
     const listed = members.find((member) => member.id === target.id);
 
     assert.equal(listed?.claimRole, "readonly");
-    assert.equal(listed?.membershipRole, "parent");
-    assert.equal(listed?.effectiveRole, "parent");
+    assert.equal(listed?.membershipRole, "editor");
+    assert.equal(listed?.effectiveRole, "editor");
     assert.equal("token" in (listed ?? {}), false);
   });
 });
@@ -180,18 +180,58 @@ test("owner can remove another member app role without deleting the user", () =>
     insertUser(database, owner);
     insertUser(database, target);
     setOwner(database, owner.id);
-    updateMemberRole(owner, target.id, "parent", timestamp, database);
+    updateMemberRole(owner, target.id, "editor", timestamp, database);
+    database.prepare(`
+      INSERT INTO calendar_feed_tokens (
+        id, user_id, token_hash, created_at, scope_type
+      ) VALUES ('feed-target', ?, 'feed-hash-target', ?, 'all')
+    `).run(target.id, timestamp);
+    database.prepare(`
+      INSERT INTO push_subscriptions (
+        id, user_id, endpoint, p256dh, auth, created_at, updated_at
+      ) VALUES ('push-target', ?, 'https://push.example.invalid/subscription', 'key', 'auth', ?, ?)
+    `).run(target.id, timestamp, timestamp);
+    database.prepare(`
+      INSERT INTO care_entries (
+        id, start_datetime, end_datetime, status, care_scope,
+        duration_minutes, created_by, updated_by, created_at, updated_at
+      ) VALUES (
+        'entry-target', '2026-07-04T16:00:00.000Z', '2026-07-04T18:00:00.000Z',
+        'planned', 'hourly', 120, ?, ?, ?, ?
+      )
+    `).run(owner.id, owner.id, timestamp, timestamp);
+    database.prepare(`
+      INSERT INTO care_confirmation_requests (
+        id, care_entry_id, user_id, due_at, status, reminder_count, created_at, updated_at
+      ) VALUES ('confirmation-target', 'entry-target', ?, ?, 'open', 0, ?, ?)
+    `).run(target.id, timestamp, timestamp, timestamp);
 
     const updated = removeMember(owner, target.id, "2026-07-05T12:00:00.000Z", database);
 
     assert.equal(updated.id, target.id);
     assert.equal(updated.membershipRole, undefined);
-    assert.equal(updated.effectiveRole, "readonly");
+    assert.equal(updated.effectiveRole, "editor");
+    assert.equal(updated.workspaceAccess, false);
     assert.equal(membershipRoleForUser(target.id, database), undefined);
     const remainingUser = database.prepare(
       "SELECT COUNT(*) AS count FROM app_users WHERE id = ?"
     ).get(target.id) as { count: number };
     assert.equal(remainingUser.count, 1);
+    assert.deepEqual(database.prepare(`
+      SELECT revoked_at AS revokedAt
+      FROM calendar_feed_tokens
+      WHERE id = 'feed-target'
+    `).get(), { revokedAt: "2026-07-05T12:00:00.000Z" });
+    assert.deepEqual(database.prepare(`
+      SELECT deleted_at AS deletedAt
+      FROM push_subscriptions
+      WHERE id = 'push-target'
+    `).get(), { deletedAt: "2026-07-05T12:00:00.000Z" });
+    assert.deepEqual(database.prepare(`
+      SELECT deleted_at AS deletedAt
+      FROM care_confirmation_requests
+      WHERE id = 'confirmation-target'
+    `).get(), { deletedAt: "2026-07-05T12:00:00.000Z" });
     assert.deepEqual(database.prepare(`
       SELECT field_name AS fieldName, old_value AS oldValue, new_value AS newValue
       FROM audit_log
@@ -200,9 +240,48 @@ test("owner can remove another member app role without deleting the user", () =>
       LIMIT 1
     `).get(), {
       fieldName: "membershipRole",
-      oldValue: "\"parent\"",
+      oldValue: "\"editor\"",
       newValue: "null"
     });
+  });
+});
+
+test("role downgrade revokes feeds and unanswered care confirmations", () => {
+  withDatabase((database) => {
+    const owner = user("user_owner", "admin");
+    const target = user("user_target", "parent");
+    insertUser(database, owner);
+    insertUser(database, target);
+    setOwner(database, owner.id);
+    updateMemberRole(owner, target.id, "editor", timestamp, database);
+    database.prepare(`
+      INSERT INTO calendar_feed_tokens (
+        id, user_id, token_hash, created_at, scope_type
+      ) VALUES ('feed-downgrade', ?, 'feed-hash-downgrade', ?, 'all')
+    `).run(target.id, timestamp);
+    database.prepare(`
+      INSERT INTO care_entries (
+        id, start_datetime, end_datetime, status, care_scope,
+        duration_minutes, created_by, updated_by, created_at, updated_at
+      ) VALUES (
+        'entry-downgrade', '2026-07-04T16:00:00.000Z', '2026-07-04T18:00:00.000Z',
+        'planned', 'hourly', 120, ?, ?, ?, ?
+      )
+    `).run(owner.id, owner.id, timestamp, timestamp);
+    database.prepare(`
+      INSERT INTO care_confirmation_requests (
+        id, care_entry_id, user_id, due_at, status, reminder_count, created_at, updated_at
+      ) VALUES ('confirmation-downgrade', 'entry-downgrade', ?, ?, 'open', 0, ?, ?)
+    `).run(target.id, timestamp, timestamp, timestamp);
+
+    updateMemberRole(owner, target.id, "scheduler", "2026-07-05T12:00:00.000Z", database);
+
+    assert.deepEqual(database.prepare(`
+      SELECT revoked_at AS revokedAt FROM calendar_feed_tokens WHERE id = 'feed-downgrade'
+    `).get(), { revokedAt: "2026-07-05T12:00:00.000Z" });
+    assert.deepEqual(database.prepare(`
+      SELECT deleted_at AS deletedAt FROM care_confirmation_requests WHERE id = 'confirmation-downgrade'
+    `).get(), { deletedAt: "2026-07-05T12:00:00.000Z" });
   });
 });
 

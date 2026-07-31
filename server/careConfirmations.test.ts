@@ -18,6 +18,7 @@ const {
   createDueCareConfirmationRequests,
   getNotificationPreferences,
   listOpenCareConfirmations,
+  remindCareConfirmationLater,
   savePushSubscription,
   sendDueCareConfirmationPushes,
   updateNotificationPreferences
@@ -380,6 +381,41 @@ test("partial confirmation rejects actual care parties outside the assigned shar
     }),
     /nicht freigegeben/
   );
+});
+
+test("removed care-party assignments hide and block stale confirmations", async () => {
+  insertPastPlannedEntry();
+  insertCareParty("party-confirmation-b", "Andere Betreuung");
+  const user = parentUser();
+  const otherUser = parentUser("user-other-confirmation");
+  insertAppUser(user);
+  insertAppUser(otherUser);
+  assignCareParty(user.id, "party-confirmation-a");
+  assignCareParty(otherUser.id, "party-confirmation-b");
+  createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z"));
+  const request = db.prepare(`
+    SELECT id FROM care_confirmation_requests
+    WHERE care_entry_id = ? AND user_id = ?
+  `).get("entry-confirmation-a", user.id) as { id: string };
+
+  db.prepare(`
+    UPDATE app_user_care_party_assignments
+    SET deleted_at = ?, updated_at = ?
+    WHERE user_id = ? AND care_party_id = ? AND deleted_at IS NULL
+  `).run(
+    "2026-07-03T09:00:00.000Z",
+    "2026-07-03T09:00:00.000Z",
+    user.id,
+    "party-confirmation-a"
+  );
+
+  assert.deepEqual(await listOpenCareConfirmations(user), []);
+  assert.equal(answerCareConfirmation(request.id, user, { status: "completed" }), undefined);
+  assert.equal(remindCareConfirmationLater(request.id, user), undefined);
+  assert.deepEqual(db.prepare(`
+    SELECT status, answered_at AS answeredAt
+    FROM care_confirmation_requests WHERE id = ?
+  `).get(request.id), { status: "open", answeredAt: null });
 });
 
 test("notification preferences default to in-app and push while email stays opt-in", () => {

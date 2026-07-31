@@ -71,7 +71,7 @@ test("valid invitations can be accepted by authenticated users", () => {
   withDatabase((database) => {
     const user = insertUser(database);
     const created = createInvitation({
-      role: "parent",
+      role: "editor",
       emailHint: "USER_INVITED@EXAMPLE.INVALID",
       expiresAt: "2026-07-06T10:00:00.000Z",
       actorId: "local-dev",
@@ -87,11 +87,11 @@ test("valid invitations can be accepted by authenticated users", () => {
     );
 
     assert.equal(accepted.id, created.invitation.id);
-    assert.equal(accepted.role, "parent");
+    assert.equal(accepted.role, "editor");
     assert.equal(accepted.emailHint, "user_invited@example.invalid");
     assert.equal(accepted.acceptedUserId, user.id);
     assert.equal(accepted.acceptedAt, "2026-07-05T11:00:00.000Z");
-    assert.equal(membershipRoleForUser(user.id, database), "parent");
+    assert.equal(membershipRoleForUser(user.id, database), "editor");
   });
 });
 
@@ -99,7 +99,7 @@ test("invitation login uses a hash and accepts after authentication", () => {
   withDatabase((database) => {
     const user = insertUser(database);
     const created = createInvitation({
-      role: "parent",
+      role: "editor",
       expiresAt: "2026-07-06T10:00:00.000Z",
       actorId: "local-dev",
       token: "test-token-login-flow-000000",
@@ -121,7 +121,7 @@ test("invitation login uses a hash and accepts after authentication", () => {
       database
     );
     assert.equal(accepted.acceptedUserId, user.id);
-    assert.equal(membershipRoleForUser(user.id, database), "parent");
+    assert.equal(membershipRoleForUser(user.id, database), "editor");
   });
 });
 
@@ -129,7 +129,7 @@ test("raw invitation tokens are not persisted", () => {
   withDatabase((database) => {
     const rawToken = "test-token-never-persisted-000000";
     const created = createInvitation({
-      role: "readonly",
+      role: "viewer",
       expiresAt: "2026-07-06T10:00:00.000Z",
       actorId: "local-dev",
       token: rawToken,
@@ -157,7 +157,7 @@ test("expired invitations cannot be accepted", () => {
   withDatabase((database) => {
     const user = insertUser(database);
     const created = createInvitation({
-      role: "parent",
+      role: "editor",
       expiresAt: "2026-07-05T10:00:00.000Z",
       actorId: "local-dev",
       token: "test-token-expired-invitation-000000",
@@ -209,7 +209,7 @@ test("accepted invitations cannot be reused", () => {
     const firstUser = insertUser(database, "user_first");
     const secondUser = insertUser(database, "user_second");
     const created = createInvitation({
-      role: "parent",
+      role: "editor",
       expiresAt: "2026-07-06T10:00:00.000Z",
       actorId: "local-dev",
       token: "test-token-single-use-invitation-000000",
@@ -225,7 +225,7 @@ test("accepted invitations cannot be reused", () => {
         error.code === "invitation_already_accepted" &&
         error.statusCode === 409
     );
-    assert.equal(membershipRoleForUser(firstUser.id, database), "parent");
+    assert.equal(membershipRoleForUser(firstUser.id, database), "editor");
     assert.equal(membershipRoleForUser(secondUser.id, database), undefined);
   });
 });
@@ -245,7 +245,7 @@ test("invitation email delivery uses a provider-neutral test transport", async (
     {
       to: "invited@example.test",
       token: "test-token-mail-delivery-000000",
-      role: "parent",
+      role: "editor",
       expiresAt: "2026-07-06T10:00:00.000Z"
     },
     mailConfig,
@@ -299,7 +299,7 @@ test("invitation email delivery can use the installation label as sender display
     {
       to: "invited@example.test",
       token: "test-token-mail-display-name-000000",
-      role: "readonly",
+      role: "viewer",
       expiresAt: "2026-07-06T10:00:00.000Z"
     },
     mailConfig,
@@ -329,7 +329,7 @@ test("invitation email delivery reports missing or failed mail configuration saf
     () => sendInvitationEmail({
       to: "invited@example.test",
       token: "test-token-mail-missing-config-000000",
-      role: "readonly",
+      role: "viewer",
       expiresAt: "2026-07-06T10:00:00.000Z"
     }, {
       invitationEmailEnabled: false,

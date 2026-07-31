@@ -5,7 +5,7 @@ import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyRequest } from "fastify";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
-import { resolveRequestUser, sessionInfo } from "./auth.js";
+import { resolveRequestUser, sessionInfo, workspacePermissionsForRole, type RequestUser } from "./auth.js";
 import { createApiAuthHook } from "./authHook.js";
 import { config } from "./config.js";
 import { cookieValue } from "./cookies.js";
@@ -84,6 +84,15 @@ const app = Fastify({
     ? (address) => isTrustedProxyAddress(address, config.trustedProxyRules)
     : config.trustProxyAuth
 });
+
+function workspaceSession(user: RequestUser) {
+  return {
+    workspaceAccess: user.workspaceAccess ?? true,
+    ...(user.workspaceRole ? { workspaceRole: user.workspaceRole } : {}),
+    isOwner: Boolean(user.isOwner),
+    permissions: user.workspacePermissions ?? []
+  };
+}
 
 await app.register(helmet, {
   contentSecurityPolicy: {
@@ -296,10 +305,18 @@ app.get("/api/session", readLimit, async (request) => {
     cookieValue(request.headers.cookie, config.recoveryAdminSessionCookieName)
   );
   if (recoveryUser) {
+    const privilegedRecoveryUser: RequestUser = {
+      ...recoveryUser,
+      workspaceRole: "admin",
+      workspaceAccess: true,
+      workspacePermissions: workspacePermissionsForRole("admin", true),
+      isOwner: true
+    };
     return {
       authRequired: config.requireAuth,
       authenticated: true,
       setup,
+      ...workspaceSession(privilegedRecoveryUser),
       user: {
         id: recoveryUser.id,
         displayName: recoveryUser.displayName,
@@ -323,6 +340,7 @@ app.get("/api/session", readLimit, async (request) => {
       setup,
       ...(nativeUser
         ? {
+            ...workspaceSession(nativeUser),
             user: {
               id: nativeUser.id,
               displayName: nativeUser.displayName,
@@ -371,6 +389,7 @@ app.get("/api/session", readLimit, async (request) => {
           authRequired: config.requireAuth,
           authenticated: true,
           setup,
+          ...workspaceSession(membership.user),
           user: {
             id: membership.user.id,
             displayName: membership.user.displayName,

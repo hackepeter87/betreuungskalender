@@ -11,10 +11,12 @@ import type { RequestUser } from "../auth.js";
 import { db } from "../db/connection.js";
 import { config } from "../config.js";
 import { markClosedMonthsChanged, recordAudit, recordFieldChanges } from "./audit.js";
-import { assertCanUseCareParty } from "./carePartyAccess.js";
+import { assertCanUseCareParty, canUseCareParty } from "./carePartyAccess.js";
 import { assertActiveCareParty } from "./careParties.js";
 import { assertNoActualCareConflict } from "./careConflicts.js";
 import { assertActiveChildren, bool, makeId, nowIso, syncJunction } from "./common.js";
+import { userHasWorkspacePermission } from "./memberships.js";
+import { findAuthenticatedUserBySubject } from "./users.js";
 
 const notificationEvents: ApiNotificationEventType[] = [
   "care_confirmation_due",
@@ -223,14 +225,62 @@ function usersForEntry(entry: EntryRow): string[] {
       WHERE care_party_id = ? AND deleted_at IS NULL
       ORDER BY user_id
     `).all(entry.responsible_party_id) as Array<{ userId: string }>;
-    if (rows.length) return rows.map((row) => row.userId);
+    if (rows.length) {
+      return rows
+        .map((row) => row.userId)
+        .filter((userId) => userHasWorkspacePermission(userId, "appointments:confirm"));
+    }
   }
   return (db.prepare(`
     SELECT id
     FROM app_users
     WHERE deleted_at IS NULL AND role IN ('admin', 'parent')
     ORDER BY id
-  `).all() as Array<{ id: string }>).map((row) => row.id);
+  `).all() as Array<{ id: string }>).map((row) => row.id).filter(
+    (userId) => userHasWorkspacePermission(userId, "appointments:confirm")
+  );
+}
+
+function currentUserForId(userId: string): RequestUser | undefined {
+  const row = db.prepare(`
+    SELECT external_subject AS externalSubject
+    FROM app_users
+    WHERE id = ? AND deleted_at IS NULL
+  `).get(userId) as { externalSubject: string } | undefined;
+  return row ? findAuthenticatedUserBySubject(row.externalSubject) : undefined;
+}
+
+function canAccessConfirmation(user: RequestUser | undefined, entry: EntryRow): user is RequestUser {
+  if (!user || !userHasWorkspacePermission(user.id, "appointments:confirm")) return false;
+  return !entry.responsible_party_id || canUseCareParty(user, entry.responsible_party_id);
+}
+
+export function invalidateInaccessibleCareConfirmations(
+  userId: string,
+  timestamp = nowIso()
+): number {
+  const user = currentUserForId(userId);
+  const rows = db.prepare(`
+    SELECT requests.id, requests.care_entry_id AS careEntryId
+    FROM care_confirmation_requests requests
+    WHERE requests.user_id = ?
+      AND requests.deleted_at IS NULL
+      AND requests.answered_at IS NULL
+  `).all(userId) as Array<{ id: string; careEntryId: string }>;
+  const revoke = db.prepare(`
+    UPDATE care_confirmation_requests
+    SET deleted_at = ?, updated_at = ?
+    WHERE id = ? AND deleted_at IS NULL
+  `);
+  let revoked = 0;
+  for (const row of rows) {
+    const entry = db.prepare("SELECT * FROM care_entries WHERE id = ? AND deleted_at IS NULL")
+      .get(row.careEntryId) as EntryRow | undefined;
+    if (!entry || !canAccessConfirmation(user, entry)) {
+      revoked += revoke.run(timestamp, timestamp, row.id).changes;
+    }
+  }
+  return revoked;
 }
 
 export function createDueCareConfirmationRequests(referenceTime = new Date()): number {
@@ -457,6 +507,9 @@ export async function sendDueCareConfirmationPushes(
   `).all(now, now) as RequestRow[];
   const rowsByUser = new Map<string, RequestRow[]>();
   for (const row of rows) {
+    const entry = db.prepare("SELECT * FROM care_entries WHERE id = ? AND deleted_at IS NULL")
+      .get(row.care_entry_id) as EntryRow | undefined;
+    if (!entry || !canAccessConfirmation(currentUserForId(row.user_id), entry)) continue;
     const userRows = rowsByUser.get(row.user_id) ?? [];
     userRows.push(row);
     rowsByUser.set(row.user_id, userRows);
@@ -495,8 +548,10 @@ export async function runCareConfirmationSweep(referenceTime = new Date()): Prom
   await sendDueCareConfirmationPushes(referenceTime);
 }
 
-export async function listOpenCareConfirmations(userId: string): Promise<ApiCareConfirmationRequest[]> {
+export async function listOpenCareConfirmations(userOrId: RequestUser | string): Promise<ApiCareConfirmationRequest[]> {
   await runCareConfirmationSweep();
+  const user = typeof userOrId === "string" ? currentUserForId(userOrId) : userOrId;
+  if (!user) return [];
   const rows = db.prepare(`
     SELECT *
     FROM care_confirmation_requests
@@ -505,11 +560,11 @@ export async function listOpenCareConfirmations(userId: string): Promise<ApiCare
       AND answered_at IS NULL
       AND status IN ('open', 'snoozed')
     ORDER BY due_at, id
-  `).all(userId) as RequestRow[];
+  `).all(user.id) as RequestRow[];
   return rows.flatMap((row) => {
     const entry = db.prepare("SELECT * FROM care_entries WHERE id = ? AND deleted_at IS NULL")
       .get(row.care_entry_id) as EntryRow | undefined;
-    return entry ? [mapRequest(row, entry)] : [];
+    return entry && canAccessConfirmation(user, entry) ? [mapRequest(row, entry)] : [];
   });
 }
 
@@ -528,6 +583,10 @@ export function answerCareConfirmation(
   const before = db.prepare("SELECT * FROM care_entries WHERE id = ? AND deleted_at IS NULL")
     .get(request.care_entry_id) as EntryRow | undefined;
   if (!before) return undefined;
+  if (typeof userOrId !== "string") {
+    if (!canAccessConfirmation(userOrId, before)) return undefined;
+    if (before.responsible_party_id) assertCanUseCareParty(userOrId, before.responsible_party_id);
+  }
   const timestamp = nowIso();
   const note = answer.note?.trim() || answer.cancellationReason?.trim() || null;
   const actualStartDateTime = answer.status === "partial"
@@ -612,15 +671,22 @@ export function answerCareConfirmation(
 
 export function remindCareConfirmationLater(
   requestId: string,
-  userId: string,
+  userOrId: RequestUser | string,
   nextReminderAt?: string
 ): ApiCareConfirmationRequest | undefined {
+  const userId = typeof userOrId === "string" ? userOrId : userOrId.id;
   const request = db.prepare(`
     SELECT *
     FROM care_confirmation_requests
     WHERE id = ? AND user_id = ? AND deleted_at IS NULL AND answered_at IS NULL
   `).get(requestId, userId) as RequestRow | undefined;
   if (!request) return undefined;
+  const entry = db.prepare("SELECT * FROM care_entries WHERE id = ? AND deleted_at IS NULL")
+    .get(request.care_entry_id) as EntryRow | undefined;
+  if (!entry) return undefined;
+  if (typeof userOrId !== "string" && !canAccessConfirmation(userOrId, entry)) {
+    return undefined;
+  }
   const next = nextReminderAt ?? new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString();
   const timestamp = nowIso();
   db.prepare(`
@@ -628,9 +694,7 @@ export function remindCareConfirmationLater(
     SET status = 'snoozed', next_reminder_at = ?, updated_at = ?
     WHERE id = ?
   `).run(next, timestamp, requestId);
-  const entry = db.prepare("SELECT * FROM care_entries WHERE id = ?")
-    .get(request.care_entry_id) as EntryRow | undefined;
   const updated = db.prepare("SELECT * FROM care_confirmation_requests WHERE id = ?")
     .get(requestId) as RequestRow;
-  return entry ? mapRequest(updated, entry) : undefined;
+  return mapRequest(updated, entry);
 }

@@ -155,11 +155,15 @@ from `OIDC_USER_ID_HEADER` to an internal `app_users` row. Display name, email,
 and groups are refreshed on every API request. API audit fields use the stable
 internal user ID rather than mutable names or email addresses.
 
-Authorization is enforced on the server:
+Before an owner exists, identity groups map to the legacy compatibility roles:
 
-- admin: read, write, app-data restore/clear, and legacy migration endpoints
+- admin: initial administrative compatibility role
 - parent: read and ordinary write operations
 - readonly: read-only API access
+
+After ownership is established, workspace memberships and the fixed owner,
+admin, editor, scheduler, and viewer permission model are authoritative. See
+[ADR 0005](adr/0005-workspace-permissions.md).
 
 When `OIDC_REQUIRE_ROLE_CLAIM=false`, an authenticated proxy user without a
 matching configured group receives `parent` permissions for compatibility with
@@ -199,12 +203,12 @@ Native OIDC maps the stable `sub` claim to `app_users.external_subject`.
 `groups`. Values may be emitted as an array or as comma, semicolon, or
 newline-separated strings. The same `OIDC_ADMIN_GROUP`, `OIDC_PARENT_GROUP`,
 and `OIDC_READONLY_GROUP` settings are used in trusted-proxy and native mode.
-When an active application membership exists for the stable app user, that
-membership role is used before the identity-provider group-derived role. If no
-membership exists, the configured OIDC groups remain the compatibility fallback.
-When no configured group matches and no app membership exists, native OIDC
-rejects the callback with `403` by default and does not create a browser
-session.
+Before an owner is established, configured OIDC groups provide the legacy
+compatibility role. Once `setup.ownerUserId` exists, the latest workspace
+membership is authoritative. An active membership grants its fixed workspace
+role; a missing or deleted membership grants no workspace access. Native OIDC
+may still authenticate the identity, but protected workspace routes return
+`403` until a valid invitation assigns a membership.
 
 Normal login always requires either a matching configured role group or an
 existing app membership. The only onboarding exceptions are validated,

@@ -3,7 +3,7 @@ import { config } from "../config.js";
 import { buildInstanceReadiness } from "../services/instanceReadiness.js";
 
 const readLimit = {
-  config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
+  config: { permission: "instance:inspect" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
 };
 
 export async function instanceReadinessRoutes(app: FastifyInstance): Promise<void> {

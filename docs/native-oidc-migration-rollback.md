@@ -137,9 +137,13 @@ Then verify authentication from a browser:
 1. Open the public URL in a private browser window.
 2. Confirm the app offers the native login action.
 3. Sign in through Keycloak and confirm the callback returns to `/`.
-4. Open `/api/session` and confirm the expected user and role.
-5. Test admin, parent, readonly, and a user without configured groups.
-6. Confirm readonly users cannot write.
+4. Open `/api/session` and confirm the expected user, workspace access,
+   workspace role, and permissions.
+5. Before owner setup, verify the configured compatibility groups and rejection
+   of users without a configured group when strict role claims are enabled.
+6. After owner setup, verify active admin, editor, scheduler, and viewer
+   memberships. Confirm that a user without an active membership has no
+   workspace access and that viewer users cannot write.
 7. Confirm logout clears the app session.
 8. Inspect logs for only sanitized OIDC error codes and request IDs. Tokens,
    authorization codes, session cookies, raw claims, nonce values, PKCE

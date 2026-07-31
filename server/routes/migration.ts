@@ -11,7 +11,7 @@ import {
 import { appDataImportSchema } from "../validation/schemas.js";
 
 const sensitiveLimit = {
-  config: { rateLimit: { max: config.rateLimitSensitiveMax, timeWindow: config.rateLimitWindowMs } }
+  config: { permission: "admin:destructive" as const, rateLimit: { max: config.rateLimitSensitiveMax, timeWindow: config.rateLimitWindowMs } }
 };
 
 const metadataSchema = z.object({

@@ -42,8 +42,13 @@ export function DashboardPage({
     closeMonth,
     canWrite,
     isSaving,
-    openConfirmations
+    openConfirmations,
+    session
   } = useAppStore();
+  const canCreateAppointments = session.permissions?.includes("appointments:create") ?? true;
+  const canManageChildren = session.permissions?.includes("children:manage") ?? true;
+  const canViewPlanning = session.permissions?.includes("planning:view") ?? true;
+  const canCloseMonth = session.permissions?.includes("reports:view") ?? true;
   const [showClosure, setShowClosure] = useState(false);
   const [closureConfirmed, setClosureConfirmed] = useState(false);
   const [externalEvents, setExternalEvents] = useState<ExternalCalendarEvent[]>([]);
@@ -88,6 +93,10 @@ export function DashboardPage({
   const backupIsCurrent = backupAgeDays !== null && backupAgeDays <= 7;
 
   useEffect(() => {
+    if (!canViewPlanning) {
+      setExternalEvents([]);
+      return;
+    }
     let ignore = false;
     void api
       .listExternalCalendarEvents(
@@ -103,7 +112,7 @@ export function DashboardPage({
     return () => {
       ignore = true;
     };
-  }, [range.endDate, range.startDate]);
+  }, [canViewPlanning, range.endDate, range.startDate]);
 
   const metrics: Array<{ label: string; value: string; detail: string; icon: IconName; tone: string }> = [
     { label: copy(locale, "dashboard", "careDays"), value: String(stats.careDays), detail: copy(locale, "dashboard", "actualDays"), icon: "calendar", tone: "teal" },
@@ -134,7 +143,7 @@ export function DashboardPage({
         </div>
         <div className="page-header__actions">
           <MonthToolbar monthKey={monthKey} onChange={onMonthChange} />
-          <span className="action-with-help action-with-help--header">
+          {canCloseMonth ? <span className="action-with-help action-with-help--header">
             <button
               className={closure ? "button button--secondary" : "button button--primary"}
               type="button"
@@ -146,11 +155,11 @@ export function DashboardPage({
               {closure ? copy(locale, "dashboard", "monthClosed") : copy(locale, "dashboard", "closeMonth")}
             </button>
             <FieldHelpButton fieldId="monthClosure.close" />
-          </span>
-          <button className="button button--primary desktop-only" data-testid="dashboard-new-entry" type="button" onClick={() => onNewEntry()} disabled={!canWrite || isSaving}>
+          </span> : null}
+          {canCreateAppointments ? <button className="button button--primary desktop-only" data-testid="dashboard-new-entry" type="button" onClick={() => onNewEntry()} disabled={!canWrite || isSaving}>
             <Icon name="plus" />
             {copy(locale, "dashboard", "createEntry")}
-          </button>
+          </button> : null}
         </div>
       </div>
 
@@ -161,9 +170,9 @@ export function DashboardPage({
             <h2>{copy(locale, "dashboard", "setupTitle")}</h2>
             <p>{copy(locale, "dashboard", "setupDescription")}</p>
           </div>
-          <button className="button button--primary" type="button" data-testid="dashboard-setup-child" onClick={onOpenSettings}>
+          {canManageChildren ? <button className="button button--primary" type="button" data-testid="dashboard-setup-child" onClick={onOpenSettings}>
             {copy(locale, "dashboard", "addChild")}
-          </button>
+          </button> : null}
         </section>
       ) : null}
 
@@ -268,7 +277,7 @@ export function DashboardPage({
             onSelectDate={onNewEntry}
             onSelectEntry={onEditEntry}
             onSelectUnavailable={() => onOpenCalendar()}
-            allowCreate={canWrite}
+            allowCreate={canCreateAppointments && canWrite}
           />
           <div className="calendar-legend">
             {data.children.map((child) => (

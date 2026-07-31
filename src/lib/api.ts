@@ -9,10 +9,13 @@ import type {
   ApiCareConfirmationRequest,
   ApiCareEntry,
   ApiCareParty,
+  ApiCarePartySummary,
   ApiChild,
+  ApiChildSummary,
   ApiContactRule,
   ApiLogout,
   ApiSession,
+  ApiScheduleEntry,
   ApiSetupFirstUse,
   ApiSetupFirstUseInput,
   ApiSetupOwnerBootstrap,
@@ -29,7 +32,7 @@ import type {
   ApiNotificationPreferencesResponse,
   ApiNotificationPreference,
   ApiPushSubscriptionInput,
-  ApiAuthRole,
+  ApiWorkspaceRole,
   CareScope
 } from "../../shared/api";
 import type {
@@ -46,6 +49,7 @@ import type {
   AuditAction,
   AuditObjectType,
   CareEntry,
+  CareLocation,
   CareConfirmationRequest,
   CareParty,
   Child,
@@ -220,6 +224,12 @@ function mapConfirmation(request: ApiCareConfirmationRequest): CareConfirmationR
 }
 
 type CareEntryWriteInput = Omit<CareEntry, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt">;
+type ScheduleEntryWriteInput = Pick<
+  CareEntryWriteInput,
+  "startDateTime" | "endDateTime" | "childIds" | "responsiblePartyId"
+> & {
+  location?: Exclude<CareLocation, "other">;
+};
 type CarePartyWriteInput = Omit<CareParty, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt">;
 type ChildWriteInput = Omit<Child, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt">;
 type HolidayWriteInput = Omit<HolidayPeriod, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt" | "deletedAt">;
@@ -335,7 +345,12 @@ function newestTimestamp(values: Array<string | undefined>): string {
     .at(-1) ?? new Date().toISOString();
 }
 
-export async function loadAppData(): Promise<AppData> {
+export async function loadAppData(options: {
+  includeSettings?: boolean;
+  includeAudit?: boolean;
+} = {}): Promise<AppData> {
+  const includeSettings = options.includeSettings ?? true;
+  const includeAudit = options.includeAudit ?? true;
   const [
     children,
     careParties,
@@ -358,8 +373,12 @@ export async function loadAppData(): Promise<AppData> {
     request<ApiUnavailablePeriod[]>("/api/unavailable-periods"),
     request<ApiContactPattern[]>("/api/contact-patterns"),
     request<ApiContactRule[]>("/api/contact-rules"),
-    request<Record<string, unknown>>("/api/settings"),
-    request<ApiAuditEntry[]>("/api/audit-log?limit=50000"),
+    includeSettings
+      ? request<Record<string, unknown>>("/api/settings")
+      : Promise.resolve({} as Record<string, unknown>),
+    includeAudit
+      ? request<ApiAuditEntry[]>("/api/audit-log?limit=50000")
+      : Promise.resolve([]),
     request<ApiMonthlyClosing[]>("/api/month-closings")
     ,request<ApiExternalCalendarSource[]>("/api/external-calendars")
   ]);
@@ -401,6 +420,63 @@ export async function loadAppData(): Promise<AppData> {
         item.changedAfterCloseAt
       ])
     ])
+  };
+}
+
+export async function loadRestrictedAppData(): Promise<AppData> {
+  const [children, careParties, entries] = await Promise.all([
+    request<ApiChildSummary[]>("/api/children/summary"),
+    request<ApiCarePartySummary[]>("/api/care-parties/summary"),
+    request<ApiScheduleEntry[]>("/api/care-entries/schedule")
+  ]);
+  const empty = createEmptyData();
+  const timestamp = new Date().toISOString();
+  return {
+    ...empty,
+    children: children.map((child) => ({
+      ...child,
+      birthMonth: 1,
+      birthYear: 1970,
+      createdBy: "",
+      updatedBy: "",
+      createdAt: timestamp,
+      updatedAt: timestamp
+    })),
+    careParties: careParties.map((party) => ({
+      ...party,
+      kind: "other",
+      createdBy: "",
+      updatedBy: "",
+      createdAt: timestamp,
+      updatedAt: timestamp
+    })),
+    entries: entries.map((entry) => ({
+      id: entry.id,
+      date: entry.startDateTime.slice(0, 10),
+      startDateTime: entry.startDateTime,
+      endDateTime: entry.endDateTime,
+      childIds: entry.children.map((child) => child.id),
+      status: entry.status,
+      responsiblePartyId: entry.responsibleParty?.id,
+      additionalCare: false,
+      overnight: false,
+      schoolHandover: false,
+      holiday: false,
+      weekend: false,
+      location: (entry.location ?? "other") as CareEntry["location"],
+      handoverFrom: "mother",
+      handoverTo: "mother",
+      hasEvidence: false,
+      trips: [],
+      costs: [],
+      createdBy: "",
+      updatedBy: "",
+      createdAt: timestamp,
+      updatedAt: timestamp
+    })),
+    careConflicts: [],
+    careConflictsComplete: true,
+    updatedAt: timestamp
   };
 }
 
@@ -455,6 +531,18 @@ export const api = {
     return request<ApiCareEntry>(`/api/care-entries/${encodeURIComponent(id)}`, {
       method: "PUT",
       body: JSON.stringify(entryPayload(input))
+    });
+  },
+  createScheduleEntry(input: ScheduleEntryWriteInput) {
+    return request<ApiScheduleEntry>("/api/care-entries", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
+  },
+  updateScheduleEntry(id: string, input: ScheduleEntryWriteInput) {
+    return request<ApiScheduleEntry>(`/api/care-entries/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(input)
     });
   },
   deleteEntry(id: string) {
@@ -674,7 +762,7 @@ export const api = {
   listMembers() {
     return request<ApiMember[]>("/api/members");
   },
-  updateMemberRole(userId: string, role: ApiAuthRole) {
+  updateMemberRole(userId: string, role: ApiWorkspaceRole) {
     return request<ApiMember>(
       `/api/members/${encodeURIComponent(userId)}/role`,
       { method: "PUT", body: JSON.stringify({ role }) }
@@ -694,7 +782,7 @@ export const api = {
   listInvitations() {
     return request<ApiInvitation[]>("/api/invitations");
   },
-  createInvitation(input: { role: ApiAuthRole; expiresAt: string; emailHint?: string; sendEmail?: boolean }) {
+  createInvitation(input: { role: ApiWorkspaceRole; expiresAt: string; emailHint?: string; sendEmail?: boolean }) {
     return request<ApiCreatedInvitation>("/api/invitations", {
       method: "POST",
       body: JSON.stringify(input)

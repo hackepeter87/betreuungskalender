@@ -74,21 +74,22 @@ group list, timestamps, and soft-delete metadata. The stable internal ID is
 used in API audit fields so name or email changes do not rewrite historical
 actors.
 
-`app_memberships` stores optional application-level roles for known app users.
-When an active membership exists, its role is used for authorization before the
-identity-provider group-derived role. If no membership exists, the existing
-OIDC group mapping remains the compatibility fallback.
+`app_memberships` stores workspace roles for known app users. Migration 028
+maps legacy `admin`, `parent`, and `readonly` memberships to `admin`, `editor`,
+and `viewer`. Before an owner exists, the identity-provider group-derived role
+remains a compatibility source. After ownership is established, the latest
+membership record is authoritative: active grants access, deleted revokes it,
+and missing grants no workspace access.
 
 `app_invitations` stores only hashes of one-time invitation tokens. The raw
 token is returned once at creation time and is never persisted. Invitations
 carry the target app role, an optional email hint, expiry, acceptance and
 revocation timestamps, and the accepted app user ID once claimed.
 
-Member administration uses `settings.setup.ownerUserId` when present. The
-explicit owner can list members, manage invitation records, and update app
-membership roles. Existing installations without an explicit owner retain an
-admin fallback so they can transition into the app-owned membership model
-without being locked out.
+Member administration uses `settings.setup.ownerUserId`. The explicit owner can
+list members, manage invitation records, and update workspace roles. Existing
+installations without an explicit owner retain the pre-owner compatibility
+path so they can claim ownership without being locked out.
 
 `audit_log` stores timestamp, stable API user ID, entity type and ID, action,
 field name, old/new serialized values, and optional metadata. Audit API

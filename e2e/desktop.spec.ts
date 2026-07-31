@@ -329,15 +329,16 @@ test("manages member invitations from settings", async ({ page }) => {
       id: string;
       displayName: string;
       claimRole: "admin" | "parent" | "readonly";
-      effectiveRole: "admin" | "parent" | "readonly";
+      effectiveRole: "admin" | "editor" | "scheduler" | "viewer";
       owner: boolean;
-      membershipRole?: "admin" | "parent" | "readonly";
+      workspaceAccess: boolean;
+      membershipRole?: "admin" | "editor" | "scheduler" | "viewer";
       email?: string;
       lastSeenAt?: string;
     };
     type Invitation = {
       id: string;
-      role: "admin" | "parent" | "readonly";
+      role: "admin" | "editor" | "scheduler" | "viewer";
       expiresAt: string;
       createdAt: string;
       updatedAt: string;
@@ -354,6 +355,7 @@ test("manages member invitations from settings", async ({ page }) => {
         claimRole: "admin",
         effectiveRole: "admin",
         owner: true,
+        workspaceAccess: true,
         lastSeenAt: now
       },
       {
@@ -361,16 +363,17 @@ test("manages member invitations from settings", async ({ page }) => {
         displayName: "Member E2E",
         email: "member@example.invalid",
         claimRole: "readonly",
-        effectiveRole: "parent",
+        effectiveRole: "editor",
         owner: false,
-        membershipRole: "parent",
+        workspaceAccess: true,
+        membershipRole: "editor",
         lastSeenAt: now
       }
     ];
     let invitations: Invitation[] = [
       {
         id: "invitation-existing-e2e",
-        role: "readonly",
+        role: "viewer",
         emailHint: "readonly@example.invalid",
         expiresAt: existingInvitationExpiry,
         createdAt: now,
@@ -408,7 +411,19 @@ test("manages member invitations from settings", async ({ page }) => {
             displayName: "Owner E2E",
             role: "admin",
             email: "owner@example.invalid"
-          }
+          },
+          workspaceAccess: true,
+          workspaceRole: "admin",
+          isOwner: true,
+          permissions: [
+            "appointments:view", "appointments:create", "appointments:edit",
+            "appointments:delete", "appointments:confirm", "children:view-basic",
+            "children:view-sensitive", "children:manage", "notes:view",
+            "planning:view", "planning:manage", "reports:view", "settings:view",
+            "settings:manage", "notifications:manage-own", "feeds:manage-own",
+            "audit:view", "instance:inspect", "members:manage", "exports:run",
+            "admin:destructive"
+          ]
         });
       }
       if (pathname === "/api/members" && method === "GET") {
@@ -426,7 +441,9 @@ test("manages member invitations from settings", async ({ page }) => {
           .__lastInvitationRequest = body;
         const invitation: Invitation = {
           id: "invitation-created-e2e",
-          role: body.role === "admin" || body.role === "readonly" ? body.role : "parent",
+          role: body.role === "admin" || body.role === "scheduler" || body.role === "viewer"
+            ? body.role
+            : "editor",
           emailHint: typeof body.emailHint === "string" ? body.emailHint : undefined,
           expiresAt: typeof body.expiresAt === "string"
             ? body.expiresAt
@@ -460,8 +477,12 @@ test("manages member invitations from settings", async ({ page }) => {
           member.id === "user-member-e2e"
             ? {
                 ...member,
-                effectiveRole: body.role === "admin" || body.role === "readonly" ? body.role : "parent",
-                membershipRole: body.role === "admin" || body.role === "readonly" ? body.role : "parent"
+                effectiveRole: body.role === "admin" || body.role === "scheduler" || body.role === "viewer"
+                  ? body.role
+                  : "editor",
+                membershipRole: body.role === "admin" || body.role === "scheduler" || body.role === "viewer"
+                  ? body.role
+                  : "editor"
               }
             : member
         );
@@ -472,7 +493,8 @@ test("manages member invitations from settings", async ({ page }) => {
           member.id === "user-member-e2e"
             ? {
                 ...member,
-                effectiveRole: member.claimRole,
+                effectiveRole: "viewer",
+                workspaceAccess: false,
                 membershipRole: undefined
               }
             : member
@@ -494,7 +516,7 @@ test("manages member invitations from settings", async ({ page }) => {
   await expect(manager).toContainText("Einladung wurde angenommen.");
 
   await manager.getByTestId("invitation-email-hint").fill("new-user@example.invalid");
-  await manager.getByTestId("invitation-role").selectOption("readonly");
+  await manager.getByTestId("invitation-role").selectOption("scheduler");
   await manager.getByTestId("invitation-expires-days").fill("14");
   await expect(manager.getByTestId("invitation-send-email")).toBeChecked();
   await manager.getByTestId("invitation-send-email").uncheck();
@@ -510,7 +532,7 @@ test("manages member invitations from settings", async ({ page }) => {
   )).toBe(false);
 
   const memberRow = manager.getByTestId("member-row-user-member-e2e");
-  await memberRow.getByTestId("member-role-select").selectOption("readonly");
+  await memberRow.getByTestId("member-role-select").selectOption("viewer");
   await expect(manager).toContainText("Rolle wurde aktualisiert.");
   await expect(memberRow).toContainText("Nur lesen");
 
@@ -522,6 +544,98 @@ test("manages member invitations from settings", async ({ page }) => {
   await expect(manager).toContainText("Einladung wurde widerrufen.");
   await expect(manager.getByTestId("invitation-row-invitation-existing-e2e")).toContainText("Widerrufen");
   await expectNoDocumentHorizontalOverflow(page);
+});
+
+test("shows only capability-appropriate settings to restricted workspace roles", async ({
+  page
+}) => {
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      if (new URL(url, window.location.href).pathname === "/api/session") {
+        return Promise.resolve(new Response(JSON.stringify({
+          authRequired: true,
+          authenticated: true,
+          user: {
+            id: "user-scheduler-e2e",
+            displayName: "Scheduler E2E",
+            role: "readonly"
+          },
+          workspaceAccess: true,
+          workspaceRole: "scheduler",
+          isOwner: false,
+          permissions: [
+            "appointments:view",
+            "appointments:create",
+            "appointments:edit",
+            "children:view-basic",
+            "notifications:manage-own"
+          ]
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }));
+      }
+      return originalFetch(input, init);
+    };
+  });
+
+  await openApp(page);
+  await expect(page.getByTestId("nav-contact")).toHaveCount(0);
+  await expect(page.getByTestId("nav-report")).toHaveCount(0);
+  await navigate(page, "settings");
+  await expect(page.getByTestId("notification-preferences")).toBeVisible();
+  await expect(page.getByTestId("instance-readiness")).toHaveCount(0);
+  await expect(page.getByTestId("member-invitations")).toHaveCount(0);
+  await expect(page.getByTestId("settings-add-child")).toHaveCount(0);
+  await expect(page.getByTestId("external-calendar-manager")).toHaveCount(0);
+  await expect(page.getByTestId("calendar-feed-manager")).toHaveCount(0);
+  await expectNoDocumentHorizontalOverflow(page);
+});
+
+test("shows a no-access page for a revoked workspace membership", async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    window.fetch = (input, init) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      if (new URL(url, window.location.href).pathname === "/api/session") {
+        return Promise.resolve(new Response(JSON.stringify({
+          authRequired: true,
+          authenticated: true,
+          user: {
+            id: "user-revoked-e2e",
+            displayName: "Revoked E2E",
+            role: "readonly"
+          },
+          workspaceAccess: false,
+          isOwner: false,
+          permissions: [],
+          logoutUrl: "/auth/logout"
+        }), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }));
+      }
+      return originalFetch(input, init);
+    };
+  });
+
+  await page.goto("/");
+  await expect(page.getByTestId("app-loading")).toBeHidden();
+  await expect(page.getByTestId("workspace-no-access")).toBeVisible();
+  await expect(page.getByTestId("app-shell")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Hauptnavigation" }).getByRole("button"))
+    .toHaveCount(0);
+  await expect(page.getByTestId("auth-logout")).toBeVisible();
 });
 
 test("shows open care confirmations in the notification center", async ({ page }) => {

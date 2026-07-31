@@ -181,8 +181,9 @@ interface AppUserPartyAssignment {
 ```
 
 This assignment is used for defaults, filtering, and feed scope. It is not a
-replacement for `app_users.role`; authorization remains `admin`, `parent`, and
-`readonly`.
+replacement for application authorization. The later workspace role model in
+[ADR 0005](0005-workspace-permissions.md) supersedes this ADR's original
+`admin`, `parent`, and `readonly` authorization statement.
 
 ## Persistence and Migration
 

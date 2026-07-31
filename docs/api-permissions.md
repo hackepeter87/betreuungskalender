@@ -16,13 +16,13 @@ metadata. Unclassified protected routes are denied.
 
 | Routes | Permission |
 | --- | --- |
-| `GET /api/care-entries`, `GET /api/care-entries/:id`, `GET /api/care-conflicts` | `appointments:view` plus full-data access |
+| `GET /api/care-entries`, `GET /api/care-entries/:id`, `GET /api/care-conflicts` | `notes:view` |
 | `GET /api/care-entries/schedule` | `appointments:view` |
 | `POST /api/care-entries` | `appointments:create` |
 | `PUT /api/care-entries/:id` | `appointments:edit` |
 | `DELETE /api/care-entries/:id` | `appointments:delete` |
-| `GET /api/care-confirmations/open` | `appointments:view` |
-| `POST /api/care-confirmations/:id/answer`, `POST /api/care-confirmations/:id/remind-later` | `appointments:edit` |
+| `GET /api/care-confirmations/open` | `notifications:manage-own` |
+| `POST /api/care-confirmations/:id/answer`, `POST /api/care-confirmations/:id/remind-later` | `appointments:confirm` |
 | `GET/PUT /api/notification-preferences`, `POST /api/push-subscriptions`, `DELETE /api/push-subscriptions/:id` | `notifications:manage-own` |
 
 ## Children, care parties, and planning
@@ -42,7 +42,7 @@ metadata. Unclassified protected routes are denied.
 | `POST /api/contact-patterns`, `PUT/DELETE /api/contact-patterns/:id` | `planning:manage` |
 | `POST /api/contact-rules`, `PUT/DELETE /api/contact-rules/:id`, `POST /api/contact-rules/:id/sync` | `planning:manage` |
 | `GET /api/month-closings` | `reports:view` |
-| `POST /api/month-closings` | `planning:manage` |
+| `POST /api/month-closings` | `reports:view` |
 
 ## Settings, calendars, and reporting support
 

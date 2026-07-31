@@ -10,10 +10,13 @@ import { makeId, nowIso } from "../services/common.js";
 import { childInputSchema } from "../validation/schemas.js";
 
 const readLimit = {
-  config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
+  config: { permission: "children:view-sensitive" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
 };
 const writeLimit = {
-  config: { rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
+  config: { permission: "children:manage" as const, rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
+};
+const summaryLimit = {
+  config: { permission: "children:view-basic" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
 };
 
 interface ChildRow {
@@ -52,6 +55,15 @@ function getChild(id: string) {
 }
 
 export async function childrenRoutes(app: FastifyInstance): Promise<void> {
+  app.get("/api/children/summary", summaryLimit, async () =>
+    db.prepare(`
+      SELECT id, name, color
+      FROM children
+      WHERE deleted_at IS NULL
+      ORDER BY name COLLATE NOCASE
+    `).all()
+  );
+
   app.get("/api/children", readLimit, async () => {
     const rows = db.prepare(`
       SELECT id, name, birth_month, birth_year, color, created_by, updated_by, created_at, updated_at

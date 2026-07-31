@@ -7,6 +7,12 @@ export const settingsDefaults: Record<string, unknown> = {
   defaultHandoverTo: "mother"
 };
 
+const internalSettingPrefixes = ["setup."];
+
+export function isClientSettingKey(key: string): boolean {
+  return !internalSettingPrefixes.some((prefix) => key.startsWith(prefix));
+}
+
 export function getStoredSettings(): Record<string, unknown> {
   const rows = db.prepare(`
     SELECT key, value_json AS valueJson
@@ -15,6 +21,12 @@ export function getStoredSettings(): Record<string, unknown> {
   `).all() as Array<{ key: string; valueJson: string }>;
   const stored = Object.fromEntries(rows.map((row) => [row.key, JSON.parse(row.valueJson) as unknown]));
   return { ...settingsDefaults, ...stored };
+}
+
+export function getClientSettings(): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(getStoredSettings()).filter(([key]) => isClientSettingKey(key))
+  );
 }
 
 export function getDefaultResponsiblePartyId(): string | undefined {

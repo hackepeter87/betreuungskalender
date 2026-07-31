@@ -40,9 +40,12 @@ Add a group-membership mapper that emits the full group path in the ID token:
 - Full group path: enabled
 - Add to ID token: enabled
 
-The app derives the role from the configured group values. If a user belongs to
-multiple configured groups, the effective role is `admin` before `parent`
-before `readonly`.
+Before an installation owner exists, the app derives a compatibility role from
+the configured group values. If a user belongs to multiple configured groups,
+the effective compatibility role is `admin` before `parent` before `readonly`.
+After owner setup, application memberships are authoritative; groups continue
+to identify the external compatibility role but no longer grant workspace
+access by themselves.
 
 ## Podman Compose deployment
 
@@ -201,14 +204,18 @@ After starting the stack:
    app shows the login action.
 4. Sign in through Keycloak and confirm the browser returns to `/`.
 5. Request `/api/session` through the browser and confirm it reports the
-   expected `displayName` and role without exposing raw tokens or claims.
-6. Test one user per role: admin, parent, readonly, and a user without a
-   configured group. The no-group user should be rejected while
+   expected `displayName`, workspace access, workspace role, and permissions
+   without exposing raw tokens or claims.
+6. Before owner setup, verify the configured admin, parent, and readonly group
+   mapping and rejection of users without a configured group while
    `OIDC_REQUIRE_ROLE_CLAIM=true`.
-7. Use the app logout action and confirm the browser is redirected through
+7. After owner setup, verify one active application membership per supported
+   role: admin, editor, scheduler, and viewer. Confirm that an authenticated
+   identity without an active membership receives no workspace access.
+8. Use the app logout action and confirm the browser is redirected through
    Keycloak logout. A later app visit should require a fresh Keycloak login,
    not silently reuse the old SSO session.
-8. Inspect application logs for OIDC failures only by error code and request
+9. Inspect application logs for OIDC failures only by error code and request
    ID. Logs must not contain authorization codes, tokens, session cookies,
    nonce values, PKCE verifiers, raw claims, or client secrets.
 

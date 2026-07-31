@@ -1,12 +1,12 @@
 import type Database from "better-sqlite3";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import type { AuthRole, RequestUser } from "../auth.js";
+import type { RequestUser, WorkspaceRole } from "../auth.js";
 import { db } from "../db/connection.js";
 import { setMembershipRole } from "./memberships.js";
 
 export interface InvitationSummary {
   id: string;
-  role: AuthRole;
+  role: WorkspaceRole;
   expiresAt: string;
   createdAt: string;
   updatedAt: string;
@@ -25,7 +25,7 @@ interface InvitationRow {
   id: string;
   token_hash: string;
   email_hint: string | null;
-  role: AuthRole;
+  role: WorkspaceRole;
   expires_at: string;
   accepted_user_id: string | null;
   accepted_at: string | null;
@@ -129,7 +129,7 @@ function normalizeEmailHint(value: string | undefined): string | undefined {
 
 export function createInvitation(
   input: {
-    role: AuthRole;
+    role: WorkspaceRole;
     expiresAt: string;
     actorId: string;
     emailHint?: string;

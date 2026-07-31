@@ -5,6 +5,7 @@ import { nowIso } from "./common.js";
 import { assignedCarePartyIds, canUseCareParty, sharedCarePartyModeEnabled } from "./carePartyAccess.js";
 import { getCareParty } from "./careParties.js";
 import { findAuthenticatedUserBySubject } from "./users.js";
+import { userHasWorkspacePermission } from "./memberships.js";
 
 const TOKEN_BYTES = 32;
 const PRODUCT_ID = "-//Betreuungskalender//Personal Calendar Feed//DE";
@@ -193,10 +194,12 @@ export function resolveCalendarFeedToken(token: string): TokenRow | undefined {
     WHERE t.token_hash = ? AND t.revoked_at IS NULL AND u.deleted_at IS NULL
   `).get(hashToken(normalized)) as TokenRow | undefined;
   if (!row) return undefined;
+  if (!userHasWorkspacePermission(row.user_id, "feeds:manage-own")) return undefined;
+  const requestUser = findAuthenticatedUserBySubject(row.external_subject);
+  if (!requestUser?.workspaceAccess) return undefined;
   if (row.scope_type === "party") {
     if (!row.scope_party_id || !row.scope_party_name) return undefined;
-    const requestUser = findAuthenticatedUserBySubject(row.external_subject);
-    if (requestUser && !canUseCareParty(requestUser, row.scope_party_id)) return undefined;
+    if (!canUseCareParty(requestUser, row.scope_party_id)) return undefined;
   }
   db.prepare("UPDATE calendar_feed_tokens SET last_used_at = ? WHERE id = ?")
     .run(nowIso(), row.id);
@@ -204,9 +207,13 @@ export function resolveCalendarFeedToken(token: string): TokenRow | undefined {
 }
 
 function feedEntriesForToken(token: TokenRow): FeedEntryRow[] {
-  const assignedIds = token.role === "admin" || !sharedCarePartyModeEnabled()
-    ? []
-    : assignedCarePartyIds(token.user_id);
+  const requestUser = findAuthenticatedUserBySubject(token.external_subject);
+  if (!requestUser?.workspaceAccess || !requestUser.workspacePermissions?.includes("feeds:manage-own")) {
+    return [];
+  }
+  const sharedMode = sharedCarePartyModeEnabled();
+  const unrestricted = !sharedMode || requestUser.isOwner || requestUser.workspaceRole === "admin";
+  const assignedIds = unrestricted ? [] : assignedCarePartyIds(token.user_id);
   const scope = scopeFromRow(token);
   if (scope === "legacy") {
     return db.prepare(`${FEED_ENTRY_SELECT}
@@ -224,7 +231,7 @@ function feedEntriesForToken(token: TokenRow): FeedEntryRow[] {
       ORDER BY e.start_datetime, e.id
     `).all(token.scope_party_id) as FeedEntryRow[];
   }
-  if (assignedIds.length > 0) {
+  if (!unrestricted && assignedIds.length > 0) {
     const placeholders = assignedIds.map(() => "?").join(", ");
     return db.prepare(`${FEED_ENTRY_SELECT}
       WHERE e.deleted_at IS NULL
@@ -233,6 +240,7 @@ function feedEntriesForToken(token: TokenRow): FeedEntryRow[] {
       ORDER BY e.start_datetime, e.id
     `).all(...assignedIds) as FeedEntryRow[];
   }
+  if (!unrestricted) return [];
   return db.prepare(`${FEED_ENTRY_SELECT}
     WHERE e.deleted_at IS NULL
       AND e.status IN ('planned', 'completed', 'partial')

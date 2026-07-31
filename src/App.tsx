@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { AppShell, type PageId } from "./components/AppShell";
+import { AppShell, canAccessPage, type PageId } from "./components/AppShell";
 import { EntryForm } from "./components/EntryForm";
 import { Modal } from "./components/Modal";
 import { LegacyMigrationDialog } from "./components/LegacyMigrationDialog";
@@ -64,7 +64,12 @@ export function App() {
   }, [onboardingNotice]);
 
   useEffect(() => {
-    if (migrationChecked.current || isLoading || serverStatus !== "online") return;
+    if (
+      migrationChecked.current ||
+      isLoading ||
+      serverStatus !== "online" ||
+      !session.permissions?.includes("admin:destructive")
+    ) return;
     migrationChecked.current = true;
     const legacy = detectLegacyBrowserData();
     if (!legacy || isLegacyFingerprintIgnored(legacy.fingerprint)) return;
@@ -80,7 +85,12 @@ export function App() {
     }).catch(() => {
       migrationChecked.current = false;
     });
-  }, [isLoading, serverStatus]);
+  }, [isLoading, serverStatus, session.permissions]);
+
+  useEffect(() => {
+    if (isLoading || !session.permissions || session.workspaceAccess === false) return;
+    if (!canAccessPage(session, activePage)) setActivePage("dashboard");
+  }, [activePage, isLoading, session]);
 
   useEffect(() => {
     if (isLoading) return;
@@ -99,9 +109,14 @@ export function App() {
     window.history.replaceState({}, "", `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`);
   }, [data.entries, isLoading, openConfirmations]);
 
-  const openNewEntry = (date?: string, additionalCare = false) =>
-    setEntryDialog({ date, additionalCare });
-  const openEditEntry = (entry: CareEntry) => setEntryDialog({ entry });
+  const canCreateAppointments = session.permissions?.includes("appointments:create") ?? true;
+  const canEditAppointments = session.permissions?.includes("appointments:edit") ?? true;
+  const openNewEntry = (date?: string, additionalCare = false) => {
+    if (canCreateAppointments) setEntryDialog({ date, additionalCare });
+  };
+  const openEditEntry = (entry: CareEntry) => {
+    if (canEditAppointments) setEntryDialog({ entry });
+  };
 
   const setupMode = Boolean(
     session.setup?.required &&
@@ -109,7 +124,15 @@ export function App() {
   );
 
   let page;
-  if (setupMode) {
+  if (session.authenticated && session.workspaceAccess === false) {
+    page = (
+      <section className="panel empty-state" data-testid="workspace-no-access">
+        <Icon name="lock" size={28} />
+        <h1>Kein Zugriff auf diesen Betreuungskalender</h1>
+        <p>Dein Login ist gültig, aber dir ist keine aktive Mitgliedschaft zugeordnet. Bitte wende dich an den Owner dieser Installation.</p>
+      </section>
+    );
+  } else if (setupMode) {
     page = <SetupWizardPage />;
   } else switch (activePage) {
     case "calendar":
