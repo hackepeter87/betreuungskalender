@@ -18,18 +18,21 @@ import {
 } from "../validation/schemas.js";
 
 const readLimit = {
-  config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
+  config: { permission: "notifications:manage-own" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
 };
 const writeLimit = {
-  config: { rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
+  config: { permission: "notifications:manage-own" as const, rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
+};
+const confirmationLimit = {
+  config: { permission: "appointments:confirm" as const, rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
 };
 
 export async function careConfirmationRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/care-confirmations/open", readLimit, async (request) =>
-    listOpenCareConfirmations(request.userEmail)
+    request.user ? listOpenCareConfirmations(request.user) : []
   );
 
-  app.post<{ Params: { id: string } }>("/api/care-confirmations/:id/answer", writeLimit, async (request, reply) => {
+  app.post<{ Params: { id: string } }>("/api/care-confirmations/:id/answer", confirmationLimit, async (request, reply) => {
     const parsed = careConfirmationAnswerSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     if (!request.user) return reply.code(401).send({ error: "authentication_required" });
@@ -48,10 +51,11 @@ export async function careConfirmationRoutes(app: FastifyInstance): Promise<void
     return result ?? reply.code(404).send({ error: "not_found" });
   });
 
-  app.post<{ Params: { id: string } }>("/api/care-confirmations/:id/remind-later", writeLimit, async (request, reply) => {
+  app.post<{ Params: { id: string } }>("/api/care-confirmations/:id/remind-later", confirmationLimit, async (request, reply) => {
     const parsed = careConfirmationRemindLaterSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
-    const result = remindCareConfirmationLater(request.params.id, request.userEmail, parsed.data.nextReminderAt);
+    if (!request.user) return reply.code(401).send({ error: "authentication_required" });
+    const result = remindCareConfirmationLater(request.params.id, request.user, parsed.data.nextReminderAt);
     return result ?? reply.code(404).send({ error: "not_found" });
   });
 

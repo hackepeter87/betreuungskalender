@@ -23,7 +23,8 @@ export function EntriesPage({
   onNewEntry: () => void;
   onEditEntry: (entry: CareEntry) => void;
 }) {
-  const { data, canWrite } = useAppStore();
+  const { data, canWrite, session } = useAppStore();
+  const canCreateAppointments = session.permissions?.includes("appointments:create") ?? true;
   const { locale, intlLocale } = useI18n();
   const [status, setStatus] = useState<EntryStatus | "all">("all");
   const [query, setQuery] = useState("");
@@ -75,10 +76,10 @@ export function EntriesPage({
         </div>
         <div className="page-header__actions">
           <MonthToolbar monthKey={monthKey} onChange={onMonthChange} />
-          <button className="button button--primary desktop-only" type="button" onClick={onNewEntry} disabled={!canWrite}>
+          {canCreateAppointments ? <button className="button button--primary desktop-only" type="button" onClick={onNewEntry} disabled={!canWrite}>
             <Icon name="plus" />
             {copy(locale, "entries", "createEntry")}
-          </button>
+          </button> : null}
         </div>
       </div>
 
@@ -143,10 +144,10 @@ export function EntriesPage({
                   {copy(locale, "entries", "resetFilters")}
                 </button>
               ) : null}
-              <button className="button button--primary" type="button" onClick={onNewEntry} disabled={!canWrite}>
+              {canCreateAppointments ? <button className="button button--primary" type="button" onClick={onNewEntry} disabled={!canWrite}>
                 <Icon name="plus" size={17} />
                 {copy(locale, "entries", "createEntry")}
-              </button>
+              </button> : null}
             </div>
           ) : null}
         </div>

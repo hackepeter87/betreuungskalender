@@ -13,6 +13,29 @@ export const proxyIdentityHeaders = [
 
 export type AuthRole = "admin" | "parent" | "readonly";
 export type AuthPermission = "read" | "write" | "admin";
+export type WorkspaceRole = "admin" | "editor" | "scheduler" | "viewer";
+export type WorkspacePermission =
+  | "appointments:view"
+  | "appointments:create"
+  | "appointments:edit"
+  | "appointments:delete"
+  | "appointments:confirm"
+  | "children:view-basic"
+  | "children:view-sensitive"
+  | "children:manage"
+  | "notes:view"
+  | "planning:view"
+  | "planning:manage"
+  | "reports:view"
+  | "settings:view"
+  | "settings:manage"
+  | "notifications:manage-own"
+  | "feeds:manage-own"
+  | "audit:view"
+  | "instance:inspect"
+  | "members:manage"
+  | "exports:run"
+  | "admin:destructive";
 
 export interface RequestUser {
   id: string;
@@ -22,6 +45,10 @@ export interface RequestUser {
   groups: string[];
   role: AuthRole;
   permissions: AuthPermission[];
+  workspaceRole?: WorkspaceRole;
+  workspacePermissions?: WorkspacePermission[];
+  workspaceAccess?: boolean;
+  isOwner?: boolean;
 }
 
 export interface AuthenticatedClaims {
@@ -83,6 +110,93 @@ export function permissionsForRole(role: AuthRole): AuthPermission[] {
   if (role === "admin") return ["read", "write", "admin"];
   if (role === "parent") return ["read", "write"];
   return ["read"];
+}
+
+const allWorkspacePermissions: WorkspacePermission[] = [
+  "appointments:view",
+  "appointments:create",
+  "appointments:edit",
+  "appointments:delete",
+  "appointments:confirm",
+  "children:view-basic",
+  "children:view-sensitive",
+  "children:manage",
+  "notes:view",
+  "planning:view",
+  "planning:manage",
+  "reports:view",
+  "settings:view",
+  "settings:manage",
+  "notifications:manage-own",
+  "feeds:manage-own",
+  "audit:view",
+  "instance:inspect",
+  "members:manage",
+  "exports:run",
+  "admin:destructive"
+];
+
+export function workspacePermissionsForRole(
+  role: WorkspaceRole,
+  isOwner = false
+): WorkspacePermission[] {
+  if (isOwner) return [...allWorkspacePermissions];
+  if (role === "admin") {
+    return allWorkspacePermissions.filter(
+      (permission) => permission !== "members:manage" && permission !== "admin:destructive"
+    );
+  }
+  if (role === "editor") {
+    return [
+      "appointments:view",
+      "appointments:create",
+      "appointments:edit",
+      "appointments:delete",
+      "appointments:confirm",
+      "children:view-basic",
+      "children:view-sensitive",
+      "children:manage",
+      "notes:view",
+      "planning:view",
+      "planning:manage",
+      "reports:view",
+      "notifications:manage-own",
+      "feeds:manage-own"
+    ];
+  }
+  if (role === "scheduler") {
+    return [
+      "appointments:view",
+      "appointments:create",
+      "appointments:edit",
+      "children:view-basic",
+      "notifications:manage-own"
+    ];
+  }
+  return [
+    "appointments:view",
+    "children:view-basic",
+    "notifications:manage-own"
+  ];
+}
+
+export function legacyRoleForWorkspaceRole(role: WorkspaceRole): AuthRole {
+  if (role === "admin") return "admin";
+  if (role === "editor") return "parent";
+  return "readonly";
+}
+
+export function workspaceRoleForLegacyRole(role: AuthRole): WorkspaceRole {
+  if (role === "admin") return "admin";
+  if (role === "parent") return "editor";
+  return "viewer";
+}
+
+export function hasWorkspacePermission(
+  user: RequestUser | undefined,
+  permission: WorkspacePermission
+): boolean {
+  return Boolean(user?.workspaceAccess && user.workspacePermissions?.includes(permission));
 }
 
 function localDevUser(): RequestUser {

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createApiAuthHook } from "./authHook.js";
-import type { RequestUser } from "./auth.js";
+import { workspacePermissionsForRole, workspaceRoleForLegacyRole, type RequestUser, type WorkspacePermission } from "./auth.js";
 import type { config as appConfig } from "./config.js";
 
 type TestAuthConfig = Pick<
@@ -50,14 +50,22 @@ function user(role: RequestUser["role"]): RequestUser {
     : role === "parent"
       ? ["read", "write"] as const
       : ["read"] as const;
+  const workspaceRole = workspaceRoleForLegacyRole(role);
   return {
     id: `user-${role}`,
     externalSubject: `subject-${role}`,
     displayName: role,
     groups: [`/betreuungskalender/${role}`],
     role,
-    permissions: [...permissions]
+    permissions: [...permissions],
+    workspaceRole,
+    workspaceAccess: true,
+    workspacePermissions: workspacePermissionsForRole(workspaceRole, role === "admin")
   };
+}
+
+function route(permission: WorkspacePermission) {
+  return { routeOptions: { config: { permission } } };
 }
 
 test("native OIDC mode rejects trusted proxy headers as API authentication", async () => {
@@ -105,7 +113,15 @@ test("trusted proxy mode rejects identity headers from untrusted source addresse
     undefined,
     {
       upsertAuthenticatedUser: () => undefined,
-      applyMembershipRole: (candidate) => ({ user: candidate })
+      applyMembershipRole: (candidate) => ({
+        membershipRole: "admin",
+        user: {
+          ...candidate,
+          workspaceRole: "admin",
+          workspaceAccess: true,
+          workspacePermissions: workspacePermissionsForRole("admin")
+        }
+      })
     }
   );
 
@@ -148,10 +164,19 @@ test("trusted proxy mode accepts identity headers from allowed source addresses"
     undefined,
     {
       upsertAuthenticatedUser: () => undefined,
-      applyMembershipRole: (candidate) => ({ user: candidate })
+      applyMembershipRole: (candidate) => ({
+        membershipRole: "admin",
+        user: {
+          ...candidate,
+          workspaceRole: "admin",
+          workspaceAccess: true,
+          workspacePermissions: workspacePermissionsForRole("admin")
+        }
+      })
     }
   );
   const request = {
+    ...route("children:view-sensitive"),
     method: "GET",
     url: "/api/children",
     raw: { socket: { remoteAddress: "10.0.0.23" } },
@@ -182,16 +207,20 @@ test("trusted proxy mode can authorize strict users through app membership", asy
     {
       upsertAuthenticatedUser: () => undefined,
       applyMembershipRole: (candidate) => ({
-        membershipRole: "parent",
+        membershipRole: "editor",
         user: {
           ...candidate,
           role: "parent",
-          permissions: ["read", "write"]
+          permissions: ["read", "write"],
+          workspaceRole: "editor",
+          workspaceAccess: true,
+          workspacePermissions: workspacePermissionsForRole("editor")
         }
       })
     }
   );
   const request = {
+    ...route("children:manage"),
     method: "POST",
     url: "/api/children",
     raw: { socket: { remoteAddress: "10.0.0.23" } },
@@ -239,6 +268,7 @@ test("native OIDC API authentication uses server-side sessions and persisted use
       : undefined
   });
   const request = {
+    ...route("admin:destructive"),
     method: "PUT",
     url: "/api/app-data",
     headers: { cookie: "betreuungskalender_session=valid" }
@@ -264,8 +294,9 @@ test("native OIDC API authentication enforces readonly permissions", async () =>
   await assert.doesNotReject(() => hook.call(
     {} as never,
     {
+      ...route("children:view-basic"),
       method: "GET",
-      url: "/api/children",
+      url: "/api/children/summary",
       headers: { cookie: "betreuungskalender_session=valid" }
     } as never,
     {} as never
@@ -275,8 +306,80 @@ test("native OIDC API authentication enforces readonly permissions", async () =>
     () => hook.call(
       {} as never,
       {
+        ...route("children:manage"),
         method: "POST",
         url: "/api/children",
+        headers: { cookie: "betreuungskalender_session=valid" }
+      } as never,
+      {} as never
+    ),
+    (error) => {
+      const normalized = error as Error & { code?: string; statusCode?: number };
+      assert.equal(normalized.code, "forbidden");
+      assert.equal(normalized.statusCode, 403);
+      return true;
+    }
+  );
+});
+
+test("protected API routes without explicit permission metadata fail closed", async () => {
+  const hook = createApiAuthHook(authConfig(), undefined, {
+    nativeSessions: {
+      findByToken: () => ({
+        id: "session-1",
+        externalSubject: "subject-admin",
+        createdAt: "2026-07-01T00:00:00.000Z",
+        expiresAt: "2026-07-02T00:00:00.000Z"
+      })
+    },
+    findUserByExternalSubject: () => user("admin")
+  });
+
+  await assert.rejects(
+    () => hook.call(
+      {} as never,
+      {
+        method: "GET",
+        url: "/api/route-without-permission",
+        headers: { cookie: "betreuungskalender_session=valid" }
+      } as never,
+      {} as never
+    ),
+    (error) => {
+      const normalized = error as Error & { code?: string; statusCode?: number };
+      assert.equal(normalized.code, "forbidden");
+      assert.equal(normalized.statusCode, 403);
+      return true;
+    }
+  );
+});
+
+test("authenticated users without workspace access are denied on the next request", async () => {
+  const deniedUser = {
+    ...user("admin"),
+    permissions: [],
+    workspaceAccess: false,
+    workspacePermissions: []
+  } satisfies RequestUser;
+  const hook = createApiAuthHook(authConfig(), undefined, {
+    nativeSessions: {
+      findByToken: () => ({
+        id: "session-1",
+        externalSubject: "subject-revoked",
+        createdAt: "2026-07-01T00:00:00.000Z",
+        expiresAt: "2026-07-02T00:00:00.000Z"
+      })
+    },
+    findUserByExternalSubject: () => deniedUser
+  });
+
+  await assert.rejects(
+    () => hook.call(
+      {} as never,
+      {
+        ...route("appointments:view"),
+        method: "GET",
+        url: "/api/care-entries/schedule",
         headers: { cookie: "betreuungskalender_session=valid" }
       } as never,
       {} as never
@@ -307,6 +410,7 @@ test("instance readiness requires an admin session", async () => {
     () => parentHook.call(
       {} as never,
       {
+        ...route("instance:inspect"),
         method: "GET",
         url: "/api/instance-readiness",
         headers: { cookie: "betreuungskalender_session=valid" }
@@ -336,6 +440,7 @@ test("instance readiness requires an admin session", async () => {
   await assert.doesNotReject(() => adminHook.call(
     {} as never,
     {
+      ...route("instance:inspect"),
       method: "GET",
       url: "/api/instance-readiness",
       headers: { cookie: "betreuungskalender_session=valid" }
@@ -382,6 +487,7 @@ test("enabled recovery admin sessions can authorize API admin requests", async (
       : undefined
   });
   const request = {
+    ...route("admin:destructive"),
     method: "PUT",
     url: "/api/app-data",
     headers: { cookie: "betreuungskalender_recovery=recovery-valid" }

@@ -111,12 +111,12 @@ export function clearDomainData(): void {
     "notification_preferences",
     "calendar_feed_tokens",
     "monthly_closings",
-    "settings",
     "children",
     "audit_log"
   ]) {
     db.prepare(`DELETE FROM ${table}`).run();
   }
+  db.prepare("DELETE FROM settings WHERE key <> 'setup.ownerUserId'").run();
 }
 
 export function insertChild(record: DataRecord, timestamp: string, userEmail: string): void {
@@ -603,7 +603,7 @@ export function importData(data: ReturnType<typeof appDataImportSchema.parse>, u
     ...data.settings,
     lastJsonBackupAt: data.lastJsonBackupAt
   })) {
-    if (value !== undefined) {
+    if (value !== undefined && !key.startsWith("setup.")) {
       settingInsert.run(
         key,
         JSON.stringify(value),
@@ -678,7 +678,8 @@ export function importData(data: ReturnType<typeof appDataImportSchema.parse>, u
 }
 
 export async function appDataRoutes(app: FastifyInstance): Promise<void> {
-  app.put("/api/app-data", async (request, reply) => {
+  const destructive = { config: { permission: "admin:destructive" as const } };
+  app.put("/api/app-data", destructive, async (request, reply) => {
     const parsed = appDataImportSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({
@@ -697,7 +698,7 @@ export async function appDataRoutes(app: FastifyInstance): Promise<void> {
     return reply.code(204).send();
   });
 
-  app.delete("/api/app-data", async (_request, reply) => {
+  app.delete("/api/app-data", destructive, async (_request, reply) => {
     db.transaction(clearDomainData)();
     return reply.code(204).send();
   });

@@ -11,10 +11,10 @@ import {
 import { calendarFeedRequestSchema } from "../validation/schemas.js";
 
 const readLimit = {
-  config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
+  config: { permission: "feeds:manage-own" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
 };
 const writeLimit = {
-  config: { rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
+  config: { permission: "feeds:manage-own" as const, rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
 };
 const feedLimit = {
   config: { rateLimit: { max: config.rateLimitExportMax, timeWindow: config.rateLimitWindowMs } }

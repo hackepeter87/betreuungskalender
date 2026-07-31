@@ -3,7 +3,7 @@ import { config } from "../config.js";
 import { db } from "../db/connection.js";
 
 const readLimit = {
-  config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
+  config: { permission: "audit:view" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
 };
 
 interface AuditQuery {

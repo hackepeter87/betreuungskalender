@@ -1,8 +1,8 @@
 import type { preHandlerAsyncHookHandler } from "fastify";
 import {
-  hasPermission,
+  hasWorkspacePermission,
+  workspacePermissionsForRole,
   type RequestUser,
-  requiredPermissionForRequest,
   resolveRequestUser
 } from "./auth.js";
 import type { config as appConfig } from "./config.js";
@@ -46,6 +46,28 @@ function httpError(code: string, statusCode: number, message: string): Error & {
   return Object.assign(new Error(message), { code, statusCode });
 }
 
+function requiredWorkspacePermission(request: Parameters<preHandlerAsyncHookHandler>[0]) {
+  const permission = request.routeOptions?.config?.permission;
+  if (!permission) {
+    throw httpError(
+      "forbidden",
+      403,
+      "Für diese Aktion fehlt die erforderliche Berechtigung."
+    );
+  }
+  return permission;
+}
+
+function assertWorkspacePermission(user: RequestUser, request: Parameters<preHandlerAsyncHookHandler>[0]): void {
+  if (!hasWorkspacePermission(user, requiredWorkspacePermission(request))) {
+    throw httpError(
+      "forbidden",
+      403,
+      "Für diese Aktion fehlt die erforderliche Berechtigung."
+    );
+  }
+}
+
 export function createApiAuthHook(
   config: AuthConfig,
   rateLimitFirst?: preHandlerAsyncHookHandler,
@@ -59,7 +81,8 @@ export function createApiAuthHook(
       request.url === "/api/ready" ||
       request.url === "/api/session" ||
       request.url === "/api/setup/owner-bootstrap" ||
-      request.url === "/api/setup/first-use"
+      request.url === "/api/setup/first-use" ||
+      request.url === "/api/invitations/accept"
     ) return;
     const recoveryUser = config.recoveryAdminEnabled
       ? options.findRecoveryUserByToken?.(
@@ -67,15 +90,15 @@ export function createApiAuthHook(
         )
       : undefined;
     if (recoveryUser) {
-      const requiredPermission = requiredPermissionForRequest(request.method, request.url);
-      if (!hasPermission(recoveryUser, requiredPermission)) {
-        throw httpError(
-          "forbidden",
-          403,
-          "Für diese Aktion fehlt die erforderliche Berechtigung."
-        );
-      }
-      request.user = recoveryUser;
+      const privilegedRecoveryUser: RequestUser = {
+        ...recoveryUser,
+        workspaceRole: "admin",
+        workspaceAccess: true,
+        workspacePermissions: workspacePermissionsForRole("admin", true),
+        isOwner: true
+      };
+      assertWorkspacePermission(privilegedRecoveryUser, request);
+      request.user = privilegedRecoveryUser;
       request.userEmail = recoveryUser.id;
       return;
     }
@@ -96,14 +119,7 @@ export function createApiAuthHook(
           "Authentifizierung erforderlich."
         );
       }
-      const requiredPermission = requiredPermissionForRequest(request.method, request.url);
-      if (!hasPermission(user, requiredPermission)) {
-        throw httpError(
-          "forbidden",
-          403,
-          "Für diese Aktion fehlt die erforderliche Berechtigung."
-        );
-      }
+      assertWorkspacePermission(user, request);
       request.user = user;
       request.userEmail = user.id;
       return;
@@ -151,14 +167,7 @@ export function createApiAuthHook(
       );
     }
     const user = membership.user;
-    const requiredPermission = requiredPermissionForRequest(request.method, request.url);
-    if (!hasPermission(user, requiredPermission)) {
-      throw httpError(
-        "forbidden",
-        403,
-        "Für diese Aktion fehlt die erforderliche Berechtigung."
-      );
-    }
+    assertWorkspacePermission(user, request);
     request.user = user;
     request.userEmail = user.id;
   };

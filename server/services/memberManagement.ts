@@ -1,5 +1,11 @@
 import type Database from "better-sqlite3";
-import type { AuthRole, RequestUser } from "../auth.js";
+import {
+  workspacePermissionsForRole,
+  workspaceRoleForLegacyRole,
+  type AuthRole,
+  type RequestUser,
+  type WorkspaceRole
+} from "../auth.js";
 import { db } from "../db/connection.js";
 import { clearMembershipRole, setMembershipRole } from "./memberships.js";
 
@@ -7,11 +13,12 @@ export interface AppMember {
   id: string;
   displayName: string;
   claimRole: AuthRole;
-  effectiveRole: AuthRole;
-  membershipRole?: AuthRole;
+  effectiveRole: WorkspaceRole;
+  membershipRole?: WorkspaceRole;
   email?: string;
   lastSeenAt?: string;
   owner: boolean;
+  workspaceAccess: boolean;
 }
 
 interface MemberRow {
@@ -19,7 +26,8 @@ interface MemberRow {
   email: string | null;
   display_name: string;
   claim_role: AuthRole;
-  membership_role: AuthRole | null;
+  membership_role: WorkspaceRole | null;
+  membership_deleted_at: string | null;
   last_seen_at: string | null;
 }
 
@@ -92,24 +100,34 @@ export function listMembers(
       users.display_name,
       users.role AS claim_role,
       users.last_seen_at,
-      memberships.role AS membership_role
+      memberships.role AS membership_role,
+      memberships.deleted_at AS membership_deleted_at
     FROM app_users users
     LEFT JOIN app_memberships memberships
-      ON memberships.user_id = users.id
-      AND memberships.deleted_at IS NULL
+      ON memberships.id = (
+        SELECT latest.id
+        FROM app_memberships latest
+        WHERE latest.user_id = users.id
+        ORDER BY latest.updated_at DESC, latest.id DESC
+        LIMIT 1
+      )
     WHERE users.deleted_at IS NULL
     ORDER BY users.display_name COLLATE NOCASE, users.id
   `).all() as MemberRow[];
-  return rows.map((row) => ({
+  return rows.map((row) => {
+    const workspaceAccess = row.membership_role !== null && row.membership_deleted_at === null;
+    return ({
     id: row.id,
     displayName: row.display_name,
     claimRole: row.claim_role,
-    effectiveRole: row.membership_role ?? row.claim_role,
-    ...(row.membership_role ? { membershipRole: row.membership_role } : {}),
+    effectiveRole: row.membership_role ?? workspaceRoleForLegacyRole(row.claim_role),
+    ...(workspaceAccess && row.membership_role ? { membershipRole: row.membership_role } : {}),
     ...(row.email ? { email: row.email } : {}),
     ...(row.last_seen_at ? { lastSeenAt: row.last_seen_at } : {}),
-    owner: Boolean(ownerId && row.id === ownerId)
-  }));
+    owner: Boolean(ownerId && row.id === ownerId),
+    workspaceAccess: ownerId ? workspaceAccess : true
+  });
+  });
 }
 
 function memberById(
@@ -148,7 +166,7 @@ function recordMemberAudit(
 export function updateMemberRole(
   actor: RequestUser,
   targetUserId: string,
-  role: AuthRole,
+  role: WorkspaceRole,
   timestamp = new Date().toISOString(),
   database: Database.Database = db
 ): AppMember {
@@ -170,6 +188,21 @@ export function updateMemberRole(
       );
     }
     setMembershipRole(targetUserId, role, actor.id, timestamp, database);
+    const permissions = workspacePermissionsForRole(role, false);
+    if (!permissions.includes("feeds:manage-own")) {
+      database.prepare(`
+        UPDATE calendar_feed_tokens
+        SET revoked_at = COALESCE(revoked_at, ?)
+        WHERE user_id = ? AND revoked_at IS NULL
+      `).run(timestamp, targetUserId);
+    }
+    if (!permissions.includes("appointments:confirm")) {
+      database.prepare(`
+        UPDATE care_confirmation_requests
+        SET deleted_at = ?, updated_at = ?
+        WHERE user_id = ? AND deleted_at IS NULL AND answered_at IS NULL
+      `).run(timestamp, timestamp, targetUserId);
+    }
     recordMemberAudit(
       database,
       actor.id,
@@ -215,6 +248,21 @@ export function removeMember(
       );
     }
     const removedRole = clearMembershipRole(targetUserId, actor.id, timestamp, database);
+    database.prepare(`
+      UPDATE calendar_feed_tokens
+      SET revoked_at = COALESCE(revoked_at, ?)
+      WHERE user_id = ? AND revoked_at IS NULL
+    `).run(timestamp, targetUserId);
+    database.prepare(`
+      UPDATE push_subscriptions
+      SET deleted_at = ?, updated_at = ?
+      WHERE user_id = ? AND deleted_at IS NULL
+    `).run(timestamp, timestamp, targetUserId);
+    database.prepare(`
+      UPDATE care_confirmation_requests
+      SET deleted_at = ?, updated_at = ?
+      WHERE user_id = ? AND deleted_at IS NULL
+    `).run(timestamp, timestamp, targetUserId);
     recordMemberAudit(
       database,
       actor.id,

@@ -16,6 +16,29 @@ export type CareScope = (typeof careScopes)[number];
 export type ApiEntryStatus = "planned" | "completed" | "cancelled" | "partial";
 export type ApiCareConflictSeverity = "planned_warning" | "unresolved_actual";
 export type ApiAuthRole = "admin" | "parent" | "readonly";
+export type ApiWorkspaceRole = "admin" | "editor" | "scheduler" | "viewer";
+export type ApiWorkspacePermission =
+  | "appointments:view"
+  | "appointments:create"
+  | "appointments:edit"
+  | "appointments:delete"
+  | "appointments:confirm"
+  | "children:view-basic"
+  | "children:view-sensitive"
+  | "children:manage"
+  | "notes:view"
+  | "planning:view"
+  | "planning:manage"
+  | "reports:view"
+  | "settings:view"
+  | "settings:manage"
+  | "notifications:manage-own"
+  | "feeds:manage-own"
+  | "audit:view"
+  | "instance:inspect"
+  | "members:manage"
+  | "exports:run"
+  | "admin:destructive";
 export type ApiCareDeviationType =
   | "cancelled"
   | "partial"
@@ -65,6 +88,12 @@ export interface ApiChild {
   updatedAt: string;
 }
 
+export interface ApiChildSummary {
+  id: string;
+  name: string;
+  color: string;
+}
+
 export interface ApiCareParty {
   id: string;
   name: string;
@@ -73,6 +102,22 @@ export interface ApiCareParty {
   updatedBy: string;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface ApiCarePartySummary {
+  id: string;
+  name: string;
+}
+
+export interface ApiScheduleEntry {
+  id: string;
+  children: ApiChildSummary[];
+  startDateTime: string;
+  endDateTime: string;
+  status: ApiEntryStatus;
+  responsibleParty?: ApiCarePartySummary;
+  location?: string;
+  hasConflict: boolean;
 }
 
 export interface ApiTrip {
@@ -283,7 +328,7 @@ export interface ApiSetupFirstUse extends ApiSetupOwnerBootstrap {
 
 export interface ApiInvitation {
   id: string;
-  role: ApiAuthRole;
+  role: ApiWorkspaceRole;
   expiresAt: string;
   createdAt: string;
   updatedAt: string;
@@ -310,9 +355,10 @@ export interface ApiMember {
   id: string;
   displayName: string;
   claimRole: ApiAuthRole;
-  effectiveRole: ApiAuthRole;
+  effectiveRole: ApiWorkspaceRole;
   owner: boolean;
-  membershipRole?: ApiAuthRole;
+  workspaceAccess: boolean;
+  membershipRole?: ApiWorkspaceRole;
   email?: string;
   lastSeenAt?: string;
 }
@@ -354,6 +400,10 @@ export interface ApiSession {
   authenticated: boolean;
   demoDatasetsEnabled?: boolean;
   setup: ApiSetupState;
+  workspaceAccess?: boolean;
+  workspaceRole?: ApiWorkspaceRole;
+  isOwner?: boolean;
+  permissions?: ApiWorkspacePermission[];
   user?: {
     id: string;
     displayName: string;

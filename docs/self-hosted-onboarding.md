@@ -78,19 +78,23 @@ maps that stable external identity to an internal `app_users` record.
 Application authorization is then resolved in this order:
 
 1. Active application membership for the internal user.
-2. Configured identity-provider group or role claim as compatibility fallback.
-3. No matching role: reject access, except for the restricted fresh-setup path.
+2. Before an owner exists only: configured identity-provider group or role
+   claim as compatibility fallback.
+3. After an owner exists: missing or deleted membership means no workspace
+   access, except for a validated invitation flow.
 
 This keeps the identity provider responsible for authentication while the app
 can manage its own roles for the self-hosted installation.
 
-The application roles are:
+The workspace roles are:
 
 | Role | Access |
 | --- | --- |
-| `admin` | Read, write, member administration, imports, app-data operations, and migration endpoints |
-| `parent` | Read and ordinary domain writes |
-| `readonly` | Read-only access |
+| Owner (`admin` membership) | All capabilities, including membership and destructive administration |
+| `admin` | Normal data, settings, reports, and exports; no member or destructive administration |
+| `editor` | Children, planning, appointments, reports, and own feeds; no settings or administration |
+| `scheduler` | Reduced appointment view and future planning for assigned care parties |
+| `viewer` | Reduced read-only appointment view |
 
 Care parties are domain records, not login identities. They describe the
 caregiving context of entries and calendar feeds. Optional app-user to
@@ -100,8 +104,8 @@ exist.
 ## Owner and member administration
 
 Once `setup.ownerUserId` is set, only that owner can administer members and
-invitations. Existing installations without an explicit owner retain an admin
-fallback so upgrades remain operable until ownership is set.
+invitations. Existing installations without an explicit owner retain the
+pre-owner compatibility path until ownership is set.
 
 In Settings, the owner can:
 
@@ -156,10 +160,13 @@ delivery channel.
 Existing installations keep their current authorization behavior after an
 upgrade:
 
-- active app memberships continue to take precedence
-- configured OIDC groups remain the fallback when no membership exists
-- installations without an explicit owner retain the documented admin
+- active app memberships are migrated to the fixed workspace roles
+- configured OIDC groups remain a compatibility source only while no owner
+  exists
+- installations without an explicit owner retain the documented pre-owner
   compatibility path until ownership is set
+- after ownership is set, users without an active membership have no workspace
+  access
 - existing invitations and sessions remain valid according to their original
   expiry and revocation state
 - an already configured installation cannot be claimed through an owner setup

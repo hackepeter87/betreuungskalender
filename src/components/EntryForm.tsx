@@ -111,7 +111,11 @@ export function EntryForm({
   onCancel
 }: EntryFormProps) {
   const { locale, intlLocale } = useI18n();
-  const { data, saveEntry, removeEntry, canWrite, isSaving } = useAppStore();
+  const { data, saveEntry, removeEntry, canWrite, isSaving, session } = useAppStore();
+  const scheduler = session.workspaceRole === "scheduler";
+  const schedulerCanEdit = !scheduler || !entry || (
+    entry.status === "planned" && Date.parse(entry.startDateTime) > Date.now()
+  );
   const defaultDate = initialDate ?? toDateKey(new Date());
   const initialStart = entry
     ? dateTimeParts(entry.startDateTime)
@@ -142,7 +146,7 @@ export function EntryForm({
       data.careParties[0]?.id ??
       ""
   );
-  const [status, setStatus] = useState<EntryStatus>(entry?.status ?? "completed");
+  const [status, setStatus] = useState<EntryStatus>(scheduler ? "planned" : entry?.status ?? "completed");
   const [deviationType, setDeviationType] = useState<DeviationChoice>(
     entry?.deviationType ?? (entry?.status === "cancelled" ? "cancelled" : "none")
   );
@@ -162,7 +166,9 @@ export function EntryForm({
   const [schoolHandover, setSchoolHandover] = useState(entry?.schoolHandover ?? false);
   const [holiday, setHoliday] = useState(entry?.holiday ?? false);
   const [location, setLocation] = useState<CareLocation>(
-    entry?.location ?? data.settings.defaultLocation
+    (scheduler && (entry?.location ?? data.settings.defaultLocation) === "other")
+      ? "mainResidence"
+      : entry?.location ?? data.settings.defaultLocation
   );
   const [customLocation, setCustomLocation] = useState(entry?.customLocation ?? "");
   const [handoverFrom, setHandoverFrom] = useState<HandoverParty>(
@@ -402,7 +408,7 @@ export function EntryForm({
           <span>{copy(locale, "entryForm", "statusClassification")}</span>
           <FieldHelpButton fieldId="careEntry.status" />
         </legend>
-        <div className="segmented-control segmented-control--four">
+        {!scheduler ? <div className="segmented-control segmented-control--four">
           {(
             [
               ["completed", copy(locale, "entryForm", "completed")],
@@ -422,8 +428,8 @@ export function EntryForm({
               {label}
             </label>
           ))}
-        </div>
-        {!entry?.generatedByPatternId ? (
+        </div> : <p className="form-section__hint">{copy(locale, "entryForm", "planned")}</p>}
+        {!scheduler && !entry?.generatedByPatternId ? (
           <label className="check-row">
             <input
               type="checkbox"
@@ -456,7 +462,7 @@ export function EntryForm({
         ) : null}
       </fieldset>
 
-      {entry ? (
+      {!scheduler && entry ? (
       <fieldset className="form-section">
         <legend className="field-label-row">
           <span>{copy(locale, "entryForm", "deviationTitle")}</span>
@@ -648,7 +654,7 @@ export function EntryForm({
           </label>
         </div>
         {fieldErrors.endDateTime ? <p className="field-error">{fieldErrors.endDateTime}</p> : null}
-        <div className="toggle-row">
+        {!scheduler ? <div className="toggle-row">
           <label className="toggle">
             <input data-testid="entry-overnight" type="checkbox" checked={overnight} onChange={(event) => toggleOvernight(event.target.checked)} />
             <span />
@@ -664,7 +670,7 @@ export function EntryForm({
             <span />
             <FieldHelpLabel fieldId="careEntry.holiday">{copy(locale, "entryForm", "holiday")}</FieldHelpLabel>
           </label>
-        </div>
+        </div> : null}
       </details>
 
       <details className="form-section form-section--collapsible" open>
@@ -673,7 +679,7 @@ export function EntryForm({
           <label className="field">
             <FieldHelpLabel fieldId="careEntry.location" />
             <select value={location} onChange={(event) => setLocation(event.target.value as CareLocation)}>
-              {locationOptions.map((value) => <option key={value} value={value}>{locationLabel(value, locale)}</option>)}
+              {locationOptions.filter((value) => !scheduler || value !== "other").map((value) => <option key={value} value={value}>{locationLabel(value, locale)}</option>)}
             </select>
           </label>
           <label className="field">
@@ -688,7 +694,7 @@ export function EntryForm({
               {handoverOptions.map((value) => <option key={value} value={value}>{handoverLabel(value, locale)}</option>)}
             </select>
           </label>
-          {location === "other" ? (
+          {!scheduler && location === "other" ? (
             <label className="field">
               <FieldHelpLabel fieldId="careEntry.customLocation" />
               <input value={customLocation} onChange={(event) => setCustomLocation(event.target.value)} placeholder={copy(locale, "entryForm", "customLocation")} />
@@ -697,7 +703,7 @@ export function EntryForm({
         </div>
       </details>
 
-      {status === "cancelled" ? (
+      {!scheduler && status === "cancelled" ? (
         <div className="form-section">
           <label className="field">
             <FieldHelpLabel fieldId="careEntry.cancellationReason" />
@@ -716,7 +722,7 @@ export function EntryForm({
         </div>
       ) : null}
 
-      <details className="form-section form-section--collapsible">
+      {!scheduler ? <details className="form-section form-section--collapsible">
         <summary className="form-section__summary" data-testid="entry-trips-toggle">{copy(locale, "entryForm", "trips")} <span>{trips.length || ""}</span></summary>
         <div className="subsection-heading">
           <div>
@@ -785,9 +791,9 @@ export function EntryForm({
           ))}
           {trips.length === 0 ? <p className="empty-copy">{copy(locale, "entryForm", "noTrips")}</p> : null}
         </div>
-      </details>
+      </details> : null}
 
-      <details className="form-section form-section--collapsible">
+      {!scheduler ? <details className="form-section form-section--collapsible">
         <summary className="form-section__summary" data-testid="entry-costs-toggle">{copy(locale, "entryForm", "costs")} <span>{costs.length || ""}</span></summary>
         <div className="subsection-heading">
           <div>
@@ -848,9 +854,9 @@ export function EntryForm({
           ))}
           {costs.length === 0 ? <p className="empty-copy">{copy(locale, "entryForm", "noCosts")}</p> : null}
         </div>
-      </details>
+      </details> : null}
 
-      <details className="form-section form-section--collapsible">
+      {!scheduler ? <details className="form-section form-section--collapsible">
         <summary className="form-section__summary" data-testid="entry-notes-toggle">{copy(locale, "entryForm", "notesEvidence")}</summary>
         <label className="field">
           <FieldHelpLabel fieldId="careEntry.notes">{copy(locale, "entryForm", "notesEvidence")}</FieldHelpLabel>
@@ -875,12 +881,12 @@ export function EntryForm({
             <input value={evidenceReference} onChange={(event) => setEvidenceReference(event.target.value)} placeholder={copy(locale, "entryForm", "evidenceReferencePlaceholder")} />
           </label>
         ) : null}
-      </details>
+      </details> : null}
 
       {error ? <p className="form-error" role="alert">{error}</p> : null}
 
       <footer className="form-actions">
-        {entry ? (
+        {entry && session.permissions?.includes("appointments:delete") ? (
           <button className="button button--danger-quiet" type="button" onClick={() => void handleDelete()} disabled={!canWrite || isSaving}>
             <Icon name="trash" size={17} />
             {copy(locale, "common", "delete")}
@@ -888,7 +894,7 @@ export function EntryForm({
         ) : <span />}
         <div className="form-actions__right">
           <button className="button button--secondary" type="button" onClick={onCancel}>{copy(locale, "common", "cancel")}</button>
-          <button className="button button--primary" data-testid="entry-submit" type="submit" disabled={data.children.length === 0 || !canWrite || isSaving}>
+          <button className="button button--primary" data-testid="entry-submit" type="submit" disabled={data.children.length === 0 || !canWrite || !schedulerCanEdit || isSaving}>
             <Icon name="check" size={17} />
             {entry ? copy(locale, "entryForm", "saveChanges") : copy(locale, "entryForm", "saveEntry")}
           </button>

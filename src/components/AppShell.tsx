@@ -46,6 +46,30 @@ const mobileNavItems = navItems.filter((item) =>
   ["dashboard", "calendar", "entries", "analytics"].includes(item.id)
 );
 
+export function canAccessPage(session: ApiSession, page: PageId): boolean {
+  if (!session.permissions) return true;
+  const has = (permission: NonNullable<ApiSession["permissions"]>[number]) =>
+    session.permissions?.includes(permission) ?? false;
+  if (["dashboard", "calendar", "entries", "rules"].includes(page)) {
+    return has("appointments:view");
+  }
+  if (["contact", "holidays", "unavailable"].includes(page)) {
+    return has("planning:view");
+  }
+  if (["analytics", "report"].includes(page)) return has("reports:view");
+  if (page === "backup") return has("exports:run");
+  if (page === "audit") return has("audit:view");
+  if (page === "settings") {
+    return [
+      "settings:view",
+      "members:manage",
+      "notifications:manage-own",
+      "feeds:manage-own"
+    ].some((permission) => has(permission as NonNullable<ApiSession["permissions"]>[number]));
+  }
+  return false;
+}
+
 const sidebarCollapsedStorageKey = "betreuungskalender.sidebarCollapsed";
 
 function AuthSessionCard({
@@ -176,7 +200,7 @@ function MobileAuthMenu({
             <div className="auth-menu__identity" role="presentation">
               <small>{t("auth.signedInAs")}</small>
               <strong>{session.user.displayName}</strong>
-              <span>{session.user.role}</span>
+              <span>{session.workspaceRole ?? session.user.role}</span>
             </div>
             {session.logoutUrl ? (
               nativeLogout ? (
@@ -235,7 +259,7 @@ function NotificationBell({
   onOpenEntry: (entry: CareEntry) => void;
 }) {
   const { locale } = useI18n();
-  const { openConfirmations } = useAppStore();
+  const { openConfirmations, session } = useAppStore();
   const [open, setOpen] = useState(false);
   const popoverRef = useRef<HTMLDivElement | null>(null);
   const count = openConfirmations.length;
@@ -255,6 +279,8 @@ function NotificationBell({
       document.removeEventListener("keydown", closeOnEscape);
     };
   }, [open]);
+
+  if (!session.permissions?.includes("notifications:manage-own") && session.permissions) return null;
 
   return (
     <div className="notification-center" ref={popoverRef}>
@@ -341,6 +367,7 @@ export function AppShell({
   } = useAppStore();
 
   const navigate = (page: PageId) => {
+    if (!canAccessPage(session, page)) return;
     setShowMore(false);
     onNavigate(page);
   };
@@ -399,7 +426,7 @@ export function AppShell({
         {!setupMode ? (
           <>
             <nav className="sidebar__nav" aria-label={t("nav.main")}>
-              {navItems.map((item) => (
+              {navItems.filter((item) => canAccessPage(session, item.id)).map((item) => (
                 <button
                   type="button"
                   key={item.id}
@@ -437,7 +464,7 @@ export function AppShell({
           />
         )}
 
-        {!setupMode ? (
+        {!setupMode && canAccessPage(session, "settings") ? (
           <button
             className={`sidebar__settings ${activePage === "settings" ? "is-active" : ""}`}
             type="button"
@@ -453,7 +480,7 @@ export function AppShell({
       </aside>
 
       {!setupMode ? <nav className="mobile-nav" aria-label={t("nav.mobile")} data-testid="mobile-navigation">
-        {mobileNavItems.map((item) => (
+        {mobileNavItems.filter((item) => canAccessPage(session, item.id)).map((item) => (
           <button
             type="button"
             key={item.id}
@@ -468,7 +495,7 @@ export function AppShell({
         <button
           type="button"
           data-testid="mobile-nav-more"
-          className={showMore || !mobileNavItems.some((item) => item.id === activePage) ? "is-active" : ""}
+          className={showMore || !mobileNavItems.filter((item) => canAccessPage(session, item.id)).some((item) => item.id === activePage) ? "is-active" : ""}
           onClick={() => setShowMore((current) => !current)}
           aria-expanded={showMore}
           aria-label={t("nav.openMore")}
@@ -582,6 +609,7 @@ export function AppShell({
             <div className="mobile-more-sheet__grid">
               {navItems
                 .filter((item) => !mobileNavItems.some((mobileItem) => mobileItem.id === item.id))
+                .filter((item) => canAccessPage(session, item.id))
                 .map((item) => (
                   <button
                     type="button"
@@ -594,7 +622,7 @@ export function AppShell({
                     <span>{t(item.labelKey)}</span>
                   </button>
                 ))}
-              <button
+              {canAccessPage(session, "settings") ? <button
                 type="button"
                 data-testid="mobile-more-settings"
                 className={activePage === "settings" ? "is-active" : ""}
@@ -602,7 +630,7 @@ export function AppShell({
               >
                 <Icon name="settings" size={20} />
                 <span>{t("nav.settings")}</span>
-              </button>
+              </button> : null}
             </div>
           </section>
         </div>

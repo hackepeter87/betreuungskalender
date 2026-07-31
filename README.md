@@ -11,7 +11,7 @@ travel, costs, holidays, and unavailable periods.
 
 ## Project status
 
-- Latest published release: [v1.18.2](docs/release-notes/v1.18.2.md)
+- Latest published release: [v1.19.0](docs/release-notes/v1.19.0.md)
 - Current `main`: SQLite/API domain persistence, first-use setup, application
   memberships and invitations, optional invitation email delivery, native OIDC
   authentication, trusted-proxy compatibility, RRULE-compatible contact rules
@@ -243,14 +243,15 @@ OIDC_READONLY_GROUP=/betreuungskalender/readers
 OIDC_REQUIRE_ROLE_CLAIM=false
 ```
 
-The API maps the stable OIDC subject to an internal app user. Application
-memberships and owner-assigned roles are used for authorization when present;
-configured identity-provider groups remain a compatibility fallback for
-existing installations. Admin users may use import, migration, member
-administration, and clear-data endpoints; parent users may read and write
-ordinary app data; readonly users can only read. Trusted proxy headers can be
-forged if users can reach the app directly, so the app port must be private or
-bound to loopback when `TRUST_PROXY_AUTH=true`.
+The API maps the stable OIDC subject to an internal app user. Before an owner is
+established, configured identity-provider groups provide the compatibility
+role used for setup. After ownership is established, active workspace
+memberships are authoritative. The fixed workspace roles are owner-backed
+admin, admin, editor, scheduler, and viewer; scheduler and viewer responses are
+reduced server-side to scheduling-safe fields. Only the owner administers
+members and destructive operations. Trusted proxy headers can be forged if
+users can reach the app directly, so the app port must be private or bound to
+loopback when `TRUST_PROXY_AUTH=true`.
 
 - HAProxy, nginx, Caddy, and Traefik:
   [docs/reverse-proxy.md](docs/reverse-proxy.md)

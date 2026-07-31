@@ -6,6 +6,42 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-07-31
+
+### Added
+
+- Added fixed workspace roles for admins, editors, schedulers, and viewers,
+  backed by named server-side permissions.
+- Added restricted child, caregiver, and appointment projections for users who
+  need scheduling access without sensitive family details.
+- Added owner-managed invitations, role changes, and member removal for the
+  shared workspace.
+
+### Changed
+
+- Existing membership roles migrate deterministically: `admin` remains
+  `admin`, `parent` becomes `editor`, and `readonly` becomes `viewer`.
+- Once an installation owner exists, active application memberships are the
+  authoritative source of workspace access. Identity-provider groups remain a
+  compatibility path only before ownership is established.
+- Scheduler access is limited to planned future appointments for assigned
+  caregivers and excludes notes, evidence, costs, trips, custom locations, and
+  lifecycle actions.
+- The browser requests only the datasets and projections allowed by the
+  current workspace permissions.
+
+### Security
+
+- Protected API routes now declare a named permission and fail closed when the
+  classification is missing.
+- Removing a member immediately revokes workspace API access, personal
+  calendar-feed tokens, push subscriptions, and pending confirmations.
+- Role and care-party assignment changes are applied to existing personal
+  feeds and confirmation tasks on the next request.
+- Installation setup metadata is separated from general application settings
+  and ownership survives a domain-data reset.
+- Restricted API responses remove sensitive fields before serialization.
+
 ## [1.18.2] - 2026-07-26
 
 ### Changed

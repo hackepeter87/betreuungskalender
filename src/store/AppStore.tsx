@@ -14,6 +14,7 @@ import {
   ApiError,
   checkServer,
   loadAppData,
+  loadRestrictedAppData,
   loadSession,
   SERVER_UNAVAILABLE_MESSAGE
 } from "../lib/api";
@@ -129,6 +130,10 @@ function requiresLogin(session: ApiSession): boolean {
   return session.authRequired && !session.authenticated;
 }
 
+function sessionCan(session: ApiSession, permission: NonNullable<ApiSession["permissions"]>[number]): boolean {
+  return session.permissions ? session.permissions.includes(permission) : true;
+}
+
 function urlBase64ToUint8Array(value: string): ArrayBuffer {
   const padding = "=".repeat((4 - (value.length % 4)) % 4);
   const base64 = `${value}${padding}`.replace(/-/g, "+").replace(/_/g, "/");
@@ -185,11 +190,21 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           setUnauthenticatedState(nextSession);
           return true;
         }
+        if (nextSession.authenticated && nextSession.workspaceAccess === false) {
+          setUnauthenticatedState(nextSession);
+          return true;
+        }
 
+        const restricted = !sessionCan(nextSession, "children:view-sensitive");
         const [next, confirmations, preferences] = await Promise.all([
-          loadAppData(),
-          api.listOpenCareConfirmations(),
-          api.getNotificationPreferences()
+          restricted
+            ? loadRestrictedAppData()
+            : loadAppData({
+                includeSettings: sessionCan(nextSession, "settings:view"),
+                includeAudit: sessionCan(nextSession, "audit:view")
+              }),
+          sessionCan(nextSession, "notifications:manage-own") ? api.listOpenCareConfirmations() : Promise.resolve([]),
+          sessionCan(nextSession, "notifications:manage-own") ? api.getNotificationPreferences() : Promise.resolve(null)
         ]);
         dataRef.current = next;
         setData(next);
@@ -453,12 +468,22 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       if (!confirmClosedMonthChange([...months])) return false;
       return performWrite(async () => {
         const { id, ...payload } = input;
-        if (id) await api.updateEntry(id, payload);
+        if (session.workspaceRole === "scheduler") {
+          const schedulePayload = {
+            startDateTime: payload.startDateTime,
+            endDateTime: payload.endDateTime,
+            childIds: payload.childIds,
+            responsiblePartyId: payload.responsiblePartyId,
+            location: payload.location === "other" ? undefined : payload.location
+          };
+          if (id) await api.updateScheduleEntry(id, schedulePayload);
+          else await api.createScheduleEntry(schedulePayload);
+        } else if (id) await api.updateEntry(id, payload);
         else await api.createEntry(payload);
         return true;
       }, false);
     },
-    [confirmClosedMonthChange, performWrite]
+    [confirmClosedMonthChange, performWrite, session.workspaceRole]
   );
 
   const removeEntry = useCallback(
@@ -738,7 +763,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         serverStatus === "online" &&
         !isLoading &&
         !isSaving &&
-        (!session.authRequired || session.authenticated),
+        (!session.authRequired || session.authenticated) &&
+        (session.permissions ? sessionCan(session, "appointments:create") : true),
       reload,
       clearError: () => setError(null),
       saveChild,

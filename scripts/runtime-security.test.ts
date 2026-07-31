@@ -191,7 +191,7 @@ test("production runtime sends documented security headers and restrictive CORS"
   const missingApi = await fetch(`http://127.0.0.1:${port}/api/not-found`, {
     headers: { origin: "https://allowed.example.test" }
   });
-  assert.equal(missingApi.status, 404);
+  assert.equal(missingApi.status, 403);
   const missingBody = await missingApi.text();
   assert.doesNotMatch(missingBody, /stack|sqlite|node_modules|server\//i);
   assert.equal(missingApi.headers.get("access-control-allow-origin"), "https://allowed.example.test");
@@ -263,6 +263,25 @@ test("runtime exposes compact session metadata for trusted proxy auth", async (t
   assert.deepEqual(await session.json(), {
     authRequired: true,
     authenticated: true,
+    workspaceAccess: true,
+    workspaceRole: "editor",
+    isOwner: false,
+    permissions: [
+      "appointments:view",
+      "appointments:create",
+      "appointments:edit",
+      "appointments:delete",
+      "appointments:confirm",
+      "children:view-basic",
+      "children:view-sensitive",
+      "children:manage",
+      "notes:view",
+      "planning:view",
+      "planning:manage",
+      "reports:view",
+      "notifications:manage-own",
+      "feeds:manage-own"
+    ],
     user: {
       id: "user_6f4c7289801c623dbaf3e32b",
       displayName: "parent",
@@ -283,7 +302,15 @@ test("runtime exposes compact session metadata for trusted proxy auth", async (t
       "x-auth-request-groups": "/betreuungskalender/readers"
     }
   });
-  assert.equal(readOnlyRead.status, 200);
+  assert.equal(readOnlyRead.status, 403);
+  const readOnlySummary = await fetch(`${baseUrl}/api/children/summary`, {
+    headers: {
+      "x-auth-request-user": "subject-reader",
+      "x-auth-request-email": "reader@example.net",
+      "x-auth-request-groups": "/betreuungskalender/readers"
+    }
+  });
+  assert.equal(readOnlySummary.status, 200);
 
   const readOnlyWrite = await fetch(`${baseUrl}/api/children`, {
     method: "POST",
@@ -412,7 +439,9 @@ test("runtime enforces the OIDC authorization matrix across endpoint classes", a
   }
   assert.ok(adminUserId);
 
-  for (const headers of [readonlyHeaders, parentHeaders, adminHeaders, fallbackHeaders]) {
+  assert.equal((await request("/api/children", { headers: readonlyHeaders })).status, 403);
+  assert.equal((await request("/api/children/summary", { headers: readonlyHeaders })).status, 200);
+  for (const headers of [parentHeaders, adminHeaders, fallbackHeaders]) {
     assert.equal((await request("/api/children", { headers })).status, 200);
   }
 
@@ -478,7 +507,7 @@ test("runtime enforces the OIDC authorization matrix across endpoint classes", a
   assert.equal((await request("/api/external-calendar-events/export")).status, 401);
   assert.equal((await request("/api/external-calendar-events/export", {
     headers: readonlyHeaders
-  })).status, 200);
+  })).status, 403);
 
   const rawCalendarMarker = "RAW_PRIVATE_ICS_MARKER_DO_NOT_LEAK";
   const rejectedCalendar = await request("/api/external-calendars/import", {
@@ -709,6 +738,25 @@ test("runtime enforces native OIDC sessions without trusting proxy headers or lo
   assert.deepEqual(await parentSession.json(), {
     authRequired: true,
     authenticated: true,
+    workspaceAccess: true,
+    workspaceRole: "editor",
+    isOwner: false,
+    permissions: [
+      "appointments:view",
+      "appointments:create",
+      "appointments:edit",
+      "appointments:delete",
+      "appointments:confirm",
+      "children:view-basic",
+      "children:view-sensitive",
+      "children:manage",
+      "notes:view",
+      "planning:view",
+      "planning:manage",
+      "reports:view",
+      "notifications:manage-own",
+      "feeds:manage-own"
+    ],
     user: {
       id: "user_parent",
       displayName: "Parent User",
@@ -745,6 +793,9 @@ test("runtime enforces native OIDC sessions without trusting proxy headers or lo
   });
 
   assert.equal((await fetch(`${baseUrl}/api/children`, {
+    headers: cookie(readonlyToken)
+  })).status, 403);
+  assert.equal((await fetch(`${baseUrl}/api/children/summary`, {
     headers: cookie(readonlyToken)
   })).status, 200);
 

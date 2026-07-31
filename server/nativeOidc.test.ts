@@ -717,7 +717,7 @@ test("native OIDC callback accepts users with app membership without role groups
     sessions,
     upsertUser: (user) => upsertAuthenticatedUser(user, new Date().toISOString(), database),
     applyMembershipRole: (candidate) => ({
-      membershipRole: "parent",
+      membershipRole: "editor",
       user: {
         ...candidate,
         role: "parent",

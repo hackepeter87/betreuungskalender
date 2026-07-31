@@ -9,6 +9,7 @@ import {
   resolveRequestUser,
   roleFromGroups,
   sessionInfo,
+  workspacePermissionsForRole,
   userFromClaims
 } from "./auth.js";
 
@@ -222,4 +223,34 @@ test("enforces read, write and admin authorization decisions", () => {
   assert.equal(hasPermission(parentUser, "write"), true);
   assert.equal(hasPermission(parentUser, "admin"), false);
   assert.equal(hasPermission(adminUser, "admin"), true);
+});
+
+test("workspace roles expose the fixed permission matrix", () => {
+  const owner = workspacePermissionsForRole("admin", true);
+  const admin = workspacePermissionsForRole("admin");
+  const editor = workspacePermissionsForRole("editor");
+  const scheduler = workspacePermissionsForRole("scheduler");
+  const viewer = workspacePermissionsForRole("viewer");
+
+  assert.equal(owner.includes("members:manage"), true);
+  assert.equal(owner.includes("admin:destructive"), true);
+  assert.equal(admin.includes("settings:manage"), true);
+  assert.equal(admin.includes("exports:run"), true);
+  assert.equal(admin.includes("members:manage"), false);
+  assert.equal(admin.includes("admin:destructive"), false);
+  assert.equal(editor.includes("children:view-sensitive"), true);
+  assert.equal(editor.includes("planning:manage"), true);
+  assert.equal(editor.includes("settings:view"), false);
+  assert.deepEqual(scheduler, [
+    "appointments:view",
+    "appointments:create",
+    "appointments:edit",
+    "children:view-basic",
+    "notifications:manage-own"
+  ]);
+  assert.deepEqual(viewer, [
+    "appointments:view",
+    "children:view-basic",
+    "notifications:manage-own"
+  ]);
 });

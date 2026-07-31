@@ -55,7 +55,8 @@ export const setupFirstUseInputSchema = z.object({
 });
 
 export const invitationInputSchema = z.object({
-  role: z.enum(["admin", "parent", "readonly"]),
+  role: z.enum(["admin", "editor", "scheduler", "viewer", "parent", "readonly"])
+    .transform((role) => role === "parent" ? "editor" as const : role === "readonly" ? "viewer" as const : role),
   emailHint: z.string().trim().email().max(320).optional(),
   expiresAt: isoDateTime,
   sendEmail: z.boolean().default(false)
@@ -72,7 +73,8 @@ export const invitationAcceptInputSchema = z.object({
 });
 
 export const memberRoleInputSchema = z.object({
-  role: z.enum(["admin", "parent", "readonly"])
+  role: z.enum(["admin", "editor", "scheduler", "viewer", "parent", "readonly"])
+    .transform((role) => role === "parent" ? "editor" as const : role === "readonly" ? "viewer" as const : role)
 });
 
 export const tripInputSchema = z.object({
@@ -172,6 +174,17 @@ export const careEntryInputSchema = z
       }
     }
   });
+
+export const schedulerCareEntryInputSchema = z.object({
+  startDateTime: isoDateTime,
+  endDateTime: isoDateTime,
+  childIds,
+  responsiblePartyId: z.string().trim().min(1).max(200),
+  location: z.enum(["commuterApartment", "mainResidence", "mother", "school", "ogs"]).optional()
+}).strict().refine(
+  (entry) => Date.parse(entry.endDateTime) > Date.parse(entry.startDateTime),
+  { path: ["endDateTime"], message: "Das Ende muss nach dem Beginn liegen." }
+);
 
 export const holidayInputSchema = z
   .object({

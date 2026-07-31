@@ -35,7 +35,8 @@ const expectedMigrations = [
   "024_external_calendar_feed_urls",
   "025_primary_care_party_setting",
   "026_oidc_login_context",
-  "027_owner_setup_tokens"
+  "027_owner_setup_tokens",
+  "028_workspace_permissions"
 ];
 
 async function withTemporaryDirectory(
@@ -236,6 +237,72 @@ test("care party migration backfills existing active entries", async () => {
       `).get("fixture-entry-1"), {
         responsiblePartyId: "party_primary"
       });
+    } finally {
+      database.close();
+    }
+  });
+});
+
+test("workspace permission migration maps roles and preserves revoked membership history", async () => {
+  await withTemporaryDirectory("workspace-permissions", (directory) => {
+    const oldMigrations = join(directory, "old-migrations");
+    mkdirSync(oldMigrations);
+    for (const file of readdirSync(migrationsDirectory)) {
+      if (!file.endsWith(".sql") || file.startsWith("028_")) continue;
+      copyFileSync(join(migrationsDirectory, file), join(oldMigrations, file));
+    }
+
+    const database = openDatabase(join(directory, "app.sqlite"));
+    try {
+      migrateDatabase(database, oldMigrations);
+      const timestamp = "2026-07-01T10:00:00.000Z";
+      const insertUser = database.prepare(`
+        INSERT INTO app_users (
+          id, external_subject, email, display_name, role, groups_json,
+          last_seen_at, created_at, updated_at
+        ) VALUES (?, ?, NULL, ?, ?, '[]', ?, ?, ?)
+      `);
+      insertUser.run("user-editor", "subject-editor", "Editor", "parent", timestamp, timestamp, timestamp);
+      insertUser.run("user-revoked", "subject-revoked", "Revoked", "admin", timestamp, timestamp, timestamp);
+      insertUser.run("user-backfill", "subject-backfill", "Backfill", "readonly", timestamp, timestamp, timestamp);
+      database.prepare(`
+        INSERT INTO app_memberships (
+          id, user_id, role, created_by, updated_by, created_at, updated_at, deleted_at
+        ) VALUES
+          ('membership-editor', 'user-editor', 'parent', 'actor', 'actor', ?, ?, NULL),
+          ('membership-revoked', 'user-revoked', 'readonly', 'actor', 'actor', ?, ?, ?)
+      `).run(timestamp, timestamp, timestamp, timestamp, timestamp);
+      database.prepare(`
+        INSERT INTO app_invitations (
+          id, token_hash, email_hint, role, expires_at, accepted_user_id,
+          accepted_at, revoked_at, created_by, updated_by, created_at, updated_at
+        ) VALUES
+          ('invite-editor', 'hash-editor', NULL, 'parent', '2026-08-01T00:00:00.000Z', NULL,
+            NULL, NULL, 'actor', 'actor', ?, ?),
+          ('invite-viewer', 'hash-viewer', NULL, 'readonly', '2026-08-01T00:00:00.000Z', 'user-revoked',
+            ?, ?, 'actor', 'actor', ?, ?)
+      `).run(timestamp, timestamp, timestamp, timestamp, timestamp, timestamp);
+
+      migrateDatabase(database, migrationsDirectory);
+
+      assert.deepEqual(database.prepare(`
+        SELECT user_id AS userId, role, deleted_at AS deletedAt
+        FROM app_memberships
+        WHERE user_id IN ('user-editor', 'user-revoked', 'user-backfill')
+        ORDER BY user_id
+      `).all(), [
+        { userId: "user-backfill", role: "viewer", deletedAt: null },
+        { userId: "user-editor", role: "editor", deletedAt: null },
+        { userId: "user-revoked", role: "viewer", deletedAt: timestamp }
+      ]);
+      assert.deepEqual(database.prepare(`
+        SELECT id, role, accepted_at AS acceptedAt, revoked_at AS revokedAt
+        FROM app_invitations
+        ORDER BY id
+      `).all(), [
+        { id: "invite-editor", role: "editor", acceptedAt: null, revokedAt: null },
+        { id: "invite-viewer", role: "viewer", acceptedAt: timestamp, revokedAt: timestamp }
+      ]);
     } finally {
       database.close();
     }

@@ -209,7 +209,7 @@ test("trusted OIDC users create distinct actor metadata and audit entries", asyn
     `/api/audit-log?entityType=child&entityId=${encodeURIComponent(created.id)}&limit=10`,
     {
       method: "GET",
-      headers: betaHeaders
+      headers: adminHeaders
     }
   );
   assert.deepEqual(

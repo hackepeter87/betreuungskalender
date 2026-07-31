@@ -1,56 +1,163 @@
 import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
-import { permissionsForRole, type AuthRole, type RequestUser } from "../auth.js";
+import {
+  legacyRoleForWorkspaceRole,
+  permissionsForRole,
+  workspacePermissionsForRole,
+  workspaceRoleForLegacyRole,
+  type AuthRole,
+  type RequestUser,
+  type WorkspacePermission,
+  type WorkspaceRole
+} from "../auth.js";
 import { db } from "../db/connection.js";
 
 export interface MembershipResolution {
   user: RequestUser;
-  membershipRole?: AuthRole;
+  membershipRole?: WorkspaceRole;
+  membershipState?: "active" | "revoked" | "none";
+  workspaceAccess?: boolean;
 }
 
-function isAuthRole(value: string): value is AuthRole {
-  return value === "admin" || value === "parent" || value === "readonly";
+interface MembershipRow {
+  role: string;
+  deleted_at: string | null;
+}
+
+function isWorkspaceRole(value: string): value is WorkspaceRole {
+  return value === "admin" || value === "editor" || value === "scheduler" || value === "viewer";
+}
+
+function ownerId(database: Database.Database): string | undefined {
+  const row = database.prepare(`
+    SELECT value_json AS valueJson
+    FROM settings
+    WHERE key = 'setup.ownerUserId' AND deleted_at IS NULL
+  `).get() as { valueJson: string } | undefined;
+  if (!row) return undefined;
+  try {
+    const value = JSON.parse(row.valueJson) as unknown;
+    return typeof value === "string" && value.trim() ? value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function latestMembershipForUser(
+  userId: string,
+  database: Database.Database
+): MembershipRow | undefined {
+  return database.prepare(`
+    SELECT role, deleted_at
+    FROM app_memberships
+    WHERE user_id = ?
+    ORDER BY updated_at DESC, id DESC
+    LIMIT 1
+  `).get(userId) as MembershipRow | undefined;
 }
 
 export function membershipRoleForUser(
   userId: string,
   database: Database.Database = db
-): AuthRole | undefined {
-  const row = database.prepare(`
+): WorkspaceRole | undefined {
+  const row = latestMembershipForUser(userId, database);
+  return row && !row.deleted_at && isWorkspaceRole(row.role) ? row.role : undefined;
+}
+
+export function hasWorkspaceAccess(
+  userId: string,
+  database: Database.Database = db
+): boolean {
+  return workspacePermissionsForUser(userId, database).length > 0;
+}
+
+export function workspacePermissionsForUser(
+  userId: string,
+  database: Database.Database = db
+): WorkspacePermission[] {
+  const membership = latestMembershipForUser(userId, database);
+  if (membership?.deleted_at) return [];
+  const owner = ownerId(database);
+  if (membership && isWorkspaceRole(membership.role)) {
+    return workspacePermissionsForRole(membership.role, owner === userId);
+  }
+  if (owner) return [];
+  const user = database.prepare(`
     SELECT role
-    FROM app_memberships
-    WHERE user_id = ?
-      AND deleted_at IS NULL
-    ORDER BY updated_at DESC, id DESC
-    LIMIT 1
-  `).get(userId) as { role: string } | undefined;
-  return row && isAuthRole(row.role) ? row.role : undefined;
+    FROM app_users
+    WHERE id = ? AND deleted_at IS NULL
+  `).get(userId) as { role: AuthRole } | undefined;
+  if (!user || !["admin", "parent", "readonly"].includes(user.role)) return [];
+  const role = workspaceRoleForLegacyRole(user.role);
+  return workspacePermissionsForRole(role, role === "admin");
+}
+
+export function userHasWorkspacePermission(
+  userId: string,
+  permission: WorkspacePermission,
+  database: Database.Database = db
+): boolean {
+  return workspacePermissionsForUser(userId, database).includes(permission);
 }
 
 export function applyMembershipRole(
   user: RequestUser,
   database: Database.Database = db
 ): MembershipResolution {
-  const membershipRole = membershipRoleForUser(user.id, database);
-  if (!membershipRole || membershipRole === user.role) {
+  const membership = latestMembershipForUser(user.id, database);
+  const owner = ownerId(database);
+  const isOwner = owner === user.id;
+  if (membership?.deleted_at) {
     return {
-      user,
-      ...(membershipRole ? { membershipRole } : {})
+      membershipState: "revoked",
+      workspaceAccess: false,
+      user: {
+        ...user,
+        permissions: [],
+        workspacePermissions: [],
+        workspaceAccess: false,
+        isOwner: false
+      }
     };
   }
+  const membershipRole = membership && isWorkspaceRole(membership.role)
+    ? membership.role
+    : undefined;
+  if (!membershipRole && owner) {
+    return {
+      membershipState: "none",
+      workspaceAccess: false,
+      user: {
+        ...user,
+        permissions: [],
+        workspacePermissions: [],
+        workspaceAccess: false,
+        isOwner: false
+      }
+    };
+  }
+  const workspaceRole = membershipRole ?? workspaceRoleForLegacyRole(user.role);
+  const legacyRole = legacyRoleForWorkspaceRole(workspaceRole);
+  const legacyAdminFallback = !owner && workspaceRole === "admin";
   return {
-    membershipRole,
+    ...(membershipRole ? { membershipRole } : {}),
+    membershipState: membershipRole ? "active" : "none",
+    workspaceAccess: true,
     user: {
       ...user,
-      role: membershipRole,
-      permissions: permissionsForRole(membershipRole)
+      role: legacyRole,
+      permissions: permissionsForRole(legacyRole),
+      workspaceRole,
+      workspacePermissions: workspacePermissionsForRole(workspaceRole, isOwner || legacyAdminFallback),
+      workspaceAccess: true,
+      isOwner
     }
   };
 }
 
 export function setMembershipRole(
   userId: string,
-  role: AuthRole,
+  role: WorkspaceRole,
   actorId: string,
   timestamp = new Date().toISOString(),
   database: Database.Database = db
@@ -86,14 +193,14 @@ export function clearMembershipRole(
   actorId: string,
   timestamp = new Date().toISOString(),
   database: Database.Database = db
-): AuthRole | undefined {
+): WorkspaceRole | undefined {
   const existing = database.prepare(`
     SELECT id, role
     FROM app_memberships
     WHERE user_id = ? AND deleted_at IS NULL
     ORDER BY updated_at DESC, id DESC
     LIMIT 1
-  `).get(userId) as { id: string; role: AuthRole } | undefined;
+  `).get(userId) as { id: string; role: WorkspaceRole } | undefined;
 
   if (!existing) return undefined;
 

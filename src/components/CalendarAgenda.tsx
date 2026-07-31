@@ -66,7 +66,7 @@ export function CalendarAgenda({
   canWrite?: boolean;
   onSelectDate: (date: string) => void;
   onSelectEntry: (entry: CareEntry) => void;
-  onSelectUnavailable: (period: UnavailablePeriod) => void;
+  onSelectUnavailable?: (period: UnavailablePeriod) => void;
   allowCreate?: boolean;
 }) {
   const { locale, intlLocale } = useI18n();
@@ -175,7 +175,7 @@ export function CalendarAgenda({
                 className={`agenda-card agenda-card--unavailable ${period.dutyRelated ? "is-duty" : ""} ${period.scope === "external_contact_block" ? "is-external-block" : ""}`}
                 type="button"
                 key={`unavailable-${period.id}`}
-                onClick={() => onSelectUnavailable(period)}
+                onClick={() => onSelectUnavailable?.(period)}
               >
                 <span className="agenda-card__unavailable-icon"><Icon name="briefcase" size={19} /></span>
                 <span className="agenda-card__main">

@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
 import { config } from "../config.js";
-import type { AuthRole } from "../auth.js";
+import type { WorkspaceRole } from "../auth.js";
 
 export interface InvitationEmailConfig {
   invitationEmailEnabled: boolean;
@@ -25,7 +25,7 @@ export function invitationEmailAvailable(config: InvitationEmailConfig): boolean
 export interface InvitationEmailInput {
   to?: string;
   token: string;
-  role: AuthRole;
+  role: WorkspaceRole;
   expiresAt: string;
 }
 
@@ -50,10 +50,11 @@ export class InvitationEmailError extends Error {
   }
 }
 
-function roleLabel(role: AuthRole): string {
+function roleLabel(role: WorkspaceRole): string {
   if (role === "admin") return "Admin";
-  if (role === "parent") return "Bearbeiten";
-  return "Nur lesen";
+  if (role === "editor") return "Bearbeiten";
+  if (role === "scheduler") return "Termine planen";
+  return "Ansehen";
 }
 
 export function invitationUrl(token: string, baseUrl: string): string {

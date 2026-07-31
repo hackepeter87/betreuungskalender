@@ -5,6 +5,7 @@ import { db } from "../db/connection.js";
 import { recordAudit } from "../services/audit.js";
 import { assertActiveCareParty } from "../services/careParties.js";
 import { nowIso } from "../services/common.js";
+import { invalidateInaccessibleCareConfirmations } from "../services/careConfirmations.js";
 import {
   assertCanAdministerMembers,
   listMembers,
@@ -19,10 +20,10 @@ import {
 } from "../validation/schemas.js";
 
 const readLimit = {
-  config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
+  config: { permission: "members:manage" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
 };
 const writeLimit = {
-  config: { rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
+  config: { permission: "members:manage" as const, rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
 };
 
 function activeAssignmentIds(userId: string): string[] {
@@ -151,6 +152,7 @@ export async function appUserRoutes(app: FastifyInstance): Promise<void> {
           timestamp
         );
       }
+      invalidateInaccessibleCareConfirmations(request.params.userId, timestamp);
       recordAudit({
         userEmail: request.userEmail,
         entityType: "user_care_party_assignment",

@@ -30,12 +30,12 @@ permissions, access-controlled backup storage, and a tested deletion policy.
 Do not send them unencrypted or upload them to public issue trackers.
 
 Administrative data-replacement paths are intentionally narrower than normal
-domain editing. `/api/app-data`, `/api/migration/*`, app-user administration,
-care-party assignments, and demo-data loading require an admin role. Readonly
-and parent users must not be able to reset, import, migrate, or replace app
-data. Export-like API routes require authentication and use the stricter export
-rate-limit class; calendar feed URLs are the only unauthenticated export
-surface and are scoped bearer secrets, not general API credentials.
+domain editing. `/api/app-data`, `/api/migration/*`, member administration,
+care-party assignments, and demo-data loading require owner permissions.
+Non-owner members cannot reset, import, migrate, or replace app data. Export-like
+API routes require authentication and use the stricter export rate-limit class;
+calendar feed URLs are the only unauthenticated export surface and are scoped
+bearer secrets, not general API credentials.
 
 Personal iCalendar feed URLs are bearer secrets. The application stores only a
 hash of the token, but anyone with the generated URL can read that feed until
@@ -172,29 +172,28 @@ are defined in [ADR 0005](adr/0005-workspace-permissions.md) and the
 declare a recognized named permission; omission is a denial, not a fallback to
 the request method.
 
-| Request class | Unauthenticated | Readonly | Parent | Admin |
-| --- | --- | --- | --- | --- |
-| `/api/health`, `/api/ready`, `/api/session` | Allowed for health or session discovery | Allowed | Allowed | Allowed |
-| Protected domain reads, such as children, entries, care parties, rules, holidays, reports, and settings reads | `401` | Allowed | Allowed | Allowed |
-| Normal domain writes, such as children, entries, care parties, rules, holidays, unavailability, settings writes, and confirmation actions | `401` | `403` | Allowed | Allowed |
-| Administrative app-data operations, legacy migration endpoints, app-user administration, care-party assignments, instance readiness details, and demo-data loading | `401` | `403` | `403` | Allowed |
-| Calendar feed token endpoint | Token scoped to the feed only | Token scoped to the feed only | Token scoped to the feed only | Token scoped to the feed only |
+| Capability | Owner | Admin | Editor | Scheduler | Viewer |
+| --- | --- | --- | --- | --- | --- |
+| Appointment and basic child view | Allowed | Allowed | Allowed | Reduced response | Reduced response |
+| Normal appointment writes | Allowed | Allowed | Allowed | Future assigned planning only | `403` |
+| Sensitive child data and notes | Allowed | Allowed | Allowed | `403` | `403` |
+| Settings and exports | Allowed | Allowed | `403` | `403` | `403` |
+| Member and destructive administration | Allowed | `403` | `403` | `403` | `403` |
 
-`readonly` users are intended for review-only access. `parent` users can manage
-normal care documentation but cannot administer imports, resets, migrations,
-users, or care-party assignments. `admin` users can perform those
-administrative actions when request input is valid. Calendar feed bearer tokens
-never authenticate general API routes.
+Calendar feed bearer tokens never authenticate general API routes. Scheduler
+and viewer clients use dedicated summary and schedule endpoints; sensitive
+fields are removed before serialization rather than hidden by the browser.
 
-Application memberships, when present, override identity-provider group-derived
-roles for known app users. Without an active membership, trusted-proxy and
-native OIDC deployments keep using the configured group mapping as the
-compatibility fallback.
+Before an owner exists, configured identity-provider groups provide the legacy
+compatibility role. Once `setup.ownerUserId` exists, the latest membership
+record is authoritative: an active membership grants its workspace role, a
+deleted membership revokes access, and a missing membership grants no workspace
+access. There is no post-setup fallback to identity-provider groups.
 
 Member administration is owner-scoped. Once `setup.ownerUserId` exists, only
 that app user can create or revoke invitations and change application
-membership roles. Existing installations without an explicit owner keep an
-admin fallback so upgrades remain operable until ownership is set.
+membership roles. Existing installations without an explicit owner keep the
+pre-owner compatibility path until ownership is claimed explicitly.
 
 Application invitations use one-time bearer tokens. The server stores only a
 SHA-256 token hash, expiry, revocation status, target role, and acceptance
