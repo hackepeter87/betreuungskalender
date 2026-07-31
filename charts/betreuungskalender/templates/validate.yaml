@@ -1,0 +1,21 @@
+{{- if ne (int .Values.replicaCount) 1 }}
+{{- fail "replicaCount must be 1 because one SQLite database cannot be shared by active application replicas" }}
+{{- end }}
+{{- if ne .Values.strategy.type "Recreate" }}
+{{- fail "strategy.type must be Recreate to prevent concurrent SQLite writers during upgrades" }}
+{{- end }}
+{{- if not .Values.persistence.data.enabled }}
+{{- fail "persistence.data.enabled must be true for a durable deployment" }}
+{{- end }}
+{{- if not (hasPrefix (printf "%s/" (trimSuffix "/" .Values.persistence.data.mountPath)) .Values.runtime.databasePath) }}
+{{- fail "runtime.databasePath must be located below persistence.data.mountPath" }}
+{{- end }}
+{{- if ne (trimSuffix "/" .Values.runtime.backupDir) (trimSuffix "/" .Values.persistence.backups.mountPath) }}
+{{- fail "runtime.backupDir must match persistence.backups.mountPath" }}
+{{- end }}
+{{- if ne (trimSuffix "/" .Values.runtime.tmpDir) (trimSuffix "/" .Values.persistence.tmp.mountPath) }}
+{{- fail "runtime.tmpDir must match persistence.tmp.mountPath" }}
+{{- end }}
+{{- if and .Values.ingress.enabled (eq (len .Values.ingress.hosts) 0) }}
+{{- fail "ingress.hosts must contain at least one host when ingress is enabled" }}
+{{- end }}

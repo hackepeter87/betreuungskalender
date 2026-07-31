@@ -10,6 +10,8 @@ The repository supports three container paths:
   runtime behind oauth2-proxy on one exposed host port.
 - Published GHCR release images for operators that want to pull an immutable
   image instead of building the release runtime from an extracted archive.
+- The application Helm chart in `charts/betreuungskalender` for Kubernetes;
+  see [deployment-helm.md](deployment-helm.md).
 - `deploy/compose.testing.yml` and `deploy/compose.production.yml` for
   image-based testing and production channels
   where machines pull `testing` or `production` without local image builds.

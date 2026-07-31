@@ -12,12 +12,32 @@ import {
   hasChangelogRelease,
   hasReadmeReleaseLink,
   hasReleaseNotesHeading,
+  helmChartAppVersion,
   isImageOutsideScreenshotDirectory,
   parseEnvValue,
   isValidSemver,
   releaseNotesPathForVersion,
+  releaseArchiveIncludesHelmChart,
   releaseTagForVersion
 } from "./release-check.js";
+
+test("reads Helm appVersion and requires the chart in release archives", () => {
+  assert.equal(helmChartAppVersion('appVersion: "1.19.0"\n'), "1.19.0");
+  assert.equal(helmChartAppVersion("appVersion: 1.19.0\n"), "1.19.0");
+  assert.equal(helmChartAppVersion("version: 0.1.0\n"), undefined);
+  assert.equal(
+    releaseArchiveIncludesHelmChart(
+      "dist dist-server scripts deploy charts Dockerfile.release package.json"
+    ),
+    true
+  );
+  assert.equal(
+    releaseArchiveIncludesHelmChart(
+      "dist dist-server scripts deploy Dockerfile.release package.json"
+    ),
+    false
+  );
+});
 
 function serviceBlock(composeContent, serviceName) {
   const lines = composeContent.split(/\r?\n/);

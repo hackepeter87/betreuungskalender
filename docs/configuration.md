@@ -1,5 +1,11 @@
 # Configuration
 
+Kubernetes installations can provide every variable below through the Helm
+chart's non-sensitive `config`, `extraEnv`, or `extraEnvFrom` values. Keep
+credentials in existing Kubernetes Secrets and reference them with
+`secretKeyRef` or `secretRef`; do not place secret values in Helm values or the
+generated ConfigMap. See [deployment-helm.md](deployment-helm.md).
+
 Configuration is read from environment variables. `dotenv` loads a local
 `.env` file when present. Never commit production `.env` files.
 

@@ -105,6 +105,8 @@ const CRITICAL_PROJECT_PATHS = [
   "docs/native-oidc-keycloak-podman.md",
   "docs/native-oidc-migration-rollback.md",
   "docs/image-promotion.md",
+  "docs/deployment-helm.md",
+  "docs/adr/0006-kubernetes-helm-deployment.md",
   "docs/release.md",
   "deploy/.env.oidc.example",
   "deploy/compose.yml",
@@ -119,6 +121,10 @@ const CRITICAL_PROJECT_PATHS = [
   ".github/workflows/promote-testing.yml",
   ".github/workflows/promote-production.yml",
   ".github/actions/validate-container/action.yml",
+  "charts/betreuungskalender/Chart.yaml",
+  "charts/betreuungskalender/values.yaml",
+  "charts/betreuungskalender/values.schema.json",
+  "charts/betreuungskalender/README.md",
   ".env.example"
 ];
 
@@ -239,6 +245,14 @@ export function releaseTagForVersion(version) {
 
 export function releaseNotesPathForVersion(version) {
   return `docs/release-notes/${releaseTagForVersion(version)}.md`;
+}
+
+export function helmChartAppVersion(content) {
+  return content.match(/^appVersion:\s*["']?([^"'\s]+)["']?\s*$/m)?.[1];
+}
+
+export function releaseArchiveIncludesHelmChart(content) {
+  return /\bdist dist-server scripts deploy charts Dockerfile\.release\b/.test(content);
 }
 
 export function hasChangelogRelease(content, version) {
@@ -648,6 +662,77 @@ function checkDeploymentExamples(cwd, version, report) {
   }
 }
 
+function checkHelmDeployment(cwd, packageJson, version, report) {
+  let chart;
+  let values;
+  let schema;
+  let deployment;
+  let chartDocs;
+  let deploymentDocs;
+  let releaseWorkflow;
+  try {
+    chart = readFileSync(resolve(cwd, "charts", "betreuungskalender", "Chart.yaml"), "utf8");
+    values = readFileSync(resolve(cwd, "charts", "betreuungskalender", "values.yaml"), "utf8");
+    schema = readFileSync(
+      resolve(cwd, "charts", "betreuungskalender", "values.schema.json"),
+      "utf8"
+    );
+    deployment = readFileSync(
+      resolve(cwd, "charts", "betreuungskalender", "templates", "deployment.yaml"),
+      "utf8"
+    );
+    chartDocs = readFileSync(
+      resolve(cwd, "charts", "betreuungskalender", "README.md"),
+      "utf8"
+    );
+    deploymentDocs = readFileSync(resolve(cwd, "docs", "deployment-helm.md"), "utf8");
+    releaseWorkflow = readFileSync(
+      resolve(cwd, ".github", "workflows", "release.yml"),
+      "utf8"
+    );
+  } catch {
+    report.fail("Helm chart, documentation, or release integration could not be read");
+    return;
+  }
+
+  if (!version || helmChartAppVersion(chart) !== version) {
+    report.fail(`Helm chart appVersion must match package.json version ${version ?? "<unknown>"}`);
+  } else {
+    report.pass("Helm chart appVersion matches package.json version");
+  }
+
+  const requiredControls = [
+    [schema, '"const": 1'],
+    [schema, '"const": "Recreate"'],
+    [values, "readOnlyRootFilesystem: true"],
+    [values, "runAsNonRoot: true"],
+    [deployment, "startupProbe:"],
+    [deployment, "readinessProbe:"],
+    [deployment, "livenessProbe:"],
+    [chartDocs, "POSIX file-locking"],
+    [deploymentDocs, "cannot reverse database migrations"]
+  ];
+  const missingControls = requiredControls.filter(([content, text]) => !content.includes(text));
+  if (missingControls.length) {
+    report.fail(
+      "Helm deployment is missing required SQLite or container controls",
+      missingControls.map(([, text]) => `  - ${text}`)
+    );
+  } else {
+    report.pass("Helm deployment defines SQLite and non-root container controls");
+  }
+
+  if (packageJson.scripts?.["test:helm"] !== "bash scripts/helm-chart-test.sh") {
+    report.fail("package.json must define the Helm chart validation script");
+  } else if (!releaseWorkflow.includes("npm run test:helm")) {
+    report.fail("release workflow must validate the Helm chart before packaging");
+  } else if (!releaseArchiveIncludesHelmChart(releaseWorkflow)) {
+    report.fail("release workflow must include the Helm chart in the runtime archive");
+  } else {
+    report.pass("Helm chart validation and release archive integration are configured");
+  }
+}
+
 function checkGitRepository(cwd, options, report) {
   const repository = runGit(["rev-parse", "--is-inside-work-tree"], cwd);
   if (repository.status !== 0 || (repository.stdout ?? "").trim() !== "true") {
@@ -846,6 +931,7 @@ export function main(argv = process.argv.slice(2), cwd = process.cwd()) {
   options.version = checkPackageVersion(packageJson, report);
   checkReleaseMetadata(cwd, packageJson, options.version, report);
   checkDeploymentExamples(cwd, options.version, report);
+  checkHelmDeployment(cwd, packageJson, options.version, report);
   const hasGitRepository = checkGitRepository(cwd, options, report);
   checkGitignore(cwd, hasGitRepository, report);
   checkDockerignore(cwd, report);

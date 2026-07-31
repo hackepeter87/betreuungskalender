@@ -1,0 +1,54 @@
+image:
+  repository: ghcr.io/hackepeter87/betreuungskalender
+  tag: "1.19.0"
+  pullPolicy: IfNotPresent
+
+config:
+  AUTH_MODE: native-oidc
+  REQUIRE_AUTH: "true"
+  TRUST_PROXY_AUTH: "false"
+  ALLOWED_ORIGIN: https://calendar.example.net
+  OIDC_ISSUER_URL: https://idp.example.net/realms/example
+  OIDC_CLIENT_ID: betreuungskalender
+  OIDC_REDIRECT_URI: https://calendar.example.net/auth/callback
+  OIDC_POST_LOGOUT_REDIRECT_URI: https://calendar.example.net/
+  OIDC_SCOPES: openid email profile
+  OIDC_GROUPS_CLAIM: groups
+  OIDC_REQUIRE_ROLE_CLAIM: "true"
+  INVITATION_PUBLIC_BASE_URL: https://calendar.example.net
+
+extraEnv:
+  - name: OIDC_CLIENT_SECRET
+    valueFrom:
+      secretKeyRef:
+        name: betreuungskalender-runtime-secrets
+        key: oidc-client-secret
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: calendar.example.net
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: calendar-example-net-tls
+      hosts:
+        - calendar.example.net
+
+persistence:
+  data:
+    storageClass: standard
+    size: 5Gi
+  backups:
+    enabled: true
+    storageClass: standard
+    size: 10Gi
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi

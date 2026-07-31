@@ -1,0 +1,10 @@
+1. Verify the application pod and readiness endpoint:
+
+   kubectl get pods -l app.kubernetes.io/instance={{ .Release.Name }}
+   kubectl port-forward service/{{ include "betreuungskalender.fullname" . }} 3000:{{ .Values.service.port }}
+   curl http://127.0.0.1:3000/api/ready
+
+2. The release uses SQLite and must remain at one replica. Multiple independent
+   releases are supported because all names and claims are release-scoped.
+
+3. {{- if .Values.ingress.enabled }} The configured ingress exposes the application.{{ else }} Ingress is disabled. Configure ingress.hosts and TLS before public use.{{ end }}

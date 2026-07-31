@@ -17,7 +17,7 @@ travel, costs, holidays, and unavailable periods.
   authentication, trusted-proxy compatibility, RRULE-compatible contact rules
   with calendar synchronization, care parties, scoped calendar feeds,
   responsive mobile support, backup/restore tooling, release archives, and GHCR
-  release images
+  release images, plus a validated Kubernetes Helm chart
 - Roadmap and work tracking: [GitHub milestones and issues](https://github.com/hackepeter87/betreuungskalender/milestones)
 - Stability target: stable self-hosted release line with roadmap work tracked in
   GitHub milestones
@@ -30,7 +30,7 @@ Example dashboard using fictional demonstration data. No real personal data is
 included in repository screenshots.
 
 [Features](#features) · [Development](#development-quick-start) ·
-[Container](#container-quick-start) · [Image Promotion](docs/image-promotion.md) · [Updates](docs/update.md) · [systemd/LXC](#lxcsystemd-quick-start) ·
+[Container](#container-quick-start) · [Helm](#kuberneteshelm-quick-start) · [Image Promotion](docs/image-promotion.md) · [Updates](docs/update.md) · [systemd/LXC](#lxcsystemd-quick-start) ·
 [First-use setup](docs/self-hosted-onboarding.md) ·
 [Configuration](docs/configuration.md) · [Security](docs/security.md) ·
 [Security baseline](docs/security-baseline.md) · [Security review](docs/security-review.md) ·
@@ -158,6 +158,25 @@ asset when deploying by image instead of rebuilding from the release archive.
 
 Docker and rootless Podman instructions:
 [docs/deployment-container.md](docs/deployment-container.md)
+
+## Kubernetes/Helm quick start
+
+The application chart deploys one non-root application pod with a release-scoped
+SQLite PVC, read-only root filesystem, startup/readiness/liveness probes,
+optional ingress and TLS, and configurable scheduling controls:
+
+```bash
+npm run test:helm
+helm upgrade --install family-calendar charts/betreuungskalender \
+  --namespace family-calendar --create-namespace \
+  --values private-values.yaml --wait
+helm test family-calendar --namespace family-calendar
+```
+
+SQLite requires exactly one application pod per release. Multiple independent
+releases are supported and receive separate resource and claim names. Complete
+configuration, storage, security and upgrade guidance:
+[docs/deployment-helm.md](docs/deployment-helm.md)
 
 ## LXC/systemd quick start
 
@@ -409,6 +428,7 @@ smoke-tests the container without publishing it. See the complete
 npm run lint
 npm run test
 npm run build
+npm run test:helm
 npm run release:check
 ```
 

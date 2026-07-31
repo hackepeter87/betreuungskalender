@@ -1,0 +1,16 @@
+{{- if .Values.config }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "betreuungskalender.fullname" . }}
+  labels:
+    {{- include "betreuungskalender.labels" . | nindent 4 }}
+  {{- with .Values.configMapAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+data:
+  {{- range $key, $value := .Values.config }}
+  {{ $key }}: {{ printf "%v" $value | quote }}
+  {{- end }}
+{{- end }}

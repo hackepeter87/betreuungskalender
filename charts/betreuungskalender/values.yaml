@@ -1,0 +1,161 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/hackepeter87/betreuungskalender
+  tag: ""
+  # When set, digest takes precedence over tag. Example: sha256:...
+  digest: ""
+  pullPolicy: IfNotPresent
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+commonLabels: {}
+configMapAnnotations: {}
+deploymentAnnotations: {}
+podLabels: {}
+podAnnotations: {}
+
+serviceAccount:
+  create: true
+  automountServiceAccountToken: false
+  annotations: {}
+  name: ""
+
+runtime:
+  nodeEnv: production
+  host: 0.0.0.0
+  port: 3000
+  databasePath: /data/app.sqlite
+  backupDir: /backups
+  tmpDir: /tmp
+
+# Non-sensitive application environment variables. See docs/configuration.md.
+# Production authentication is intentionally not selected by the chart. A
+# deployment without an explicit secure authentication configuration fails
+# closed at application startup.
+config: {}
+
+# Use Kubernetes Secret or ConfigMap references for credentials and other
+# externally managed values. Do not put secret values in this file.
+extraEnv: []
+extraEnvFrom: []
+
+ownerSetupSecret:
+  existingSecret: ""
+  key: owner-setup-token
+
+recoveryAdminSecret:
+  existingSecret: ""
+  key: recovery-admin-password
+
+service:
+  type: ClusterIP
+  port: 3000
+  annotations: {}
+  labels: {}
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  labels: {}
+  hosts: []
+  tls: []
+
+persistence:
+  data:
+    enabled: true
+    existingClaim: ""
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 2Gi
+    annotations: {}
+    retain: true
+    mountPath: /data
+  backups:
+    enabled: false
+    existingClaim: ""
+    storageClass: ""
+    accessModes:
+      - ReadWriteOnce
+    size: 5Gi
+    annotations: {}
+    retain: true
+    mountPath: /backups
+  tmp:
+    mountPath: /tmp
+    sizeLimit: 256Mi
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  fsGroup: 1000
+  fsGroupChangePolicy: OnRootMismatch
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 1000
+  runAsGroup: 1000
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    memory: 512Mi
+
+startupProbe:
+  enabled: true
+  path: /api/ready
+  initialDelaySeconds: 2
+  periodSeconds: 5
+  timeoutSeconds: 4
+  failureThreshold: 30
+  successThreshold: 1
+
+livenessProbe:
+  enabled: true
+  path: /api/health
+  initialDelaySeconds: 0
+  periodSeconds: 20
+  timeoutSeconds: 5
+  failureThreshold: 6
+  successThreshold: 1
+
+readinessProbe:
+  enabled: true
+  path: /api/ready
+  initialDelaySeconds: 0
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+  successThreshold: 1
+
+strategy:
+  type: Recreate
+
+terminationGracePeriodSeconds: 30
+revisionHistoryLimit: 3
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+topologySpreadConstraints: []
+
+extraVolumes: []
+extraVolumeMounts: []
+
+helmTest:
+  enabled: true
+  annotations: {}

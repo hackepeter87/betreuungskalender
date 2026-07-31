@@ -1,0 +1,49 @@
+{{- if and .Values.persistence.data.enabled (not .Values.persistence.data.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "betreuungskalender.dataClaimName" . }}
+  labels:
+    {{- include "betreuungskalender.labels" . | nindent 4 }}
+  annotations:
+    {{- if .Values.persistence.data.retain }}
+    helm.sh/resource-policy: keep
+    {{- end }}
+    {{- with .Values.persistence.data.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.data.accessModes | nindent 4 }}
+  {{- if .Values.persistence.data.storageClass }}
+  storageClassName: {{ .Values.persistence.data.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.data.size }}
+---
+{{- end }}
+{{- if and .Values.persistence.backups.enabled (not .Values.persistence.backups.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "betreuungskalender.backupClaimName" . }}
+  labels:
+    {{- include "betreuungskalender.labels" . | nindent 4 }}
+  annotations:
+    {{- if .Values.persistence.backups.retain }}
+    helm.sh/resource-policy: keep
+    {{- end }}
+    {{- with .Values.persistence.backups.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  accessModes:
+    {{- toYaml .Values.persistence.backups.accessModes | nindent 4 }}
+  {{- if .Values.persistence.backups.storageClass }}
+  storageClassName: {{ .Values.persistence.backups.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.persistence.backups.size }}
+{{- end }}
