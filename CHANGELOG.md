@@ -6,6 +6,14 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.20.1] - 2026-08-05
+
+### Changed
+
+- Updated affected transitive dependencies to maintained patch versions.
+- Made recurring-rule and selected-month browser tests independent of the
+  current calendar month.
+
 ## [1.20.0] - 2026-07-31
 
 ### Added
