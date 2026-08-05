@@ -96,6 +96,7 @@ test("keeps mobile agenda scoped to the selected month", async ({
 
   await openApp(page);
   await navigate(page, "calendar");
+  await page.getByTestId("month-picker").fill("2026-07");
   await expect(page.getByTestId("calendar-view-agenda")).toHaveClass(/is-active/);
   await expect(page.getByText("Juli 2026").first()).toBeVisible();
   await expect(page.getByText("Osterferien 2026 Nordrhein-Westfalen")).toHaveCount(0);
@@ -173,6 +174,7 @@ test("keeps critical mobile pages within the viewport", async ({
 
   await openApp(page);
   await navigate(page, "calendar");
+  await page.getByTestId("month-picker").fill("2026-07");
   await expect(page.getByTestId("mobile-entry-create")).toHaveCount(0);
   await expect(page.getByTestId("calendar-add-entry")).toBeVisible();
   const unavailableRange = page.locator('[data-testid^="agenda-unavailable-range-"]').first();

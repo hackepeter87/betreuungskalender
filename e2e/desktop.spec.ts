@@ -1276,6 +1276,7 @@ test("generates recurring weekend contact dates and shows them in the calendar",
   await navigate(page, "contact");
   await expect(page.getByTestId("page-contact")).toBeVisible();
   await page.getByTestId("contact-pattern-start-date").fill("2026-07-03");
+  await page.getByTestId("contact-pattern-end-date").fill("2026-07-31");
   await page.getByTestId("contact-pattern-friday-start-time").fill("16:00");
   await page.getByTestId("contact-pattern-sunday-end-time").fill("18:00");
   await page.getByTestId("contact-generation-start").fill("2026-07-01");
@@ -1315,7 +1316,7 @@ test("generates recurring weekend contact dates and shows them in the calendar",
   const julyGeneratedEntries = generatedEntries.filter((entry) =>
     entry.startDateTime.startsWith("2026-07")
   );
-  expect(generatedEntries.length).toBeGreaterThan(julyGeneratedEntries.length);
+  expect(generatedEntries).toHaveLength(3);
   expect(julyGeneratedEntries).toHaveLength(3);
   expect(generatedEntries.every((entry) => entry.status === "planned")).toBe(
     true
@@ -1487,6 +1488,7 @@ test("uses a weekly multi-day contact rule builder with calendar preview", async
   await page.getByTestId("contact-recurrence-frequency").selectOption("weekly");
   await page.getByTestId("contact-recurrence-interval").fill("1");
   await page.getByTestId("contact-pattern-start-date").fill("2026-07-01");
+  await page.getByTestId("contact-pattern-end-date").fill("2026-07-31");
   await page.getByTestId("contact-pattern-friday-start-time").fill("15:00");
   await page.getByTestId("contact-pattern-sunday-end-time").fill("18:00");
   const wednesday = page.getByTestId("contact-weekday-WE");
