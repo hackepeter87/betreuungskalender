@@ -117,9 +117,7 @@ recorded checksum.
 Publishing a non-draft `v*` release starts
 `.github/workflows/publish-release-image.yml`. That workflow re-checks the
 tagged release, validates the release runtime image, publishes
-`Dockerfile.release` to GitHub Container Registry and the private central
-Harbor registry, publishes the matching Helm chart as an OCI artifact to
-Harbor, and uploads
+`Dockerfile.release` to GitHub Container Registry, and uploads
 `betreuungskalender-vX.Y.Z.image-digest.txt` to the release.
 
 The GHCR workflow uses `GITHUB_TOKEN` with `packages: write` only in the image
@@ -127,24 +125,10 @@ publish job. It also needs `contents: write` in that job so it can attach the
 image digest file to the GitHub release. Keep the general release validation
 workflow read-only.
 
-Harbor publication uses the repository secrets `HARBOR_USERNAME` and
-`HARBOR_PASSWORD`. They contain only the dedicated
-`robot$github-betreuungskalender-push` identity and its secret. That robot has
-pull/push access to the Harbor projects `applications` and `charts`, but no
-delete, administrative, scan or system permissions. The workflow never uses
-the Harbor administrator account.
-
 Published image tags:
 
 - `ghcr.io/hackepeter87/betreuungskalender:vX.Y.Z`
 - `ghcr.io/hackepeter87/betreuungskalender:X.Y.Z`
-- `harbor.mgmt.huneck.org/applications/betreuungskalender:vX.Y.Z`
-- `harbor.mgmt.huneck.org/applications/betreuungskalender:X.Y.Z`
-
-The matching OCI chart is published as
-`oci://harbor.mgmt.huneck.org/charts/betreuungskalender:X.Y.Z`. The packaged
-chart version and `appVersion` are derived from the release tag; no credential
-or private values file is embedded in the artifact.
 
 Release publication does not update `latest`. `latest` is reserved as an alias
 for the current production digest and is moved only by **Promote production
