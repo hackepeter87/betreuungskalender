@@ -660,6 +660,29 @@ function checkDeploymentExamples(cwd, version, report) {
   } else {
     report.pass("promotion workflows retag immutable release images");
   }
+
+  const harborPublicationRequired = [
+    "harbor.mgmt.huneck.org",
+    "applications/betreuungskalender",
+    "HARBOR_USERNAME",
+    "HARBOR_PASSWORD",
+    "docker/login-action@v4",
+    "helm registry login",
+    "helm package charts/betreuungskalender",
+    "helm push",
+    "oci://${HARBOR_REGISTRY}/${HARBOR_CHART_REPOSITORY}"
+  ];
+  const missingHarborPublication = harborPublicationRequired.filter(
+    (text) => !publishReleaseImageWorkflow.includes(text)
+  );
+  if (missingHarborPublication.length) {
+    report.fail(
+      "release workflow is missing required Harbor OCI publication",
+      missingHarborPublication.map((text) => `  - ${text}`)
+    );
+  } else {
+    report.pass("release workflow publishes images and Helm charts to Harbor");
+  }
 }
 
 function checkHelmDeployment(cwd, packageJson, version, report) {

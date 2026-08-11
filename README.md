@@ -16,8 +16,9 @@ travel, costs, holidays, and unavailable periods.
   memberships and invitations, optional invitation email delivery, native OIDC
   authentication, trusted-proxy compatibility, RRULE-compatible contact rules
   with calendar synchronization, care parties, scoped calendar feeds,
-  responsive mobile support, backup/restore tooling, release archives, and GHCR
-  release images, plus a validated Kubernetes Helm chart
+  responsive mobile support, backup/restore tooling, release archives, GHCR
+  and private Harbor release images, plus a validated OCI-capable Kubernetes
+  Helm chart
 - Roadmap and work tracking: [GitHub milestones and issues](https://github.com/hackepeter87/betreuungskalender/milestones)
 - Stability target: stable self-hosted release line with roadmap work tracked in
   GitHub milestones
