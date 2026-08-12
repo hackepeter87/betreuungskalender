@@ -1,10 +1,12 @@
 # Updates and rollback
 
-The supported production update path is Docker Compose with immutable,
-checksummed release archives. The update tool is intentionally external to the
-running application: it verifies the archive, creates and validates a SQLite
-backup, changes the active release, waits for readiness, and rolls back both
-the runtime and the matching database backup if validation fails.
+The project supports both checksummed release archives and promoted GHCR images
+for production updates. The automated update tool manages only the archive
+layout. It is intentionally external to the running application: it verifies
+the archive, creates and validates a SQLite backup, changes the active release,
+waits for readiness, and rolls back both the runtime and the matching database
+backup if validation fails. Image-based updates use the separate manual flow
+documented below.
 
 It never attempts reverse database migrations.
 
@@ -50,9 +52,14 @@ APP_RELEASE_VERSION=X.Y.Z
 APP_RELEASE_DIR=/opt/svc_betreuung/betreuungskalender/releases/vX.Y.Z
 HOST_BIND_ADDRESS=127.0.0.1
 HOST_PORT=3000
-AUTH_MODE=trusted-proxy
+AUTH_MODE=native-oidc
 REQUIRE_AUTH=true
-TRUST_PROXY_AUTH=true
+TRUST_PROXY_AUTH=false
+OIDC_ISSUER_URL=https://idp.example.net/realms/example
+OIDC_CLIENT_ID=betreuungskalender
+OIDC_CLIENT_SECRET=CHANGE_ME
+OIDC_REDIRECT_URI=https://betreuung.example.net/auth/callback
+OIDC_POST_LOGOUT_REDIRECT_URI=https://betreuung.example.net/
 ALLOWED_ORIGIN=https://betreuung.example.net
 LOG_LEVEL=info
 RATE_LIMIT_MAX=120
@@ -179,7 +186,7 @@ For image-based deployments, use `deploy/compose.testing.yml` or
 `deploy/compose.production.yml` and the promotion channels documented in
 [image-promotion.md](image-promotion.md):
 
-- `testing` for `bk-demo.saas-lab.de`;
+- `testing` for a non-production test installation;
 - `production` for production;
 - `latest` as a production convenience alias moved only with `production`.
 

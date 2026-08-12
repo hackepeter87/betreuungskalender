@@ -341,7 +341,7 @@ test("direct Compose example does not trust proxy identity headers", () => {
   assert.match(imagePromotionDocs, /deploy\/compose\.testing\.yml/);
   assert.match(imagePromotionDocs, /deploy\/compose\.production\.yml/);
   assert.match(imagePromotionDocs, /latest.*production promotion workflow/s);
-  assert.match(imagePromotionDocs, /bk-demo\.saas-lab\.de/);
+  assert.match(imagePromotionDocs, /app\.testing\.example\.net/);
   assert.match(promoteTestingWorkflow, /docker buildx imagetools create/);
   assert.match(promoteTestingWorkflow, /--prefer-index=false/);
   assert.match(promoteTestingWorkflow, /target_ref=.*:testing/);

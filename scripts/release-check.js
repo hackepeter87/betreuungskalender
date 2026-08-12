@@ -596,7 +596,7 @@ function checkDeploymentExamples(cwd, version, report) {
     "deploy/compose.production.yml",
     "latest",
     "updated only by the production promotion workflow",
-    "bk-demo.saas-lab.de",
+    "app.testing.example.net",
     "podman-compose --env-file app.env -f compose.yml pull",
     "runtime-verify.js --expected-version X.Y.Z"
   ];
