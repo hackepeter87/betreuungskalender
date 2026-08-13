@@ -187,11 +187,11 @@ Production image updates must still run a backup and restore check before
 pulling the promoted image:
 
 ```bash
-podman-compose --env-file app.env -f compose.yml exec betreuungskalender npm run backup
-podman-compose --env-file app.env -f compose.yml exec betreuungskalender npm run restore:check
+podman-compose --env-file app.env -f compose.yml exec betreuungskalender /nodejs/bin/node scripts/backup.js
+podman-compose --env-file app.env -f compose.yml exec betreuungskalender /nodejs/bin/node scripts/restore-check.js
 podman-compose --env-file app.env -f compose.yml pull
 podman-compose --env-file app.env -f compose.yml up -d --force-recreate
-podman exec APP_CONTAINER node scripts/runtime-verify.js --expected-version X.Y.Z
+podman exec APP_CONTAINER /nodejs/bin/node scripts/runtime-verify.js --expected-version X.Y.Z
 ```
 
 Retain the same `./data:/data` and `./backups:/backups` persistence boundary.
@@ -238,13 +238,13 @@ The tool performs these ordered steps:
 1. checks the active layout, Docker Compose availability, disk space, release
    directory, and the update lock;
 2. validates the archive checksum, contents, and package version;
-3. runs `npm run backup` and `npm run restore:check` inside the current
+3. runs the bundled `backup.js` and `restore-check.js` scripts inside the current
    container, then stores a mode-`0600` snapshot of `.env` and metadata next
    to the verified SQLite backup. The metadata never contains configuration
    values, but the private configuration snapshot may contain secrets;
 4. extracts the verified archive to `releases/vX.Y.Z`, updates only
    `APP_RELEASE_DIR` and `APP_RELEASE_VERSION`, and starts Compose;
-5. repeatedly runs `npm run verify:runtime` in the container. This confirms
+5. repeatedly runs the bundled `runtime-verify.js` script in the container. This confirms
    `/api/health`, `/api/ready`, the expected version, SQLite integrity, and
    recorded migrations; and
 6. records the successfully verified runtime state.
@@ -284,7 +284,8 @@ not retry the update blindly. Recover manually:
 4. remove only the matching `app.sqlite-wal` and `app.sqlite-shm` sidecars;
 5. set `APP_RELEASE_DIR` and `APP_RELEASE_VERSION` back to the prior verified
    release in `.env`;
-6. start Compose and run `npm run verify:runtime -- --expected-version X.Y.Z`;
+6. start Compose and run `/nodejs/bin/node scripts/runtime-verify.js --expected-version X.Y.Z`
+   inside the application container;
 7. retain the failed archive, backup metadata, and update log for diagnosis.
 
 Never delete migration rows or edit SQLite files while the service is running.

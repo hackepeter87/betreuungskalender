@@ -75,15 +75,20 @@ if (command === "up") {
   process.exit(0);
 }
 if (command !== "exec") process.exit(1);
-if (args.includes("backup")) {
+if (args.includes("--version")) {
+  const target = env.includes("APP_RELEASE_VERSION=0.5.0");
+  if (!target && args.includes("/nodejs/bin/node")) process.exit(1);
+  process.exit(0);
+}
+if (args.includes("scripts/backup.js")) {
   writeFileSync(resolve(root, "backups", "betreuungskalender-sqlite-2026-01-01T00-00-00Z.sqlite"), "synthetic-backup");
   process.exit(0);
 }
-if (args.includes("restore:check")) {
+if (args.includes("scripts/restore-check.js")) {
   if (process.env.UPDATE_TEST_FAIL_BACKUP === "true") process.exit(1);
   process.exit(0);
 }
-if (args.includes("verify:runtime")) {
+if (args.includes("scripts/runtime-verify.js")) {
   const target = env.includes("APP_RELEASE_VERSION=0.5.0");
   if (target && process.env.UPDATE_TEST_FAIL_TARGET === "true") process.exit(1);
   process.exit(0);
@@ -167,6 +172,12 @@ test("synthetic Compose upgrade verifies backup and records the active release",
     assert.equal(state.rollbackBackup, "betreuungskalender-sqlite-2026-01-01T00-00-00Z.sqlite");
     assert.match(state.configurationBackup, /^update-.*\.env$/);
     assert.match(await readFile(resolve(root, "backups", state.configurationBackup), "utf8"), /REQUIRE_AUTH=true/);
+    const composeLog = await readFile(resolve(root, "fake-docker.log"), "utf8");
+    assert.match(composeLog, /exec -T betreuungskalender node scripts\/backup\.js/);
+    assert.match(
+      composeLog,
+      /exec -T betreuungskalender \/nodejs\/bin\/node scripts\/runtime-verify\.js --expected-version 0\.5\.0/
+    );
   });
 });
 

@@ -20,7 +20,7 @@ services:
       - ./data:/data
       - ./backups:/backups
     healthcheck:
-      test: ["CMD", "node", "scripts/healthcheck.js"]
+      test: ["CMD", "/nodejs/bin/node", "scripts/healthcheck.js"]
       interval: 30s
       timeout: 5s
       retries: 3

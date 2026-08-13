@@ -190,14 +190,14 @@ After starting the stack:
 1. Confirm the app healthcheck from inside the container.
 
    ```bash
-   podman exec betreuungskalender_betreuungskalender_1 node scripts/healthcheck.js
+   podman exec betreuungskalender_betreuungskalender_1 /nodejs/bin/node scripts/healthcheck.js
    ```
 
 2. Confirm runtime version and migrations.
 
    ```bash
    podman-compose --env-file .env -f compose.yml exec betreuungskalender \
-     npm run verify:runtime -- --expected-version X.Y.Z
+     /nodejs/bin/node scripts/runtime-verify.js --expected-version X.Y.Z
    ```
 
 3. Open `https://app.example.net` in a private browser session and confirm the

@@ -16,12 +16,17 @@ The repository supports three container paths:
   image-based testing and production channels
   where machines pull `testing` or `production` without local image builds.
 
-Both runtime images use Node.js 24 LTS and explicitly install npm 11.18.0 with
-npm update notifications disabled. They install production dependencies only,
-run as the unprivileged `node` user, and include a healthcheck. The container
-entrypoint starts the Fastify server directly with `node` instead of
-`npm run start`, so normal container startup logs do not contain npm
-update-notifier messages.
+Both runtime images use a digest-pinned minimal Node.js 24 runtime. Build tools,
+the package manager, and a shell remain in build stages and are not copied into
+the final image. The runtime installs production dependencies only, keeps the
+existing numeric UID/GID `1000`, and includes a direct Node.js healthcheck. This
+reduces the runtime package surface and avoids package-manager output during
+normal startup.
+
+Because the final image intentionally has no shell or package manager, run the
+included maintenance scripts with `/nodejs/bin/node`. Container debugging that
+requires a shell must use a separate, temporary diagnostic container; do not
+add debugging tools to the application image.
 
 GitHub Actions builds the image and starts a disposable container on relevant
 pull requests and pushes. Validation succeeds only after the container's
@@ -321,7 +326,7 @@ cd /opt/svc_betreuung/betreuungskalender
 podman-compose --env-file .env -f compose.oidc.yml ps
 
 # App health from inside the private network/container.
-podman exec betreuungskalender_betreuungskalender_1 node scripts/healthcheck.js
+podman exec betreuungskalender_betreuungskalender_1 /nodejs/bin/node scripts/healthcheck.js
 
 # oauth2-proxy listener on the single exposed local host port.
 curl -fsSI http://127.0.0.1:8080/oauth2/start
@@ -335,7 +340,7 @@ Container names can differ by Compose implementation. Use
 
 ### OIDC troubleshooting checklist
 
-- App container health: run `podman exec APP_CONTAINER node scripts/healthcheck.js`
+- App container health: run `podman exec APP_CONTAINER /nodejs/bin/node scripts/healthcheck.js`
   and inspect `podman inspect APP_CONTAINER`.
 - oauth2-proxy config parse errors: run `podman start -a OAUTH2_CONTAINER` to
   see the foreground startup error, then fix `oauth2-proxy.cfg`.
@@ -395,8 +400,8 @@ only on the Compose network.
 ## Backup
 
 ```bash
-docker compose exec betreuungskalender npm run backup
-docker compose exec betreuungskalender npm run restore:check
+docker compose exec betreuungskalender /nodejs/bin/node scripts/backup.js
+docker compose exec betreuungskalender /nodejs/bin/node scripts/restore-check.js
 ```
 
 Copy backups to protected external storage according to the container engine's
@@ -484,7 +489,7 @@ After starting an image-based deployment, run the same runtime verification as
 for archive deployments:
 
 ```bash
-podman exec betreuungskalender npm run verify:runtime -- --expected-version X.Y.Z
+podman exec betreuungskalender /nodejs/bin/node scripts/runtime-verify.js --expected-version X.Y.Z
 ```
 
 The image does not remove the need for a verified SQLite backup, restore test,
