@@ -26,7 +26,7 @@ auth mode:
 cd /opt/svc_betreuung/betreuungskalender
 podman-compose --env-file .env -f compose.oidc.yml ps
 podman-compose --env-file .env -f compose.oidc.yml exec betreuungskalender \
-  npm run verify:runtime -- --expected-version X.Y.Z
+  /nodejs/bin/node scripts/runtime-verify.js --expected-version X.Y.Z
 ```
 
 ## Back up configuration first
@@ -47,9 +47,9 @@ Also create and verify a SQLite backup before switching auth mode:
 
 ```bash
 podman-compose --env-file .env -f compose.oidc.yml exec betreuungskalender \
-  npm run backup
+  /nodejs/bin/node scripts/backup.js
 podman-compose --env-file .env -f compose.oidc.yml exec betreuungskalender \
-  npm run restore:check
+  /nodejs/bin/node scripts/restore-check.js
 ```
 
 Do not edit `oauth2-proxy.cfg` for the native rollout. Keeping it unchanged
@@ -129,7 +129,7 @@ Verify the runtime first:
 
 ```bash
 podman-compose --env-file .env -f compose.yml exec betreuungskalender \
-  npm run verify:runtime -- --expected-version X.Y.Z
+  /nodejs/bin/node scripts/runtime-verify.js --expected-version X.Y.Z
 ```
 
 Then verify authentication from a browser:
@@ -187,7 +187,7 @@ After rollback, verify:
 
 ```bash
 podman-compose --env-file .env -f compose.oidc.yml exec betreuungskalender \
-  npm run verify:runtime -- --expected-version X.Y.Z
+  /nodejs/bin/node scripts/runtime-verify.js --expected-version X.Y.Z
 ```
 
 Then open the public URL and confirm the old `/oauth2/start` and

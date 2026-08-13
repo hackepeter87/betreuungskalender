@@ -52,7 +52,7 @@ jobs:
         with:
           node-version: 24.18.0
           cache: npm
-      - run: npm install --global npm@11.18.0
+      - run: npm install --global npm@12.0.1
       - run: npm ci
       - run: npm run build
       - run: DOCKERFILE=Dockerfile.release bash scripts/container-smoke.sh

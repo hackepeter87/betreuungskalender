@@ -355,13 +355,26 @@ async function latestBackup(backupsPath, before) {
   return entries[0];
 }
 
+function containerNode(options) {
+  for (const executable of ["/nodejs/bin/node", "node"]) {
+    try {
+      compose(options, ["exec", "-T", options.service, executable, "--version"]);
+      return executable;
+    } catch {
+      // Release images before the minimal runtime used the Node binary from PATH.
+    }
+  }
+  fail(EXIT.PREFLIGHT, "The application container does not expose a supported Node.js runtime.");
+}
+
 async function createVerifiedBackup(options, previous) {
   const backupsPath = resolve(options.root, "backups");
   const before = new Set(await readdir(backupsPath));
   try {
-    compose(options, ["exec", "-T", options.service, "npm", "run", "backup"]);
+    const node = containerNode(options);
+    compose(options, ["exec", "-T", options.service, node, "scripts/backup.js"]);
     const backupFile = await latestBackup(backupsPath, before);
-    compose(options, ["exec", "-T", options.service, "npm", "run", "restore:check", "--", `/backups/${backupFile}`]);
+    compose(options, ["exec", "-T", options.service, node, "scripts/restore-check.js", `/backups/${backupFile}`]);
     const timestamp = new Date().toISOString().replaceAll(":", "-").replace(/\.\d{3}Z$/, "Z");
     const configFile = `update-${timestamp}.env`;
     const metadataFile = `update-${timestamp}.json`;
@@ -414,7 +427,8 @@ async function verifyRuntime(options, version) {
   let lastError;
   for (let attempt = 1; attempt <= options.healthRetries; attempt += 1) {
     try {
-      compose(options, ["exec", "-T", options.service, "npm", "run", "verify:runtime", "--", "--expected-version", version]);
+      const node = containerNode(options);
+      compose(options, ["exec", "-T", options.service, node, "scripts/runtime-verify.js", "--expected-version", version]);
       event("info", "runtime_verified", { version, attempt });
       return;
     } catch (error) {

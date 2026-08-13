@@ -243,6 +243,17 @@ test("defines the local security baseline script", () => {
   assert.match(script, /npm run release:check/);
 });
 
+test("allows only required dependency install scripts", () => {
+  const packageJson = JSON.parse(readFileSync(resolve("package.json"), "utf8"));
+
+  assert.deepEqual(packageJson.allowScripts, {
+    "better-sqlite3": true,
+    "core-js": false,
+    esbuild: true,
+    fsevents: false
+  });
+});
+
 test("pins the required npm version in Node-based GitHub workflows", () => {
   const workflowPaths = [
     ".github/workflows/ci.yml",
@@ -254,12 +265,12 @@ test("pins the required npm version in Node-based GitHub workflows", () => {
   for (const workflowPath of workflowPaths) {
     const workflow = readFileSync(resolve(workflowPath), "utf8");
     const setupNodeSteps = workflow.match(/actions\/setup-node@v6/g) ?? [];
-    const pinnedNpmSteps = workflow.match(/npm install --global npm@11\.18\.0/g) ?? [];
+    const pinnedNpmSteps = workflow.match(/npm install --global npm@12\.0\.1/g) ?? [];
 
     assert.equal(
       pinnedNpmSteps.length,
       setupNodeSteps.length,
-      `${workflowPath} must pin npm 11.18.0 after every setup-node step`
+      `${workflowPath} must pin npm 12.0.1 after every setup-node step`
     );
   }
 });
@@ -317,12 +328,22 @@ test("direct Compose example does not trust proxy identity headers", () => {
   assert.equal(parseEnvValue(envExample, "TRUST_PROXY_AUTH"), "false");
   assert.equal(parseEnvValue(oidcEnvExample, "TRUST_PROXY_AUTH"), "true");
   assert.match(dockerfile, /FROM node:24\.18\.0-bookworm-slim AS build/);
-  assert.match(dockerfile, /FROM node:24\.18\.0-bookworm-slim AS runtime/);
-  assert.match(releaseDockerfile, /FROM node:24\.18\.0-bookworm-slim AS runtime/);
-  assert.match(`${dockerfile}\n${releaseDockerfile}`, /npm install -g npm@11\.18\.0/);
-  assert.match(`${dockerfile}\n${releaseDockerfile}`, /NPM_CONFIG_UPDATE_NOTIFIER=false/);
+  assert.match(releaseDockerfile, /FROM node:24\.18\.0-bookworm-slim AS production-deps/);
+  assert.match(
+    dockerfile,
+    /FROM gcr\.io\/distroless\/nodejs24-debian13:nonroot@sha256:fbbdda866ea71aef98c4abece17e3d61fbf820cc2ef3961522caa2478716171a AS runtime/
+  );
+  assert.match(
+    releaseDockerfile,
+    /FROM gcr\.io\/distroless\/nodejs24-debian13:nonroot@sha256:fbbdda866ea71aef98c4abece17e3d61fbf820cc2ef3961522caa2478716171a AS runtime/
+  );
+  assert.match(`${dockerfile}\n${releaseDockerfile}`, /npm install -g npm@12\.0\.1/);
   assert.doesNotMatch(`${dockerfile}\n${releaseDockerfile}`, /CMD \["npm", "run", "start"\]/);
-  assert.match(`${dockerfile}\n${releaseDockerfile}`, /CMD \["node", "dist-server\/server\/index\.js"\]/);
+  assert.match(`${dockerfile}\n${releaseDockerfile}`, /CMD \["dist-server\/server\/index\.js"\]/);
+  assert.match(
+    `${dockerfile}\n${releaseDockerfile}`,
+    /CMD \["\/nodejs\/bin\/node", "scripts\/healthcheck\.js"\]/
+  );
   assert.match(nativeInstallDocs, /AUTH_MODE=native-oidc/);
   assert.match(nativeInstallDocs, /TRUST_PROXY_AUTH=false/);
   assert.match(nativeInstallDocs, /OIDC_REQUIRE_ROLE_CLAIM=true/);

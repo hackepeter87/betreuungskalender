@@ -41,6 +41,14 @@ The managed Compose update workflow runs both commands before switching a
 release and writes non-sensitive metadata next to the resulting backup. See
 [update.md](update.md) for the complete update and rollback procedure.
 
+The minimal release container does not include npm. Run the same scripts there
+directly:
+
+```bash
+podman exec APP_CONTAINER /nodejs/bin/node scripts/backup.js
+podman exec APP_CONTAINER /nodejs/bin/node scripts/restore-check.js
+```
+
 ## Restore procedure
 
 1. Stop the application service.

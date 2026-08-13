@@ -15,7 +15,7 @@ git status
 npm ci
 ```
 
-GitHub Actions uses Node.js 24.18.0 LTS with npm 11 and follows the same
+GitHub Actions uses Node.js 24.18.0 LTS with npm 12.0.1 and follows the same
 non-interactive sequence: `npm ci`, `npm run release:check`, and
 `npm run build`. The frontend is built with Vite through the package script;
 Webpack is not part of the build.
@@ -162,7 +162,7 @@ archive, verify health and version reporting, create and validate a synthetic
 SQLite backup, restore that backup in an isolated runtime, and run the update
 tool in `--dry-run` mode where Docker Compose is available. If the GHCR image
 is used, pull it by the recorded immutable digest and verify that
-`npm run verify:runtime -- --expected-version X.Y.Z` reports the expected
+`/nodejs/bin/node scripts/runtime-verify.js --expected-version X.Y.Z` reports the expected
 version.
 
 If the tag already exists, investigate before changing or deleting it. Never

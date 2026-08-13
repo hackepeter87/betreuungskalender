@@ -69,8 +69,8 @@ podman-compose --env-file app.env -f compose.yml ps
 Validate the runtime:
 
 ```bash
-podman exec APP_CONTAINER node scripts/healthcheck.js
-podman exec APP_CONTAINER node scripts/runtime-verify.js --expected-version X.Y.Z
+podman exec APP_CONTAINER /nodejs/bin/node scripts/healthcheck.js
+podman exec APP_CONTAINER /nodejs/bin/node scripts/runtime-verify.js --expected-version X.Y.Z
 curl -I https://bk-demo.saas-lab.de/auth/login
 ```
 
@@ -94,11 +94,11 @@ Before pulling a new production image, create and validate a backup inside the
 currently running container:
 
 ```bash
-podman-compose --env-file app.env -f compose.yml exec betreuungskalender npm run backup
-podman-compose --env-file app.env -f compose.yml exec betreuungskalender npm run restore:check
+podman-compose --env-file app.env -f compose.yml exec betreuungskalender /nodejs/bin/node scripts/backup.js
+podman-compose --env-file app.env -f compose.yml exec betreuungskalender /nodejs/bin/node scripts/restore-check.js
 podman-compose --env-file app.env -f compose.yml pull
 podman-compose --env-file app.env -f compose.yml up -d --force-recreate
-podman exec APP_CONTAINER node scripts/runtime-verify.js --expected-version X.Y.Z
+podman exec APP_CONTAINER /nodejs/bin/node scripts/runtime-verify.js --expected-version X.Y.Z
 ```
 
 Do not copy production data to the demo machine. Demo data must be synthetic and

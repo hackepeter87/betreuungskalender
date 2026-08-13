@@ -384,6 +384,21 @@ function checkPackageVersion(packageJson, report) {
 function checkReleaseMetadata(cwd, packageJson, version, report) {
   if (!version) return;
 
+  const installScriptPolicy = packageJson.allowScripts;
+  if (
+    installScriptPolicy?.["better-sqlite3"] !== true ||
+    installScriptPolicy?.esbuild !== true ||
+    installScriptPolicy?.["core-js"] !== false ||
+    installScriptPolicy?.fsevents !== false ||
+    Object.values(installScriptPolicy).some((allowed) => typeof allowed !== "boolean")
+  ) {
+    report.fail(
+      "package.json must explicitly allow required native build scripts and deny optional scripts"
+    );
+  } else {
+    report.pass("dependency install scripts use an explicit allowlist");
+  }
+
   const packageLockPath = resolve(cwd, "package-lock.json");
   try {
     const packageLock = JSON.parse(readFileSync(packageLockPath, "utf8"));
@@ -533,23 +548,30 @@ function checkDeploymentExamples(cwd, version, report) {
   report.pass("direct Compose example does not trust proxy identity headers");
 
   const dockerfiles = `${dockerfile}\n${releaseDockerfile}`;
+  const runtimeImage =
+    "gcr.io/distroless/nodejs24-debian13:nonroot@sha256:fbbdda866ea71aef98c4abece17e3d61fbf820cc2ef3961522caa2478716171a";
+  const runtimeStages = [dockerfile, releaseDockerfile].map((content) =>
+    content.slice(content.lastIndexOf(" AS runtime"))
+  );
   if (
     !dockerfile.includes("FROM node:24.18.0-bookworm-slim AS build") ||
-    !dockerfile.includes("FROM node:24.18.0-bookworm-slim AS runtime") ||
-    !releaseDockerfile.includes("FROM node:24.18.0-bookworm-slim AS runtime") ||
-    !dockerfiles.includes("npm install -g npm@11.18.0")
+    !releaseDockerfile.includes("FROM node:24.18.0-bookworm-slim AS production-deps") ||
+    !dockerfile.includes(`FROM ${runtimeImage} AS runtime`) ||
+    !releaseDockerfile.includes(`FROM ${runtimeImage} AS runtime`) ||
+    !dockerfiles.includes("npm install -g npm@12.0.1")
   ) {
-    report.fail("Dockerfiles must use the pinned Node.js 24 LTS runtime image and npm 11.18.0");
+    report.fail("Dockerfiles must use the pinned Node.js 24 build toolchain and minimal runtime image");
   } else if (
-    !dockerfiles.includes("NPM_CONFIG_UPDATE_NOTIFIER=false") ||
+    runtimeStages.some((stage) => stage.includes("npm install") || stage.includes("bookworm-slim")) ||
     dockerfiles.includes('CMD ["npm", "run", "start"]') ||
-    !dockerfiles.includes('CMD ["node", "dist-server/server/index.js"]')
+    !dockerfiles.includes('CMD ["dist-server/server/index.js"]') ||
+    !dockerfiles.includes('CMD ["/nodejs/bin/node", "scripts/healthcheck.js"]')
   ) {
     report.fail(
-      "Dockerfiles must disable npm update notifications and start the server directly with node"
+      "Runtime stages must exclude npm and start the server and healthcheck directly with Node.js"
     );
   } else {
-    report.pass("Dockerfiles use Node.js 24 LTS without npm runtime startup");
+    report.pass("Dockerfiles use a pinned minimal Node.js 24 runtime without npm");
   }
 
   const nativeInstallRequired = [

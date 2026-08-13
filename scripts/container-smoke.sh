@@ -16,7 +16,7 @@ trap cleanup EXIT
 
 wait_for_health() {
   for attempt in $(seq 1 30); do
-    if docker exec "$container" node scripts/healthcheck.js; then
+    if docker exec "$container" /nodejs/bin/node scripts/healthcheck.js; then
       return 0
     fi
     sleep 2
@@ -37,7 +37,7 @@ docker run --detach --name "$container" \
 
 wait_for_health
 
-docker exec "$container" node --input-type=module -e '
+docker exec "$container" /nodejs/bin/node --input-type=module -e '
   const response = await fetch("http://127.0.0.1:3000/api/children", {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -49,12 +49,12 @@ docker exec "$container" node --input-type=module -e '
 docker restart "$container" >/dev/null
 wait_for_health
 
-docker exec "$container" node --input-type=module -e '
+docker exec "$container" /nodejs/bin/node --input-type=module -e '
   const children = await (await fetch("http://127.0.0.1:3000/api/children")).json();
   if (!children.some((child) => child.name === "Container Smoke Child")) throw new Error("Persistent child missing after restart");
 '
 
-docker exec "$container" node --input-type=module -e '
+docker exec "$container" /nodejs/bin/node --input-type=module -e '
   import Database from "better-sqlite3";
   const db = new Database("/data/app.sqlite", { readonly: true });
   const migrations = db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get();
