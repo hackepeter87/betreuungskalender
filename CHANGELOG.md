@@ -6,6 +6,13 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+### Changed
+
+- Updated the reproducible build and CI toolchain to npm 12.0.1 on Node.js
+  24.18.0.
+- Reduced the production container to a digest-pinned minimal Node.js runtime
+  without a shell, package manager, or build-only operating-system tools.
+
 ## [1.20.1] - 2026-08-05
 
 ### Changed

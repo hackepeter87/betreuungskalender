@@ -94,7 +94,7 @@ There is no cloud synchronization, analytics, or external tracking.
 
 ## Development quick start
 
-Requirements: Node.js 24 LTS, npm 11, and a build environment supported by
+Requirements: Node.js 24.15 or newer in the supported LTS line, npm 12, and a build environment supported by
 `better-sqlite3`.
 
 ```bash

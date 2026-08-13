@@ -254,12 +254,12 @@ test("pins the required npm version in Node-based GitHub workflows", () => {
   for (const workflowPath of workflowPaths) {
     const workflow = readFileSync(resolve(workflowPath), "utf8");
     const setupNodeSteps = workflow.match(/actions\/setup-node@v6/g) ?? [];
-    const pinnedNpmSteps = workflow.match(/npm install --global npm@11\.18\.0/g) ?? [];
+    const pinnedNpmSteps = workflow.match(/npm install --global npm@12\.0\.1/g) ?? [];
 
     assert.equal(
       pinnedNpmSteps.length,
       setupNodeSteps.length,
-      `${workflowPath} must pin npm 11.18.0 after every setup-node step`
+      `${workflowPath} must pin npm 12.0.1 after every setup-node step`
     );
   }
 });
@@ -326,7 +326,7 @@ test("direct Compose example does not trust proxy identity headers", () => {
     releaseDockerfile,
     /FROM gcr\.io\/distroless\/nodejs24-debian13:nonroot@sha256:fbbdda866ea71aef98c4abece17e3d61fbf820cc2ef3961522caa2478716171a AS runtime/
   );
-  assert.match(`${dockerfile}\n${releaseDockerfile}`, /npm install -g npm@11\.18\.0/);
+  assert.match(`${dockerfile}\n${releaseDockerfile}`, /npm install -g npm@12\.0\.1/);
   assert.doesNotMatch(`${dockerfile}\n${releaseDockerfile}`, /CMD \["npm", "run", "start"\]/);
   assert.match(`${dockerfile}\n${releaseDockerfile}`, /CMD \["dist-server\/server\/index\.js"\]/);
   assert.match(

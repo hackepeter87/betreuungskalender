@@ -543,7 +543,7 @@ function checkDeploymentExamples(cwd, version, report) {
     !releaseDockerfile.includes("FROM node:24.18.0-bookworm-slim AS production-deps") ||
     !dockerfile.includes(`FROM ${runtimeImage} AS runtime`) ||
     !releaseDockerfile.includes(`FROM ${runtimeImage} AS runtime`) ||
-    !dockerfiles.includes("npm install -g npm@11.18.0")
+    !dockerfiles.includes("npm install -g npm@12.0.1")
   ) {
     report.fail("Dockerfiles must use the pinned Node.js 24 build toolchain and minimal runtime image");
   } else if (

@@ -3,7 +3,7 @@ FROM node:24.18.0-bookworm-slim AS production-deps
 ENV NPM_CONFIG_UPDATE_NOTIFIER=false
 
 WORKDIR /app
-RUN npm install -g npm@11.18.0 && npm cache clean --force
+RUN npm install -g npm@12.0.1 && npm cache clean --force
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 RUN mkdir -p /runtime-layout/data /runtime-layout/backups && \
