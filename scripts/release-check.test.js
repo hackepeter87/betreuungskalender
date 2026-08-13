@@ -243,6 +243,17 @@ test("defines the local security baseline script", () => {
   assert.match(script, /npm run release:check/);
 });
 
+test("allows only required dependency install scripts", () => {
+  const packageJson = JSON.parse(readFileSync(resolve("package.json"), "utf8"));
+
+  assert.deepEqual(packageJson.allowScripts, {
+    "better-sqlite3": true,
+    "core-js": false,
+    esbuild: true,
+    fsevents: false
+  });
+});
+
 test("pins the required npm version in Node-based GitHub workflows", () => {
   const workflowPaths = [
     ".github/workflows/ci.yml",

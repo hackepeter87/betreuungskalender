@@ -8,6 +8,12 @@
     "node": ">=24.15.0",
     "npm": ">=12.0.1"
   },
+  "allowScripts": {
+    "better-sqlite3": true,
+    "core-js": false,
+    "esbuild": true,
+    "fsevents": false
+  },
   "scripts": {
     "dev": "concurrently -k -n frontend,backend -c cyan,green \"npm:dev:frontend\" \"npm:dev:server\"",
     "dev:frontend": "vite",

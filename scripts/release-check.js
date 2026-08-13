@@ -384,6 +384,21 @@ function checkPackageVersion(packageJson, report) {
 function checkReleaseMetadata(cwd, packageJson, version, report) {
   if (!version) return;
 
+  const installScriptPolicy = packageJson.allowScripts;
+  if (
+    installScriptPolicy?.["better-sqlite3"] !== true ||
+    installScriptPolicy?.esbuild !== true ||
+    installScriptPolicy?.["core-js"] !== false ||
+    installScriptPolicy?.fsevents !== false ||
+    Object.values(installScriptPolicy).some((allowed) => typeof allowed !== "boolean")
+  ) {
+    report.fail(
+      "package.json must explicitly allow required native build scripts and deny optional scripts"
+    );
+  } else {
+    report.pass("dependency install scripts use an explicit allowlist");
+  }
+
   const packageLockPath = resolve(cwd, "package-lock.json");
   try {
     const packageLock = JSON.parse(readFileSync(packageLockPath, "utf8"));
