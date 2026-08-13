@@ -6,6 +6,8 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.20.2] - 2026-08-13
+
 ### Changed
 
 - Updated the reproducible build and CI toolchain to npm 12.0.1 on Node.js
