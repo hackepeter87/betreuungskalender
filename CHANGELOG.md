@@ -6,6 +6,13 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.20.3] - 2026-08-18
+
+### Changed
+
+- Refreshed compatible Fastify, OIDC, and mail runtime dependencies.
+- Revalidated the production dependency tree and minimal runtime image.
+
 ## [1.20.2] - 2026-08-13
 
 ### Changed
