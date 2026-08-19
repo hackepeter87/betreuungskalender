@@ -51,23 +51,12 @@ jobs:
           ref: ${{ steps.release.outputs.tag }}
           fetch-depth: 0
 
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 24.18.0
-          cache: npm
-
-      - run: npm install --global npm@12.0.1
-
-      - run: npm ci
-
       - uses: azure/setup-helm@v5
         with:
           version: v3.17.3
 
-      - name: Validate release and Helm chart
-        run: |
-          npm run test:helm
-          npm run release:check:strict
+      - name: Validate Helm chart
+        run: bash scripts/helm-chart-test.sh
 
       - name: Validate chart release metadata
         id: chart
@@ -75,6 +64,11 @@ jobs:
         env:
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
         run: |
+          if [[ "$(git rev-parse "refs/tags/${RELEASE_TAG}^{commit}")" != "$(git rev-parse HEAD)" ]]; then
+            echo "::error::Checked-out commit does not match release tag '$RELEASE_TAG'."
+            exit 1
+          fi
+
           chart_name="$(awk '/^name:/ { value=$2; gsub(/["\047]/, "", value); print value }' charts/betreuungskalender/Chart.yaml)"
           chart_version="$(awk '/^version:/ { value=$2; gsub(/["\047]/, "", value); print value }' charts/betreuungskalender/Chart.yaml)"
           app_version="$(awk '/^appVersion:/ { value=$2; gsub(/["\047]/, "", value); print value }' charts/betreuungskalender/Chart.yaml)"

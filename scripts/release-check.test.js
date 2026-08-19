@@ -50,6 +50,8 @@ test("release workflow publishes and verifies the Helm OCI chart", () => {
   assert.match(workflow, /release:\n\s+types: \[published\]/);
   assert.match(workflow, /CHART_REPOSITORY: ghcr\.io\/\$\{\{ github\.repository_owner \}\}\/charts/);
   assert.match(workflow, /helm registry logout "\$REGISTRY"/);
+  assert.match(workflow, /git rev-parse "refs\/tags\/\$\{RELEASE_TAG\}\^\{commit\}"/);
+  assert.doesNotMatch(workflow, /npm ci|release:check:strict/);
 });
 
 function serviceBlock(composeContent, serviceName) {
@@ -272,7 +274,6 @@ test("pins the required npm version in Node-based GitHub workflows", () => {
     ".github/workflows/ci.yml",
     ".github/workflows/container.yml",
     ".github/workflows/release.yml",
-    ".github/workflows/publish-release-chart.yml",
     ".github/workflows/publish-release-image.yml"
   ];
 

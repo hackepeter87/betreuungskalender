@@ -120,8 +120,8 @@ Publishing a non-draft `v*` release starts
 the tagged release, validates the release runtime image, publishes
 `Dockerfile.release` to GitHub Container Registry, and uploads
 `betreuungskalender-vX.Y.Z.image-digest.txt` to the release. The chart workflow
-validates the same immutable tag, packages the product chart and publishes it
-to:
+checks out the same immutable tag, validates and renders the chart, verifies
+its release metadata, packages it and publishes it to:
 
 ```text
 oci://ghcr.io/hackepeter87/charts/betreuungskalender:<chart-version>
