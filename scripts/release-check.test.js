@@ -18,6 +18,7 @@ import {
   isValidSemver,
   releaseNotesPathForVersion,
   releaseArchiveIncludesHelmChart,
+  releaseWorkflowPublishesHelmChart,
   releaseTagForVersion
 } from "./release-check.js";
 
@@ -37,6 +38,18 @@ test("reads Helm appVersion and requires the chart in release archives", () => {
     ),
     false
   );
+});
+
+test("release workflow publishes and verifies the Helm OCI chart", () => {
+  const workflow = readFileSync(
+    resolve(".github", "workflows", "publish-release-chart.yml"),
+    "utf8"
+  );
+
+  assert.equal(releaseWorkflowPublishesHelmChart(workflow), true);
+  assert.match(workflow, /release:\n\s+types: \[published\]/);
+  assert.match(workflow, /CHART_REPOSITORY: ghcr\.io\/\$\{\{ github\.repository_owner \}\}\/charts/);
+  assert.match(workflow, /helm registry logout "\$REGISTRY"/);
 });
 
 function serviceBlock(composeContent, serviceName) {
@@ -259,6 +272,7 @@ test("pins the required npm version in Node-based GitHub workflows", () => {
     ".github/workflows/ci.yml",
     ".github/workflows/container.yml",
     ".github/workflows/release.yml",
+    ".github/workflows/publish-release-chart.yml",
     ".github/workflows/publish-release-image.yml"
   ];
 

@@ -1,0 +1,147 @@
+name: Publish release chart
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to publish, for example v1.20.3
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY: ghcr.io
+  CHART_REPOSITORY: ghcr.io/${{ github.repository_owner }}/charts
+
+jobs:
+  publish:
+    name: Publish GHCR Helm chart
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Resolve release tag
+        id: release
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
+            tag="$INPUT_TAG"
+          else
+            tag="$RELEASE_TAG"
+          fi
+
+          if [[ ! "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "::error::Release tag must be SemVer with a leading v, got '$tag'."
+            exit 1
+          fi
+
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.release.outputs.tag }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+          cache: npm
+
+      - run: npm install --global npm@12.0.1
+
+      - run: npm ci
+
+      - uses: azure/setup-helm@v5
+        with:
+          version: v3.17.3
+
+      - name: Validate release and Helm chart
+        run: |
+          npm run test:helm
+          npm run release:check:strict
+
+      - name: Validate chart release metadata
+        id: chart
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        run: |
+          chart_name="$(awk '/^name:/ { value=$2; gsub(/["\047]/, "", value); print value }' charts/betreuungskalender/Chart.yaml)"
+          chart_version="$(awk '/^version:/ { value=$2; gsub(/["\047]/, "", value); print value }' charts/betreuungskalender/Chart.yaml)"
+          app_version="$(awk '/^appVersion:/ { value=$2; gsub(/["\047]/, "", value); print value }' charts/betreuungskalender/Chart.yaml)"
+          expected_app_version="${RELEASE_TAG#v}"
+
+          if [[ "$chart_name" != "betreuungskalender" ]]; then
+            echo "::error::Unexpected chart name '$chart_name'."
+            exit 1
+          fi
+          if [[ -z "$chart_version" ]]; then
+            echo "::error::Chart version is missing."
+            exit 1
+          fi
+          if [[ "$app_version" != "$expected_app_version" ]]; then
+            echo "::error::Chart appVersion '$app_version' does not match release '$expected_app_version'."
+            exit 1
+          fi
+
+          {
+            echo "name=$chart_name"
+            echo "version=$chart_version"
+            echo "app_version=$app_version"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Package Helm chart
+        shell: bash
+        run: |
+          mkdir -p chart-dist
+          helm package charts/betreuungskalender --destination chart-dist
+
+      - name: Log in to GitHub Container Registry
+        shell: bash
+        run: |
+          printf '%s' '${{ github.token }}' \
+            | helm registry login "$REGISTRY" --username '${{ github.actor }}' --password-stdin
+
+      - name: Publish Helm chart
+        shell: bash
+        env:
+          CHART_NAME: ${{ steps.chart.outputs.name }}
+          CHART_VERSION: ${{ steps.chart.outputs.version }}
+        run: |
+          chart_package="chart-dist/${CHART_NAME}-${CHART_VERSION}.tgz"
+          test -f "$chart_package"
+          helm push "$chart_package" "oci://${CHART_REPOSITORY}"
+
+      - name: Verify anonymous OCI pull
+        shell: bash
+        env:
+          CHART_NAME: ${{ steps.chart.outputs.name }}
+          CHART_VERSION: ${{ steps.chart.outputs.version }}
+          APP_VERSION: ${{ steps.chart.outputs.app_version }}
+        run: |
+          helm registry logout "$REGISTRY"
+          mkdir -p chart-verify
+          helm pull "oci://${CHART_REPOSITORY}/${CHART_NAME}" \
+            --version "$CHART_VERSION" \
+            --destination chart-verify
+          helm show chart "oci://${CHART_REPOSITORY}/${CHART_NAME}" \
+            --version "$CHART_VERSION" \
+            | grep -Fx "appVersion: ${APP_VERSION}"
+
+          {
+            echo "## GHCR Helm chart"
+            echo
+            echo "- Chart: \`oci://${CHART_REPOSITORY}/${CHART_NAME}\`"
+            echo "- Chart version: \`${CHART_VERSION}\`"
+            echo "- App version: \`${APP_VERSION}\`"
+            echo "- Anonymous pull: verified"
+          } >> "$GITHUB_STEP_SUMMARY"

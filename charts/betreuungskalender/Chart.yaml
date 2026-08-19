@@ -11,3 +11,4 @@ sources:
   - https://github.com/hackepeter87/betreuungskalender
 annotations:
   artifacthub.io/license: MIT
+  org.opencontainers.image.source: https://github.com/hackepeter87/betreuungskalender

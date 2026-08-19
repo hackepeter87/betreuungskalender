@@ -118,6 +118,7 @@ const CRITICAL_PROJECT_PATHS = [
   ".github/workflows/ci.yml",
   ".github/workflows/container.yml",
   ".github/workflows/release.yml",
+  ".github/workflows/publish-release-chart.yml",
   ".github/workflows/promote-testing.yml",
   ".github/workflows/promote-production.yml",
   ".github/actions/validate-container/action.yml",
@@ -253,6 +254,17 @@ export function helmChartAppVersion(content) {
 
 export function releaseArchiveIncludesHelmChart(content) {
   return /\bdist dist-server scripts deploy charts Dockerfile\.release\b/.test(content);
+}
+
+export function releaseWorkflowPublishesHelmChart(content) {
+  const required = [
+    "packages: write",
+    "helm package charts/betreuungskalender",
+    'helm push "$chart_package" "oci://${CHART_REPOSITORY}"',
+    'helm pull "oci://${CHART_REPOSITORY}/${CHART_NAME}"',
+    'expected_app_version="${RELEASE_TAG#v}"'
+  ];
+  return required.every((fragment) => content.includes(fragment));
 }
 
 export function hasChangelogRelease(content, version) {
@@ -467,6 +479,7 @@ function checkDeploymentExamples(cwd, version, report) {
   let imagePromotionDocs;
   let promoteTestingWorkflow;
   let publishReleaseImageWorkflow;
+  let publishReleaseChartWorkflow;
   let promoteProductionWorkflow;
   try {
     envExample = readFileSync(resolve(cwd, ".env.example"), "utf8");
@@ -494,6 +507,10 @@ function checkDeploymentExamples(cwd, version, report) {
     );
     publishReleaseImageWorkflow = readFileSync(
       resolve(cwd, ".github", "workflows", "publish-release-image.yml"),
+      "utf8"
+    );
+    publishReleaseChartWorkflow = readFileSync(
+      resolve(cwd, ".github", "workflows", "publish-release-chart.yml"),
       "utf8"
     );
     promoteProductionWorkflow = readFileSync(
@@ -546,6 +563,12 @@ function checkDeploymentExamples(cwd, version, report) {
     return;
   }
   report.pass("direct Compose example does not trust proxy identity headers");
+
+  if (!releaseWorkflowPublishesHelmChart(publishReleaseChartWorkflow)) {
+    report.fail("release workflow must publish and anonymously verify the versioned Helm OCI chart");
+  } else {
+    report.pass("release workflow publishes the versioned Helm OCI chart to GHCR");
+  }
 
   const dockerfiles = `${dockerfile}\n${releaseDockerfile}`;
   const runtimeImage =

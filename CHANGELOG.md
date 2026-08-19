@@ -6,6 +6,11 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+### Added
+
+- Publish the versioned Helm OCI chart to GHCR from the exact GitHub release
+  tag and verify anonymous pull access for Argo CD.
+
 ## [1.20.3] - 2026-08-18
 
 ### Changed

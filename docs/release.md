@@ -115,10 +115,27 @@ recorded checksum.
 - Publish only after the tag workflow and checksum verification pass.
 
 Publishing a non-draft `v*` release starts
-`.github/workflows/publish-release-image.yml`. That workflow re-checks the
-tagged release, validates the release runtime image, publishes
+`.github/workflows/publish-release-image.yml` and
+`.github/workflows/publish-release-chart.yml`. The image workflow re-checks
+the tagged release, validates the release runtime image, publishes
 `Dockerfile.release` to GitHub Container Registry, and uploads
-`betreuungskalender-vX.Y.Z.image-digest.txt` to the release.
+`betreuungskalender-vX.Y.Z.image-digest.txt` to the release. The chart workflow
+validates the same immutable tag, packages the product chart and publishes it
+to:
+
+```text
+oci://ghcr.io/hackepeter87/charts/betreuungskalender:<chart-version>
+```
+
+The chart workflow verifies that `appVersion` matches the Git release and
+performs an anonymous pull after publication. This makes public readability a
+release invariant and lets Argo CD consume the chart without a long-lived GHCR
+credential. GitHub's `GITHUB_TOKEN` is the only publisher credential.
+
+For the initial backfill of an already released tag, run **Publish release
+chart** manually with the exact tag. The workflow checks out that immutable tag
+and derives both chart and application versions from it; do not package a
+historic chart from `main`.
 
 The GHCR workflow uses `GITHUB_TOKEN` with `packages: write` only in the image
 publish job. It also needs `contents: write` in that job so it can attach the
