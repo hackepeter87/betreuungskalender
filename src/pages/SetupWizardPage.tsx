@@ -95,8 +95,8 @@ export function SetupWizardPage() {
         </div>
       </section>
 
-      <form className="panel setup-wizard__form" onSubmit={submit}>
-        <section className="setup-step">
+      <form className="setup-wizard__form" onSubmit={submit}>
+        <section className="panel setup-step setup-step--owner">
           <div className="setup-step__number">1</div>
           <div className="setup-step__content">
             <h2>{copy(locale, "setup", "ownerTitle")}</h2>
@@ -111,13 +111,13 @@ export function SetupWizardPage() {
           </div>
         </section>
 
-        <section className="setup-step">
+        <section className="panel setup-step">
           <div className="setup-step__number">2</div>
           <div className="setup-step__content">
             <h2>{copy(locale, "setup", "basicTitle")}</h2>
             <p>{copy(locale, "setup", "basicDescription")}</p>
-            <div className="settings-form-grid settings-form-grid--two setup-form-grid">
-              <label className="field">
+            <div className="setup-basics">
+              <label className="field setup-installation-field">
                 <span>{copy(locale, "setup", "installationLabel")}</span>
                 <input
                   data-testid="setup-installation-label"
@@ -128,7 +128,8 @@ export function SetupWizardPage() {
                 />
                 <small>{copy(locale, "setup", "optional")}</small>
               </label>
-              <article className="setup-person-card">
+              <div className="setup-person-grid" data-testid="setup-person-grid">
+              <article className="setup-person-card" data-testid="setup-primary-person-card">
                 <div className="setup-person-card__header">
                   <div>
                     <h3>{copy(locale, "setup", "ownCarePartyTitle")}</h3>
@@ -178,7 +179,7 @@ export function SetupWizardPage() {
                   <small>{copy(locale, "setup", "ownDefaultCarePartyDescription")}</small>
                 </label>
               </article>
-              <article className="setup-person-card">
+              <article className="setup-person-card" data-testid="setup-secondary-person-card">
                 <div className="setup-person-card__header">
                   <div>
                     <h3>{copy(locale, "setup", "secondaryCarePartyName")}</h3>
@@ -227,16 +228,17 @@ export function SetupWizardPage() {
                   <small>{copy(locale, "setup", "optional")}</small>
                 </label>
               </article>
+              </div>
             </div>
           </div>
         </section>
 
-        <section className="setup-step">
+        <section className="panel setup-step">
           <div className="setup-step__number">3</div>
           <div className="setup-step__content">
             <h2>{copy(locale, "setup", "childTitle")}</h2>
             <p>{copy(locale, "setup", "childDescription")}</p>
-            <div className="settings-form-grid settings-form-grid--three setup-form-grid setup-form-grid--child">
+            <div className="setup-child-grid" data-testid="setup-child-grid">
               <label className="field">
                 <FieldHelpLabel fieldId="child.name">
                   {copy(locale, "setup", "childName")}
@@ -293,7 +295,7 @@ export function SetupWizardPage() {
           </div>
         </section>
 
-        <section className="setup-step">
+        <section className="panel setup-step setup-step--discovery">
           <div className="setup-step__number">4</div>
           <div className="setup-step__content">
             <h2>{copy(locale, "setup", "calendarTitle")}</h2>
@@ -326,7 +328,7 @@ export function SetupWizardPage() {
 
         {error ? <p className="form-error" role="alert">{error}</p> : null}
 
-        <footer className="setup-wizard__actions">
+        <footer className="panel setup-wizard__actions">
           <p>{copy(locale, "setup", "finishNote")}</p>
           <button
             className="button button--primary"

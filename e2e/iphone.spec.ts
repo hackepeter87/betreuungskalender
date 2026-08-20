@@ -13,6 +13,27 @@ test.beforeEach(async ({ request }) => {
   await resetApp(request);
 });
 
+test("keeps first-use setup readable on a narrow screen", async ({
+  page,
+  request
+}) => {
+  await resetApp(request, { completeSetup: false });
+  await openApp(page);
+
+  await expect(page.getByTestId("setup-wizard")).toBeVisible();
+  await expectNoDocumentHorizontalOverflow(page);
+  const roleCards = page.locator('[data-testid="setup-person-grid"] > article');
+  await expect(roleCards).toHaveCount(2);
+  const positions = await roleCards.evaluateAll((cards) => cards.map((card) => {
+    const rect = card.getBoundingClientRect();
+    return { left: rect.left, top: rect.top, right: rect.right };
+  }));
+  expect(positions[1].top).toBeGreaterThan(positions[0].top);
+  expect(Math.abs(positions[0].left - positions[1].left)).toBeLessThanOrEqual(1);
+  expect(Math.abs(positions[0].right - positions[1].right)).toBeLessThanOrEqual(1);
+  await expect(page.getByTestId("setup-wizard-submit")).toBeVisible();
+});
+
 test("explains the iOS home-screen installation without blocking the app", async ({
   page
 }) => {
