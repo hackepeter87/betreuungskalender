@@ -39,9 +39,5 @@ test("request URL sanitizer redacts bearer feed tokens and OIDC callback paramet
     sanitizeRequestUrl("/settings?tab=members"),
     "/settings?tab=members"
   );
-  assert.equal(
-    sanitizeRequestUrl("/api/invitations/accept"),
-    "/api/invitations/accept"
-  );
   assert.equal(sanitizeRequestUrl("/setup"), "/setup");
 });

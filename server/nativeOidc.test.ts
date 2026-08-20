@@ -622,9 +622,11 @@ test("native OIDC routes redirect login and keep callback responses token-free",
   }
 });
 
-test("native OIDC callback rejects claims without a configured role group", async () => {
+test("native OIDC callback rejects normal login without workspace membership", async () => {
   const { database, cleanup } = testDatabase();
   const app = Fastify({ logger: false });
+  const sessions = new OidcSessionStore(database);
+  const staleSession = sessions.create("previous-subject", 3600);
   await app.register(nativeOidcRoutes, {
     config: {
       authMode: "native-oidc",
@@ -651,27 +653,31 @@ test("native OIDC callback rejects claims without a configured role group", asyn
       createLogoutRedirect: async () => new URL("https://idp.example.test/logout"),
       validateCallback: async () => ({
         subject: "subject-123",
-        groups: ["/other"],
+        groups: ["/betreuungskalender/parents"],
         loginContext: { type: "normal" }
       })
     },
-    sessions: new OidcSessionStore(database),
+    sessions,
     upsertUser: (user) => upsertAuthenticatedUser(user, new Date().toISOString(), database),
-    applyMembershipRole: (candidate) => ({ user: candidate }),
+    applyMembershipRole: (candidate) => ({ user: candidate, workspaceAccess: false }),
     isSetupRequired: () => false
   });
 
   try {
     const callback = await app.inject({
       method: "GET",
-      url: "/auth/callback?code=code-123&state=state-123"
+      url: "/auth/callback?code=code-123&state=state-123",
+      headers: {
+        cookie: `betreuungskalender_session=${staleSession.token}`
+      }
     });
     assert.equal(callback.statusCode, 403);
-    assert.equal(callback.headers["set-cookie"], undefined);
-    assert.deepEqual(JSON.parse(callback.payload), {
-      error: "authorization_required",
-      message: "Keine passende Berechtigung in den OIDC-Claims gefunden."
-    });
+    assert.match(String(callback.headers["content-type"]), /text\/html/);
+    assert.equal(callback.headers["cache-control"], "no-store, max-age=0");
+    assert.match(String(callback.headers["set-cookie"]), /Max-Age=0/);
+    assert.match(callback.payload, /Kein Zugriff auf diese Installation/);
+    assert.doesNotMatch(callback.payload, /subject-123|parents|editor|admin/);
+    assert.equal(sessions.findByToken(staleSession.token), undefined);
   } finally {
     await app.close();
     cleanup();
@@ -718,10 +724,12 @@ test("native OIDC callback accepts users with app membership without role groups
     upsertUser: (user) => upsertAuthenticatedUser(user, new Date().toISOString(), database),
     applyMembershipRole: (candidate) => ({
       membershipRole: "editor",
+      workspaceAccess: true,
       user: {
         ...candidate,
         role: "parent",
-        permissions: ["read", "write"]
+        permissions: ["read", "write"],
+        workspaceAccess: true
       }
     })
   });
@@ -744,7 +752,7 @@ test("native OIDC callback accepts users with app membership without role groups
   }
 });
 
-test("native OIDC callback rejects normal setup login without role groups", async () => {
+test("native OIDC callback keeps pre-owner bootstrap compatibility", async () => {
   const { database, cleanup } = testDatabase();
   const app = Fastify({ logger: false });
   const sessions = new OidcSessionStore(database);
@@ -782,7 +790,10 @@ test("native OIDC callback rejects normal setup login without role groups", asyn
     },
     sessions,
     upsertUser: (user) => upsertAuthenticatedUser(user, new Date().toISOString(), database),
-    applyMembershipRole: (candidate) => ({ user: candidate }),
+    applyMembershipRole: (candidate) => ({
+      user: { ...candidate, workspaceAccess: true },
+      workspaceAccess: true
+    }),
     isSetupRequired: () => true
   });
 
@@ -792,9 +803,10 @@ test("native OIDC callback rejects normal setup login without role groups", asyn
       url: "/auth/callback?code=code-123&state=state-123"
     });
 
-    assert.equal(callback.statusCode, 403);
-    assert.equal(callback.headers["set-cookie"], undefined);
-    assert.equal(sessions.findByToken("missing"), undefined);
+    assert.equal(callback.statusCode, 302);
+    assert.equal(callback.headers.location, "/");
+    const sessionToken = String(callback.headers["set-cookie"]).split(";")[0]?.split("=")[1];
+    assert.equal(sessions.findByToken(sessionToken)?.externalSubject, "subject-setup");
   } finally {
     await app.close();
     cleanup();

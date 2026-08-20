@@ -794,12 +794,6 @@ export const api = {
       { method: "DELETE" }
     );
   },
-  acceptInvitation(token: string) {
-    return request<ApiInvitation>("/api/invitations/accept", {
-      method: "POST",
-      body: JSON.stringify({ token })
-    });
-  },
   listUserCarePartyAssignments() {
     return request<ApiUserCarePartyAssignment[]>("/api/user-care-party-assignments");
   },

@@ -1,9 +1,7 @@
-import type { FastifyInstance } from "fastify";
+import type { FastifyInstance, FastifyReply } from "fastify";
 import { config } from "../config.js";
 import {
-  acceptInvitation,
   createInvitation,
-  InvitationError,
   listInvitations,
   revokeInvitation
 } from "../services/invitations.js";
@@ -14,13 +12,11 @@ import {
 import {
   InvitationEmailError,
   invitationEmailAvailable,
+  invitationUrl,
   sendInvitationEmail
 } from "../services/invitationEmail.js";
 import { getStoredSettings } from "../services/settings.js";
-import {
-  invitationAcceptInputSchema,
-  invitationInputSchema
-} from "../validation/schemas.js";
+import { invitationInputSchema } from "../validation/schemas.js";
 
 const readLimit = {
   config: { permission: "members:manage" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
@@ -28,21 +24,6 @@ const readLimit = {
 const writeLimit = {
   config: { permission: "members:manage" as const, rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
 };
-
-function normalizeInvitationError(error: unknown) {
-  if (error instanceof InvitationError) {
-    return {
-      statusCode: error.statusCode,
-      error: error.code,
-      message: error.message
-    };
-  }
-  return {
-    statusCode: 500,
-    error: "invitation_failed",
-    message: "Die Einladung konnte nicht verarbeitet werden."
-  };
-}
 
 function normalizeMemberError(error: unknown) {
   if (error instanceof MemberManagementError) {
@@ -67,6 +48,13 @@ function normalizeInvitationEmailError(error: unknown): string {
 function invitationSenderName(): string | undefined {
   const value = getStoredSettings()["setup.installationLabel"];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function preventInvitationCache(reply: FastifyReply): FastifyReply {
+  return reply
+    .header("cache-control", "no-store, max-age=0")
+    .header("pragma", "no-cache")
+    .header("expires", "0");
 }
 
 export async function invitationRoutes(app: FastifyInstance): Promise<void> {
@@ -97,18 +85,19 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post("/api/invitations", writeLimit, async (request, reply) => {
+    const invitationReply = preventInvitationCache(reply);
     try {
       assertCanAdministerMembers(request.user);
     } catch (error) {
       const normalized = normalizeMemberError(error);
-      return reply.code(normalized.statusCode).send({
+      return invitationReply.code(normalized.statusCode).send({
         error: normalized.error,
         message: normalized.message
       });
     }
     const parsed = invitationInputSchema.safeParse(request.body);
     if (!parsed.success) {
-      return reply.code(400).send({
+      return invitationReply.code(400).send({
         error: "validation_error",
         issues: parsed.error.issues
       });
@@ -117,9 +106,11 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
       ...parsed.data,
       actorId: request.userEmail
     });
+    const publicInvitationUrl = invitationUrl(created.token, config.invitationPublicBaseUrl);
     if (!parsed.data.sendEmail) {
-      return reply.code(201).send({
+      return invitationReply.code(201).send({
         ...created,
+        invitationUrl: publicInvitationUrl,
         emailDelivery: { status: "not_requested" }
       });
     }
@@ -136,42 +127,19 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
           smtpFromName: invitationSenderName()
         }
       );
-      return reply.code(201).send({
+      return invitationReply.code(201).send({
         ...created,
+        invitationUrl: publicInvitationUrl,
         emailDelivery: { status: "sent" }
       });
     } catch (error) {
-      return reply.code(201).send({
+      return invitationReply.code(201).send({
         ...created,
+        invitationUrl: publicInvitationUrl,
         emailDelivery: {
           status: "failed",
           message: normalizeInvitationEmailError(error)
         }
-      });
-    }
-  });
-
-  app.post("/api/invitations/accept", writeLimit, async (request, reply) => {
-    if (!request.user) {
-      return reply.code(401).send({
-        error: "authentication_required",
-        message: "Authentifizierung erforderlich."
-      });
-    }
-    const parsed = invitationAcceptInputSchema.safeParse(request.body);
-    if (!parsed.success) {
-      return reply.code(400).send({
-        error: "validation_error",
-        issues: parsed.error.issues
-      });
-    }
-    try {
-      return acceptInvitation(parsed.data.token, request.user);
-    } catch (error) {
-      const normalized = normalizeInvitationError(error);
-      return reply.code(normalized.statusCode).send({
-        error: normalized.error,
-        message: normalized.message
       });
     }
   });

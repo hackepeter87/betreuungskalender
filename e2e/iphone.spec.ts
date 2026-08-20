@@ -34,6 +34,77 @@ test("keeps first-use setup readable on a narrow screen", async ({
   await expect(page.getByTestId("setup-wizard-submit")).toBeVisible();
 });
 
+test("creates and displays a complete invitation link on mobile", async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    const json = (body: unknown, status = 200) => Promise.resolve(new Response(
+      JSON.stringify(body),
+      {
+        status,
+        headers: {
+          "content-type": "application/json",
+          "cache-control": "no-store, max-age=0"
+        }
+      }
+    ));
+    window.fetch = (input, init) => {
+      const url = typeof input === "string"
+        ? input
+        : input instanceof Request
+          ? input.url
+          : String(input);
+      const pathname = new URL(url, window.location.href).pathname;
+      const method = (init?.method ?? (input instanceof Request ? input.method : "GET")).toUpperCase();
+      if (pathname === "/api/session") {
+        return json({
+          authRequired: true,
+          authenticated: true,
+          setup: { complete: true, required: false },
+          workspaceAccess: true,
+          workspaceRole: "admin",
+          isOwner: true,
+          permissions: ["settings:view", "settings:manage", "members:manage"],
+          user: { id: "user-owner-mobile", displayName: "Owner Mobile", role: "admin" }
+        });
+      }
+      if (pathname === "/api/members" && method === "GET") return json([]);
+      if (pathname === "/api/invitations" && method === "GET") return json([]);
+      if (pathname === "/api/invitations/capabilities" && method === "GET") {
+        return json({ emailDeliveryAvailable: false });
+      }
+      if (pathname === "/api/invitations" && method === "POST") {
+        const now = new Date().toISOString();
+        return json({
+          invitation: {
+            id: "invitation-mobile",
+            role: "viewer",
+            expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
+            createdAt: now,
+            updatedAt: now
+          },
+          token: "invite_mobile_compatibility_token",
+          invitationUrl: "https://bk.example.invalid/invite?token=invite_mobile_compatibility_token",
+          emailDelivery: { status: "not_requested" }
+        }, 201);
+      }
+      return originalFetch(input, init);
+    };
+  });
+  await openApp(page);
+  await navigate(page, "settings");
+
+  const manager = page.getByTestId("member-invitations");
+  await expect(manager).toBeVisible();
+  await expect(manager.getByTestId("invitation-accept-form")).toHaveCount(0);
+  await manager.getByTestId("invitation-role").selectOption("viewer");
+  await manager.getByRole("button", { name: "Einladung erstellen" }).click();
+
+  const invitationLink = manager.getByTestId("invitation-created-link");
+  await expect(invitationLink).toHaveValue(/\/invite\?token=.+/);
+  await expect(manager.getByRole("button", { name: "Link kopieren" })).toBeVisible();
+  await expectNoDocumentHorizontalOverflow(page);
+});
+
 test("explains the iOS home-screen installation without blocking the app", async ({
   page
 }) => {

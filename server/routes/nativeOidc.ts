@@ -149,6 +149,37 @@ function onboardingPage(input: {
 </html>`;
 }
 
+function accessDeniedPage(): string {
+  return `<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Kein Zugriff · Betreuungskalender</title>
+  <style>
+    :root { color-scheme: light; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #14213d; background: #f4f7f8; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+    main { width: min(100%, 560px); background: #fff; border: 1px solid #d8e0e7; border-radius: 8px; padding: 32px; box-shadow: 0 10px 30px rgba(20, 33, 61, .08); }
+    .mark { width: 48px; height: 48px; display: grid; place-items: center; border-radius: 8px; background: #fff4dc; color: #8a5b00; font-size: 24px; font-weight: 700; }
+    h1 { margin: 20px 0 8px; font-size: clamp(1.65rem, 5vw, 2.15rem); line-height: 1.15; }
+    p { margin: 0; color: #5b677d; line-height: 1.6; }
+    a { margin-top: 28px; min-height: 48px; display: inline-flex; align-items: center; justify-content: center; width: 100%; padding: 12px 18px; border-radius: 6px; background: #07877f; color: #fff; font-weight: 700; text-decoration: none; }
+    .hint { margin-top: 20px; font-size: .9rem; }
+  </style>
+</head>
+<body>
+  <main data-onboarding-state="access-denied">
+    <div class="mark" aria-hidden="true">!</div>
+    <h1>Kein Zugriff auf diese Installation</h1>
+    <p>Die Anmeldung war erfolgreich, aber für diese Installation besteht keine aktive Mitgliedschaft.</p>
+    <a href="/auth/logout">Abmelden</a>
+    <p class="hint">Verwende einen gültigen Einladungslink oder wende dich an die verantwortliche Person.</p>
+  </main>
+</body>
+</html>`;
+}
+
 export async function nativeOidcRoutes(
   app: FastifyInstance,
   options: NativeOidcRoutesOptions
@@ -330,12 +361,11 @@ export async function nativeOidcRoutes(
         invitationFlow.accept(claims.loginContext.tokenHash, auth.user);
       }
       const membership = resolveMembership(auth.user);
-      const onboardingContext = claims.loginContext.type !== "normal";
-      if (auth.reason === "missing_role" && !membership.membershipRole && !onboardingContext) {
+      if (claims.loginContext.type === "normal" && !membership.workspaceAccess) {
         throw new NativeOidcError(
           "authorization_required",
           403,
-          "Keine passende Berechtigung in den OIDC-Claims gefunden."
+          "Für diese Installation besteht keine aktive Mitgliedschaft."
         );
       }
       const session = sessions.create(membership.user.externalSubject, options.config.sessionTtlSeconds);
@@ -358,6 +388,16 @@ export async function nativeOidcRoutes(
         { code: normalized.code, statusCode: normalized.statusCode, requestId: request.id },
         "native oidc callback rejected"
       );
+      if (normalized.statusCode === 403) {
+        sessions.revokeByToken(
+          cookieValue(request.headers.cookie, options.config.sessionCookieName)
+        );
+        return preventOnboardingCache(reply)
+          .header("set-cookie", clearSessionCookie(options.config.sessionCookieName, secureCookie))
+          .code(403)
+          .type("text/html; charset=utf-8")
+          .send(accessDeniedPage());
+      }
       return reply.code(normalized.statusCode).send({
         error: normalized.code,
         message: normalized.message

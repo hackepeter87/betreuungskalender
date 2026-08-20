@@ -325,6 +325,15 @@ test("shows admin instance readiness information in settings", async ({ page }) 
 test("manages member invitations from settings", async ({ page }) => {
   page.on("dialog", (dialog) => void dialog.accept());
   await page.addInitScript(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: {
+        writeText: async (value: string) => {
+          (window as typeof window & { __copiedInvitationLink?: string })
+            .__copiedInvitationLink = value;
+        }
+      }
+    });
     type Member = {
       id: string;
       displayName: string;
@@ -455,13 +464,11 @@ test("manages member invitations from settings", async ({ page }) => {
         return json({
           invitation,
           token: "invite_e2e_created_token",
+          invitationUrl: "https://bk.example.invalid/invite?token=invite_e2e_created_token",
           emailDelivery: body.sendEmail
             ? { status: "sent" }
             : { status: "not_requested" }
         }, 201);
-      }
-      if (pathname === "/api/invitations/accept" && method === "POST") {
-        return json({ ...invitations[0], acceptedAt: now, acceptedUserId: "user-owner-e2e" });
       }
       if (pathname === "/api/invitations/invitation-existing-e2e" && method === "DELETE") {
         invitations = invitations.map((invitation) =>
@@ -511,9 +518,7 @@ test("manages member invitations from settings", async ({ page }) => {
   const manager = page.getByTestId("member-invitations");
   await expect(manager).toBeVisible();
   await expect(manager).toContainText("Member E2E");
-  await manager.getByTestId("invitation-accept-token").fill("invite_e2e_existing_token");
-  await manager.getByRole("button", { name: "Einladung annehmen" }).click();
-  await expect(manager).toContainText("Einladung wurde angenommen.");
+  await expect(manager.getByTestId("invitation-accept-form")).toHaveCount(0);
 
   await manager.getByTestId("invitation-email-hint").fill("new-user@example.invalid");
   await manager.getByTestId("invitation-role").selectOption("scheduler");
@@ -524,7 +529,14 @@ test("manages member invitations from settings", async ({ page }) => {
   await expect(manager.getByTestId("invitation-send-email")).not.toBeChecked();
   await manager.getByRole("button", { name: "Einladung erstellen" }).click();
   await expect(manager).toContainText("Einladung wurde erstellt.");
-  await expect(manager.getByTestId("invitation-created-token")).toHaveValue("invite_e2e_created_token");
+  await expect(manager.getByTestId("invitation-created-link")).toHaveValue(
+    "https://bk.example.invalid/invite?token=invite_e2e_created_token"
+  );
+  await manager.getByRole("button", { name: "Link kopieren" }).click();
+  expect(await page.evaluate(() =>
+    (window as typeof window & { __copiedInvitationLink?: string }).__copiedInvitationLink
+  )).toBe("https://bk.example.invalid/invite?token=invite_e2e_created_token");
+  await expect(manager).toContainText("Einladungslink kopiert.");
   await expect(manager.getByTestId("invitation-list")).toContainText("corrected-user@example.invalid");
   expect(await page.evaluate(() =>
     (window as typeof window & { __lastInvitationRequest?: { sendEmail?: boolean } })

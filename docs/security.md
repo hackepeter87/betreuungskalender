@@ -209,7 +209,9 @@ pre-owner compatibility path until ownership is claimed explicitly.
 Application invitations use one-time bearer tokens. The server stores only a
 SHA-256 token hash, expiry, revocation status, target role, and acceptance
 metadata. Treat raw invitation URLs like passwords: they are shown only at
-creation time and should be shared through a trusted channel.
+creation time and should be shared through a trusted channel. Manual sharing
+and optional email delivery use the same complete URL. There is no separate
+code-entry API.
 
 Optional invitation email delivery sends the same bearer invitation link
 through an operator-configured SMTP relay. Keep `INVITATION_EMAIL_ENABLED`
@@ -269,12 +271,13 @@ validated again before the owner membership is assigned, so replacing or
 removing the file invalidates an unfinished setup flow. Setup and invitation
 landing pages and redirects are returned with explicit no-store cache headers.
 
-An incomplete setup does not weaken normal native OIDC authorization. A normal
-login still requires a configured group role or an existing app membership.
-Only a validated owner-setup or invitation context may establish the matching
-membership without a pre-existing role claim. Completed installations continue
-to use app memberships first and configured OIDC groups as compatibility
-fallback.
+Before the first owner is established, configured groups may supply the
+documented compatibility role. After that claim, normal native OIDC login
+requires an active app membership and configured groups cannot replace a
+missing or revoked membership. Only a validated owner-setup or invitation
+context may establish the matching membership. Rejected login, setup, and
+invitation responses are returned without caching, and rejected callbacks clear
+any existing app session cookie.
 
 ## Operator responsibility
 
