@@ -68,10 +68,6 @@ export const invitationInputSchema = z.object({
   message: "Für den E-Mail-Versand ist eine Empfängeradresse erforderlich."
 });
 
-export const invitationAcceptInputSchema = z.object({
-  token: z.string().trim().min(24).max(500)
-});
-
 export const memberRoleInputSchema = z.object({
   role: z.enum(["admin", "editor", "scheduler", "viewer", "parent", "readonly"])
     .transform((role) => role === "parent" ? "editor" as const : role === "readonly" ? "viewer" as const : role)

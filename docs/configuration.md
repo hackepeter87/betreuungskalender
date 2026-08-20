@@ -216,11 +216,13 @@ role; a missing or deleted membership grants no workspace access. Native OIDC
 may still authenticate the identity, but protected workspace routes return
 `403` until a valid invitation assigns a membership.
 
-Normal login always requires either a matching configured role group or an
-existing app membership. The only onboarding exceptions are validated,
-short-lived owner-setup and invitation contexts. Those contexts may create the
-specific owner or invited membership after the callback; they do not grant a
-generic provisional session and cannot be used for ordinary login.
+Before an owner exists, normal login may use configured role groups as the
+documented compatibility path. After an owner exists, normal login requires an
+active app membership; provider-side groups cannot create or replace it. The
+only onboarding exceptions are validated, short-lived owner-setup and
+invitation contexts. Those contexts may create the specific owner or invited
+membership after the callback; they do not grant a generic provisional session
+and cannot be used for ordinary login.
 
 For initial owner setup, mount a private random value at
 `OWNER_SETUP_TOKEN_FILE` and open `/setup?token=<one-time-value>` before

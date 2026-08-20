@@ -153,7 +153,7 @@ export async function sendInvitationEmail(
     if (error instanceof InvitationEmailError) throw error;
     throw new InvitationEmailError(
       "mail_delivery_failed",
-      "Einladungs-E-Mail konnte nicht gesendet werden. Bitte Mailkonfiguration prüfen oder den Code manuell weitergeben."
+      "Einladungs-E-Mail konnte nicht gesendet werden. Bitte Mailkonfiguration prüfen oder den Einladungslink manuell weitergeben."
     );
   }
 }

@@ -17,7 +17,9 @@ import {
 import {
   InvitationEmailError,
   invitationEmailAvailable,
+  invitationEmailText,
   invitationSenderAddress,
+  invitationUrl,
   sendInvitationEmail,
   type InvitationEmailConfig
 } from "./services/invitationEmail.js";
@@ -262,6 +264,22 @@ test("invitation email delivery uses a provider-neutral test transport", async (
   assert.equal(sent[0]?.subject, "Einladung zum Betreuungskalender");
   assert.match(sent[0]?.text ?? "", /https:\/\/bk\.example\.test\/invite\?token=test-token-mail-delivery-000000/);
   assert.match(sent[0]?.text ?? "", /Rolle: Bearbeiten/);
+});
+
+test("manual and email invitations use the same complete link", () => {
+  const input = {
+    token: "test-token-link-equality-000000",
+    role: "scheduler" as const,
+    expiresAt: "2026-07-06T10:00:00.000Z"
+  };
+  const baseUrl = "https://bk.example.test/base-path";
+  const publicUrl = invitationUrl(input.token, baseUrl);
+
+  assert.equal(
+    publicUrl,
+    "https://bk.example.test/invite?token=test-token-link-equality-000000"
+  );
+  assert.equal(invitationEmailText(input, baseUrl).split("\n").includes(publicUrl), true);
 });
 
 test("invitation email capability requires enabled host and sender configuration", () => {

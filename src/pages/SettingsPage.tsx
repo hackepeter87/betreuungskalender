@@ -233,18 +233,15 @@ function invitationStatus(invitation: ApiInvitation, locale: "de" | "en") {
 
 function MemberInvitationManager() {
   const { locale, intlLocale } = useI18n();
-  const { session, reload } = useAppStore();
+  const { session } = useAppStore();
   const [members, setMembers] = useState<ApiMember[]>([]);
   const [invitations, setInvitations] = useState<ApiInvitation[]>([]);
-  const [acceptToken, setAcceptToken] = useState(() =>
-    new URLSearchParams(window.location.search).get("invitation") ?? ""
-  );
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<ApiWorkspaceRole>("editor");
   const [expiresDays, setExpiresDays] = useState(7);
   const [sendEmailOverride, setSendEmailOverride] = useState<boolean>();
   const [emailDeliveryAvailable, setEmailDeliveryAvailable] = useState(false);
-  const [createdToken, setCreatedToken] = useState<string | null>(null);
+  const [createdInvitationUrl, setCreatedInvitationUrl] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [ownerForbidden, setOwnerForbidden] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -280,31 +277,12 @@ function MemberInvitationManager() {
 
   if (!session.authenticated || !session.isOwner) return null;
 
-  const acceptInvitation = async (event: FormEvent) => {
-    event.preventDefault();
-    if (!acceptToken.trim()) return;
-    setBusy(true);
-    setMessage(null);
-    setError(null);
-    try {
-      await api.acceptInvitation(acceptToken.trim());
-      setAcceptToken("");
-      setMessage(copy(locale, "settings", "invitationAcceptDone"));
-      await reload();
-      await loadOwnerData();
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const createInvitation = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setMessage(null);
     setError(null);
-    setCreatedToken(null);
+    setCreatedInvitationUrl(null);
     try {
       const safeExpiresDays = Number.isFinite(expiresDays) ? Math.min(30, Math.max(1, expiresDays)) : 7;
       const expiresAt = new Date(Date.now() + safeExpiresDays * 86_400_000).toISOString();
@@ -315,7 +293,7 @@ function MemberInvitationManager() {
         sendEmail
       });
       setInvitations((items) => [created.invitation, ...items]);
-      setCreatedToken(created.token);
+      setCreatedInvitationUrl(created.invitationUrl);
       setInviteEmail("");
       setSendEmailOverride(undefined);
       if (created.emailDelivery?.status === "sent") {
@@ -379,10 +357,10 @@ function MemberInvitationManager() {
     }
   };
 
-  const copyToken = async () => {
-    if (!createdToken) return;
-    await navigator.clipboard.writeText(createdToken);
-    setMessage(copy(locale, "settings", "invitationTokenCopied"));
+  const copyInvitationLink = async () => {
+    if (!createdInvitationUrl) return;
+    await navigator.clipboard.writeText(createdInvitationUrl);
+    setMessage(copy(locale, "settings", "invitationLinkCopied"));
   };
 
   const currentUserId = session.user?.id;
@@ -396,23 +374,6 @@ function MemberInvitationManager() {
           <p>{copy(locale, "settings", "membersDescription")}</p>
         </div>
       </div>
-
-      <form className="member-invite-accept" data-testid="invitation-accept-form" onSubmit={(event) => void acceptInvitation(event)}>
-        <label className="field">
-          <span>{copy(locale, "settings", "invitationAccept")}</span>
-          <input
-            data-testid="invitation-accept-token"
-            value={acceptToken}
-            onChange={(event) => setAcceptToken(event.target.value)}
-            placeholder={copy(locale, "settings", "invitationTokenPlaceholder")}
-            autoComplete="off"
-          />
-        </label>
-        <button className="button button--secondary" type="submit" disabled={busy || !acceptToken.trim()}>
-          <Icon name="check" size={17} />
-          {copy(locale, "settings", "invitationAcceptAction")}
-        </button>
-      </form>
 
       {showOwnerControls ? (
         <>
@@ -467,14 +428,14 @@ function MemberInvitationManager() {
               </button>
             </form>
 
-            {createdToken ? (
-              <div className="member-token-card" data-testid="created-invitation-token">
-                <strong>{copy(locale, "settings", "invitationTokenTitle")}</strong>
-                <small>{copy(locale, "settings", "invitationTokenDescription")}</small>
-                <textarea data-testid="invitation-created-token" readOnly value={createdToken} />
-                <button className="button button--secondary" type="button" onClick={() => void copyToken()}>
+            {createdInvitationUrl ? (
+              <div className="member-token-card" data-testid="created-invitation-link">
+                <strong>{copy(locale, "settings", "invitationLinkTitle")}</strong>
+                <small>{copy(locale, "settings", "invitationLinkDescription")}</small>
+                <textarea data-testid="invitation-created-link" readOnly value={createdInvitationUrl} />
+                <button className="button button--secondary" type="button" onClick={() => void copyInvitationLink()}>
                   <Icon name="copy" size={17} />
-                  {copy(locale, "settings", "invitationTokenCopy")}
+                  {copy(locale, "settings", "invitationLinkCopy")}
                 </button>
               </div>
             ) : null}

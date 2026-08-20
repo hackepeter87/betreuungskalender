@@ -10,7 +10,10 @@ metadata. Unclassified protected routes are denied.
 | --- | --- |
 | `GET /api/health`, `GET /api/ready`, `GET /api/session` | Public |
 | `POST /api/setup/owner-bootstrap`, `POST /api/setup/first-use` | Controlled setup flow |
-| `POST /api/invitations/accept` | Controlled invitation flow |
+
+Invitations are accepted only through the browser link and its validated OIDC
+callback. There is no public API endpoint for submitting a raw invitation
+token.
 
 ## Appointments and personal notification state
 

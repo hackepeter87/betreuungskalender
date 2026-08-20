@@ -311,10 +311,11 @@ requiring browser-local state.
 
 Owner-scoped member administration is available in Settings. Owners can create
 one-time invitations, assign application roles, revoke pending invitations, and
-manage explicit app roles. Invitation codes are shown only at creation time;
-the server stores token hashes and acceptance metadata. Optional SMTP delivery
-sends the same one-time invitation link when mail is configured, while manual
-code transfer remains available.
+manage explicit app roles. The complete invitation link is shown only at
+creation time; the server stores token hashes and acceptance metadata. Optional
+SMTP delivery sends exactly the same one-time invitation link that the owner can
+copy manually. After an owner exists, a normal identity-provider login does not
+create workspace access without an active app membership.
 
 Full guide: [docs/self-hosted-onboarding.md](docs/self-hosted-onboarding.md).
 

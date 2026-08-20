@@ -388,9 +388,6 @@ export function requiredPermissionForRequest(
   url: string
 ): AuthPermission {
   const normalizedMethod = method.toUpperCase();
-  if (url.startsWith("/api/invitations/accept")) {
-    return "read";
-  }
   if (
     url.startsWith("/api/app-data") ||
     url.startsWith("/api/app-users") ||

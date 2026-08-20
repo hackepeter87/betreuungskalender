@@ -119,8 +119,8 @@ Users cannot elevate their own role through member administration.
 
 ## Invitation lifecycle
 
-Invitations are app-owned one-time bearer codes. The raw code is shown only at
-creation time.
+Invitations are app-owned one-time bearer links. The complete link is shown only
+at creation time.
 
 The server stores:
 
@@ -134,13 +134,13 @@ The server stores:
 Opening an invitation link first shows a neutral landing page. Continuing from
 that page starts native OIDC login and accepts the invitation after the
 validated callback. Expired, revoked, already accepted, or malformed links
-show an understandable error without exposing the raw token. Manual token
-acceptance remains available as a compatibility fallback.
+show an understandable error without exposing the raw token. The link and its
+validated OIDC callback are the only invitation acceptance path.
 
 ## Invitation email delivery
 
 Invitation email delivery is optional. Without SMTP configuration, owners can
-copy the one-time code manually.
+copy the complete one-time link manually.
 
 When email delivery is enabled:
 
@@ -154,6 +154,12 @@ When email delivery is enabled:
 The email contains the same one-time bearer invitation link that manual sharing
 would provide. Treat sent invitation email like any other password-equivalent
 delivery channel.
+
+The identity provider confirms who signed in. The application independently
+decides whether that identity has access to this installation. After an owner
+exists, ordinary OIDC login without an active membership is rejected even when
+provider-side groups are present. A validated owner-setup or invitation link is
+required to create the corresponding membership.
 
 ## Upgrade compatibility
 
