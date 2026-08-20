@@ -1,7 +1,10 @@
 import { db } from "../db/connection.js";
 import { permissionsForRole, type AuthRole, type RequestUser } from "../auth.js";
 import type Database from "better-sqlite3";
-import { applyMembershipRole } from "./memberships.js";
+import {
+  applyMembershipRole,
+  type MembershipResolutionPolicy
+} from "./memberships.js";
 
 interface AppUserRow {
   id: string;
@@ -60,7 +63,8 @@ export function upsertAuthenticatedUser(
 
 export function findAuthenticatedUserBySubject(
   externalSubject: string,
-  database: Database.Database = db
+  database: Database.Database = db,
+  policy: MembershipResolutionPolicy = "strict"
 ): RequestUser | undefined {
   const row = database.prepare(`
     SELECT id, external_subject, email, display_name, role, groups_json
@@ -77,7 +81,7 @@ export function findAuthenticatedUserBySubject(
     groups: parseGroups(row.groups_json),
     role: row.role,
     permissions: permissionsForRole(row.role)
-  }, database).user;
+  }, database, policy).user;
 }
 
 export function listAppUsers(database: Database.Database = db) {

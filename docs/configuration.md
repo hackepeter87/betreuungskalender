@@ -33,9 +33,9 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `OIDC_REDIRECT_URI` | Native OIDC callback URI | `https://betreuung.example.net/auth/callback` | Required for `AUTH_MODE=native-oidc` | None | Must be same-origin and pre-registered at the provider |
 | `OIDC_POST_LOGOUT_REDIRECT_URI` | Native OIDC post-logout URI | `https://betreuung.example.net/` | Optional for `AUTH_MODE=native-oidc` | App origin derived from `OIDC_REDIRECT_URI` | Must be pre-registered as a valid post-logout redirect URI in Keycloak |
 | `OIDC_SCOPES` | Native OIDC scopes requested at login | `openid email profile` | Optional for `AUTH_MODE=native-oidc` | `openid email profile` | Keep minimal; add only the provider scopes required to emit configured claims |
-| `OIDC_GROUPS_CLAIM` | Native OIDC claim containing group or role values | `groups` | Recommended for `AUTH_MODE=native-oidc` | `groups` | Used for server-side native authorization |
+| `OIDC_GROUPS_CLAIM` | Native OIDC claim containing group or role values | `groups` | Optional for `AUTH_MODE=native-oidc` | `groups` | Stored as external identity metadata; app memberships remain authoritative for workspace access |
 | `OIDC_LOGIN_STATE_TTL_SECONDS` | Native OIDC login transaction lifetime | `600` | Optional for `AUTH_MODE=native-oidc` | `600` | Short-lived state, nonce, and PKCE verifier records limit replay windows |
-| `OWNER_SETUP_TOKEN_FILE` | Mounted file containing the one-time initial owner setup token | `/run/secrets/owner-setup-token` | Optional for fresh native OIDC installations | Same | Keep the secret file mounted until the owner claim completes; do not place the token itself in app environment files |
+| `OWNER_SETUP_TOKEN_FILE` | Mounted file containing the one-time initial owner setup token | `/run/secrets/owner-setup-token` | Required when establishing a native-OIDC owner | Same | Keep the secret file mounted until the owner claim completes; do not place the token itself in app environment files |
 | `OWNER_SETUP_TOKEN_TTL_SECONDS` | Initial owner setup link lifetime from the secret file modification time | `86400` | Optional | `86400` | Replacing or removing the file invalidates an unfinished owner setup flow |
 | `SESSION_COOKIE_NAME` | Native OIDC opaque session cookie name | `betreuungskalender_session` | Optional for `AUTH_MODE=native-oidc` | `betreuungskalender_session` | Cookie value is opaque and never stores claims or tokens |
 | `SESSION_TTL_SECONDS` | Native OIDC server-side session lifetime | `2419200` | Optional for `AUTH_MODE=native-oidc` | `2419200` | Limits how long an unreused opaque session can remain valid |
@@ -161,11 +161,16 @@ from `OIDC_USER_ID_HEADER` to an internal `app_users` row. Display name, email,
 and groups are refreshed on every API request. API audit fields use the stable
 internal user ID rather than mutable names or email addresses.
 
-Before an owner exists, identity groups map to the legacy compatibility roles:
+In trusted-proxy mode before an owner exists, identity groups map to the legacy
+compatibility roles:
 
 - admin: initial administrative compatibility role
 - parent: read and ordinary write operations
 - readonly: read-only API access
+
+Completing first-use setup in trusted-proxy mode requires an identity that
+matches the configured `OIDC_ADMIN_GROUP`. Parent, viewer, and missing-role
+fallback identities cannot complete first use.
 
 After ownership is established, workspace memberships and the fixed owner,
 admin, editor, scheduler, and viewer permission model are authoritative. See
@@ -209,20 +214,17 @@ Native OIDC maps the stable `sub` claim to `app_users.external_subject`.
 `groups`. Values may be emitted as an array or as comma, semicolon, or
 newline-separated strings. The same `OIDC_ADMIN_GROUP`, `OIDC_PARENT_GROUP`,
 and `OIDC_READONLY_GROUP` settings are used in trusted-proxy and native mode.
-Before an owner is established, configured OIDC groups provide the legacy
-compatibility role. Once `setup.ownerUserId` exists, the latest workspace
-membership is authoritative. An active membership grants its fixed workspace
-role; a missing or deleted membership grants no workspace access. Native OIDC
-may still authenticate the identity, but protected workspace routes return
-`403` until a valid invitation assigns a membership.
+Native OIDC ordinary login requires an active workspace membership regardless
+of provider-side groups. The only onboarding exceptions are validated,
+short-lived owner-setup and invitation contexts. Those contexts may create the
+specific owner or invited membership after the callback; they do not grant a
+generic provisional session and cannot be used for ordinary login.
 
-Before an owner exists, normal login may use configured role groups as the
-documented compatibility path. After an owner exists, normal login requires an
-active app membership; provider-side groups cannot create or replace it. The
-only onboarding exceptions are validated, short-lived owner-setup and
-invitation contexts. Those contexts may create the specific owner or invited
-membership after the callback; they do not grant a generic provisional session
-and cannot be used for ordinary login.
+Trusted-proxy mode may use configured role groups as the documented
+compatibility path before an owner exists. Once `setup.ownerUserId` exists, the
+latest workspace membership is authoritative in every production auth mode. An
+active membership grants its fixed workspace role; a missing or deleted
+membership grants no workspace access.
 
 For initial owner setup, mount a private random value at
 `OWNER_SETUP_TOKEN_FILE` and open `/setup?token=<one-time-value>` before
@@ -278,7 +280,7 @@ secret.
 ### Invitation email delivery
 
 Invitation email delivery is optional. Without SMTP configuration, owners can
-still create an invitation and copy the one-time code manually.
+still create an invitation and copy the one-time link manually.
 
 ```dotenv
 INVITATION_EMAIL_ENABLED=false
@@ -302,7 +304,7 @@ include a display name accepted by the SMTP relay.
 
 Invitation links contain the one-time token. Treat sent mail like any other
 bearer-link delivery channel. If delivery fails, the owner sees a generic
-failure message and can copy the code manually; SMTP hostnames, usernames,
+failure message and can copy the link manually; SMTP hostnames, usernames,
 passwords, and raw provider errors are not returned to the browser.
 
 ## CORS and same-origin operation

@@ -38,7 +38,7 @@ import { externalCalendarRoutes } from "./routes/externalCalendars.js";
 import { calendarFeedRoutes } from "./routes/calendarFeeds.js";
 import { OidcSessionStore } from "./services/oidcSessions.js";
 import { RecoveryAdminStore } from "./services/recoveryAdmin.js";
-import { applyMembershipRole } from "./services/memberships.js";
+import { applyLegacyPreOwnerMembershipRole } from "./services/memberships.js";
 import { publicSetupState } from "./services/setupState.js";
 import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "./services/users.js";
 import { runCareConfirmationSweep } from "./services/careConfirmations.js";
@@ -260,9 +260,10 @@ function hasNativeOidcBrowserSession(request: FastifyRequest): boolean {
   const nativeSession = nativeOidcSessions.findByToken(
     cookieValue(request.headers.cookie, config.sessionCookieName)
   );
-  return Boolean(
-    nativeSession && findAuthenticatedUserBySubject(nativeSession.externalSubject)
-  );
+  const user = nativeSession
+    ? findAuthenticatedUserBySubject(nativeSession.externalSubject)
+    : undefined;
+  return Boolean(user?.workspaceAccess);
 }
 
 function requiresNativeOidcBrowserLogin(request: FastifyRequest): boolean {
@@ -331,8 +332,11 @@ app.get("/api/session", readLimit, async (request) => {
     const nativeSession = nativeOidcSessions.findByToken(
       cookieValue(request.headers.cookie, config.sessionCookieName)
     );
-    const nativeUser = nativeSession
+    const resolvedNativeUser = nativeSession
       ? findAuthenticatedUserBySubject(nativeSession.externalSubject)
+      : undefined;
+    const nativeUser = resolvedNativeUser?.workspaceAccess
+      ? resolvedNativeUser
       : undefined;
     return {
       authRequired: config.requireAuth,
@@ -383,7 +387,7 @@ app.get("/api/session", readLimit, async (request) => {
     });
     if (auth.authenticated && auth.user) {
       upsertAuthenticatedUser(auth.user);
-      const membership = applyMembershipRole(auth.user);
+      const membership = applyLegacyPreOwnerMembershipRole(auth.user);
       if (auth.reason !== "missing_role" || membership.membershipRole) {
         return {
           authRequired: config.requireAuth,

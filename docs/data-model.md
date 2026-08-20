@@ -76,10 +76,12 @@ actors.
 
 `app_memberships` stores workspace roles for known app users. Migration 028
 maps legacy `admin`, `parent`, and `readonly` memberships to `admin`, `editor`,
-and `viewer`. Before an owner exists, the identity-provider group-derived role
-remains a compatibility source. After ownership is established, the latest
-membership record is authoritative: active grants access, deleted revokes it,
-and missing grants no workspace access.
+and `viewer`. Native OIDC requires an active membership for ordinary workspace
+access. Trusted-proxy mode can use the identity-provider group-derived role as
+a compatibility source before an owner exists. After ownership is established,
+the latest membership record is authoritative in every production auth mode:
+active grants access, deleted revokes it, and missing grants no workspace
+access.
 
 `app_invitations` stores only hashes of one-time invitation tokens. The raw
 token is returned once at creation time and is never persisted. Invitations
@@ -88,8 +90,8 @@ revocation timestamps, and the accepted app user ID once claimed.
 
 Member administration uses `settings.setup.ownerUserId`. The explicit owner can
 list members, manage invitation records, and update workspace roles. Existing
-installations without an explicit owner retain the pre-owner compatibility
-path so they can claim ownership without being locked out.
+installations without an explicit owner use the secret-backed owner setup flow;
+the claim establishes ownership without changing existing domain data.
 
 `audit_log` stores timestamp, stable API user ID, entity type and ID, action,
 field name, old/new serialized values, and optional metadata. Audit API

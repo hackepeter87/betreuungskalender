@@ -195,16 +195,22 @@ Calendar feed bearer tokens never authenticate general API routes. Scheduler
 and viewer clients use dedicated summary and schedule endpoints; sensitive
 fields are removed before serialization rather than hidden by the browser.
 
-Before an owner exists, configured identity-provider groups provide the legacy
-compatibility role. Once `setup.ownerUserId` exists, the latest membership
-record is authoritative: an active membership grants its workspace role, a
-deleted membership revokes access, and a missing membership grants no workspace
-access. There is no post-setup fallback to identity-provider groups.
+Native OIDC ordinary login requires an active application membership.
+Configured identity-provider groups do not establish workspace access in this
+mode. Trusted-proxy mode can use configured groups as a compatibility source
+before an owner exists. Once `setup.ownerUserId` exists, the latest membership
+record is authoritative in every production auth mode: an active membership
+grants its workspace role, a deleted membership revokes access, and a missing
+membership grants no workspace access.
+
+Trusted-proxy first-use setup requires the configured admin group. Parent,
+viewer, and missing-role fallback identities cannot establish the owner.
 
 Member administration is owner-scoped. Once `setup.ownerUserId` exists, only
 that app user can create or revoke invitations and change application
-membership roles. Existing installations without an explicit owner keep the
-pre-owner compatibility path until ownership is claimed explicitly.
+membership roles. Existing installations without an explicit owner use the
+secret-backed owner setup link to establish ownership explicitly without
+changing existing domain data.
 
 Application invitations use one-time bearer tokens. The server stores only a
 SHA-256 token hash, expiry, revocation status, target role, and acceptance
@@ -222,11 +228,11 @@ sender display name when available; the actual sender mailbox still comes from
 `SMTP_FROM`. Delivery errors returned to owners must remain generic and must not
 include raw tokens, SMTP credentials, relay hostnames, or provider stack traces.
 
-Fresh installations support an explicit owner bootstrap. During that incomplete
-first-run state, a successfully authenticated identity may create the initial
-admin membership and mark setup complete. The action is audited and becomes
-unavailable once setup is complete, so later users cannot silently take over
-ownership through the same flow.
+Fresh native-OIDC installations require the explicit, secret-backed owner setup
+link. The validated callback creates the initial admin membership and owner
+designation; the guided first-use wizard then records application defaults.
+Ownerless existing installations can use the same link without recreating
+domain data. The action is audited and becomes unavailable once an owner exists.
 
 The full self-hosted setup, owner, member, and invitation model is documented
 in [self-hosted-onboarding.md](self-hosted-onboarding.md).
@@ -271,13 +277,12 @@ validated again before the owner membership is assigned, so replacing or
 removing the file invalidates an unfinished setup flow. Setup and invitation
 landing pages and redirects are returned with explicit no-store cache headers.
 
-Before the first owner is established, configured groups may supply the
-documented compatibility role. After that claim, normal native OIDC login
-requires an active app membership and configured groups cannot replace a
-missing or revoked membership. Only a validated owner-setup or invitation
-context may establish the matching membership. Rejected login, setup, and
-invitation responses are returned without caching, and rejected callbacks clear
-any existing app session cookie.
+Before the first owner is established, trusted-proxy mode may use configured
+groups for its documented compatibility role. Native OIDC always requires an
+active app membership for normal login. Only a validated owner-setup or
+invitation context may establish the matching membership. Rejected login,
+setup, and invitation responses are returned without caching, and rejected
+callbacks clear any existing app session cookie.
 
 ## Operator responsibility
 

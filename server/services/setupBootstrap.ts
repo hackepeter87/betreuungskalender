@@ -94,26 +94,6 @@ function recordSetupComplete(
   };
 }
 
-export function bootstrapInstallationOwner(
-  user: RequestUser,
-  timestamp = new Date().toISOString(),
-  database: Database.Database = db
-) {
-  return database.transaction(() => {
-    const setup = buildSetupState(database);
-    if (setup.complete) {
-      throw new SetupBootstrapError(
-        "setup_already_complete",
-        409,
-        "Die Installation wurde bereits eingerichtet."
-      );
-    }
-
-    assertKnownUser(user.id, database);
-    return recordSetupComplete(database, user, timestamp);
-  })();
-}
-
 export interface FirstUseSetupInput {
   installationLabel?: string;
   careParty: {

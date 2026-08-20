@@ -63,7 +63,7 @@ test("active app membership overrides the identity-provider derived role", () =>
   });
 });
 
-test("users without app membership keep their claim-derived role before ownership is configured", () => {
+test("strict membership resolution denies claim-derived roles before ownership is configured", () => {
   const user: RequestUser = {
     id: "user-parent",
     externalSubject: "subject-parent",
@@ -77,6 +77,27 @@ test("users without app membership keep their claim-derived role before ownershi
     const resolved = applyMembershipRole(user, database);
 
     assert.equal(resolved.membershipRole, undefined);
+    assert.equal(resolved.workspaceAccess, false);
+    assert.equal(resolved.user.workspaceAccess, false);
+    assert.deepEqual(resolved.user.permissions, []);
+  });
+});
+
+test("trusted-proxy compatibility can retain claim-derived roles before ownership is configured", () => {
+  const user: RequestUser = {
+    id: "user-parent",
+    externalSubject: "subject-parent",
+    displayName: "Parent",
+    groups: ["/betreuungskalender/parents"],
+    role: "parent",
+    permissions: permissionsForRole("parent")
+  };
+
+  withDatabase((database) => {
+    const resolved = applyMembershipRole(user, database, "legacy-pre-owner");
+
+    assert.equal(resolved.membershipRole, undefined);
+    assert.equal(resolved.workspaceAccess, true);
     assert.equal(resolved.user.role, "parent");
     assert.deepEqual(resolved.user.permissions, permissionsForRole("parent"));
   });

@@ -56,9 +56,10 @@ Migrations run automatically before the listener starts.
 ## First-use setup
 
 Fresh self-hosted installations are detected from server-side SQLite state.
-After the first successful sign-in, the app can guide the initial owner through
-setup, child and care-party defaults, and calendar/feed discovery. Member
-administration and invitations are handled inside Settings after setup.
+Native OIDC uses the one-time owner setup link before the app guides the initial
+owner through setup, child and care-party defaults, and calendar/feed discovery.
+Trusted-proxy and local installations use their documented first-use path.
+Member administration and invitations are handled inside Settings after setup.
 
 Read the complete setup and member-administration guide:
 [self-hosted-onboarding.md](self-hosted-onboarding.md).

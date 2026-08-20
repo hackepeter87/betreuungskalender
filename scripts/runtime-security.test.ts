@@ -80,6 +80,7 @@ function seedNativeOidcUser(
     role: "admin" | "parent" | "readonly";
     groups: string[];
     token: string;
+    membership?: boolean;
   }
 ): void {
   const now = "2026-07-01T00:00:00.000Z";
@@ -111,6 +112,26 @@ function seedNativeOidcUser(
     now,
     expiresAt
   );
+  if (input.membership !== false) {
+    const workspaceRole = input.role === "admin"
+      ? "admin"
+      : input.role === "parent"
+        ? "editor"
+        : "viewer";
+    database.prepare(`
+      INSERT INTO app_memberships (
+        id, user_id, role, created_by, updated_by, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      `membership-${input.id}`,
+      input.id,
+      workspaceRole,
+      input.id,
+      input.id,
+      now,
+      now
+    );
+  }
 }
 
 test("production runtime sends documented security headers and restrictive CORS", async (t) => {
@@ -642,6 +663,7 @@ test("runtime enforces native OIDC sessions without trusting proxy headers or lo
   migrateDatabase(seededDatabase);
   const parentToken = "native-parent-session-secret";
   const readonlyToken = "native-readonly-session-secret";
+  const preOwnerToken = "native-pre-owner-session-secret";
   seedNativeOidcUser(seededDatabase, {
     id: "user_parent",
     externalSubject: "subject-parent",
@@ -659,6 +681,16 @@ test("runtime enforces native OIDC sessions without trusting proxy headers or lo
     role: "readonly",
     groups: ["/betreuungskalender/readers"],
     token: readonlyToken
+  });
+  seedNativeOidcUser(seededDatabase, {
+    id: "user_pre_owner",
+    externalSubject: "subject-pre-owner",
+    email: "pre-owner@example.net",
+    displayName: "Pre Owner User",
+    role: "admin",
+    groups: ["/betreuungskalender/admins"],
+    token: preOwnerToken,
+    membership: false
   });
   seededDatabase.prepare(`
     INSERT INTO native_oidc_sessions (
@@ -792,6 +824,44 @@ test("runtime enforces native OIDC sessions without trusting proxy headers or lo
     }
   });
 
+  const preOwnerSession = await fetch(`${baseUrl}/api/session`, {
+    headers: cookie(preOwnerToken)
+  });
+  assert.equal(preOwnerSession.status, 200);
+  assert.deepEqual(await preOwnerSession.json(), {
+    authRequired: true,
+    authenticated: false,
+    loginUrl: "/auth/login",
+    setup: {
+      complete: false,
+      required: true
+    }
+  });
+  const preOwnerSpa = await fetch(`${baseUrl}/`, {
+    headers: cookie(preOwnerToken),
+    redirect: "manual"
+  });
+  assert.equal(preOwnerSpa.status, 302);
+  assert.equal(
+    new URL(preOwnerSpa.headers.get("location") ?? "", baseUrl).pathname,
+    "/auth/login"
+  );
+  assert.equal((await fetch(`${baseUrl}/api/children`, {
+    headers: cookie(preOwnerToken)
+  })).status, 403);
+  assert.equal((await fetch(`${baseUrl}/api/setup/first-use`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      ...cookie(preOwnerToken)
+    },
+    body: JSON.stringify({
+      ownerConfirmed: true,
+      careParty: { name: "Primary care", kind: "other" },
+      defaultCareParty: "primary"
+    })
+  })).status, 403);
+
   assert.equal((await fetch(`${baseUrl}/api/children`, {
     headers: cookie(readonlyToken)
   })).status, 403);
@@ -837,6 +907,7 @@ test("runtime enforces native OIDC sessions without trusting proxy headers or lo
   assert.doesNotMatch(logs, /native-parent-session-secret/);
   assert.doesNotMatch(logs, /native-readonly-session-secret/);
   assert.doesNotMatch(logs, /native-missing-user-session-secret/);
+  assert.doesNotMatch(logs, /native-pre-owner-session-secret/);
   assert.doesNotMatch(logs, /native-code-secret|native-state-secret/);
 });
 
@@ -881,7 +952,7 @@ test("runtime serves revocable personal iCalendar feeds without broader token ac
     "x-auth-request-user": "subject-alpha-feed",
     "x-auth-request-email": "alpha-feed@example.invalid",
     "x-auth-request-preferred-username": "Alpha Parent",
-    "x-auth-request-groups": "/betreuungskalender/parents"
+    "x-auth-request-groups": "/betreuungskalender/admins"
   };
   const betaHeaders = {
     "x-auth-request-user": "subject-beta-feed",
@@ -890,6 +961,30 @@ test("runtime serves revocable personal iCalendar feeds without broader token ac
     "x-auth-request-groups": "/betreuungskalender/parents"
   };
   const jsonHeaders = { "content-type": "application/json" };
+
+  const setup = await fetch(`${baseUrl}/api/setup/first-use`, {
+    method: "POST",
+    headers: { ...jsonHeaders, ...alphaHeaders },
+    body: JSON.stringify({
+      ownerConfirmed: true,
+      careParty: { name: "Primary care", kind: "other" },
+      defaultCareParty: "primary"
+    })
+  });
+  assert.equal(setup.status, 200);
+
+  const betaSession = await fetch(`${baseUrl}/api/session`, { headers: betaHeaders });
+  assert.equal(betaSession.status, 200);
+  const users = await fetch(`${baseUrl}/api/app-users`, { headers: alphaHeaders });
+  assert.equal(users.status, 200);
+  const betaUser = (await users.json() as Array<{ id: string; email?: string }>)
+    .find((user) => user.email === "beta-feed@example.invalid");
+  assert(betaUser);
+  assert.equal((await fetch(`${baseUrl}/api/members/${betaUser.id}/role`, {
+    method: "PUT",
+    headers: { ...jsonHeaders, ...alphaHeaders },
+    body: JSON.stringify({ role: "editor" })
+  })).status, 200);
 
   const child = await fetch(`${baseUrl}/api/children`, {
     method: "POST",

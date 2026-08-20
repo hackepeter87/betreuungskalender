@@ -103,12 +103,14 @@ The latest membership record has three possible states:
 
 - active membership: authorize with its workspace role;
 - deleted membership: deny workspace access and never fall back to claims;
-- no membership: use the legacy claim mapping only while no owner exists.
+- no membership: deny native-OIDC workspace access; trusted-proxy mode may use
+  the legacy claim mapping only while no owner exists.
 
-Once an owner exists, membership state is authoritative. An authenticated
-identity without an active membership can complete a valid invitation but
-cannot read workspace data. Existing installations without an owner can use
-the secret-backed owner setup flow to establish ownership explicitly.
+Native OIDC always treats membership state as authoritative for ordinary
+login. An authenticated identity without an active membership can complete a
+valid invitation but cannot read workspace data. Existing installations
+without an owner can use the secret-backed owner setup flow to establish
+ownership explicitly without changing domain data.
 
 ### Revocation
 
