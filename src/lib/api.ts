@@ -18,7 +18,6 @@ import type {
   ApiScheduleEntry,
   ApiSetupFirstUse,
   ApiSetupFirstUseInput,
-  ApiSetupOwnerBootstrap,
   ApiUserCarePartyAssignment,
   ApiMonthlyClosing,
   ApiUnavailablePeriod,
@@ -799,12 +798,6 @@ export const api = {
   },
   getInstanceReadiness() {
     return request<ApiInstanceReadiness>("/api/instance-readiness");
-  },
-  bootstrapInstallationOwner() {
-    return request<ApiSetupOwnerBootstrap>("/api/setup/owner-bootstrap", {
-      method: "POST",
-      body: JSON.stringify({ confirm: true })
-    });
   },
   completeFirstUseSetup(input: ApiSetupFirstUseInput) {
     return request<ApiSetupFirstUse>("/api/setup/first-use", {

@@ -3,7 +3,11 @@ import { cookieValue } from "../cookies.js";
 import { config } from "../config.js";
 import { resolveRequestUser, type RequestUser } from "../auth.js";
 import { isTrustedProxyAddress } from "../trustedProxy.js";
-import { bootstrapInstallationOwner, completeFirstUseSetup, SetupBootstrapError } from "../services/setupBootstrap.js";
+import { completeFirstUseSetup, SetupBootstrapError } from "../services/setupBootstrap.js";
+import {
+  isNativeOwnerSetupUser,
+  isTrustedProxySetupAdmin
+} from "../services/setupAuthorization.js";
 import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "../services/users.js";
 import type { OidcSessionStore } from "../services/oidcSessions.js";
 import { setupFirstUseInputSchema } from "../validation/schemas.js";
@@ -21,7 +25,16 @@ function setupUserFromNativeSession(
   sessions: Pick<OidcSessionStore, "findByToken">
 ): RequestUser | undefined {
   const session = sessions.findByToken(cookieValue(request.headers.cookie, config.sessionCookieName));
-  return session ? findAuthenticatedUserBySubject(session.externalSubject) : undefined;
+  if (!session) return undefined;
+  const user = findAuthenticatedUserBySubject(session.externalSubject);
+  if (!user) return undefined;
+  if (!isNativeOwnerSetupUser(user)) {
+    throw Object.assign(new Error("Für diese Einrichtung ist eine Owner-Berechtigung erforderlich."), {
+      code: "forbidden",
+      statusCode: 403
+    });
+  }
+  return user;
 }
 
 function setupUserFromTrustedProxy(request: FastifyRequest): RequestUser | undefined {
@@ -44,7 +57,12 @@ function setupUserFromTrustedProxy(request: FastifyRequest): RequestUser | undef
     requireRoleClaim: config.oidcRequireRoleClaim,
     fallbackRoleOnMissing: "readonly"
   });
-  if (!auth.authenticated || !auth.user) return undefined;
+  if (!isTrustedProxySetupAdmin(auth)) {
+    throw Object.assign(new Error("Für diese Einrichtung ist eine Admin-Berechtigung erforderlich."), {
+      code: "forbidden",
+      statusCode: 403
+    });
+  }
   upsertAuthenticatedUser(auth.user);
   return auth.user;
 }
@@ -102,34 +120,6 @@ export async function setupRoutes(
   app: FastifyInstance,
   options: SetupRouteOptions
 ): Promise<void> {
-  app.post("/api/setup/owner-bootstrap", writeLimit, async (request, reply) => {
-    const body = request.body as { confirm?: unknown } | undefined;
-    if (body?.confirm !== true) {
-      return reply.code(400).send({
-        error: "validation_error",
-        message: "Die Einrichtung muss ausdrücklich bestätigt werden."
-      });
-    }
-
-    const user = setupUser(request, options.nativeSessions);
-    if (!user) {
-      return reply.code(401).send({
-        error: "authentication_required",
-        message: "Authentifizierung erforderlich."
-      });
-    }
-
-    try {
-      return bootstrapInstallationOwner(user);
-    } catch (error) {
-      const normalized = normalizeSetupError(error);
-      return reply.code(normalized.statusCode).send({
-        error: normalized.error,
-        message: normalized.message
-      });
-    }
-  });
-
   app.post("/api/setup/first-use", writeLimit, async (request, reply) => {
     const parsed = setupFirstUseInputSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -139,15 +129,14 @@ export async function setupRoutes(
       });
     }
 
-    const user = setupUser(request, options.nativeSessions);
-    if (!user) {
-      return reply.code(401).send({
-        error: "authentication_required",
-        message: "Authentifizierung erforderlich."
-      });
-    }
-
     try {
+      const user = setupUser(request, options.nativeSessions);
+      if (!user) {
+        return reply.code(401).send({
+          error: "authentication_required",
+          message: "Authentifizierung erforderlich."
+        });
+      }
       return completeFirstUseSetup(user, parsed.data);
     } catch (error) {
       const normalized = normalizeSetupError(error);

@@ -11,7 +11,7 @@ travel, costs, holidays, and unavailable periods.
 
 ## Project status
 
-- Latest published release: [v1.20.4](docs/release-notes/v1.20.4.md)
+- Latest published release: [v1.20.5](docs/release-notes/v1.20.5.md)
 - Current `main`: SQLite/API domain persistence, first-use setup, application
   memberships and invitations, optional invitation email delivery, native OIDC
   authentication, trusted-proxy compatibility, RRULE-compatible contact rules
@@ -262,10 +262,11 @@ OIDC_READONLY_GROUP=/betreuungskalender/readers
 OIDC_REQUIRE_ROLE_CLAIM=false
 ```
 
-The API maps the stable OIDC subject to an internal app user. Before an owner is
-established, configured identity-provider groups provide the compatibility
-role used for setup. After ownership is established, active workspace
-memberships are authoritative. The fixed workspace roles are owner-backed
+The API maps the stable OIDC subject to an internal app user. Native OIDC uses
+active workspace memberships for application access; the initial owner is
+established through the one-time owner setup link. Trusted-proxy installations
+can use configured identity-provider groups as a documented compatibility path
+until an owner is established. The fixed workspace roles are owner-backed
 admin, admin, editor, scheduler, and viewer; scheduler and viewer responses are
 reduced server-side to scheduling-safe fields. Only the owner administers
 members and destructive operations. Trusted proxy headers can be forged if
@@ -304,10 +305,11 @@ restricted to the admin instance-information view.
 
 ## First-use setup and members
 
-Fresh self-hosted installations show a guided first-use setup after the first
-successful sign-in. The flow confirms the installation owner, creates initial
-application defaults, and points the user to calendar/feed setup without
-requiring browser-local state.
+Fresh native-OIDC installations start with the one-time owner setup link. After
+the validated owner claim, the guided setup creates initial application
+defaults and points the owner to calendar/feed setup without requiring
+browser-local state. Existing installations without an explicit owner can use
+the same owner link without recreating or changing their domain data.
 
 Owner-scoped member administration is available in Settings. Owners can create
 one-time invitations, assign application roles, revoke pending invitations, and

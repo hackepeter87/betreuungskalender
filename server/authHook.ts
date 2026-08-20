@@ -11,7 +11,8 @@ import { type OidcSessionRecord, type OidcSessionStore } from "./services/oidcSe
 import { isTrustedProxyAddress } from "./trustedProxy.js";
 import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "./services/users.js";
 import {
-  applyMembershipRole,
+  applyLegacyPreOwnerMembershipRole,
+  type MembershipResolutionPolicy,
   type MembershipResolution
 } from "./services/memberships.js";
 
@@ -39,7 +40,10 @@ interface NativeAuthOptions {
   findUserByExternalSubject?: (externalSubject: string) => RequestUser | undefined;
   findRecoveryUserByToken?: (token: string | undefined) => RequestUser | undefined;
   upsertAuthenticatedUser?: (user: RequestUser) => void;
-  applyMembershipRole?: (user: RequestUser) => MembershipResolution;
+  applyMembershipRole?: (
+    user: RequestUser,
+    policy?: MembershipResolutionPolicy
+  ) => MembershipResolution;
 }
 
 function httpError(code: string, statusCode: number, message: string): Error & { code: string; statusCode: number } {
@@ -80,7 +84,6 @@ export function createApiAuthHook(
       request.url === "/api/health" ||
       request.url === "/api/ready" ||
       request.url === "/api/session" ||
-      request.url === "/api/setup/owner-bootstrap" ||
       request.url === "/api/setup/first-use"
     ) return;
     const recoveryUser = config.recoveryAdminEnabled
@@ -157,7 +160,9 @@ export function createApiAuthHook(
         );
     }
     (options.upsertAuthenticatedUser ?? upsertAuthenticatedUser)(auth.user);
-    const membership = (options.applyMembershipRole ?? applyMembershipRole)(auth.user);
+    const membership = options.applyMembershipRole
+      ? options.applyMembershipRole(auth.user, "legacy-pre-owner")
+      : applyLegacyPreOwnerMembershipRole(auth.user);
     if (auth.reason === "missing_role" && !membership.membershipRole) {
       throw httpError(
         "authorization_required",

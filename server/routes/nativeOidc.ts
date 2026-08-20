@@ -54,7 +54,6 @@ interface NativeOidcRoutesOptions {
   sessions?: OidcSessionStore;
   upsertUser?: (user: RequestUser) => void;
   applyMembershipRole?: (user: RequestUser) => MembershipResolution;
-  isSetupRequired?: () => boolean;
   ownerSetupTokens?: Pick<OwnerSetupTokenStore, "begin" | "consumeAndClaim">;
   invitationFlow?: {
     begin(token: string): string;
@@ -354,14 +353,28 @@ export async function nativeOidcRoutes(
           "Keine passende Berechtigung in den OIDC-Claims gefunden."
         );
       }
-      upsertUser(auth.user);
-      if (claims.loginContext.type === "owner_setup") {
-        ownerSetupTokens.consumeAndClaim(claims.loginContext.tokenHash, auth.user);
-      } else if (claims.loginContext.type === "invitation") {
-        invitationFlow.accept(claims.loginContext.tokenHash, auth.user);
+      let membership: MembershipResolution;
+      if (claims.loginContext.type === "normal") {
+        membership = resolveMembership(auth.user);
+        if (!membership.workspaceAccess) {
+          throw new NativeOidcError(
+            "authorization_required",
+            403,
+            "Für diese Installation besteht keine aktive Mitgliedschaft."
+          );
+        }
+        upsertUser(auth.user);
+        membership = resolveMembership(auth.user);
+      } else {
+        upsertUser(auth.user);
+        if (claims.loginContext.type === "owner_setup") {
+          ownerSetupTokens.consumeAndClaim(claims.loginContext.tokenHash, auth.user);
+        } else {
+          invitationFlow.accept(claims.loginContext.tokenHash, auth.user);
+        }
+        membership = resolveMembership(auth.user);
       }
-      const membership = resolveMembership(auth.user);
-      if (claims.loginContext.type === "normal" && !membership.workspaceAccess) {
+      if (!membership.workspaceAccess) {
         throw new NativeOidcError(
           "authorization_required",
           403,

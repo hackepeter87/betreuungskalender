@@ -284,7 +284,7 @@ export interface ApiSetupState {
   required: boolean;
 }
 
-export interface ApiSetupOwnerBootstrap {
+export interface ApiSetupCompletion {
   setup: ApiSetupState;
   completedAt: string;
   owner: {
@@ -316,7 +316,7 @@ export interface ApiSetupFirstUseInput {
   };
 }
 
-export interface ApiSetupFirstUse extends ApiSetupOwnerBootstrap {
+export interface ApiSetupFirstUse extends ApiSetupCompletion {
   created: {
     carePartyId: string;
     secondaryCarePartyId?: string;

@@ -7,7 +7,7 @@ import Database from "better-sqlite3";
 import { permissionsForRole, type RequestUser } from "./auth.js";
 import { migrateDatabase } from "./db/migrationRunner.js";
 import { membershipRoleForUser } from "./services/memberships.js";
-import { bootstrapInstallationOwner, completeFirstUseSetup, SetupBootstrapError } from "./services/setupBootstrap.js";
+import { completeFirstUseSetup } from "./services/setupBootstrap.js";
 import { buildSetupState, publicSetupState } from "./services/setupState.js";
 import { OwnerSetupTokenError, OwnerSetupTokenStore } from "./services/ownerSetupTokens.js";
 
@@ -142,60 +142,6 @@ test("supports explicit setup completion metadata for later owner bootstrap", ()
   });
 });
 
-test("bootstraps the first owner and records explicit setup completion", () => {
-  withDatabase((database) => {
-    const result = bootstrapInstallationOwner(
-      setupUser(),
-      "2026-07-05T12:00:00.000Z",
-      database
-    );
-    const settings = database.prepare(`
-      SELECT key, value_json AS valueJson
-      FROM settings
-      WHERE key IN ('setup.ownerUserId', 'setup.completedAt', 'setup.completedBy')
-      ORDER BY key
-    `).all() as Array<{ key: string; valueJson: string }>;
-    const auditRows = database.prepare(`
-      SELECT field_name AS fieldName
-      FROM audit_log
-      WHERE entity_type = 'setup'
-      ORDER BY id
-    `).all() as Array<{ fieldName: string }>;
-
-    assert.deepEqual(result.setup, {
-      complete: true,
-      required: false
-    });
-    assert.equal(result.owner.id, "local-dev");
-    assert.equal(result.owner.role, "admin");
-    assert.equal(membershipRoleForUser("local-dev", database), "admin");
-    assert.deepEqual(settings.map((row) => [row.key, JSON.parse(row.valueJson)]), [
-      ["setup.completedAt", "2026-07-05T12:00:00.000Z"],
-      ["setup.completedBy", "local-dev"],
-      ["setup.ownerUserId", "local-dev"]
-    ]);
-    assert.deepEqual(auditRows.map((row) => row.fieldName), [
-      "owner_bootstrap",
-      "setup_completed"
-    ]);
-  });
-});
-
-test("does not allow silent owner takeover after setup completion", () => {
-  withDatabase((database) => {
-    insertSetting(database, "setup.completedAt", "2026-07-05T11:00:00.000Z");
-
-    assert.throws(
-      () => bootstrapInstallationOwner(setupUser(), timestamp, database),
-      (error) =>
-        error instanceof SetupBootstrapError &&
-        error.code === "setup_already_complete" &&
-        error.statusCode === 409
-    );
-    assert.equal(membershipRoleForUser("local-dev", database), "admin");
-  });
-});
-
 test("owner setup token claims an owner once without completing the wizard", () => {
   withDatabase((database) => {
     const directory = mkdtempSync(join(tmpdir(), "betreuungskalender-owner-token-"));
@@ -249,6 +195,45 @@ test("owner setup token claims an owner once without completing the wizard", () 
         "owner_bootstrap",
         "owner_setup_reuse_rejected"
       ]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+});
+
+test("owner setup token claims an owner for existing data without changing domain records", () => {
+  withDatabase((database) => {
+    insertChild(database);
+    insertCareParty(database);
+    const before = {
+      child: database.prepare("SELECT * FROM children WHERE id = ?").get("child-setup-state"),
+      careParty: database.prepare("SELECT * FROM care_parties WHERE id = ?").get("party-setup-state")
+    };
+    const directory = mkdtempSync(join(tmpdir(), "betreuungskalender-existing-owner-token-"));
+    const tokenFile = join(directory, "owner-token");
+    try {
+      writeFileSync(tokenFile, "fictional-existing-owner-secret\n", { mode: 0o600 });
+      const issuedAt = new Date("2026-07-05T11:00:00.000Z");
+      utimesSync(tokenFile, issuedAt, issuedAt);
+      const store = new OwnerSetupTokenStore({ tokenFile, ttlSeconds: 3600, database });
+      const hash = store.begin(
+        "fictional-existing-owner-secret",
+        new Date("2026-07-05T11:05:00.000Z")
+      );
+
+      store.consumeAndClaim(hash, setupUser(), new Date("2026-07-05T11:10:00.000Z"));
+
+      assert.equal(settingValue(database, "setup.ownerUserId"), "local-dev");
+      assert.equal(buildSetupState(database).source, "existing-data");
+      assert.deepEqual(
+        database.prepare("SELECT * FROM children WHERE id = ?").get("child-setup-state"),
+        before.child
+      );
+      assert.deepEqual(
+        database.prepare("SELECT * FROM care_parties WHERE id = ?").get("party-setup-state"),
+        before.careParty
+      );
+      assert.equal(settingValue(database, "setup.completedAt"), undefined);
     } finally {
       rmSync(directory, { recursive: true, force: true });
     }

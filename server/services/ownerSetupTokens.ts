@@ -4,7 +4,6 @@ import type Database from "better-sqlite3";
 import type { RequestUser } from "../auth.js";
 import { db as defaultDb } from "../db/connection.js";
 import { setMembershipRole } from "./memberships.js";
-import { buildSetupState } from "./setupState.js";
 
 export class OwnerSetupTokenError extends Error {
   constructor(
@@ -141,14 +140,6 @@ export class OwnerSetupTokenStore {
   }
 
   begin(rawToken: string, now = new Date()): string {
-    if (buildSetupState(this.#database).complete) {
-      throw new OwnerSetupTokenError(
-        "setup_already_complete",
-        409,
-        "Die Installation wurde bereits eingerichtet."
-      );
-    }
-
     if (!rawToken.trim()) {
       throw new OwnerSetupTokenError(
         "owner_setup_invalid",
@@ -220,11 +211,11 @@ export class OwnerSetupTokenStore {
     }
 
     this.#database.transaction(() => {
-      if (buildSetupState(this.#database).complete || setting(this.#database, "setup.ownerUserId")) {
+      if (setting(this.#database, "setup.ownerUserId")) {
         throw new OwnerSetupTokenError(
           "setup_already_complete",
           409,
-          "Die Installation wurde bereits eingerichtet."
+          "Ein Installationseigentümer wurde bereits festgelegt."
         );
       }
       const timestamp = now.toISOString();

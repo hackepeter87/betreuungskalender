@@ -19,6 +19,8 @@ export interface MembershipResolution {
   workspaceAccess?: boolean;
 }
 
+export type MembershipResolutionPolicy = "strict" | "legacy-pre-owner";
+
 interface MembershipRow {
   role: string;
   deleted_at: string | null;
@@ -66,14 +68,16 @@ export function membershipRoleForUser(
 
 export function hasWorkspaceAccess(
   userId: string,
-  database: Database.Database = db
+  database: Database.Database = db,
+  policy: MembershipResolutionPolicy = "strict"
 ): boolean {
-  return workspacePermissionsForUser(userId, database).length > 0;
+  return workspacePermissionsForUser(userId, database, policy).length > 0;
 }
 
 export function workspacePermissionsForUser(
   userId: string,
-  database: Database.Database = db
+  database: Database.Database = db,
+  policy: MembershipResolutionPolicy = "strict"
 ): WorkspacePermission[] {
   const membership = latestMembershipForUser(userId, database);
   if (membership?.deleted_at) return [];
@@ -81,7 +85,7 @@ export function workspacePermissionsForUser(
   if (membership && isWorkspaceRole(membership.role)) {
     return workspacePermissionsForRole(membership.role, owner === userId);
   }
-  if (owner) return [];
+  if (owner || policy === "strict") return [];
   const user = database.prepare(`
     SELECT role
     FROM app_users
@@ -95,14 +99,16 @@ export function workspacePermissionsForUser(
 export function userHasWorkspacePermission(
   userId: string,
   permission: WorkspacePermission,
-  database: Database.Database = db
+  database: Database.Database = db,
+  policy: MembershipResolutionPolicy = "strict"
 ): boolean {
-  return workspacePermissionsForUser(userId, database).includes(permission);
+  return workspacePermissionsForUser(userId, database, policy).includes(permission);
 }
 
 export function applyMembershipRole(
   user: RequestUser,
-  database: Database.Database = db
+  database: Database.Database = db,
+  policy: MembershipResolutionPolicy = "strict"
 ): MembershipResolution {
   const membership = latestMembershipForUser(user.id, database);
   const owner = ownerId(database);
@@ -123,7 +129,7 @@ export function applyMembershipRole(
   const membershipRole = membership && isWorkspaceRole(membership.role)
     ? membership.role
     : undefined;
-  if (!membershipRole && owner) {
+  if (!membershipRole && (owner || policy === "strict")) {
     return {
       membershipState: "none",
       workspaceAccess: false,
@@ -153,6 +159,13 @@ export function applyMembershipRole(
       isOwner
     }
   };
+}
+
+export function applyLegacyPreOwnerMembershipRole(
+  user: RequestUser,
+  database: Database.Database = db
+): MembershipResolution {
+  return applyMembershipRole(user, database, "legacy-pre-owner");
 }
 
 export function setMembershipRole(

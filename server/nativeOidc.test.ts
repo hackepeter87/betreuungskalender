@@ -15,6 +15,7 @@ import {
 import { nativeOidcRoutes } from "./routes/nativeOidc.js";
 import { OidcLoginStateStore } from "./services/oidcLoginStates.js";
 import { OidcSessionStore } from "./services/oidcSessions.js";
+import { applyMembershipRole } from "./services/memberships.js";
 import { upsertAuthenticatedUser } from "./services/users.js";
 
 function testDatabase() {
@@ -454,7 +455,7 @@ test("native OIDC routes redirect login and keep callback responses token-free",
     },
     sessions,
     upsertUser: (user) => upsertAuthenticatedUser(user, new Date().toISOString(), database),
-    applyMembershipRole: (candidate) => ({ user: candidate })
+    applyMembershipRole: (candidate) => ({ user: candidate, workspaceAccess: true })
   });
 
   try {
@@ -627,6 +628,7 @@ test("native OIDC callback rejects normal login without workspace membership", a
   const app = Fastify({ logger: false });
   const sessions = new OidcSessionStore(database);
   const staleSession = sessions.create("previous-subject", 3600);
+  let upsertCalls = 0;
   await app.register(nativeOidcRoutes, {
     config: {
       authMode: "native-oidc",
@@ -658,9 +660,10 @@ test("native OIDC callback rejects normal login without workspace membership", a
       })
     },
     sessions,
-    upsertUser: (user) => upsertAuthenticatedUser(user, new Date().toISOString(), database),
-    applyMembershipRole: (candidate) => ({ user: candidate, workspaceAccess: false }),
-    isSetupRequired: () => false
+    upsertUser: () => {
+      upsertCalls += 1;
+    },
+    applyMembershipRole: (candidate) => ({ user: candidate, workspaceAccess: false })
   });
 
   try {
@@ -678,6 +681,7 @@ test("native OIDC callback rejects normal login without workspace membership", a
     assert.match(callback.payload, /Kein Zugriff auf diese Installation/);
     assert.doesNotMatch(callback.payload, /subject-123|parents|editor|admin/);
     assert.equal(sessions.findByToken(staleSession.token), undefined);
+    assert.equal(upsertCalls, 0);
   } finally {
     await app.close();
     cleanup();
@@ -752,63 +756,74 @@ test("native OIDC callback accepts users with app membership without role groups
   }
 });
 
-test("native OIDC callback keeps pre-owner bootstrap compatibility", async () => {
-  const { database, cleanup } = testDatabase();
-  const app = Fastify({ logger: false });
-  const sessions = new OidcSessionStore(database);
-  await app.register(nativeOidcRoutes, {
-    config: {
-      authMode: "native-oidc",
-      nodeEnv: "production",
-      oidcIssuerUrl: "https://idp.example.test/realms/demo",
-      oidcClientId: "betreuungskalender",
-      oidcClientSecret: "test-secret",
-      oidcRedirectUri: "https://bk.example.test/auth/callback",
-      oidcPostLogoutRedirectUri: "https://bk.example.test/",
-      oidcScopes: "openid email profile",
-      oidcGroupsClaim: "groups",
-      oidcLoginStateTtlSeconds: 600,
-      oidcAdminGroup: "/betreuungskalender/admins",
-      oidcParentGroup: "/betreuungskalender/parents",
-      oidcReadonlyGroup: "/betreuungskalender/readers",
-      oidcRequireRoleClaim: true,
-      sessionCookieName: "betreuungskalender_session",
-      sessionTtlSeconds: 3600,
-      rateLimitSensitiveMax: 5,
-      rateLimitWindowMs: 60_000
-    },
-    service: {
-      createLoginRedirect: async () => new URL("https://idp.example.test/auth?state=state-123"),
-      createLogoutRedirect: async () => new URL("https://idp.example.test/logout"),
-      validateCallback: async () => ({
-        subject: "subject-setup",
-        email: "setup@example.net",
-        displayName: "Setup User",
-        groups: ["/other"],
-        loginContext: { type: "normal" }
-      })
-    },
-    sessions,
-    upsertUser: (user) => upsertAuthenticatedUser(user, new Date().toISOString(), database),
-    applyMembershipRole: (candidate) => ({
-      user: { ...candidate, workspaceAccess: true },
-      workspaceAccess: true
-    }),
-    isSetupRequired: () => true
-  });
+test("native OIDC normal login stays closed before owner setup for every claim role", async (t) => {
+  const groupCases = [
+    ["admin", "/betreuungskalender/admins"],
+    ["editor", "/betreuungskalender/parents"],
+    ["viewer", "/betreuungskalender/readers"],
+    ["missing", "/other"]
+  ] as const;
 
-  try {
-    const callback = await app.inject({
-      method: "GET",
-      url: "/auth/callback?code=code-123&state=state-123"
+  for (const [label, group] of groupCases) {
+    await t.test(label, async () => {
+      const { database, cleanup } = testDatabase();
+      const app = Fastify({ logger: false });
+      const sessions = new OidcSessionStore(database);
+      let upsertCalls = 0;
+      await app.register(nativeOidcRoutes, {
+        config: {
+          authMode: "native-oidc",
+          nodeEnv: "production",
+          oidcIssuerUrl: "https://idp.example.test/realms/demo",
+          oidcClientId: "betreuungskalender",
+          oidcClientSecret: "test-secret",
+          oidcRedirectUri: "https://bk.example.test/auth/callback",
+          oidcPostLogoutRedirectUri: "https://bk.example.test/",
+          oidcScopes: "openid email profile",
+          oidcGroupsClaim: "groups",
+          oidcLoginStateTtlSeconds: 600,
+          oidcAdminGroup: "/betreuungskalender/admins",
+          oidcParentGroup: "/betreuungskalender/parents",
+          oidcReadonlyGroup: "/betreuungskalender/readers",
+          oidcRequireRoleClaim: true,
+          sessionCookieName: "betreuungskalender_session",
+          sessionTtlSeconds: 3600,
+          rateLimitSensitiveMax: 5,
+          rateLimitWindowMs: 60_000
+        },
+        service: {
+          createLoginRedirect: async () => new URL("https://idp.example.test/auth?state=state-123"),
+          createLogoutRedirect: async () => new URL("https://idp.example.test/logout"),
+          validateCallback: async () => ({
+            subject: `subject-${label}`,
+            displayName: `User ${label}`,
+            groups: [group],
+            loginContext: { type: "normal" }
+          })
+        },
+        sessions,
+        upsertUser: () => {
+          upsertCalls += 1;
+        },
+        applyMembershipRole: (candidate) => applyMembershipRole(candidate, database)
+      });
+
+      try {
+        const callback = await app.inject({
+          method: "GET",
+          url: "/auth/callback?code=code-123&state=state-123"
+        });
+
+        assert.equal(callback.statusCode, 403);
+        assert.equal(upsertCalls, 0);
+        const persisted = database
+          .prepare("SELECT COUNT(*) AS count FROM app_users WHERE external_subject = ?")
+          .get(`subject-${label}`) as { count: number };
+        assert.equal(persisted.count, 0);
+      } finally {
+        await app.close();
+        cleanup();
+      }
     });
-
-    assert.equal(callback.statusCode, 302);
-    assert.equal(callback.headers.location, "/");
-    const sessionToken = String(callback.headers["set-cookie"]).split(";")[0]?.split("=")[1];
-    assert.equal(sessions.findByToken(sessionToken)?.externalSubject, "subject-setup");
-  } finally {
-    await app.close();
-    cleanup();
   }
 });

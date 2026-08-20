@@ -6,6 +6,23 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.20.5] - 2026-08-20
+
+### Changed
+
+- Require an active application membership for every ordinary native-OIDC
+  login, including before the initial owner is established.
+- Use the one-time owner setup link as the exclusive native-OIDC path for
+  establishing the first owner.
+- Allow ownerless existing installations to establish an owner without
+  recreating or changing existing domain data.
+- Require the configured admin group for trusted-proxy first-use setup.
+
+### Removed
+
+- Removed the obsolete owner-bootstrap API and Settings action; guided first
+  use now continues only from an authorized owner session.
+
 ## [1.20.4] - 2026-08-20
 
 ### Added

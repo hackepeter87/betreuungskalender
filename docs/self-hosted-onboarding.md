@@ -12,8 +12,8 @@ your deployment environment and the security guidance in
 ## First-use setup
 
 A fresh installation is detected from server-side SQLite state, not from
-browser storage. After the first successful sign-in, the app can guide the user
-through the initial setup flow.
+browser storage. Native OIDC first establishes the owner through the one-time
+owner setup link and then guides that owner through the initial setup flow.
 
 The setup flow covers:
 
@@ -58,9 +58,12 @@ https://betreuung.example.net/setup?token=<one-time-value>
 
 The landing page validates the link before offering the sign-in action. After
 the validated OIDC callback, the authenticated user receives the owner/admin
-membership. The setup wizard remains open until the required app data is
-completed. The link expires according to `OWNER_SETUP_TOKEN_TTL_SECONDS`, can
-be used only once, and is rejected after an owner has been established.
+membership. On a fresh database, the setup wizard remains open until the
+required app data is completed. On an existing installation without an owner,
+the same link establishes ownership and opens the existing app without changing
+children, care parties, rules, entries, or settings. The link expires according
+to `OWNER_SETUP_TOKEN_TTL_SECONDS`, can be used only once, and is rejected after
+an owner has been established.
 
 Keep the secret file mounted and unchanged until the authenticated owner claim
 has completed. Replacing or removing it invalidates an unfinished flow. After
@@ -77,11 +80,16 @@ maps that stable external identity to an internal `app_users` record.
 
 Application authorization is then resolved in this order:
 
-1. Active application membership for the internal user.
-2. Before an owner exists only: configured identity-provider group or role
-   claim as compatibility fallback.
-3. After an owner exists: missing or deleted membership means no workspace
-   access, except for a validated invitation flow.
+1. Native OIDC requires an active application membership for ordinary login.
+2. The validated owner-setup and invitation flows may create exactly the
+   corresponding application membership.
+3. Trusted-proxy mode may use configured identity-provider groups as a
+   compatibility source before an owner exists.
+4. A missing or deleted membership grants no native-OIDC workspace access.
+
+Trusted-proxy first-use setup requires the configured admin group. Parent,
+viewer, and missing-role fallback identities cannot complete it. Local mode
+retains its development-oriented first-use behavior.
 
 This keeps the identity provider responsible for authentication while the app
 can manage its own roles for the self-hosted installation.
@@ -104,8 +112,9 @@ exist.
 ## Owner and member administration
 
 Once `setup.ownerUserId` is set, only that owner can administer members and
-invitations. Existing installations without an explicit owner retain the
-pre-owner compatibility path until ownership is set.
+invitations. Existing installations without an explicit owner use the
+secret-backed owner setup link to establish ownership without rerunning the
+first-use data wizard.
 
 In Settings, the owner can:
 
@@ -167,16 +176,16 @@ Existing installations keep their current authorization behavior after an
 upgrade:
 
 - active app memberships are migrated to the fixed workspace roles
-- configured OIDC groups remain a compatibility source only while no owner
-  exists
-- installations without an explicit owner retain the documented pre-owner
-  compatibility path until ownership is set
-- after ownership is set, users without an active membership have no workspace
-  access
+- native OIDC ordinary login always requires an active app membership
+- trusted-proxy installations may retain configured group compatibility before
+  an owner exists
+- installations without an explicit owner can use the owner setup link without
+  changing existing domain data
+- users without an active membership have no native-OIDC workspace access
 - existing invitations and sessions remain valid according to their original
   expiry and revocation state
-- an already configured installation cannot be claimed through an owner setup
-  link
+- an installation with an existing owner cannot be claimed through another
+  owner setup link
 
 Do not remove working group mappings during the same update that introduces
 app memberships. Verify owner access and a second member login first, then

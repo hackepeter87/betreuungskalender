@@ -39,6 +39,7 @@ function resetDatabase(): void {
     db.prepare("DELETE FROM care_parties").run();
     db.prepare("DELETE FROM audit_log").run();
     db.prepare("DELETE FROM monthly_closings").run();
+    db.prepare("DELETE FROM app_memberships WHERE user_id <> 'local-dev'").run();
     db.prepare("DELETE FROM app_users WHERE id <> 'local-dev'").run();
   })();
 }
@@ -135,6 +136,18 @@ function insertAppUser(user: RequestUser): void {
     user.role,
     JSON.stringify(user.groups),
     "2026-07-01T10:00:00.000Z",
+    "2026-07-01T10:00:00.000Z",
+    "2026-07-01T10:00:00.000Z"
+  );
+  db.prepare(`
+    INSERT INTO app_memberships (
+      id, user_id, role, created_by, updated_by, created_at, updated_at
+    ) VALUES (?, ?, 'editor', ?, ?, ?, ?)
+  `).run(
+    `membership-${user.id}`,
+    user.id,
+    "local-dev",
+    "local-dev",
     "2026-07-01T10:00:00.000Z",
     "2026-07-01T10:00:00.000Z"
   );
