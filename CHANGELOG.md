@@ -6,10 +6,24 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.20.4] - 2026-08-20
+
 ### Added
 
 - Publish the versioned Helm OCI chart to GHCR from the exact GitHub release
-  tag and verify anonymous pull access for Argo CD.
+  tag and verify anonymous pull access.
+
+### Changed
+
+- Reworked the first-use setup into compact, responsive sections that support
+  more than one child without turning the setup into an oversized form.
+- Use the same complete invitation link for manual sharing and email delivery.
+- Require an active workspace membership for regular OIDC sign-in after the
+  first owner has completed setup.
+
+### Removed
+
+- Removed the obsolete invitation-code entry form and its separate API route.
 
 ## [1.20.3] - 2026-08-18
 
