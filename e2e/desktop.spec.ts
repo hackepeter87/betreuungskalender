@@ -888,6 +888,24 @@ test("guides fresh installations through first-use setup before showing navigati
 
   await expect(page.getByTestId("setup-wizard")).toBeVisible();
   await expect(page.getByTestId("nav-calendar")).toHaveCount(0);
+  await expectNoDocumentHorizontalOverflow(page);
+  const setupLayout = await page.evaluate(() => {
+    const wizard = document.querySelector('[data-testid="setup-wizard"]')!.getBoundingClientRect();
+    const primary = document.querySelector('[data-testid="setup-primary-person-card"]')!.getBoundingClientRect();
+    const secondary = document.querySelector('[data-testid="setup-secondary-person-card"]')!.getBoundingClientRect();
+    const childFields = Array.from(document.querySelectorAll('[data-testid="setup-child-grid"] > .field'))
+      .map((field) => field.getBoundingClientRect().top);
+    return {
+      wizardWidth: wizard.width,
+      roleTopDifference: Math.abs(primary.top - secondary.top),
+      roleWidthDifference: Math.abs(primary.width - secondary.width),
+      childTopDifference: Math.max(...childFields) - Math.min(...childFields)
+    };
+  });
+  expect(setupLayout.wizardWidth).toBeLessThanOrEqual(960);
+  expect(setupLayout.roleTopDifference).toBeLessThanOrEqual(1);
+  expect(setupLayout.roleWidthDifference).toBeLessThanOrEqual(1);
+  expect(setupLayout.childTopDifference).toBeLessThanOrEqual(1);
   await page.getByTestId("setup-installation-label").fill("Testkalender");
   await page.getByTestId("setup-care-party-name").fill("Vater");
   await page.getByTestId("setup-care-party-kind").selectOption("father");
