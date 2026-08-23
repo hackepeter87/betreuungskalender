@@ -14,6 +14,7 @@ import {
   updateMemberRole
 } from "./services/memberManagement.js";
 import { membershipRoleForUser } from "./services/memberships.js";
+import { listAppUsers } from "./services/users.js";
 
 const timestamp = "2026-07-05T10:00:00.000Z";
 
@@ -170,6 +171,31 @@ test("member listing exposes claim and effective roles without tokens", () => {
     assert.equal(listed?.membershipRole, "editor");
     assert.equal(listed?.effectiveRole, "editor");
     assert.equal("token" in (listed ?? {}), false);
+  });
+});
+
+test("deployed user listings omit the exact local development identity", () => {
+  withDatabase((database) => {
+    const deployedOptions = { includeLocalDevelopmentIdentity: false };
+    assert.equal(
+      listMembers(database, deployedOptions).some((member) => member.id === "local-dev"),
+      false
+    );
+    assert.equal(
+      listAppUsers(database, deployedOptions).some((member) => member.id === "local-dev"),
+      false
+    );
+
+    assert.equal(
+      listMembers(database, { includeLocalDevelopmentIdentity: true })
+        .some((member) => member.id === "local-dev"),
+      true
+    );
+    assert.equal(
+      listAppUsers(database, { includeLocalDevelopmentIdentity: true })
+        .some((member) => member.id === "local-dev"),
+      true
+    );
   });
 });
 

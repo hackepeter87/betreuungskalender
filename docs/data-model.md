@@ -360,3 +360,11 @@ SQL files in `server/migrations/` are applied in lexical order and recorded in
 `schema_migrations`. Build copies them into `dist-server/server/migrations`.
 Never edit an already released migration; add a new numbered migration and
 update this document.
+
+Migration `029_local_development_identity_cleanup` marks the introduction of a
+mode-aware startup cleanup. Outside local mode, runtime access is removed from
+the exact technical `local-dev` identity while its historical `app_users`
+record remains available for existing audit references. Active memberships,
+care-party assignments, calendar feeds, push subscriptions, and unanswered
+confirmation requests are disabled. Local mode and an explicitly configured
+local development owner remain unchanged.

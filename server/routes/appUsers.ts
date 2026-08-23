@@ -51,12 +51,16 @@ function normalizeMemberError(error: unknown) {
 }
 
 export async function appUserRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/app-users", readLimit, async () => listAppUsers());
+  const userListOptions = {
+    includeLocalDevelopmentIdentity: config.authMode === "local"
+  };
+
+  app.get("/api/app-users", readLimit, async () => listAppUsers(db, userListOptions));
 
   app.get("/api/members", readLimit, async (request, reply) => {
     try {
       assertCanAdministerMembers(request.user);
-      return listMembers();
+      return listMembers(db, userListOptions);
     } catch (error) {
       const normalized = normalizeMemberError(error);
       return reply.code(normalized.statusCode).send({
@@ -105,7 +109,7 @@ export async function appUserRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get("/api/user-care-party-assignments", readLimit, async () =>
-    listAppUsers().map((user) => ({
+    listAppUsers(db, userListOptions).map((user) => ({
       userId: user.id,
       carePartyIds: activeAssignmentIds(user.id)
     }))
@@ -114,7 +118,7 @@ export async function appUserRoutes(app: FastifyInstance): Promise<void> {
   app.put<{ Params: { userId: string } }>("/api/user-care-party-assignments/:userId", writeLimit, async (request, reply) => {
     const parsed = userCarePartyAssignmentInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
-    const user = listAppUsers().find((item) => item.id === request.params.userId);
+    const user = listAppUsers(db, userListOptions).find((item) => item.id === request.params.userId);
     if (!user) return reply.code(404).send({ error: "not_found" });
 
     const uniqueIds = [...new Set(parsed.data.carePartyIds)];

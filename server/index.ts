@@ -42,8 +42,12 @@ import { applyLegacyPreOwnerMembershipRole } from "./services/memberships.js";
 import { publicSetupState } from "./services/setupState.js";
 import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "./services/users.js";
 import { runCareConfirmationSweep } from "./services/careConfirmations.js";
+import { disableLocalDevelopmentIdentityAccess } from "./services/localDevelopmentIdentity.js";
 
 runMigrations();
+if (config.authMode !== "local") {
+  disableLocalDevelopmentIdentityAccess(db);
+}
 
 const nativeOidcSessions = new OidcSessionStore();
 const recoveryAdmin = new RecoveryAdminStore({

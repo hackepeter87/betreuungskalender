@@ -5,6 +5,7 @@ import {
   applyMembershipRole,
   type MembershipResolutionPolicy
 } from "./memberships.js";
+import { isLocalDevelopmentIdentity } from "./localDevelopmentIdentity.js";
 
 interface AppUserRow {
   id: string;
@@ -84,20 +85,32 @@ export function findAuthenticatedUserBySubject(
   }, database, policy).user;
 }
 
-export function listAppUsers(database: Database.Database = db) {
+export function listAppUsers(
+  database: Database.Database = db,
+  options: { includeLocalDevelopmentIdentity?: boolean } = {
+    includeLocalDevelopmentIdentity: true
+  }
+) {
   const rows = database.prepare(`
-    SELECT id, email, display_name, role, last_seen_at
+    SELECT id, external_subject, email, display_name, role, last_seen_at
     FROM app_users
     WHERE deleted_at IS NULL
     ORDER BY display_name COLLATE NOCASE, id
   `).all() as Array<{
     id: string;
+    external_subject: string;
     email: string | null;
     display_name: string;
     role: AuthRole;
     last_seen_at: string;
   }>;
-  return rows.map((row) => ({
+  return rows.filter((row) =>
+    options.includeLocalDevelopmentIdentity || !isLocalDevelopmentIdentity({
+      id: row.id,
+      externalSubject: row.external_subject,
+      displayName: row.display_name
+    })
+  ).map((row) => ({
     id: row.id,
     displayName: row.display_name,
     role: row.role,
