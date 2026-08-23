@@ -235,6 +235,12 @@ never stored in SQLite and is redacted from request logs. See
 Keep the same file mounted until the authenticated owner claim has completed.
 Replacing or removing it invalidates any unfinished setup flow.
 
+The exact `/setup`, `/setup/continue`, `/invite`, and `/invite/continue` GET
+routes are reachable without an existing app session so their one-time values
+can be validated. This does not make the application public: all other browser
+routes retain the normal login requirement, and a regular OIDC login does not
+create an application membership.
+
 In native mode, unauthenticated `/api/session` responses include
 `loginUrl: "/auth/login"`. Authenticated native sessions include
 `logoutUrl: "/auth/logout"`, which the frontend calls with `POST`. The route

@@ -65,6 +65,12 @@ children, care parties, rules, entries, or settings. The link expires according
 to `OWNER_SETUP_TOKEN_TTL_SECONDS`, can be used only once, and is rejected after
 an owner has been established.
 
+The exact `GET /setup` and `GET /setup/continue` routes are controlled public
+entry points so the server can validate the one-time value before beginning
+OIDC. They do not grant application access by themselves. Ordinary application
+pages, unknown setup subpaths, and normal OIDC login still require an active
+application membership.
+
 Keep the secret file mounted and unchanged until the authenticated owner claim
 has completed. Replacing or removing it invalidates an unfinished flow. After
 the claim succeeds, remove the mounted file.
@@ -130,6 +136,11 @@ Users cannot elevate their own role through member administration.
 
 Invitations are app-owned one-time bearer links. The complete link is shown only
 at creation time.
+
+The exact `GET /invite` and `GET /invite/continue` routes remain reachable for
+the same reason as owner setup: the application must validate and bind the
+one-time invitation before OIDC begins. Missing, invalid, expired, revoked, or
+used invitations do not create a login context or application session.
 
 The server stores:
 

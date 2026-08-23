@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { existsSync } from "node:fs";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -10,6 +11,7 @@ import test, { type TestContext } from "node:test";
 import Database from "better-sqlite3";
 import ICAL from "ical.js";
 import { migrateDatabase } from "../server/db/migrationRunner.js";
+import { createInvitation } from "../server/services/invitations.js";
 import { oidcSessionTokenForTesting } from "../server/services/oidcSessions.js";
 
 const projectRoot = resolve(import.meta.dirname, "..");
@@ -909,6 +911,358 @@ test("runtime enforces native OIDC sessions without trusting proxy headers or lo
   assert.doesNotMatch(logs, /native-missing-user-session-secret/);
   assert.doesNotMatch(logs, /native-pre-owner-session-secret/);
   assert.doesNotMatch(logs, /native-code-secret|native-state-secret/);
+});
+
+test("production runtime preserves token-bound native OIDC onboarding routes", async (t) => {
+  await ensureFrontendFallback(t);
+  const root = await mkdtemp(join(tmpdir(), "betreuungskalender-onboarding-runtime-"));
+  const databasePath = join(root, "app.sqlite");
+  const ownerTokenFile = join(root, "owner-setup-token");
+  const ownerToken = "fictional-runtime-owner-token";
+  const validInvitationToken = "fictional-runtime-valid-invitation";
+  const expiredInvitationToken = "fictional-runtime-expired-invitation";
+  const revokedInvitationToken = "fictional-runtime-revoked-invitation";
+  const acceptedInvitationToken = "fictional-runtime-accepted-invitation";
+  await writeFile(ownerTokenFile, ownerToken, { mode: 0o600 });
+
+  const seededDatabase = new Database(databasePath);
+  seededDatabase.pragma("foreign_keys = ON");
+  migrateDatabase(seededDatabase);
+  const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+  const validInvitation = createInvitation({
+    role: "viewer",
+    expiresAt: future,
+    actorId: "system",
+    token: validInvitationToken
+  }, seededDatabase);
+  createInvitation({
+    role: "viewer",
+    expiresAt: past,
+    actorId: "system",
+    token: expiredInvitationToken
+  }, seededDatabase);
+  const revokedInvitation = createInvitation({
+    role: "viewer",
+    expiresAt: future,
+    actorId: "system",
+    token: revokedInvitationToken
+  }, seededDatabase);
+  seededDatabase.prepare(`
+    UPDATE app_invitations
+    SET revoked_at = ?, updated_at = ?
+    WHERE id = ?
+  `).run(new Date().toISOString(), new Date().toISOString(), revokedInvitation.invitation.id);
+  const acceptedInvitation = createInvitation({
+    role: "viewer",
+    expiresAt: future,
+    actorId: "system",
+    token: acceptedInvitationToken
+  }, seededDatabase);
+  seededDatabase.prepare(`
+    UPDATE app_invitations
+    SET accepted_at = ?, updated_at = ?
+    WHERE id = ?
+  `).run(new Date().toISOString(), new Date().toISOString(), acceptedInvitation.invitation.id);
+  seededDatabase.close();
+
+  const port = await freePort();
+  const issuer = "https://idp.example.invalid/realms/runtime";
+  const clientSecret = "fictional-runtime-client-secret-at-least-32-bytes";
+  const fetchStub = resolve(projectRoot, "scripts/fixtures/runtime-oidc-fetch-stub.mjs");
+  let logs = "";
+  const runtime = spawn(
+    process.execPath,
+    [resolve(projectRoot, "node_modules/tsx/dist/cli.mjs"), "server/index.ts"],
+    {
+      cwd: projectRoot,
+      env: {
+        ...process.env,
+        NODE_ENV: "production",
+        NODE_OPTIONS: `${process.env.NODE_OPTIONS ?? ""} --import=${fetchStub}`.trim(),
+        HOST: "127.0.0.1",
+        PORT: String(port),
+        DATABASE_PATH: databasePath,
+        BACKUP_DIR: join(root, "backups"),
+        AUTH_MODE: "native-oidc",
+        REQUIRE_AUTH: "true",
+        TRUST_PROXY_AUTH: "false",
+        OIDC_ISSUER_URL: issuer,
+        OIDC_CLIENT_ID: "betreuungskalender-runtime-test",
+        OIDC_CLIENT_SECRET: clientSecret,
+        OIDC_REDIRECT_URI: `http://127.0.0.1:${port}/auth/callback`,
+        OIDC_REQUIRE_ROLE_CLAIM: "false",
+        OWNER_SETUP_TOKEN_FILE: ownerTokenFile,
+        OWNER_SETUP_TOKEN_TTL_SECONDS: "3600",
+        RUNTIME_OIDC_TEST_ISSUER: issuer,
+        ALLOWED_ORIGIN: "https://allowed.example.test",
+        LOG_LEVEL: "info",
+        RATE_LIMIT_MAX: "300",
+        RATE_LIMIT_WRITE_MAX: "300",
+        RATE_LIMIT_SENSITIVE_MAX: "300",
+        RATE_LIMIT_EXPORT_MAX: "300"
+      }
+    }
+  );
+  runtime.stdout.on("data", (chunk) => { logs += chunk; });
+  runtime.stderr.on("data", (chunk) => { logs += chunk; });
+
+  t.after(async () => {
+    await stop(runtime);
+    await rm(root, { recursive: true, force: true });
+  });
+
+  const baseUrl = `http://127.0.0.1:${port}`;
+  await waitForHealth(`${baseUrl}/api/health`, () => logs);
+  const manualGet = (path: string, headers?: Record<string, string>) => fetch(
+    `${baseUrl}${path}`,
+    { headers, redirect: "manual" }
+  );
+  const stateCount = () => {
+    const database = new Database(databasePath, { readonly: true });
+    try {
+      return (database.prepare(`
+        SELECT COUNT(*) AS count
+        FROM native_oidc_login_states
+      `).get() as { count: number }).count;
+    } finally {
+      database.close();
+    }
+  };
+  const sessionCount = () => {
+    const database = new Database(databasePath, { readonly: true });
+    try {
+      return (database.prepare(`
+        SELECT COUNT(*) AS count
+        FROM native_oidc_sessions
+      `).get() as { count: number }).count;
+    } finally {
+      database.close();
+    }
+  };
+  const loginState = (state: string) => {
+    const database = new Database(databasePath, { readonly: true });
+    try {
+      return database.prepare(`
+        SELECT state, nonce, pkce_verifier, context_type, context_token_hash,
+          consumed_at
+        FROM native_oidc_login_states
+        WHERE state = ?
+      `).get(state) as {
+        state: string;
+        nonce: string;
+        pkce_verifier: string;
+        context_type: string;
+        context_token_hash: string | null;
+        consumed_at: string | null;
+      } | undefined;
+    } finally {
+      database.close();
+    }
+  };
+  const callbackFor = async (redirect: Response, subject: string) => {
+    const providerUrl = new URL(redirect.headers.get("location") ?? "");
+    const state = providerUrl.searchParams.get("state");
+    const nonce = providerUrl.searchParams.get("nonce");
+    assert(state);
+    assert(nonce);
+    const code = Buffer.from(JSON.stringify({ subject, nonce })).toString("base64url");
+    return {
+      state,
+      nonce,
+      response: await manualGet(
+        `/auth/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`
+      )
+    };
+  };
+
+  const unauthenticatedRoot = await manualGet("/");
+  assert.equal(unauthenticatedRoot.status, 302);
+  assert.equal(new URL(unauthenticatedRoot.headers.get("location") ?? "", baseUrl).pathname, "/auth/login");
+  for (const path of ["/calendar", "/setup/unknown", "/invite/unknown"]) {
+    const response = await manualGet(`${path}?token=fictional-unknown-path-token`);
+    assert.equal(response.status, 302);
+    assert.equal(new URL(response.headers.get("location") ?? "", baseUrl).pathname, "/auth/login");
+  }
+
+  const missingSetup = await manualGet("/setup");
+  assert.equal(missingSetup.status, 400);
+  assert.equal(missingSetup.headers.has("location"), false);
+  assert.equal(missingSetup.headers.has("set-cookie"), false);
+  const invalidSetup = await manualGet("/setup?token=fictional-invalid-owner-token");
+  assert.equal(invalidSetup.status, 403);
+  assert.equal(invalidSetup.headers.has("location"), false);
+  assert.equal(invalidSetup.headers.has("set-cookie"), false);
+  const invalidSetupContinue = await manualGet(
+    "/setup/continue?token=fictional-invalid-owner-token"
+  );
+  assert.equal(invalidSetupContinue.status, 403);
+  assert.equal(invalidSetupContinue.headers.has("location"), false);
+  assert.equal(stateCount(), 0);
+  assert.equal(sessionCount(), 0);
+
+  const setup = await manualGet(`/setup?token=${encodeURIComponent(ownerToken)}`);
+  assert.equal(setup.status, 200);
+  assert.match(setup.headers.get("content-type") ?? "", /text\/html/);
+  assert.match(await setup.text(), /Installation einrichten/);
+  assert.equal(stateCount(), 0);
+  const setupContinue = await manualGet(
+    `/setup/continue?token=${encodeURIComponent(ownerToken)}`
+  );
+  assert.equal(setupContinue.status, 302);
+  const setupProviderUrl = new URL(setupContinue.headers.get("location") ?? "");
+  assert.equal(setupProviderUrl.origin, new URL(issuer).origin);
+  const setupState = setupProviderUrl.searchParams.get("state");
+  assert(setupState);
+  const persistedSetupState = loginState(setupState);
+  assert(persistedSetupState);
+  assert.equal(persistedSetupState.context_type, "owner_setup");
+  assert.equal(
+    persistedSetupState.context_token_hash,
+    createHash("sha256").update(ownerToken).digest("hex")
+  );
+  assert.equal(persistedSetupState.consumed_at, null);
+  assert.notEqual(persistedSetupState.pkce_verifier, "");
+  assert.equal(sessionCount(), 0);
+
+  const ownerCallback = await callbackFor(setupContinue, "runtime-owner");
+  assert.equal(ownerCallback.response.status, 302);
+  assert.equal(ownerCallback.response.headers.get("location"), "/?onboarding=owner-setup");
+  const ownerCookie = (ownerCallback.response.headers.get("set-cookie") ?? "").split(";")[0];
+  assert.match(ownerCookie, /^betreuungskalender_session=.+/);
+  const ownerDatabase = new Database(databasePath, { readonly: true });
+  const owner = ownerDatabase.prepare(`
+    SELECT u.id, m.role, s.value_json AS owner_user_json, t.consumed_at
+    FROM app_users u
+    JOIN app_memberships m ON m.user_id = u.id AND m.deleted_at IS NULL
+    JOIN settings s ON s.key = 'setup.ownerUserId' AND s.deleted_at IS NULL
+    JOIN owner_setup_tokens t ON t.token_hash = ?
+    WHERE u.external_subject = ? AND u.deleted_at IS NULL
+  `).get(
+    createHash("sha256").update(ownerToken).digest("hex"),
+    "runtime-owner"
+  ) as {
+    id: string;
+    role: string;
+    owner_user_json: string;
+    consumed_at: string;
+  };
+  ownerDatabase.close();
+  assert.equal(owner.role, "admin");
+  assert.equal(JSON.parse(owner.owner_user_json), owner.id);
+  assert.notEqual(owner.consumed_at, null);
+  assert.equal(sessionCount(), 1);
+  assert.notEqual(loginState(ownerCallback.state)?.consumed_at, null);
+  const ownerSpa = await manualGet("/?onboarding=owner-setup", { cookie: ownerCookie });
+  assert.equal(ownerSpa.status, 200);
+  assert.match(await ownerSpa.text(), /<div id="root">/);
+  const ownerSession = await fetch(`${baseUrl}/api/session`, {
+    headers: { cookie: ownerCookie }
+  });
+  assert.equal(ownerSession.status, 200);
+  const ownerSessionBody = await ownerSession.json() as {
+    authenticated: boolean;
+    isOwner: boolean;
+    setup: { complete: boolean; required: boolean };
+  };
+  assert.equal(ownerSessionBody.authenticated, true);
+  assert.equal(ownerSessionBody.isOwner, true);
+  assert.deepEqual(ownerSessionBody.setup, { complete: false, required: true });
+
+  const consumedSetup = await manualGet(`/setup?token=${encodeURIComponent(ownerToken)}`);
+  assert.equal(consumedSetup.status, 409);
+  assert.equal(consumedSetup.headers.has("set-cookie"), false);
+  const replacementOwnerToken = "fictional-runtime-replacement-owner-token";
+  await writeFile(ownerTokenFile, replacementOwnerToken, { mode: 0o600 });
+  const ownerAlreadyConfigured = await manualGet(
+    `/setup?token=${encodeURIComponent(replacementOwnerToken)}`
+  );
+  assert.equal(ownerAlreadyConfigured.status, 409);
+  const expiredTime = new Date(Date.now() - 2 * 60 * 60 * 1000);
+  await utimes(ownerTokenFile, expiredTime, expiredTime);
+  const expiredSetup = await manualGet(
+    `/setup?token=${encodeURIComponent(replacementOwnerToken)}`
+  );
+  assert.equal(expiredSetup.status, 410);
+
+  const invitationFailures = [
+    ["/invite", 400],
+    ["/invite?token=fictional-invalid-invitation", 404],
+    [`/invite?token=${encodeURIComponent(expiredInvitationToken)}`, 410],
+    [`/invite?token=${encodeURIComponent(revokedInvitationToken)}`, 410],
+    [`/invite?token=${encodeURIComponent(acceptedInvitationToken)}`, 409],
+    ["/invite/continue?token=fictional-invalid-invitation", 404]
+  ] as const;
+  for (const [path, status] of invitationFailures) {
+    const response = await manualGet(path);
+    assert.equal(response.status, status);
+    assert.equal(response.headers.has("location"), false);
+    assert.equal(response.headers.has("set-cookie"), false);
+  }
+  assert.equal(sessionCount(), 1);
+
+  const invitation = await manualGet(
+    `/invite?token=${encodeURIComponent(validInvitationToken)}`
+  );
+  assert.equal(invitation.status, 200);
+  assert.match(await invitation.text(), /Einladung annehmen/);
+  const invitationContinue = await manualGet(
+    `/invite/continue?token=${encodeURIComponent(validInvitationToken)}`
+  );
+  assert.equal(invitationContinue.status, 302);
+  const invitationState = new URL(
+    invitationContinue.headers.get("location") ?? ""
+  ).searchParams.get("state");
+  assert(invitationState);
+  assert.equal(loginState(invitationState)?.context_type, "invitation");
+  const invitationCallback = await callbackFor(invitationContinue, "runtime-invitee");
+  assert.equal(invitationCallback.response.status, 302);
+  assert.equal(invitationCallback.response.headers.get("location"), "/?onboarding=invitation");
+  const invitationCookie = (invitationCallback.response.headers.get("set-cookie") ?? "")
+    .split(";")[0];
+  assert.match(invitationCookie, /^betreuungskalender_session=.+/);
+  const invitationDatabase = new Database(databasePath, { readonly: true });
+  const invitedMembership = invitationDatabase.prepare(`
+    SELECT m.role, i.accepted_at
+    FROM app_users u
+    JOIN app_memberships m ON m.user_id = u.id AND m.deleted_at IS NULL
+    JOIN app_invitations i ON i.id = ? AND i.accepted_user_id = u.id
+    WHERE u.external_subject = ? AND u.deleted_at IS NULL
+  `).get(validInvitation.invitation.id, "runtime-invitee") as {
+    role: string;
+    accepted_at: string;
+  } | undefined;
+  invitationDatabase.close();
+  assert.equal(invitedMembership?.role, "viewer");
+  assert.notEqual(invitedMembership?.accepted_at, null);
+  assert.equal(sessionCount(), 2);
+
+  const normalLogin = await manualGet("/auth/login");
+  assert.equal(normalLogin.status, 302);
+  const normalCallback = await callbackFor(normalLogin, "runtime-without-membership");
+  assert.equal(normalCallback.response.status, 403);
+  assert.match(await normalCallback.response.text(), /Kein Zugriff auf diese Installation/);
+  assert.match(normalCallback.response.headers.get("set-cookie") ?? "", /Max-Age=0/);
+  assert.equal(sessionCount(), 2);
+
+  await new Promise((resolveDelay) => setTimeout(resolveDelay, 100));
+  for (const secret of [
+    ownerToken,
+    replacementOwnerToken,
+    validInvitationToken,
+    expiredInvitationToken,
+    revokedInvitationToken,
+    acceptedInvitationToken,
+    "fictional-invalid-owner-token",
+    "fictional-invalid-invitation",
+    "fictional-unknown-path-token",
+    ownerCallback.state,
+    ownerCallback.nonce,
+    invitationCallback.state,
+    invitationCallback.nonce
+  ]) {
+    assert.doesNotMatch(logs, new RegExp(secret.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+  }
 });
 
 test("runtime serves revocable personal iCalendar feeds without broader token access", async (t) => {
