@@ -31,6 +31,11 @@ test("keeps first-use setup readable on a narrow screen", async ({
   expect(positions[1].top).toBeGreaterThan(positions[0].top);
   expect(Math.abs(positions[0].left - positions[1].left)).toBeLessThanOrEqual(1);
   expect(Math.abs(positions[0].right - positions[1].right)).toBeLessThanOrEqual(1);
+  await page.getByTestId("setup-primary-care-party-secondary-toggle").click();
+  await expect(page.getByTestId("setup-primary-care-party-secondary")).toBeChecked();
+  await expect(page.getByTestId("setup-secondary-care-party-name")).toHaveValue("Mutter");
+  await page.getByTestId("setup-secondary-care-party-name").fill("");
+  await expect(page.getByTestId("setup-primary-care-party-own")).toBeChecked();
   await expect(page.getByTestId("setup-wizard-submit")).toBeVisible();
 });
 

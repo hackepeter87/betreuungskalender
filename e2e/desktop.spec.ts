@@ -921,9 +921,10 @@ test("guides fresh installations through first-use setup before showing navigati
   await page.getByTestId("setup-installation-label").fill("Testkalender");
   await page.getByTestId("setup-care-party-name").fill("Vater");
   await page.getByTestId("setup-care-party-kind").selectOption("father");
-  await page.getByTestId("setup-secondary-care-party-name").fill("Mutter");
   await page.getByTestId("setup-secondary-care-party-kind").selectOption("mother");
   await page.getByTestId("setup-primary-care-party-secondary-toggle").click();
+  await expect(page.getByTestId("setup-primary-care-party-secondary")).toBeChecked();
+  await expect(page.getByTestId("setup-secondary-care-party-name")).toHaveValue("Mutter");
   await page.getByTestId("setup-child-name").fill("Setup Kind");
   await expect(page.getByTestId("setup-calendar-feed-discovery")).toContainText("Kalenderfeed");
   await expect(page.getByTestId("setup-calendar-import-discovery")).toContainText("Externe Kalender");

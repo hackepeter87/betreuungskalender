@@ -6,6 +6,7 @@ dist-server/
 *.tsbuildinfo
 .idea/
 .vscode/
+.projectatlas/
 .env
 .env.*
 !.env.example

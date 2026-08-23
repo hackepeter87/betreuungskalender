@@ -190,9 +190,13 @@ export function SetupWizardPage() {
                       data-testid="setup-primary-care-party-secondary"
                       type="radio"
                       name="setup-primary-care-party"
-                      disabled={!secondaryCarePartyName.trim()}
                       checked={primaryCareParty === "secondary"}
-                      onChange={() => setPrimaryCareParty("secondary")}
+                      onChange={() => {
+                        if (!secondaryCarePartyName.trim()) {
+                          setSecondaryCarePartyName(kindLabel(locale, secondaryCarePartyKind));
+                        }
+                        setPrimaryCareParty("secondary");
+                      }}
                     />
                     <span />
                     {copy(locale, "setup", "primaryCarePartyToggle")}
@@ -203,8 +207,13 @@ export function SetupWizardPage() {
                   <select
                     data-testid="setup-secondary-care-party-kind"
                     value={secondaryCarePartyKind}
-                    disabled={!secondaryCarePartyName.trim()}
-                    onChange={(event) => setSecondaryCarePartyKind(event.target.value as ApiCarePartyKind)}
+                    onChange={(event) => {
+                      const nextKind = event.target.value as ApiCarePartyKind;
+                      if (secondaryCarePartyName === kindLabel(locale, secondaryCarePartyKind)) {
+                        setSecondaryCarePartyName(kindLabel(locale, nextKind));
+                      }
+                      setSecondaryCarePartyKind(nextKind);
+                    }}
                   >
                     {carePartyKinds.map((kind) => (
                       <option key={kind} value={kind}>
