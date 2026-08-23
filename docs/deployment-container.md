@@ -83,10 +83,10 @@ host-side `./data:/data` and `./backups:/backups` bind mounts.
 
 For testing and production machines that should not build from release
 archives, install the matching image Compose file as `compose.yml` and keep
-private settings in `app.env`. Use `deploy/compose.testing.yml` only on the demo
-machine, currently `bk-demo.saas-lab.de`. Use `deploy/compose.production.yml`
-only on the production machine. Do not use `latest` in deployment Compose files;
-it is not a release gate.
+private settings in `app.env`. Use `deploy/compose.testing.yml` only on a
+testing installation and `deploy/compose.production.yml` only on a production
+installation. Do not use `latest` in deployment Compose files; it is not a
+release gate.
 
 The image-based path is documented in [image-promotion.md](image-promotion.md).
 It uses native OIDC without oauth2-proxy when `AUTH_MODE=native-oidc` and

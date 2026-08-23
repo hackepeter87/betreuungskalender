@@ -6,6 +6,22 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.20.7] - 2026-08-23
+
+### Changed
+
+- Use the established PWA application icon consistently in desktop and mobile
+  navigation, including the collapsed sidebar.
+- Reorder desktop sidebar footer controls and balance instance-information and
+  invitation layouts across desktop and tablet widths.
+
+### Fixed
+
+- Remove the exact local-development identity from deployed member and
+  assignment lists while preserving historical audit references.
+- Keep first-use primary-care selection directly operable for either initial
+  caregiver.
+
 ## [1.20.6] - 2026-08-23
 
 ### Fixed

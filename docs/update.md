@@ -179,7 +179,7 @@ For image-based deployments, use `deploy/compose.testing.yml` or
 `deploy/compose.production.yml` and the promotion channels documented in
 [image-promotion.md](image-promotion.md):
 
-- `testing` for `bk-demo.saas-lab.de`;
+- `testing` for a testing installation;
 - `production` for production;
 - `latest` as a production convenience alias moved only with `production`.
 

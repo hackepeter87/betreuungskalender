@@ -11,7 +11,7 @@ travel, costs, holidays, and unavailable periods.
 
 ## Project status
 
-- Latest published release: [v1.20.6](docs/release-notes/v1.20.6.md)
+- Latest published release: [v1.20.7](docs/release-notes/v1.20.7.md)
 - Current `main`: SQLite/API domain persistence, first-use setup, application
   memberships and invitations, optional invitation email delivery, native OIDC
   authentication, trusted-proxy compatibility, RRULE-compatible contact rules
