@@ -2,8 +2,8 @@ apiVersion: v2
 name: betreuungskalender
 description: Helm chart for the self-hosted Betreuungskalender application
 type: application
-version: 0.1.6
-appVersion: "1.20.6"
+version: 0.1.7
+appVersion: "1.20.7"
 kubeVersion: ">=1.27.0-0"
 home: https://github.com/hackepeter87/betreuungskalender
 icon: https://raw.githubusercontent.com/hackepeter87/betreuungskalender/main/public/icons/app-icon-512.png

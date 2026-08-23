@@ -152,7 +152,7 @@ for the current production digest and is moved only by **Promote production
 image**. Do not use it in demo Compose files. Image-based deployments use
 explicit promotion channels:
 
-- `testing` for the `bk-demo.saas-lab.de` demo machine;
+- `testing` for a testing installation;
 - `production` for the production machine;
 - `latest` as a production convenience alias only.
 

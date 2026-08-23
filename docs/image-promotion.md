@@ -1,9 +1,9 @@
 # Image promotion deployment
 
 This path is for operators that want stable machine configuration and updates
-by pulling a promoted GHCR image. It is the recommended path for the
-`bk-demo.saas-lab.de` testing machine and for production once the deployment has
-moved away from archive-based Compose builds.
+by pulling a promoted GHCR image. It is the recommended path for a testing
+installation and for production once the deployment has moved away from
+archive-based Compose builds.
 
 ## Release channels
 
@@ -12,7 +12,7 @@ The image tags have fixed meanings:
 | Tag | Meaning | Deployment target |
 | --- | --- | --- |
 | `vX.Y.Z` | Immutable release image and source of truth | Never edited |
-| `testing` | Mutable tag promoted from a release after image validation | `bk-demo.saas-lab.de` |
+| `testing` | Mutable tag promoted from a release after image validation | Testing installation |
 | `production` | Mutable tag promoted from the tested digest | Production |
 | `latest` | Alias for the currently promoted production digest | Production convenience tag |
 
@@ -34,11 +34,11 @@ Install `deploy/compose.testing.yml` as `compose.yml` and start from
 `deploy/app.env.demo.example` as `app.env`. Replace the Keycloak issuer and
 client secret with the private demo realm values. Keep `app.env` out of Git.
 
-For `bk-demo.saas-lab.de`, the public native OIDC values are:
+For a testing installation, the public native OIDC values may look like:
 
 ```dotenv
-ALLOWED_ORIGIN=https://bk-demo.saas-lab.de
-OIDC_REDIRECT_URI=https://bk-demo.saas-lab.de/auth/callback
+ALLOWED_ORIGIN=https://app.testing.example.net
+OIDC_REDIRECT_URI=https://app.testing.example.net/auth/callback
 AUTH_MODE=native-oidc
 TRUST_PROXY_AUTH=false
 ```
@@ -71,7 +71,7 @@ Validate the runtime:
 ```bash
 podman exec APP_CONTAINER /nodejs/bin/node scripts/healthcheck.js
 podman exec APP_CONTAINER /nodejs/bin/node scripts/runtime-verify.js --expected-version X.Y.Z
-curl -I https://bk-demo.saas-lab.de/auth/login
+curl -I https://app.testing.example.net/auth/login
 ```
 
 `/auth/login` must return a redirect to Keycloak. Unauthenticated API routes,
@@ -116,7 +116,7 @@ Release image publication still starts from a GitHub release for `vX.Y.Z`.
 After the release image exists:
 
 1. Run **Promote testing image** with the release tag, for example `v1.4.0`.
-2. Update `bk-demo.saas-lab.de` and complete the technical and domain smoke
+2. Update the testing installation and complete the technical and domain smoke
    tests.
 3. Run **Promote production image** with the same release tag. The workflow
    fails if `testing` no longer points at the release digest and updates both
