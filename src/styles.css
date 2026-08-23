@@ -1184,11 +1184,42 @@ button.metric-card {
   grid-template-columns: minmax(220px, 1.4fr) minmax(120px, 0.55fr) minmax(140px, 0.65fr);
   align-items: start;
   gap: 16px;
+}
+
+.setup-children-list {
+  display: grid;
+  gap: 14px;
   margin-top: 20px;
 }
 
+.setup-child-card {
+  min-width: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.setup-child-card__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.setup-child-card__header h3 {
+  margin: 0;
+  font-size: 0.9rem;
+}
+
 .setup-color-field {
-  margin-top: 20px;
+  margin-top: 16px;
+}
+
+.setup-add-child {
+  width: fit-content;
+  margin-top: 14px;
 }
 
 .setup-discovery-grid {
@@ -3636,6 +3667,10 @@ button.metric-card {
   .setup-person-grid,
   .setup-child-grid {
     grid-template-columns: 1fr;
+  }
+
+  .setup-add-child {
+    width: 100%;
   }
 
   .setup-wizard__actions {

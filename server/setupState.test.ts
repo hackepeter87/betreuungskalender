@@ -10,6 +10,7 @@ import { membershipRoleForUser } from "./services/memberships.js";
 import { completeFirstUseSetup } from "./services/setupBootstrap.js";
 import { buildSetupState, publicSetupState } from "./services/setupState.js";
 import { OwnerSetupTokenError, OwnerSetupTokenStore } from "./services/ownerSetupTokens.js";
+import { setupFirstUseInputSchema } from "./validation/schemas.js";
 
 const migrationsDirectory = resolve(process.cwd(), "server/migrations");
 const timestamp = "2026-07-05T10:00:00.000Z";
@@ -299,7 +300,7 @@ test("owner setup rejects a pending context after the mounted token is removed",
   });
 });
 
-test("completes first-use setup with owner, care party, child, and defaults", () => {
+test("completes first-use setup with owner, care parties, multiple children, and defaults", () => {
   withDatabase((database) => {
     const result = completeFirstUseSetup(
       setupUser(),
@@ -315,12 +316,26 @@ test("completes first-use setup with owner, care party, child, and defaults", ()
         },
         primaryCareParty: "secondary",
         defaultCareParty: "primary",
-        child: {
-          name: "Child A",
-          birthMonth: 4,
-          birthYear: 2017,
-          color: "#0d9488"
-        }
+        children: [
+          {
+            name: "Child A",
+            birthMonth: 4,
+            birthYear: 2017,
+            color: "#0d9488"
+          },
+          {
+            name: "Child B",
+            birthMonth: 9,
+            birthYear: 2019,
+            color: "#6d5bd0"
+          },
+          {
+            name: "Child C",
+            birthMonth: 12,
+            birthYear: 2021,
+            color: "#e68000"
+          }
+        ]
       },
       "2026-07-05T12:30:00.000Z",
       database
@@ -337,16 +352,17 @@ test("completes first-use setup with owner, care party, child, and defaults", ()
       name: string;
       kind: string;
     }>;
-    const child = database.prepare(`
+    const children = database.prepare(`
       SELECT id, name, birth_month AS birthMonth, birth_year AS birthYear
       FROM children
-      WHERE id = ? AND deleted_at IS NULL
-    `).get(result.created.childId) as {
+      WHERE deleted_at IS NULL
+      ORDER BY name
+    `).all() as Array<{
       id: string;
       name: string;
       birthMonth: number;
       birthYear: number;
-    } | undefined;
+    }>;
     const settings = database.prepare(`
       SELECT key, value_json AS valueJson
       FROM settings
@@ -370,15 +386,19 @@ test("completes first-use setup with owner, care party, child, and defaults", ()
     assert.equal(membershipRoleForUser("local-dev", database), "admin");
     assert.equal(setup.complete, true);
     assert.equal(setup.required, false);
-    assert.equal(setup.counts.children, 1);
+    assert.equal(setup.counts.children, 3);
     assert.equal(setup.counts.careParties, 2);
     assert.deepEqual(careParties.map((party) => [party.name, party.kind]), [
       ["Other parent", "mother"],
       ["Primary care", "other"]
     ]);
-    assert.equal(child?.name, "Child A");
-    assert.equal(child?.birthMonth, 4);
-    assert.equal(child?.birthYear, 2017);
+    assert.deepEqual(children.map((child) => [child.name, child.birthMonth, child.birthYear]), [
+      ["Child A", 4, 2017],
+      ["Child B", 9, 2019],
+      ["Child C", 12, 2021]
+    ]);
+    assert.equal(result.created.childIds.length, 3);
+    assert.equal(result.created.childId, result.created.childIds[0]);
     assert.deepEqual(settings.map((row) => [row.key, JSON.parse(row.valueJson)]), [
       ["defaultResponsiblePartyId", result.created.carePartyId],
       ["primaryCarePartyId", result.created.secondaryCarePartyId],
@@ -389,5 +409,91 @@ test("completes first-use setup with owner, care party, child, and defaults", ()
     ]);
     assert.equal(result.created.primaryCarePartyId, result.created.secondaryCarePartyId);
     assert.equal(result.created.defaultCarePartyId, result.created.carePartyId);
+  });
+});
+
+test("accepts the legacy child input but rejects ambiguous child forms", () => {
+  const common = {
+    ownerConfirmed: true as const,
+    careParty: { name: "Care party", kind: "other" as const },
+    defaultCareParty: "primary" as const
+  };
+  const child = {
+    name: "Child A",
+    birthMonth: 4,
+    birthYear: 2017,
+    color: "#0d9488"
+  };
+
+  const legacy = setupFirstUseInputSchema.parse({ ...common, child });
+  assert.deepEqual(legacy.children, [child]);
+  const current = setupFirstUseInputSchema.parse({ ...common, children: [child] });
+  assert.deepEqual(current.children, [child]);
+  assert.equal(setupFirstUseInputSchema.safeParse({ ...common, child, children: [child] }).success, false);
+});
+
+test("validates every setup child and limits the initial child list", () => {
+  const common = {
+    ownerConfirmed: true as const,
+    careParty: { name: "Care party", kind: "other" as const },
+    defaultCareParty: "primary" as const
+  };
+  const child = {
+    name: "Child",
+    birthMonth: 4,
+    birthYear: 2017,
+    color: "#0d9488"
+  };
+
+  assert.equal(setupFirstUseInputSchema.safeParse({
+    ...common,
+    children: [child, { ...child, birthMonth: 13 }]
+  }).success, false);
+  assert.equal(setupFirstUseInputSchema.safeParse({
+    ...common,
+    children: Array.from({ length: 21 }, (_, index) => ({ ...child, name: `Child ${index + 1}` }))
+  }).success, false);
+});
+
+test("allows first-use setup without children", () => {
+  withDatabase((database) => {
+    const result = completeFirstUseSetup(
+      setupUser(),
+      {
+        careParty: { name: "Care party", kind: "other" },
+        defaultCareParty: "primary",
+        children: []
+      },
+      "2026-07-05T12:30:00.000Z",
+      database
+    );
+
+    assert.deepEqual(result.created.childIds, []);
+    assert.equal(result.created.childId, undefined);
+    assert.equal(buildSetupState(database).counts.children, 0);
+  });
+});
+
+test("rolls back the complete first-use setup when one child cannot be stored", () => {
+  withDatabase((database) => {
+    assert.throws(() => completeFirstUseSetup(
+      setupUser(),
+      {
+        careParty: { name: "Care party", kind: "other" },
+        defaultCareParty: "primary",
+        children: [
+          { name: "Child A", birthMonth: 4, birthYear: 2017, color: "#0d9488" },
+          { name: "Invalid child", birthMonth: 13, birthYear: 2019, color: "#6d5bd0" }
+        ]
+      },
+      "2026-07-05T12:30:00.000Z",
+      database
+    ));
+
+    const childCount = database.prepare("SELECT COUNT(*) AS count FROM children").get() as { count: number };
+    const carePartyCount = database.prepare("SELECT COUNT(*) AS count FROM care_parties").get() as { count: number };
+    assert.equal(childCount.count, 0);
+    assert.equal(carePartyCount.count, 0);
+    assert.equal(buildSetupState(database).complete, false);
   });
 });

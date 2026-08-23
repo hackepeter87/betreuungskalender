@@ -19,13 +19,18 @@ The setup flow covers:
 
 - confirming the installation owner
 - choosing an installation label for the app UI
-- creating initial child records
+- optionally creating no, one, or several initial child records
 - creating or selecting care parties
 - setting default care location and handover values
 - discovering calendar import and personal calendar-feed options
 
 Setup completion is explicit and audited. After setup is complete, later users
 cannot claim ownership through the same first-use flow.
+
+The child step starts with one optional child card. Add or remove cards as
+needed; leaving the list empty is supported. The owner, care parties, settings,
+and all submitted children are stored in one transaction. If any submitted
+record is invalid, none of the first-use changes are committed.
 
 The normal `/api/session` response exposes only minimal setup state for the UI:
 whether setup is complete and whether setup is currently required. Detailed

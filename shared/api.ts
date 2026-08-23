@@ -295,6 +295,13 @@ export interface ApiSetupCompletion {
   };
 }
 
+export interface ApiSetupChildInput {
+  name: string;
+  birthMonth: number;
+  birthYear: number;
+  color: string;
+}
+
 export interface ApiSetupFirstUseInput {
   installationLabel?: string;
   ownerConfirmed: true;
@@ -308,12 +315,8 @@ export interface ApiSetupFirstUseInput {
   };
   primaryCareParty?: "primary" | "secondary";
   defaultCareParty: "primary" | "secondary";
-  child?: {
-    name: string;
-    birthMonth: number;
-    birthYear: number;
-    color: string;
-  };
+  children?: ApiSetupChildInput[];
+  child?: ApiSetupChildInput;
 }
 
 export interface ApiSetupFirstUse extends ApiSetupCompletion {
@@ -322,6 +325,7 @@ export interface ApiSetupFirstUse extends ApiSetupCompletion {
     secondaryCarePartyId?: string;
     primaryCarePartyId: string;
     defaultCarePartyId: string;
+    childIds: string[];
     childId?: string;
   };
 }

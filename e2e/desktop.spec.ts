@@ -985,7 +985,12 @@ test("guides fresh installations through first-use setup before showing navigati
   await page.getByTestId("setup-primary-care-party-secondary-toggle").click();
   await expect(page.getByTestId("setup-primary-care-party-secondary")).toBeChecked();
   await expect(page.getByTestId("setup-secondary-care-party-name")).toHaveValue("Mutter");
-  await page.getByTestId("setup-child-name").fill("Setup Kind");
+  await page.getByTestId("setup-child-name").fill("Setup Kind A");
+  await page.getByTestId("setup-add-child").click();
+  await page.getByTestId("setup-add-child").click();
+  await expect(page.getByTestId("setup-child-card")).toHaveCount(3);
+  await page.getByTestId("setup-child-name").nth(1).fill("Setup Kind B");
+  await page.getByTestId("setup-child-name").nth(2).fill("Setup Kind C");
   await expect(page.getByTestId("setup-calendar-feed-discovery")).toContainText("Kalenderfeed");
   await expect(page.getByTestId("setup-calendar-import-discovery")).toContainText("Externe Kalender");
   await expect(page.getByTestId("setup-calendar-export-discovery")).toContainText("exportieren");
@@ -993,7 +998,9 @@ test("guides fresh installations through first-use setup before showing navigati
 
   await expect(page.getByTestId("setup-wizard")).toHaveCount(0);
   await expect(page.getByTestId("nav-calendar")).toBeVisible();
-  await expect(page.getByText("Setup Kind", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Setup Kind A", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Setup Kind B", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("Setup Kind C", { exact: true }).first()).toBeVisible();
 
   const session = await page.evaluate(async () => {
     const response = await fetch("/api/session", { cache: "no-store" });

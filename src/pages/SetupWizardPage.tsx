@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { FieldHelpLabel } from "../components/FieldHelp";
 import { Icon } from "../components/Icon";
 import { CHILD_COLORS } from "../data/defaults";
@@ -8,12 +8,30 @@ import { api } from "../lib/api";
 import { useAppStore } from "../store/AppStore";
 import { carePartyKinds, type ApiCarePartyKind } from "../../shared/api";
 
+interface SetupChildDraft {
+  id: number;
+  name: string;
+  birthMonth: number;
+  birthYear: number;
+  color: string;
+}
+
 function defaultBirthYear(): number {
   return new Date().getFullYear() - 8;
 }
 
 function kindLabel(locale: "de" | "en", kind: ApiCarePartyKind): string {
   return copy(locale, "settings", `carePartyKind_${kind}` as CatalogKey<"settings">);
+}
+
+function childDraft(id: number): SetupChildDraft {
+  return {
+    id,
+    name: "",
+    birthMonth: 1,
+    birthYear: defaultBirthYear(),
+    color: CHILD_COLORS[id % CHILD_COLORS.length]
+  };
 }
 
 export function SetupWizardPage() {
@@ -25,10 +43,8 @@ export function SetupWizardPage() {
   const [secondaryCarePartyName, setSecondaryCarePartyName] = useState("");
   const [secondaryCarePartyKind, setSecondaryCarePartyKind] = useState<ApiCarePartyKind>("mother");
   const [primaryCareParty, setPrimaryCareParty] = useState<"primary" | "secondary">("primary");
-  const [childName, setChildName] = useState("");
-  const [birthMonth, setBirthMonth] = useState(1);
-  const [birthYear, setBirthYear] = useState(defaultBirthYear);
-  const [color, setColor] = useState(CHILD_COLORS[0]);
+  const nextChildId = useRef(1);
+  const [children, setChildren] = useState<SetupChildDraft[]>(() => [childDraft(0)]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -37,6 +53,14 @@ export function SetupWizardPage() {
     if (!carePartyName.trim()) return;
     const hasSecondaryCareParty = Boolean(secondaryCarePartyName.trim());
     if (primaryCareParty === "secondary" && !hasSecondaryCareParty) return;
+    const submittedChildren = children
+      .filter((child) => child.name.trim())
+      .map((child) => ({
+        name: child.name.trim(),
+        birthMonth: child.birthMonth,
+        birthYear: child.birthYear,
+        color: child.color
+      }));
     setBusy(true);
     setError(null);
     try {
@@ -57,16 +81,7 @@ export function SetupWizardPage() {
           : {}),
         primaryCareParty: hasSecondaryCareParty && primaryCareParty === "secondary" ? "secondary" : "primary",
         defaultCareParty: "primary",
-        ...(childName.trim()
-          ? {
-              child: {
-                name: childName.trim(),
-                birthMonth,
-                birthYear,
-                color
-              }
-            }
-          : {})
+        children: submittedChildren
       });
       await reload();
     } catch (reason) {
@@ -245,62 +260,105 @@ export function SetupWizardPage() {
         <section className="panel setup-step">
           <div className="setup-step__number">3</div>
           <div className="setup-step__content">
-            <h2>{copy(locale, "setup", "childTitle")}</h2>
-            <p>{copy(locale, "setup", "childDescription")}</p>
-            <div className="setup-child-grid" data-testid="setup-child-grid">
-              <label className="field">
-                <FieldHelpLabel fieldId="child.name">
-                  {copy(locale, "setup", "childName")}
-                </FieldHelpLabel>
-                <input
-                  data-testid="setup-child-name"
-                  value={childName}
-                  maxLength={200}
-                  onChange={(event) => setChildName(event.target.value)}
-                  placeholder={copy(locale, "settings", "childNamePlaceholder")}
-                />
-                <small>{copy(locale, "setup", "optional")}</small>
-              </label>
-              <label className="field">
-                <FieldHelpLabel fieldId="child.birthMonth" />
-                <select value={birthMonth} onChange={(event) => setBirthMonth(Number(event.target.value))}>
-                  {Array.from({ length: 12 }, (_, index) => (
-                    <option key={index + 1} value={index + 1}>
-                      {String(index + 1).padStart(2, "0")}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label className="field">
-                <FieldHelpLabel fieldId="child.birthYear" />
-                <input
-                  type="number"
-                  min="1990"
-                  max={new Date().getFullYear()}
-                  value={birthYear}
-                  onChange={(event) => setBirthYear(Number(event.target.value))}
-                />
-              </label>
+            <h2>{copy(locale, "setup", "childrenTitle")}</h2>
+            <p>{copy(locale, "setup", "childrenDescription")}</p>
+            <div className="setup-children-list" data-testid="setup-children-list">
+              {children.map((child, index) => (
+                <article className="setup-child-card" data-testid="setup-child-card" key={child.id}>
+                  <header className="setup-child-card__header">
+                    <h3>{copy(locale, "setup", "childCardTitle")} {index + 1}</h3>
+                    <button
+                      className="icon-button icon-button--danger"
+                      type="button"
+                      title={copy(locale, "setup", "removeChild")}
+                      aria-label={`${copy(locale, "setup", "removeChild")} ${index + 1}`}
+                      onClick={() => setChildren((current) => current.filter((item) => item.id !== child.id))}
+                    >
+                      <Icon name="trash" size={17} />
+                    </button>
+                  </header>
+                  <div className="setup-child-grid" data-testid="setup-child-grid">
+                    <label className="field">
+                      <FieldHelpLabel fieldId="child.name">
+                        {copy(locale, "setup", "childName")}
+                      </FieldHelpLabel>
+                      <input
+                        data-testid="setup-child-name"
+                        value={child.name}
+                        maxLength={200}
+                        onChange={(event) => setChildren((current) => current.map((item) => (
+                          item.id === child.id ? { ...item, name: event.target.value } : item
+                        )))}
+                        placeholder={copy(locale, "settings", "childNamePlaceholder")}
+                      />
+                      <small>{copy(locale, "setup", "optional")}</small>
+                    </label>
+                    <label className="field">
+                      <FieldHelpLabel fieldId="child.birthMonth" />
+                      <select
+                        value={child.birthMonth}
+                        onChange={(event) => setChildren((current) => current.map((item) => (
+                          item.id === child.id ? { ...item, birthMonth: Number(event.target.value) } : item
+                        )))}
+                      >
+                        {Array.from({ length: 12 }, (_, monthIndex) => (
+                          <option key={monthIndex + 1} value={monthIndex + 1}>
+                            {String(monthIndex + 1).padStart(2, "0")}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field">
+                      <FieldHelpLabel fieldId="child.birthYear" />
+                      <input
+                        type="number"
+                        min="1900"
+                        max={new Date().getFullYear()}
+                        value={child.birthYear}
+                        onChange={(event) => setChildren((current) => current.map((item) => (
+                          item.id === child.id ? { ...item, birthYear: Number(event.target.value) } : item
+                        )))}
+                      />
+                    </label>
+                  </div>
+                  <fieldset className="color-field setup-color-field">
+                    <legend className="field-label-row">
+                      <span>{copy(locale, "settings", "calendarColor")}</span>
+                    </legend>
+                    <div>
+                      {CHILD_COLORS.map((option) => (
+                        <label key={option} className={child.color === option ? "is-selected" : ""}>
+                          <input
+                            type="radio"
+                            name={`setup-child-color-${child.id}`}
+                            value={option}
+                            checked={child.color === option}
+                            onChange={() => setChildren((current) => current.map((item) => (
+                              item.id === child.id ? { ...item, color: option } : item
+                            )))}
+                          />
+                          <span style={{ backgroundColor: option }} />
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                </article>
+              ))}
             </div>
-            <fieldset className="color-field setup-color-field">
-              <legend className="field-label-row">
-                <span>{copy(locale, "settings", "calendarColor")}</span>
-              </legend>
-              <div>
-                {CHILD_COLORS.map((option) => (
-                  <label key={option} className={color === option ? "is-selected" : ""}>
-                    <input
-                      type="radio"
-                      name="setup-child-color"
-                      value={option}
-                      checked={color === option}
-                      onChange={() => setColor(option)}
-                    />
-                    <span style={{ backgroundColor: option }} />
-                  </label>
-                ))}
-              </div>
-            </fieldset>
+            <button
+              className="button button--secondary setup-add-child"
+              data-testid="setup-add-child"
+              type="button"
+              disabled={children.length >= 20}
+              onClick={() => {
+                const id = nextChildId.current;
+                nextChildId.current += 1;
+                setChildren((current) => [...current, childDraft(id)]);
+              }}
+            >
+              <Icon name="plus" size={17} />
+              {copy(locale, "setup", "addChild")}
+            </button>
           </div>
         </section>
 

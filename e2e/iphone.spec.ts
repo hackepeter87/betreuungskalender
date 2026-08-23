@@ -38,6 +38,14 @@ test("keeps first-use setup readable on a narrow screen", async ({
   await expect(page.getByTestId("setup-secondary-care-party-name")).toHaveValue("Mutter");
   await page.getByTestId("setup-secondary-care-party-name").fill("");
   await expect(page.getByTestId("setup-primary-care-party-own")).toBeChecked();
+  await page.getByTestId("setup-add-child").click();
+  await page.getByTestId("setup-add-child").click();
+  await expect(page.getByTestId("setup-child-card")).toHaveCount(3);
+  await page.getByTestId("setup-child-card").nth(1).getByRole("button", { name: /Kind entfernen/ }).click();
+  await expect(page.getByTestId("setup-child-card")).toHaveCount(2);
+  await page.getByTestId("setup-add-child").click();
+  await expect(page.getByTestId("setup-child-card")).toHaveCount(3);
+  await expectNoDocumentHorizontalOverflow(page);
   await expect(page.getByTestId("setup-wizard-submit")).toBeVisible();
 });
 
