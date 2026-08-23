@@ -1,0 +1,2 @@
+-- Runtime access cleanup is intentionally mode-aware and runs after migrations.
+-- A SQL migration cannot distinguish local development from deployed auth modes.

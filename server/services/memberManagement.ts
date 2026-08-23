@@ -7,6 +7,7 @@ import {
   type WorkspaceRole
 } from "../auth.js";
 import { db } from "../db/connection.js";
+import { isLocalDevelopmentIdentity } from "./localDevelopmentIdentity.js";
 import { clearMembershipRole, setMembershipRole } from "./memberships.js";
 
 export interface AppMember {
@@ -23,6 +24,7 @@ export interface AppMember {
 
 interface MemberRow {
   id: string;
+  external_subject: string;
   email: string | null;
   display_name: string;
   claim_role: AuthRole;
@@ -91,11 +93,15 @@ export function assertCanAdministerMembers(
 }
 
 export function listMembers(
-  database: Database.Database = db
+  database: Database.Database = db,
+  options: { includeLocalDevelopmentIdentity?: boolean } = {
+    includeLocalDevelopmentIdentity: true
+  }
 ): AppMember[] {
   const ownerId = installationOwnerId(database);
   const rows = database.prepare(`
     SELECT users.id,
+      users.external_subject,
       users.email,
       users.display_name,
       users.role AS claim_role,
@@ -114,7 +120,13 @@ export function listMembers(
     WHERE users.deleted_at IS NULL
     ORDER BY users.display_name COLLATE NOCASE, users.id
   `).all() as MemberRow[];
-  return rows.map((row) => {
+  return rows.filter((row) =>
+    options.includeLocalDevelopmentIdentity || !isLocalDevelopmentIdentity({
+      id: row.id,
+      externalSubject: row.external_subject,
+      displayName: row.display_name
+    })
+  ).map((row) => {
     const workspaceAccess = row.membership_role !== null && row.membership_deleted_at === null;
     return ({
     id: row.id,

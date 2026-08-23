@@ -6,6 +6,7 @@ import test from "node:test";
 import Database from "better-sqlite3";
 import { migrateDatabase } from "./db/migrationRunner.js";
 import { backupDatabase } from "./services/sqliteBackup.js";
+import { disableLocalDevelopmentIdentityAccess } from "./services/localDevelopmentIdentity.js";
 
 const migrationsDirectory = resolve(process.cwd(), "server/migrations");
 const expectedMigrations = [
@@ -36,7 +37,8 @@ const expectedMigrations = [
   "025_primary_care_party_setting",
   "026_oidc_login_context",
   "027_owner_setup_tokens",
-  "028_workspace_permissions"
+  "028_workspace_permissions",
+  "029_local_development_identity_cleanup"
 ];
 
 async function withTemporaryDirectory(
@@ -210,7 +212,8 @@ test("care party migration backfills existing active entries", async () => {
         file.startsWith("018_") ||
         file.startsWith("019_") ||
         file.startsWith("020_") ||
-        file.startsWith("025_")
+        file.startsWith("025_") ||
+        file.startsWith("029_")
       ) continue;
       copyFileSync(join(migrationsDirectory, file), join(oldMigrations, file));
     }
@@ -303,6 +306,116 @@ test("workspace permission migration maps roles and preserves revoked membership
         { id: "invite-editor", role: "editor", acceptedAt: null, revokedAt: null },
         { id: "invite-viewer", role: "viewer", acceptedAt: timestamp, revokedAt: timestamp }
       ]);
+    } finally {
+      database.close();
+    }
+  });
+});
+
+test("local development identity cleanup revokes runtime access but preserves history", async () => {
+  await withTemporaryDirectory("local-development-cleanup", (directory) => {
+    const oldMigrations = join(directory, "old-migrations");
+    mkdirSync(oldMigrations);
+    for (const file of readdirSync(migrationsDirectory)) {
+      if (!file.endsWith(".sql") || file.startsWith("029_")) continue;
+      copyFileSync(join(migrationsDirectory, file), join(oldMigrations, file));
+    }
+
+    const database = openDatabase(join(directory, "app.sqlite"));
+    try {
+      migrateDatabase(database, oldMigrations);
+      const timestamp = "2026-08-01T10:00:00.000Z";
+      database.prepare(`
+        INSERT INTO care_parties (
+          id, name, kind, created_by, updated_by, created_at, updated_at
+        ) VALUES ('party-cleanup', 'Fictional caregiver', 'other', 'local-dev', 'local-dev', ?, ?)
+      `).run(timestamp, timestamp);
+      database.prepare(`
+        INSERT INTO app_user_care_party_assignments (
+          id, user_id, care_party_id, created_by, updated_by, created_at, updated_at
+        ) VALUES ('assignment-cleanup', 'local-dev', 'party-cleanup', 'local-dev', 'local-dev', ?, ?)
+      `).run(timestamp, timestamp);
+      database.prepare(`
+        INSERT INTO calendar_feed_tokens (
+          id, user_id, token_hash, created_at, scope_type
+        ) VALUES ('feed-cleanup', 'local-dev', 'hash-cleanup', ?, 'all')
+      `).run(timestamp);
+      database.prepare(`
+        INSERT INTO push_subscriptions (
+          id, user_id, endpoint, p256dh, auth, created_at, updated_at
+        ) VALUES ('push-cleanup', 'local-dev', 'https://push.example.invalid/cleanup', 'key', 'auth', ?, ?)
+      `).run(timestamp, timestamp);
+      database.prepare(`
+        INSERT INTO care_entries (
+          id, start_datetime, end_datetime, status, care_scope,
+          duration_minutes, created_by, updated_by, created_at, updated_at
+        ) VALUES (
+          'entry-cleanup', '2026-07-01T10:00:00.000Z', '2026-07-01T12:00:00.000Z',
+          'planned', 'hourly', 120, 'local-dev', 'local-dev', ?, ?
+        )
+      `).run(timestamp, timestamp);
+      database.prepare(`
+        INSERT INTO care_confirmation_requests (
+          id, care_entry_id, user_id, due_at, status, reminder_count, created_at, updated_at
+        ) VALUES (
+          'confirmation-cleanup', 'entry-cleanup', 'local-dev', ?, 'open', 0, ?, ?
+        )
+      `).run(timestamp, timestamp, timestamp);
+
+      migrateDatabase(database, migrationsDirectory);
+      disableLocalDevelopmentIdentityAccess(database, timestamp);
+
+      assert.equal((database.prepare(
+        "SELECT COUNT(*) AS count FROM app_users WHERE id = 'local-dev'"
+      ).get() as { count: number }).count, 1);
+      assert.notEqual((database.prepare(`
+        SELECT deleted_at AS deletedAt FROM app_memberships
+        WHERE user_id = 'local-dev' ORDER BY updated_at DESC LIMIT 1
+      `).get() as { deletedAt: string | null }).deletedAt, null);
+      assert.notEqual((database.prepare(`
+        SELECT deleted_at AS deletedAt FROM app_user_care_party_assignments
+        WHERE id = 'assignment-cleanup'
+      `).get() as { deletedAt: string | null }).deletedAt, null);
+      assert.notEqual((database.prepare(`
+        SELECT revoked_at AS revokedAt FROM calendar_feed_tokens WHERE id = 'feed-cleanup'
+      `).get() as { revokedAt: string | null }).revokedAt, null);
+      assert.notEqual((database.prepare(`
+        SELECT deleted_at AS deletedAt FROM push_subscriptions WHERE id = 'push-cleanup'
+      `).get() as { deletedAt: string | null }).deletedAt, null);
+      assert.notEqual((database.prepare(`
+        SELECT deleted_at AS deletedAt FROM care_confirmation_requests
+        WHERE id = 'confirmation-cleanup'
+      `).get() as { deletedAt: string | null }).deletedAt, null);
+    } finally {
+      database.close();
+    }
+  });
+});
+
+test("local development identity cleanup preserves an explicit local owner", async () => {
+  await withTemporaryDirectory("local-development-owner", (directory) => {
+    const oldMigrations = join(directory, "old-migrations");
+    mkdirSync(oldMigrations);
+    for (const file of readdirSync(migrationsDirectory)) {
+      if (!file.endsWith(".sql") || file.startsWith("029_")) continue;
+      copyFileSync(join(migrationsDirectory, file), join(oldMigrations, file));
+    }
+
+    const database = openDatabase(join(directory, "app.sqlite"));
+    try {
+      migrateDatabase(database, oldMigrations);
+      database.prepare(`
+        INSERT INTO settings (key, value_json, created_by, updated_by, created_at, updated_at)
+        VALUES ('setup.ownerUserId', '"local-dev"', 'local-dev', 'local-dev', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+      `).run();
+
+      migrateDatabase(database, migrationsDirectory);
+      disableLocalDevelopmentIdentityAccess(database, "2026-08-01T10:00:00.000Z");
+
+      assert.equal((database.prepare(`
+        SELECT deleted_at AS deletedAt FROM app_memberships
+        WHERE user_id = 'local-dev' ORDER BY updated_at DESC LIMIT 1
+      `).get() as { deletedAt: string | null }).deletedAt, null);
     } finally {
       database.close();
     }
