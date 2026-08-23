@@ -16,6 +16,33 @@ test.beforeEach(async ({ request }) => {
   await resetApp(request);
 });
 
+test("keeps application branding and sidebar footer controls aligned", async ({ page }) => {
+  await openApp(page);
+
+  const logo = page.getByTestId("desktop-app-logo");
+  const settings = page.getByTestId("nav-settings");
+  const collapse = page.getByTestId("sidebar-collapse-control");
+  await expect(logo).toBeVisible();
+  await expect(logo).toHaveAttribute("src", "/icons/app-icon.svg");
+  await expect(collapse).toBeVisible();
+
+  const footerOrder = await page.evaluate(() => {
+    const top = (testId: string) => document.querySelector(`[data-testid="${testId}"]`)!
+      .getBoundingClientRect().top;
+    return {
+      settings: top("nav-settings"),
+      collapse: top("sidebar-collapse-control")
+    };
+  });
+  expect(footerOrder.settings).toBeLessThan(footerOrder.collapse);
+
+  await collapse.click();
+  await expect(page.getByTestId("app-shell")).toHaveClass(/app-shell--sidebar-collapsed/);
+  await expect(logo).toBeVisible();
+  await expect(settings).toBeVisible();
+  await expect(collapse).toHaveAttribute("aria-pressed", "true");
+});
+
 test("offers PWA installation only after the browser reports availability", async ({
   page
 }) => {
@@ -319,6 +346,16 @@ test("shows admin instance readiness information in settings", async ({ page }) 
   await expect(readiness).toContainText("1.10.2");
   await expect(readiness).toContainText("Native OIDC");
   await expect(readiness).toContainText("Push konfiguriert");
+  const readinessRows = await readiness.locator(".readiness-item").evaluateAll((items) =>
+    items.map((item) => {
+      const rect = item.getBoundingClientRect();
+      return { top: Math.round(rect.top), width: Math.round(rect.width) };
+    })
+  );
+  expect(readinessRows).toHaveLength(9);
+  expect(new Set(readinessRows.slice(0, 4).map((item) => item.top)).size).toBe(1);
+  expect(new Set(readinessRows.slice(6, 9).map((item) => item.top)).size).toBe(1);
+  expect(readinessRows[6].width).toBeGreaterThan(readinessRows[7].width * 1.8);
   await expectNoDocumentHorizontalOverflow(page);
 });
 
@@ -519,6 +556,20 @@ test("manages member invitations from settings", async ({ page }) => {
   await expect(manager).toBeVisible();
   await expect(manager).toContainText("Member E2E");
   await expect(manager.getByTestId("invitation-accept-form")).toHaveCount(0);
+  const invitationGrid = manager.locator(".member-management-grid");
+  const invitationForm = manager.getByTestId("invitation-create-form");
+  const initialWidths = await invitationGrid.evaluate((element) => {
+    const style = window.getComputedStyle(element);
+    const contentWidth = element.getBoundingClientRect().width
+      - Number.parseFloat(style.paddingLeft)
+      - Number.parseFloat(style.paddingRight);
+    const form = element.querySelector('[data-testid="invitation-create-form"]');
+    return {
+      contentWidth,
+      formWidth: form?.getBoundingClientRect().width ?? 0
+    };
+  });
+  expect(Math.abs(initialWidths.contentWidth - initialWidths.formWidth)).toBeLessThanOrEqual(2);
 
   await manager.getByTestId("invitation-email-hint").fill("new-user@example.invalid");
   await manager.getByTestId("invitation-role").selectOption("scheduler");
@@ -532,6 +583,15 @@ test("manages member invitations from settings", async ({ page }) => {
   await expect(manager.getByTestId("invitation-created-link")).toHaveValue(
     "https://bk.example.invalid/invite?token=invite_e2e_created_token"
   );
+  const splitCards = await manager.locator(".member-management-grid > *").evaluateAll((items) =>
+    items.map((item) => {
+      const rect = item.getBoundingClientRect();
+      return { top: Math.round(rect.top), width: Math.round(rect.width) };
+    })
+  );
+  expect(splitCards).toHaveLength(2);
+  expect(splitCards[0].top).toBe(splitCards[1].top);
+  expect(Math.abs(splitCards[0].width - splitCards[1].width)).toBeLessThanOrEqual(2);
   await manager.getByRole("button", { name: "Link kopieren" }).click();
   expect(await page.evaluate(() =>
     (window as typeof window & { __copiedInvitationLink?: string }).__copiedInvitationLink

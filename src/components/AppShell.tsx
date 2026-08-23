@@ -403,24 +403,14 @@ export function AppShell({
       <aside className={`sidebar${sidebarCollapsed ? " sidebar--collapsed" : ""}`}>
         <div className="sidebar__header">
           <button className="brand" type="button" onClick={() => navigate("dashboard")} aria-label={t("app.name")}>
-            <span className="brand__mark"><Icon name="calendar" size={22} /></span>
+            <span className="brand__mark">
+              <img className="brand__logo" src="/icons/app-icon.svg" alt="" data-testid="desktop-app-logo" />
+            </span>
             <span>
               <strong>{t("app.name")}</strong>
               <small>{t("app.tagline")}</small>
             </span>
           </button>
-          {!setupMode ? (
-            <button
-              className="sidebar__collapse-control"
-              type="button"
-              aria-label={t(sidebarCollapsed ? "nav.expandSidebar" : "nav.collapseSidebar")}
-              aria-pressed={sidebarCollapsed}
-              title={t(sidebarCollapsed ? "nav.expandSidebar" : "nav.collapseSidebar")}
-              onClick={() => setSidebarCollapsed((current) => !current)}
-            >
-              <Icon name={sidebarCollapsed ? "chevronRight" : "chevronLeft"} size={18} />
-            </button>
-          ) : null}
         </div>
 
         {!setupMode ? (
@@ -446,37 +436,54 @@ export function AppShell({
           </>
         ) : null}
 
-        {sidebarCollapsed && !setupMode ? (
-          <div className="sidebar__collapsed-auth">
-            <MobileAuthMenu
+        <div className="sidebar__footer">
+          {!setupMode && canAccessPage(session, "settings") ? (
+            <button
+              className={`sidebar__settings ${activePage === "settings" ? "is-active" : ""}`}
+              type="button"
+              data-testid="nav-settings"
+              onClick={() => navigate("settings")}
+              aria-label={t("nav.settings")}
+              title={sidebarCollapsed ? t("nav.settings") : undefined}
+            >
+              <Icon name="settings" />
+              <span>{t("nav.settings")}</span>
+            </button>
+          ) : null}
+
+          {!setupMode ? (
+            <button
+              className="sidebar__collapse-control"
+              type="button"
+              data-testid="sidebar-collapse-control"
+              aria-label={t(sidebarCollapsed ? "nav.expandSidebar" : "nav.collapseSidebar")}
+              aria-pressed={sidebarCollapsed}
+              title={t(sidebarCollapsed ? "nav.expandSidebar" : "nav.collapseSidebar")}
+              onClick={() => setSidebarCollapsed((current) => !current)}
+            >
+              <Icon name={sidebarCollapsed ? "chevronRight" : "chevronLeft"} size={18} />
+              <span>{t(sidebarCollapsed ? "nav.expandSidebar" : "nav.collapseSidebar")}</span>
+            </button>
+          ) : null}
+
+          {sidebarCollapsed && !setupMode ? (
+            <div className="sidebar__collapsed-auth">
+              <MobileAuthMenu
+                session={session}
+                loggingOut={loggingOut}
+                onLogout={() => void logout()}
+                t={t}
+              />
+            </div>
+          ) : (
+            <AuthSessionCard
               session={session}
               loggingOut={loggingOut}
               onLogout={() => void logout()}
               t={t}
             />
-          </div>
-        ) : (
-          <AuthSessionCard
-            session={session}
-            loggingOut={loggingOut}
-            onLogout={() => void logout()}
-            t={t}
-          />
-        )}
-
-        {!setupMode && canAccessPage(session, "settings") ? (
-          <button
-            className={`sidebar__settings ${activePage === "settings" ? "is-active" : ""}`}
-            type="button"
-            data-testid="nav-settings"
-            onClick={() => navigate("settings")}
-            aria-label={t("nav.settings")}
-            title={sidebarCollapsed ? t("nav.settings") : undefined}
-          >
-            <Icon name="settings" />
-            <span>{t("nav.settings")}</span>
-          </button>
-        ) : null}
+          )}
+        </div>
       </aside>
 
       {!setupMode ? <nav className="mobile-nav" aria-label={t("nav.mobile")} data-testid="mobile-navigation">
@@ -508,7 +515,9 @@ export function AppShell({
       <main className="main">
         <header className="mobile-header">
           <button className="brand brand--compact" type="button" onClick={() => navigate("dashboard")}>
-            <span className="brand__mark"><Icon name="calendar" size={20} /></span>
+            <span className="brand__mark">
+              <img className="brand__logo" src="/icons/app-icon.svg" alt="" data-testid="mobile-app-logo" />
+            </span>
             <strong>{t("app.name")}</strong>
           </button>
           <div className="mobile-header__actions">

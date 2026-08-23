@@ -128,10 +128,7 @@ h3 {
 }
 
 .sidebar__header {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 34px;
-  align-items: center;
-  gap: 8px;
+  display: block;
 }
 
 .brand {
@@ -148,16 +145,21 @@ h3 {
 }
 
 .sidebar__collapse-control {
-  display: inline-flex;
-  width: 34px;
-  height: 34px;
+  display: flex;
+  width: 100%;
+  min-height: 42px;
   align-items: center;
-  justify-content: center;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--surface);
+  justify-content: flex-start;
+  gap: 13px;
+  padding: 0 14px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  background: transparent;
   color: var(--muted);
   cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 700;
 }
 
 .sidebar__collapse-control:hover,
@@ -174,10 +176,16 @@ h3 {
   flex: 0 0 42px;
   align-items: center;
   justify-content: center;
-  border: 1px solid var(--line-strong);
-  border-radius: 9px;
-  color: var(--ink);
-  box-shadow: 0 2px 7px rgba(20, 33, 61, 0.08);
+  overflow: hidden;
+  border: 0;
+  border-radius: 8px;
+}
+
+.brand__logo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .brand strong,
@@ -256,6 +264,7 @@ h3 {
 .sidebar--collapsed .brand > span:not(.brand__mark),
 .sidebar--collapsed .sidebar__nav span,
 .sidebar--collapsed .sidebar__settings span,
+.sidebar--collapsed .sidebar__collapse-control span,
 .sidebar--collapsed .notification-center__label {
   display: none;
 }
@@ -266,7 +275,8 @@ h3 {
 }
 
 .sidebar--collapsed .sidebar__nav button,
-.sidebar--collapsed .sidebar__settings {
+.sidebar--collapsed .sidebar__settings,
+.sidebar--collapsed .sidebar__collapse-control {
   width: 48px;
   min-height: 44px;
   justify-content: center;
@@ -282,6 +292,13 @@ h3 {
   display: flex;
   justify-content: center;
   margin-top: 10px;
+}
+
+.sidebar__footer {
+  display: grid;
+  gap: 6px;
+  margin-top: auto;
+  padding-top: 12px;
 }
 
 .sidebar__collapsed-auth .auth-menu__popover {
@@ -462,7 +479,7 @@ h3 {
 
 .sidebar__settings {
   width: 100%;
-  margin-top: 10px;
+  margin-top: 0;
 }
 
 .main {
@@ -2379,7 +2396,7 @@ button.metric-card {
 
 .instance-readiness-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
   padding: 18px;
 }
@@ -2803,6 +2820,20 @@ button.metric-card {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 14px;
   padding: 0 18px 18px;
+}
+
+.member-management-grid--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.member-management-grid--single .member-invite-card {
+  width: 100%;
+}
+
+@media (min-width: 721px) and (max-width: 1199px) {
+  .instance-readiness-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .member-invite-card,
@@ -5572,7 +5603,7 @@ button.metric-card {
 
   .sidebar__settings {
     flex: 0 0 auto;
-    margin-top: 8px;
+    margin-top: 0;
   }
 
   .main {

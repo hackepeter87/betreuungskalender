@@ -333,7 +333,7 @@ function MemberInvitationManager() {
 
       {showOwnerControls ? (
         <>
-          <div className="member-management-grid">
+          <div className={`member-management-grid${createdInvitationUrl ? "" : " member-management-grid--single"}`}>
             <form className="member-invite-card" data-testid="invitation-create-form" onSubmit={(event) => void createInvitation(event)}>
               <div>
                 <strong>{copy(locale, "settings", "invitationCreate")}</strong>
@@ -859,12 +859,12 @@ function InstanceReadinessSection() {
               )) : <span className="status-pill">{copy(locale, "settings", "notConfigured")}</span>}
             </div>
           </div>
-          <div className="readiness-item readiness-item--wide">
+          <div className="readiness-item">
             <small>{copy(locale, "settings", "serverTime")}</small>
             <strong>{formatDateTime(readiness.serverTime, intlLocale)}</strong>
             <span>{readiness.timezone}</span>
           </div>
-          <div className="readiness-item readiness-item--wide">
+          <div className="readiness-item">
             <small>{copy(locale, "settings", "instanceId")}</small>
             <strong>{readiness.instanceId}</strong>
           </div>

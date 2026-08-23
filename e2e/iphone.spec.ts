@@ -20,6 +20,8 @@ test("keeps first-use setup readable on a narrow screen", async ({
   await resetApp(request, { completeSetup: false });
   await openApp(page);
 
+  await expect(page.getByTestId("mobile-app-logo")).toBeVisible();
+  await expect(page.getByTestId("mobile-app-logo")).toHaveAttribute("src", "/icons/app-icon.svg");
   await expect(page.getByTestId("setup-wizard")).toBeVisible();
   await expectNoDocumentHorizontalOverflow(page);
   const roleCards = page.locator('[data-testid="setup-person-grid"] > article');
