@@ -307,9 +307,11 @@ restricted to the admin instance-information view.
 
 Fresh native-OIDC installations start with the one-time owner setup link. After
 the validated owner claim, the guided setup creates initial application
-defaults and points the owner to calendar/feed setup without requiring
-browser-local state. Existing installations without an explicit owner can use
-the same owner link without recreating or changing their domain data.
+defaults, optionally creates multiple children, and points the owner to
+calendar/feed setup without requiring browser-local state. The setup is atomic:
+an invalid child record leaves the complete first-use state unchanged. Existing
+installations without an explicit owner can use the same owner link without
+recreating or changing their domain data.
 
 Owner-scoped member administration is available in Settings. Owners can create
 one-time invitations, assign application roles, revoke pending invitations, and

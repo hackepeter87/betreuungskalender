@@ -120,6 +120,12 @@ setup flows can persist `setup.completedAt`, `setup.completedBy`, and
 `complete`/`required` state, while detailed counts remain admin-only
 instance-readiness information.
 
+The first-use API accepts an optional `children` array and stores the owner,
+care parties, settings, and every submitted child in one SQLite transaction.
+For one compatibility release the previous singular `child` input remains
+accepted; clients must not send both forms. The current UI sends only
+`children` and supports completing setup without a child record.
+
 ## Care parties
 
 `care_parties` stores the domain-level responsible people for care planning.

@@ -45,13 +45,27 @@ export const setupFirstUseInputSchema = z.object({
   secondaryCareParty: carePartyInputSchema.optional(),
   primaryCareParty: z.enum(["primary", "secondary"]).default("primary"),
   defaultCareParty: z.enum(["primary", "secondary"]).default("primary"),
+  children: z.array(childInputSchema).max(20, "Es können höchstens 20 Kinder beim Setup angelegt werden.").optional(),
   child: childInputSchema.optional()
+}).superRefine((setup, context) => {
+  if (setup.child && setup.children) {
+    context.addIssue({
+      code: "custom",
+      path: ["children"],
+      message: "child und children dürfen nicht gleichzeitig übermittelt werden."
+    });
+  }
 }).refine((setup) => setup.defaultCareParty === "primary" || Boolean(setup.secondaryCareParty), {
   path: ["defaultCareParty"],
   message: "Eine zweite betreuende Person ist erforderlich, wenn sie als Standard verwendet werden soll."
 }).refine((setup) => setup.primaryCareParty === "primary" || Boolean(setup.secondaryCareParty), {
   path: ["primaryCareParty"],
   message: "Eine zweite betreuende Person ist erforderlich, wenn sie als Hauptbetreuung verwendet werden soll."
+}).transform(({ child, children, ...setup }) => {
+  return {
+    ...setup,
+    children: children ?? (child ? [child] : [])
+  };
 });
 
 export const invitationInputSchema = z.object({

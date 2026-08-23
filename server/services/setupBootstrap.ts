@@ -1,7 +1,7 @@
 import type Database from "better-sqlite3";
 import type { RequestUser } from "../auth.js";
 import { db } from "../db/connection.js";
-import type { ApiCarePartyKind } from "../../shared/api.js";
+import type { ApiCarePartyKind, ApiSetupChildInput } from "../../shared/api.js";
 import { setMembershipRole } from "./memberships.js";
 import { buildSetupState, publicSetupState } from "./setupState.js";
 import { makeId } from "./common.js";
@@ -106,12 +106,7 @@ export interface FirstUseSetupInput {
   };
   primaryCareParty?: "primary" | "secondary";
   defaultCareParty: "primary" | "secondary";
-  child?: {
-    name: string;
-    birthMonth: number;
-    birthYear: number;
-    color: string;
-  };
+  children?: ApiSetupChildInput[];
 }
 
 function createCareParty(
@@ -183,9 +178,8 @@ export function completeFirstUseSetup(
       ? secondaryCarePartyId
       : carePartyId;
 
-    let childId: string | undefined;
-    if (input.child) {
-      childId = makeId("child");
+    const childIds = (input.children ?? []).map((child) => {
+      const childId = makeId("child");
       database.prepare(`
         INSERT INTO children (
           id, name, birth_month, birth_year, color, created_by, updated_by,
@@ -193,10 +187,10 @@ export function completeFirstUseSetup(
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         childId,
-        input.child.name,
-        input.child.birthMonth,
-        input.child.birthYear,
-        input.child.color,
+        child.name,
+        child.birthMonth,
+        child.birthYear,
+        child.color,
         user.id,
         user.id,
         timestamp,
@@ -205,7 +199,8 @@ export function completeFirstUseSetup(
       recordBootstrapAudit(database, user.id, "child_created", {
         childId
       }, timestamp);
-    }
+      return childId;
+    });
 
     upsertSetting(database, "primaryCarePartyId", primaryCarePartyId, user.id, timestamp);
     upsertSetting(database, "defaultResponsiblePartyId", defaultCarePartyId, user.id, timestamp);
@@ -221,7 +216,8 @@ export function completeFirstUseSetup(
         ...(secondaryCarePartyId ? { secondaryCarePartyId } : {}),
         primaryCarePartyId,
         defaultCarePartyId,
-        ...(childId ? { childId } : {})
+        childIds,
+        ...(childIds[0] ? { childId: childIds[0] } : {})
       }
     };
   })();
