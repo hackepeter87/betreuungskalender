@@ -6,6 +6,20 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-08-23
+
+### Added
+
+- Allow first-use setup to create no, one, or several children through
+  repeatable, responsive child cards.
+- Add an array-based first-use API contract for initial child records while
+  retaining the previous singular input for one compatibility release.
+
+### Changed
+
+- Store the owner, initial care parties, settings, and every submitted child in
+  one transaction so partial first-use state cannot be committed.
+
 ## [1.20.7] - 2026-08-23
 
 ### Changed
