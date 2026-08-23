@@ -234,6 +234,13 @@ designation; the guided first-use wizard then records application defaults.
 Ownerless existing installations can use the same link without recreating
 domain data. The action is audited and becomes unavailable once an owner exists.
 
+The exact native-OIDC `GET` routes `/setup`, `/setup/continue`, `/invite`, and
+`/invite/continue` are controlled token entry points and must reach their
+server-side validation handlers before the authenticated SPA fallback. Their
+reachability is not workspace authorization: the one-time token, OIDC context,
+callback validation, and resulting membership remain mandatory. Unknown
+subpaths and ordinary browser routes remain protected.
+
 The full self-hosted setup, owner, member, and invitation model is documented
 in [self-hosted-onboarding.md](self-hosted-onboarding.md).
 

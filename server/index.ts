@@ -242,6 +242,20 @@ function requestPath(request: FastifyRequest): string {
   }
 }
 
+const nativeOidcOnboardingPaths = new Set([
+  "/setup",
+  "/setup/continue",
+  "/invite",
+  "/invite/continue"
+]);
+
+function isNativeOidcOnboardingRequest(request: FastifyRequest): boolean {
+  return (
+    request.method === "GET" &&
+    nativeOidcOnboardingPaths.has(requestPath(request))
+  );
+}
+
 function isSpaFallbackRequest(request: FastifyRequest): boolean {
   const path = requestPath(request);
   return (
@@ -271,6 +285,7 @@ function requiresNativeOidcBrowserLogin(request: FastifyRequest): boolean {
     config.authMode === "native-oidc" &&
     config.requireAuth &&
     isSpaFallbackRequest(request) &&
+    !isNativeOidcOnboardingRequest(request) &&
     !hasNativeOidcBrowserSession(request)
   );
 }

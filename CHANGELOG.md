@@ -6,6 +6,15 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.20.6] - 2026-08-23
+
+### Fixed
+
+- Keep the exact token-bound native-OIDC owner-setup and invitation entry
+  routes reachable while preserving the authenticated SPA boundary.
+- Cover owner setup, invitation acceptance, rejected onboarding values, and
+  ordinary membership enforcement in the production runtime test suite.
+
 ## [1.20.5] - 2026-08-20
 
 ### Changed
