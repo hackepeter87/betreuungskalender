@@ -1765,6 +1765,49 @@ test("downloads a complete JSON backup without raw calendar payloads", async ({
   expect(raw).not.toContain("process.env");
 });
 
+test("requires a successful dry run before importing a portable transfer", async ({
+  page,
+  request
+}) => {
+  const childName = "Transfer Kind";
+  await openApp(page);
+  await createChild(page, childName);
+
+  await navigate(page, "backup");
+  await expect(page.getByTestId("data-transfer-import")).toHaveCount(0);
+
+  const downloadPromise = page.waitForEvent("download");
+  await page.getByTestId("export-json").click();
+  const download = await downloadPromise;
+  const stream = await download.createReadStream();
+  expect(stream).not.toBeNull();
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream!) chunks.push(Buffer.from(chunk));
+  const transfer = Buffer.concat(chunks);
+
+  await page.locator('input[type="file"][accept*="json"]').setInputFiles({
+    name: "betreuungskalender-transfer-test.json",
+    mimeType: "application/json",
+    buffer: transfer
+  });
+  await expect(page.getByTestId("data-transfer-import")).toHaveCount(0);
+
+  await page.getByTestId("data-transfer-dry-run").click();
+  const result = page.getByTestId("data-transfer-result");
+  await expect(result).toBeVisible();
+  await expect(result).toContainText(/ready|warnings/);
+  await expect(result).toContainText("entries");
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await page.getByTestId("data-transfer-import").click();
+  await expect(page.getByTestId("transfer-actors")).toBeVisible();
+  const childrenResponse = await request.get("/api/children");
+  expect(childrenResponse.ok()).toBeTruthy();
+  await expect(childrenResponse.json()).resolves.toEqual(expect.arrayContaining([
+    expect.objectContaining({ name: childName })
+  ]));
+});
+
 test("records partial actual care details from the entry form", async ({
   page,
   request

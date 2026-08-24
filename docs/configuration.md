@@ -14,9 +14,9 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `NODE_ENV` | Runtime mode and production error handling | `production` | Recommended | `development` | Production hides internal error details |
 | `HOST` | Listener address | `127.0.0.1` | Optional | `127.0.0.1` | Use loopback when a local proxy is in front |
 | `PORT` | HTTP port | `3000` | Optional | `3000` | Expose only through the intended firewall/proxy |
-| `APP_RELEASE_VERSION` | Release Compose image tag | `1.10.2` | Required for `deploy/compose.yml` | None | Must match the extracted release package version |
+| `APP_RELEASE_VERSION` | Release Compose image tag | `1.22.0` | Required for `deploy/compose.yml` | None | Must match the extracted release package version |
 | `APP_RELEASE_DIR` | Release Compose build context | `/opt/svc_betreuung/betreuungskalender/releases/vX.Y.Z` | Required for `deploy/compose.yml` | None | Must point at the verified extracted release directory |
-| `APP_COMPOSE_FILE` | Compose file managed by the update tool | `compose.oidc.yml` | Required only when not using `compose.yml` | `compose.yml` | Must be `compose.yml` or `compose.oidc.yml` |
+| `APP_COMPOSE_FILE` | Compose file used by the update tool | `compose.oidc.yml` | Required only when not using `compose.yml` | `compose.yml` | Must be `compose.yml` or `compose.oidc.yml` |
 | `OAUTH2_PROXY_IMAGE` | oauth2-proxy image used by `deploy/compose.oidc.yml` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.3` | Optional for OIDC Compose | Same | Pin and review oauth2-proxy updates like other runtime dependencies |
 | `HOST_BIND_ADDRESS` | Host address published by release Compose | `127.0.0.1` | Recommended for `deploy/compose.yml` | `127.0.0.1` | Use loopback only when the reverse proxy is on the same host |
 | `HOST_PORT` | Host port published by release Compose | `3000` | Recommended for `deploy/compose.yml` | `3000` | Expose only through the intended firewall/proxy |
@@ -34,6 +34,7 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `OIDC_POST_LOGOUT_REDIRECT_URI` | Native OIDC post-logout URI | `https://betreuung.example.net/` | Optional for `AUTH_MODE=native-oidc` | App origin derived from `OIDC_REDIRECT_URI` | Must be pre-registered as a valid post-logout redirect URI in Keycloak |
 | `OIDC_SCOPES` | Native OIDC scopes requested at login | `openid email profile` | Optional for `AUTH_MODE=native-oidc` | `openid email profile` | Keep minimal; add only the provider scopes required to emit configured claims |
 | `OIDC_GROUPS_CLAIM` | Native OIDC claim containing group or role values | `groups` | Optional for `AUTH_MODE=native-oidc` | `groups` | Stored as external identity metadata; app memberships remain authoritative for workspace access |
+| `OIDC_DISPLAY_NAME_CLAIM` | Native OIDC claim used as the current display name | `preferred_username` | Optional for `AUTH_MODE=native-oidc` | `preferred_username` | Presentation only; the stable `sub` remains the technical identity and is never part of portable exports |
 | `OIDC_LOGIN_STATE_TTL_SECONDS` | Native OIDC login transaction lifetime | `600` | Optional for `AUTH_MODE=native-oidc` | `600` | Short-lived state, nonce, and PKCE verifier records limit replay windows |
 | `OWNER_SETUP_TOKEN_FILE` | Mounted file containing the one-time initial owner setup token | `/run/secrets/owner-setup-token` | Required when establishing a native-OIDC owner | Same | Keep the secret file mounted until the owner claim completes; do not place the token itself in app environment files |
 | `OWNER_SETUP_TOKEN_TTL_SECONDS` | Initial owner setup link lifetime from the secret file modification time | `86400` | Optional | `86400` | Replacing or removing the file invalidates an unfinished owner setup flow |
@@ -73,6 +74,7 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `RATE_LIMIT_EXPORT_MAX` | Maximum export requests per client and time window | `15` | Optional | `15` | Restricts potentially expensive export generation |
 | `RATE_LIMIT_WINDOW_MS` | Shared rate-limit window in milliseconds | `60000` | Optional | `60000` | Keep a bounded window; values must be positive integers |
 | `DEMO_DATASETS_ENABLED` | Enable admin-only synthetic demo dataset loaders | `true` on demo only | Optional for demo/staging | `false` | Never enable on production; loading a dataset replaces domain data |
+| `DATA_TRANSFER_MAX_BYTES` | Maximum JSON request size for portable transfer preview, dry run, and import | `26214400` | Optional | `26214400` (25 MiB) | Bounds memory use; align reverse-proxy or ingress request limits without increasing this value unnecessarily |
 | `BACKUP_RETENTION_DAYS` | Remove generated SQLite backups older than this | `14` | Optional | `14` | Set `0` to disable automatic age pruning |
 | `HEALTHCHECK_URL` | URL used by `npm run healthcheck` | `http://127.0.0.1:3000/api/health` | Optional | Same | Use an internal URL; no credentials are required |
 

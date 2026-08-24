@@ -65,6 +65,15 @@ placeholder.
 | `nodeSelector`, `tolerations`, `affinity` | Kubernetes scheduling | empty |
 | `commonLabels`, `podLabels`, `*.annotations` | Additional resource metadata | empty |
 
+Portable transfer requests use `DATA_TRANSFER_MAX_BYTES` from `config` and are
+validated in memory without creating a temporary package file. The default is
+25 MiB. Configure the ingress controller to permit the same request size while
+keeping the application limit as the authoritative upper bound.
+
+`OIDC_DISPLAY_NAME_CLAIM` selects the native-OIDC display-name claim and
+defaults to `preferred_username`. It does not change the stable OIDC subject or
+portable-transfer identity rules.
+
 All application settings from `docs/configuration.md` can be supplied through
 `config`, `extraEnv`, or `extraEnvFrom`. The schema rejects known secret keys
 inside `config`; use a Kubernetes Secret reference instead.

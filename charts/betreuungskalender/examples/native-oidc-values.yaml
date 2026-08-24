@@ -1,6 +1,6 @@
 image:
   repository: ghcr.io/hackepeter87/betreuungskalender
-  tag: "1.20.1"
+  tag: "1.22.0"
   pullPolicy: IfNotPresent
 
 config:
@@ -14,8 +14,10 @@ config:
   OIDC_POST_LOGOUT_REDIRECT_URI: https://calendar.example.net/
   OIDC_SCOPES: openid email profile
   OIDC_GROUPS_CLAIM: groups
+  OIDC_DISPLAY_NAME_CLAIM: preferred_username
   OIDC_REQUIRE_ROLE_CLAIM: "true"
   INVITATION_PUBLIC_BASE_URL: https://calendar.example.net
+  DATA_TRANSFER_MAX_BYTES: "26214400"
 
 extraEnv:
   - name: OIDC_CLIENT_SECRET

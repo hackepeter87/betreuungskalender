@@ -23,6 +23,7 @@ import { childrenRoutes } from "./routes/children.js";
 import { contactPatternRoutes } from "./routes/contactPatterns.js";
 import { contactRuleRoutes } from "./routes/contactRules.js";
 import { demoDataRoutes } from "./routes/demoData.js";
+import { dataTransferRoutes } from "./routes/dataTransfer.js";
 import { holidayRoutes } from "./routes/holidays.js";
 import { instanceReadinessRoutes } from "./routes/instanceReadiness.js";
 import { invitationRoutes } from "./routes/invitations.js";
@@ -376,7 +377,7 @@ app.get("/api/session", readLimit, async (request) => {
         : {
             loginUrl: "/auth/login",
             ...(config.demoDatasetsEnabled ? { demoDatasetsEnabled: true } : {})
-          })
+      })
     };
   }
   if (
@@ -453,6 +454,7 @@ await app.register(migrationRoutes);
 await app.register(auditRoutes);
 await app.register(appUserRoutes);
 await app.register(appDataRoutes);
+await app.register(dataTransferRoutes);
 await app.register(demoDataRoutes);
 
 const confirmationSweep = setInterval(() => {

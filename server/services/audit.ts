@@ -1,3 +1,4 @@
+import type Database from "better-sqlite3";
 import { db } from "../db/connection.js";
 
 type AuditAction = "created" | "updated" | "deleted" | "post_close_change";
@@ -12,6 +13,7 @@ interface AuditInput {
   newValue?: unknown;
   metadata?: unknown;
   timestamp?: string;
+  database?: Database.Database;
 }
 
 function serialize(value: unknown): string | null {
@@ -22,7 +24,8 @@ function serialize(value: unknown): string | null {
 
 export function recordAudit(input: AuditInput): void {
   const timestamp = input.timestamp ?? new Date().toISOString();
-  db.prepare(`
+  const database = input.database ?? db;
+  database.prepare(`
     INSERT INTO audit_log (
       timestamp, user_email, entity_type, entity_id, action, field_name,
       old_value, new_value, metadata_json, created_at, updated_at

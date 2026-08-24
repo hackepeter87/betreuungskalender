@@ -32,6 +32,7 @@ interface InvitationRow {
   revoked_at: string | null;
   created_at: string;
   updated_at: string;
+  data_transfer_actor_id: string | null;
 }
 
 export class InvitationError extends Error {
@@ -73,7 +74,7 @@ function selectInvitationByToken(
 ): InvitationRow | undefined {
   return database.prepare(`
     SELECT id, token_hash, email_hint, role, expires_at, accepted_user_id,
-      accepted_at, revoked_at, created_at, updated_at
+      accepted_at, revoked_at, created_at, updated_at, data_transfer_actor_id
     FROM app_invitations
     WHERE token_hash = ?
       AND deleted_at IS NULL
@@ -87,7 +88,7 @@ function selectInvitationByHash(
   if (!/^[0-9a-f]{64}$/.test(hash)) return undefined;
   return database.prepare(`
     SELECT id, token_hash, email_hint, role, expires_at, accepted_user_id,
-      accepted_at, revoked_at, created_at, updated_at
+      accepted_at, revoked_at, created_at, updated_at, data_transfer_actor_id
     FROM app_invitations
     WHERE token_hash = ?
       AND deleted_at IS NULL
@@ -100,7 +101,7 @@ function selectInvitationById(
 ): InvitationRow | undefined {
   return database.prepare(`
     SELECT id, token_hash, email_hint, role, expires_at, accepted_user_id,
-      accepted_at, revoked_at, created_at, updated_at
+      accepted_at, revoked_at, created_at, updated_at, data_transfer_actor_id
     FROM app_invitations
     WHERE id = ?
       AND deleted_at IS NULL
@@ -135,6 +136,7 @@ export function createInvitation(
     emailHint?: string;
     token?: string;
     timestamp?: string;
+    dataTransferActorId?: string;
   },
   database: Database.Database = db
 ): CreatedInvitation {
@@ -144,8 +146,8 @@ export function createInvitation(
   database.prepare(`
     INSERT INTO app_invitations (
       id, token_hash, email_hint, role, expires_at,
-      created_by, updated_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      created_by, updated_by, created_at, updated_at, data_transfer_actor_id
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     invitationTokenHash(token),
@@ -155,7 +157,8 @@ export function createInvitation(
     input.actorId,
     input.actorId,
     timestamp,
-    timestamp
+    timestamp,
+    input.dataTransferActorId ?? null
   );
   const invitation = selectInvitationById(id, database);
   if (!invitation) {
@@ -220,6 +223,29 @@ function acceptSelectedInvitation(
     }
 
     setMembershipRole(user.id, invitation.role, user.id, timestamp, database);
+    if (invitation.data_transfer_actor_id) {
+      database.prepare(`
+        UPDATE data_transfer_actors
+        SET mapped_user_id = ?, updated_by = ?, updated_at = ?
+        WHERE id = ?
+      `).run(user.id, user.id, timestamp, invitation.data_transfer_actor_id);
+      const assignments = database.prepare(`
+        SELECT target_care_party_id AS carePartyId
+        FROM data_transfer_actor_care_parties
+        WHERE actor_id = ? AND target_care_party_id IS NOT NULL
+      `).all(invitation.data_transfer_actor_id) as Array<{ carePartyId: string }>;
+      const insertAssignment = database.prepare(`
+        INSERT INTO app_user_care_party_assignments (
+          id, user_id, care_party_id, created_by, updated_by, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT DO NOTHING
+      `);
+      for (const assignment of assignments) {
+        insertAssignment.run(
+          randomUUID(), user.id, assignment.carePartyId, user.id, user.id, timestamp, timestamp
+        );
+      }
+    }
     database.prepare(`
       UPDATE app_invitations
       SET accepted_user_id = ?,
@@ -308,7 +334,7 @@ export function listInvitations(
 ): InvitationSummary[] {
   const rows = database.prepare(`
     SELECT id, token_hash, email_hint, role, expires_at, accepted_user_id,
-      accepted_at, revoked_at, created_at, updated_at
+      accepted_at, revoked_at, created_at, updated_at, data_transfer_actor_id
     FROM app_invitations
     WHERE deleted_at IS NULL
     ORDER BY created_at DESC, id DESC

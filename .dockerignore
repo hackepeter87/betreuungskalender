@@ -33,6 +33,7 @@ blob-report
 *.tgz
 *.zip
 betreuungskalender-backup-*.json
+betreuungskalender-transfer-*.json
 backup-*.json
 *.backup.json
 *.export.json

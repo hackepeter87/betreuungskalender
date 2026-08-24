@@ -27,11 +27,13 @@ import type {
   ApiExternalCalendarHolidayDeriveResult,
   ApiInvitation,
   ApiInstanceReadiness,
+  ApiImportedTransferActor,
   ApiMember,
   ApiNotificationPreferencesResponse,
   ApiNotificationPreference,
   ApiPushSubscriptionInput,
   ApiWorkspaceRole,
+  ApiTransferDryRunResult,
   CareScope
 } from "../../shared/api";
 import type {
@@ -73,10 +75,10 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+async function request<T>(path: string, init?: RequestInit, timeoutMs = 5_000): Promise<T> {
   let response: Response;
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), 5_000);
+  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
   try {
     response = await fetch(path, {
       ...init,
@@ -810,6 +812,49 @@ export const api = {
       `/api/user-care-party-assignments/${encodeURIComponent(userId)}`,
       { method: "PUT", body: JSON.stringify({ carePartyIds }) }
     );
+  },
+  exportPortableTransfer() {
+    return request<unknown>("/api/data-transfer/export", undefined, 30_000);
+  },
+  dryRunPortableTransfer(packageData: unknown) {
+    return request<ApiTransferDryRunResult>("/api/data-transfer/dry-run", {
+      method: "POST",
+      body: JSON.stringify(packageData)
+    }, 60_000);
+  },
+  importPortableTransfer(input: {
+    package: unknown;
+    fingerprint: string;
+    dryRunReceipt: string;
+    confirmWarnings: boolean;
+  }) {
+    return request<ApiTransferDryRunResult>("/api/data-transfer/import", {
+      method: "PUT",
+      body: JSON.stringify(input)
+    }, 120_000);
+  },
+  listTransferActors() {
+    return request<ApiImportedTransferActor[]>("/api/data-transfer/actors");
+  },
+  mapTransferActor(id: string, input: {
+    userId: string;
+    role: ApiWorkspaceRole;
+    carePartyIds: string[];
+  }) {
+    return request<{ mapped: true }>(`/api/data-transfer/actors/${encodeURIComponent(id)}/mapping`, {
+      method: "PUT",
+      body: JSON.stringify(input)
+    });
+  },
+  inviteTransferActor(id: string, input: {
+    role: ApiWorkspaceRole;
+    expiresAt: string;
+    emailHint?: string;
+  }) {
+    return request<ApiCreatedInvitation>(`/api/data-transfer/actors/${encodeURIComponent(id)}/invitation`, {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
   }
   ,listExternalCalendarEvents(from: string, to: string) {
     return request<ApiExternalCalendarEvent[]>(`/api/external-calendar-events?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`);

@@ -353,6 +353,39 @@ export interface ApiCreatedInvitation {
   };
 }
 
+export interface ApiTransferActorSnapshot {
+  sourceRef: string;
+  displayName: string;
+  email?: string;
+  suggestedRole?: ApiWorkspaceRole;
+  carePartyIds: string[];
+  mappingRequired: true;
+}
+
+export interface ApiTransferDryRunResult {
+  fingerprint: string;
+  formatVersion: number;
+  sourceVersion: string;
+  result: "ready" | "warnings" | "blocked";
+  counts: Record<string, number>;
+  skippedRuntimeData: string[];
+  missingReferences: string[];
+  warnings: string[];
+  actors: ApiTransferActorSnapshot[];
+  dryRunReceipt?: string;
+}
+
+export interface ApiImportedTransferActor {
+  id: string;
+  displayName: string;
+  email?: string;
+  suggestedRole?: ApiWorkspaceRole;
+  mappedUserId?: string;
+  invitationId?: string;
+  packageFingerprint: string;
+  carePartyIds: string[];
+}
+
 export interface ApiInvitationCapabilities {
   emailDeliveryAvailable: boolean;
 }

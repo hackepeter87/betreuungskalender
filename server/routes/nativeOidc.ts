@@ -43,7 +43,10 @@ type NativeOidcRouteConfig = Pick<
   | "nodeEnv"
   | "rateLimitSensitiveMax"
   | "rateLimitWindowMs"
-> & Partial<Pick<typeof appConfig, "ownerSetupTokenFile" | "ownerSetupTokenTtlSeconds">>;
+> & Partial<Pick<
+  typeof appConfig,
+  "ownerSetupTokenFile" | "ownerSetupTokenTtlSeconds" | "oidcDisplayNameClaim"
+>>;
 
 interface NativeOidcRoutesOptions {
   config: NativeOidcRouteConfig;
@@ -201,6 +204,7 @@ export async function nativeOidcRoutes(
       postLogoutRedirectUri: options.config.oidcPostLogoutRedirectUri,
       scopes: options.config.oidcScopes,
       groupsClaim: options.config.oidcGroupsClaim,
+      displayNameClaim: options.config.oidcDisplayNameClaim ?? "preferred_username",
       loginStateTtlSeconds: options.config.oidcLoginStateTtlSeconds
     }
   });

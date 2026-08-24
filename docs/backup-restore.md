@@ -19,8 +19,7 @@ npm run backup
 
 The destination directory is set to mode `0700` and new backup files to `0600`.
 Files older than `BACKUP_RETENTION_DAYS` are removed; the default is 14 days.
-This also removes the private `.env` snapshots and metadata created by managed
-updates. Use additional weekly/monthly external retention if required.
+Use additional weekly/monthly external retention if required.
 
 Verify the latest backup:
 
@@ -37,9 +36,9 @@ npm run restore:check -- /var/backups/betreuungskalender/example.sqlite
 The check runs SQLite `integrity_check` and verifies required tables. It does
 not print family data.
 
-The managed Compose update workflow runs both commands before switching a
-release and writes non-sensitive metadata next to the resulting backup. See
-[update.md](update.md) for the complete update and rollback procedure.
+The documented Compose update procedure runs both commands before switching a
+release. See [update.md](update.md) for the complete update and rollback
+procedure.
 
 The minimal release container does not include npm. Run the same scripts there
 directly:
@@ -66,8 +65,39 @@ podman exec APP_CONTAINER /nodejs/bin/node scripts/restore-check.js
 Test restoration periodically in an isolated environment. A successful backup
 command alone does not prove recoverability.
 
-## Browser JSON restore
+## Portable instance transfer
 
-Export an up-to-date JSON file before importing another one. Test JSON restore
-in a separate browser profile. JSON, CSV, and PDF files may contain sensitive
-data and should be encrypted at rest and never attached to public issues.
+The in-app transfer export is intended for moving complete domain data between
+self-hosted installations whose OIDC identities may differ. It includes domain
+records, audit history, and portable historical actor snapshots. It excludes
+sessions, OIDC subjects and claims, invitation and setup tokens, personal feed
+tokens, push subscriptions, recovery credentials, runtime secrets, and private
+external-calendar feed URLs.
+
+Every import follows this sequence:
+
+1. Initialize the target installation and establish its owner normally.
+2. Select the transfer JSON file in **Export & Import**.
+3. Run **Import testen**. The server validates the checksum, relationships,
+   limits, and current schema in a temporary SQLite database without changing
+   the target database. A short-lived confirmation binds the later import to
+   this exact tested package; after a server restart or expiry, run the test
+   again.
+4. Resolve blocked results before continuing. Review and explicitly accept any
+   warnings.
+5. Confirm the complete replacement of target domain data. The server validates
+   the same package again, verifies its dry-run fingerprint, and imports it in
+   one transaction.
+6. Explicitly map historical actors to existing target members or create new
+   invitations. No actor is granted access based on a matching name or email.
+7. Reconfigure personal calendar feeds, push subscriptions, and external feed
+   connections on the target installation.
+
+The transfer mechanism does not merge two independent data sets. Keep the
+source SQLite backup until the target has been checked. Legacy application JSON
+exports remain accepted, but they also require a dry run and do not contain the
+new historical actor snapshots.
+
+JSON, CSV, and PDF files may contain sensitive personal data. Encrypt transfer
+files at rest and in transit, remove temporary copies after verification, and
+never attach them to public issues.

@@ -277,6 +277,32 @@ test("native OIDC callback validates state nonce and PKCE through the client lib
   }
 });
 
+test("native OIDC can use a configurable display claim without changing the subject", async () => {
+  const { database, cleanup } = testDatabase();
+  try {
+    const service = new NativeOidcService({
+      config: { ...nativeConfig(), displayNameClaim: "name" },
+      loginStates: new OidcLoginStateStore(database),
+      library: fakeLibrary({
+        authorizationCodeGrant: async () => ({
+          claims: () => ({
+            sub: "stable-subject",
+            name: "Current display name",
+            preferred_username: "mutable-login-name",
+            groups: []
+          })
+        })
+      })
+    });
+    await service.createLoginRedirect();
+    const result = await service.validateCallback("/auth/callback?code=code-123&state=state-123");
+    assert.equal(result.subject, "stable-subject");
+    assert.equal(result.displayName, "Current display name");
+  } finally {
+    cleanup();
+  }
+});
+
 test("native OIDC callback rejects state mismatches before token exchange", async () => {
   const { database, cleanup } = testDatabase();
   try {
