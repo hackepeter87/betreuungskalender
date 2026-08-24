@@ -142,7 +142,7 @@ test("does not classify ordinary code by generic backup or export words", () => 
   }
 });
 
-test("allows documentation screenshots and warns about images elsewhere", () => {
+test("allows controlled documentation screenshots and icons and warns elsewhere", () => {
   const allowed = [
     "docs/assets/screenshots/dashboard-desktop.png",
     "docs/assets/screenshots/calendar-desktop.jpg",

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="52 68 408 392" role="img" aria-labelledby="title desc">
+  <title id="title">Betreuungskalender</title>
+  <desc id="desc">Blaues Kalender-Symbol mit Familie und gelbem Herz.</desc>
+  <defs>
+    <linearGradient id="blue" x1="104" y1="78" x2="406" y2="410" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1d63d6"/>
+      <stop offset="1" stop-color="#0649b5"/>
+    </linearGradient>
+    <linearGradient id="yellow" x1="220" y1="335" x2="292" y2="431" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f7c948"/>
+      <stop offset="1" stop-color="#eca400"/>
+    </linearGradient>
+  </defs>
+  <path d="M138 117h236c40 0 72 32 72 72v179c0 40-32 72-72 72H138c-40 0-72-32-72-72V189c0-40 32-72 72-72Z" fill="#fff" stroke="url(#blue)" stroke-width="22"/>
+  <path d="M76 205h360" stroke="url(#blue)" stroke-width="22"/>
+  <path d="M169 86v73M343 86v73" stroke="url(#blue)" stroke-width="22" stroke-linecap="round"/>
+  <g fill="#b9cff6">
+    <rect x="127" y="239" width="38" height="38" rx="10"/>
+    <rect x="190" y="239" width="38" height="38" rx="10"/>
+    <rect x="253" y="239" width="38" height="38" rx="10"/>
+    <rect x="316" y="239" width="38" height="38" rx="10"/>
+    <rect x="127" y="302" width="38" height="38" rx="10"/>
+    <rect x="316" y="302" width="38" height="38" rx="10"/>
+  </g>
+  <rect x="253" y="302" width="38" height="38" rx="10" fill="url(#yellow)"/>
+  <path d="M193 337c-34 0-62 28-62 62v17c19 16 45 25 76 25h22c-13-15-20-31-20-48 0-22 10-41 28-52-11-3-25-4-44-4Z" fill="url(#blue)"/>
+  <circle cx="193" cy="303" r="32" fill="url(#blue)"/>
+  <path d="M319 354c-23 0-42 19-42 42v29c12 8 29 13 51 13h10c22 0 39-5 51-13v-29c0-23-19-42-42-42h-28Z" fill="url(#blue)"/>
+  <circle cx="333" cy="321" r="28" fill="url(#blue)"/>
+  <path d="M256 431c-28-23-72-52-72-91 0-24 18-43 41-43 14 0 25 7 31 18 7-11 18-18 32-18 23 0 41 19 41 43 0 39-45 68-73 91Z" fill="url(#yellow)" stroke="#fff" stroke-width="16" stroke-linejoin="round"/>
+</svg>

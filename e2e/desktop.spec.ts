@@ -23,7 +23,7 @@ test("keeps application branding and sidebar footer controls aligned", async ({ 
   const settings = page.getByTestId("nav-settings");
   const collapse = page.getByTestId("sidebar-collapse-control");
   await expect(logo).toBeVisible();
-  await expect(logo).toHaveAttribute("src", "/icons/app-icon.svg");
+  await expect(logo).toHaveAttribute("src", "/icons/app-logo-nav.svg");
   await expect(collapse).toBeVisible();
 
   const footerOrder = await page.evaluate(() => {
@@ -41,6 +41,67 @@ test("keeps application branding and sidebar footer controls aligned", async ({ 
   await expect(logo).toBeVisible();
   await expect(settings).toBeVisible();
   await expect(collapse).toHaveAttribute("aria-pressed", "true");
+
+  await page.getByTestId("sidebar-notification-center-trigger").click();
+  const notificationCenter = page.getByTestId("sidebar-notification-center-popover");
+  await expect(notificationCenter).toBeVisible();
+  const menuBox = await notificationCenter.boundingBox();
+  const viewport = page.viewportSize();
+  expect(menuBox).not.toBeNull();
+  expect(viewport).not.toBeNull();
+  expect(menuBox!.x).toBeGreaterThanOrEqual(76);
+  expect(menuBox!.x + menuBox!.width).toBeLessThanOrEqual(viewport!.width);
+  expect(menuBox!.y + menuBox!.height).toBeLessThanOrEqual(viewport!.height);
+});
+
+test("uses a fluid desktop page baseline and stacks dashboard secondary panels", async ({ page }) => {
+  await openApp(page);
+
+  const mainWidth = await page.locator("main.main").evaluate((element) => element.getBoundingClientRect().width);
+  const dashboardWidth = await page.getByTestId("page-dashboard").evaluate((element) => element.getBoundingClientRect().width);
+  expect(dashboardWidth).toBeGreaterThan(mainWidth - 2);
+
+  const calendar = page.locator(".dashboard-layout > .calendar-panel");
+  const secondary = page.locator(".dashboard-layout > .dashboard-sidebar");
+  const calendarBox = await calendar.boundingBox();
+  const secondaryBox = await secondary.boundingBox();
+  expect(calendarBox).not.toBeNull();
+  expect(secondaryBox).not.toBeNull();
+  expect(secondaryBox!.y).toBeGreaterThanOrEqual(calendarBox!.y + calendarBox!.height);
+
+  for (const route of ["settings", "backup", "report", "rules"] as const) {
+    await navigate(page, route);
+    const pageElement = page.locator("main.main > .page");
+    await expect(pageElement).toBeVisible();
+    const pageWidth = await pageElement.evaluate((element) => element.getBoundingClientRect().width);
+    expect(pageWidth).toBeGreaterThan(mainWidth - 2);
+    await expectNoDocumentHorizontalOverflow(page);
+  }
+});
+
+test("captures the shared desktop layout across core pages", async ({ page }, testInfo) => {
+  await page.clock.setFixedTime(new Date("2026-08-24T10:00:00Z"));
+  await openApp(page);
+
+  const pages = [
+    ["dashboard", "dashboard-fluid-desktop.png"],
+    ["settings", "settings-fluid-desktop.png"],
+    ["backup", "backup-fluid-desktop.png"],
+    ["report", "report-fluid-desktop.png"],
+    ["rules", "documentation-fluid-desktop.png"]
+  ] as const;
+
+  for (const [route, snapshot] of pages) {
+    await navigate(page, route);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await expectNoDocumentHorizontalOverflow(page);
+    const screenshot = await page.screenshot({
+      animations: "disabled",
+      caret: "hide",
+      fullPage: false
+    });
+    await testInfo.attach(snapshot, { body: screenshot, contentType: "image/png" });
+  }
 });
 
 test("offers PWA installation only after the browser reports availability", async ({
@@ -1281,8 +1342,10 @@ test("can hide inline help icons while keeping the help page available", async (
   await expect(page.locator(".field-help-button")).toHaveCount(0);
 
   await navigate(page, "rules");
-  await page.locator("details.field-help-group summary").first().click();
-  await expect(page.locator(".field-help-list .field-help-button").first()).toBeVisible();
+  const practicalTopic = page.locator("details.documentation-topic").first();
+  await expect(practicalTopic).toBeVisible();
+  await expect(practicalTopic).toHaveAttribute("open", "");
+  await expect(practicalTopic.locator(".documentation-topic__content article").first()).toBeVisible();
 });
 
 test("uses compact required-field markers in forms", async ({ page }) => {
