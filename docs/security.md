@@ -68,6 +68,13 @@ feed tokens, push subscriptions, recovery credentials, runtime secrets, and
 private external-calendar feed URLs. Historical actors receive no access until
 the owner explicitly maps them or creates an invitation.
 
+The optional downloadable transfer review is generated in the browser and
+contains only versions, aggregate counts, named check outcomes, warning counts,
+a shortened fingerprint, and its creation time. It excludes names, email
+addresses, domain content, complete identifiers, URLs, claims, tokens, and the
+short-lived dry-run receipt. Dry-run review details are not persisted as an
+import-history log.
+
 Personal iCalendar feed URLs are bearer secrets. The application stores only a
 hash of the token, but anyone with the generated URL can read that feed until
 it is revoked. Feeds may cover all visible entries or one selected care party.

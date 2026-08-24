@@ -1795,11 +1795,20 @@ test("requires a successful dry run before importing a portable transfer", async
   await page.getByTestId("data-transfer-dry-run").click();
   const result = page.getByTestId("data-transfer-result");
   await expect(result).toBeVisible();
-  await expect(result).toContainText(/ready|warnings/);
-  await expect(result).toContainText("entries");
+  await expect(result).toContainText(/Bereit|Hinweise prüfen/);
+  await expect(result).toContainText("Betreuungseinträge");
+  await expect(result).not.toContainText("careParties");
+  await expect(result).not.toContainText("contactPatterns");
+  const fingerprint = await result.locator(".transfer-fingerprint code").textContent();
+  expect(fingerprint).toMatch(/^[a-f0-9]{12}$/);
 
-  page.once("dialog", (dialog) => dialog.accept());
   await page.getByTestId("data-transfer-import").click();
+  const confirmImport = page.getByTestId("data-transfer-import-confirm");
+  await expect(confirmImport).toBeVisible();
+  await expect(confirmImport).toBeDisabled();
+  await page.locator(".transfer-confirm__check input").check();
+  await confirmImport.click();
+  await expect(page.getByTestId("data-transfer-complete")).toBeVisible();
   await expect(page.getByTestId("transfer-actors")).toBeVisible();
   const childrenResponse = await request.get("/api/children");
   expect(childrenResponse.ok()).toBeTruthy();

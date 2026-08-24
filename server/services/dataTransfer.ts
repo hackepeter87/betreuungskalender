@@ -45,8 +45,13 @@ export interface TransferDryRunResult {
   fingerprint: string;
   formatVersion: number;
   sourceVersion: string;
+  exportedAt?: string;
   result: "ready" | "warnings" | "blocked";
   counts: TransferCounts;
+  comparison: TransferComparison[];
+  checks: TransferCheck[];
+  summary: TransferSummary;
+  skippedRuntimeCodes: string[];
   skippedRuntimeData: string[];
   missingReferences: string[];
   warnings: string[];
@@ -58,10 +63,58 @@ interface NormalizedTransfer {
   fingerprint: string;
   formatVersion: number;
   sourceVersion: string;
+  exportedAt?: string;
   data: ImportData;
   actors: PortableActor[];
   warnings: string[];
 }
+
+export type TransferCategoryCode =
+  | "children"
+  | "care_parties"
+  | "care_entries"
+  | "holiday_periods"
+  | "unavailable_periods"
+  | "external_calendar_sources"
+  | "external_calendar_events"
+  | "contact_patterns"
+  | "contact_rules"
+  | "audit_records"
+  | "month_closures";
+
+export interface TransferComparison {
+  category: TransferCategoryCode;
+  current: number;
+  incoming: number;
+  afterImport: number;
+}
+
+export interface TransferCheck {
+  code: "checksum" | "format" | "schema" | "references" | "sqlite_foreign_keys" | "sqlite_integrity";
+  status: "passed" | "warning" | "failed" | "not_run";
+}
+
+export interface TransferSummary {
+  currentRecords: number;
+  incomingRecords: number;
+  replacedRecords: number;
+  warnings: number;
+  actorMappingsRequired: number;
+}
+
+const transferCategories: Array<{ code: TransferCategoryCode; key: string }> = [
+  { code: "children", key: "children" },
+  { code: "care_parties", key: "careParties" },
+  { code: "care_entries", key: "entries" },
+  { code: "holiday_periods", key: "holidayPeriods" },
+  { code: "unavailable_periods", key: "unavailablePeriods" },
+  { code: "external_calendar_sources", key: "externalCalendarSources" },
+  { code: "external_calendar_events", key: "externalCalendarEvents" },
+  { code: "contact_patterns", key: "contactPatterns" },
+  { code: "contact_rules", key: "contactRules" },
+  { code: "audit_records", key: "auditLog" },
+  { code: "month_closures", key: "monthClosures" }
+];
 
 function stableValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stableValue);
@@ -423,10 +476,15 @@ function normalizeTransfer(input: unknown): NormalizedTransfer {
       fingerprint: checksum,
       formatVersion: FORMAT_VERSION,
       sourceVersion: String(record.sourceVersion ?? "unknown"),
+      ...(typeof record.exportedAt === "string" ? { exportedAt: record.exportedAt } : {}),
       data,
       actors,
       warnings: []
     };
+  }
+
+  if (record.application === "betreuungskalender" && record.data && record.formatVersion !== undefined) {
+    throw new Error("Transfer package format version is incompatible.");
   }
 
   const legacyData = record.application === "betreuungskalender" && record.data
@@ -441,6 +499,40 @@ function normalizeTransfer(input: unknown): NormalizedTransfer {
     actors: [],
     warnings: ["Legacy JSON package has no portable actor snapshots."]
   };
+}
+
+function transferComparison(incoming: TransferCounts, current: TransferCounts): TransferComparison[] {
+  return transferCategories.map(({ code, key }) => ({
+    category: code,
+    current: current[key] ?? 0,
+    incoming: incoming[key] ?? 0,
+    afterImport: incoming[key] ?? 0
+  }));
+}
+
+function transferSummary(
+  comparison: TransferComparison[],
+  warnings: number,
+  actorMappingsRequired: number
+): TransferSummary {
+  return {
+    currentRecords: comparison.reduce((sum, item) => sum + item.current, 0),
+    incomingRecords: comparison.reduce((sum, item) => sum + item.incoming, 0),
+    replacedRecords: comparison.reduce((sum, item) => sum + item.current, 0),
+    warnings,
+    actorMappingsRequired
+  };
+}
+
+function baseChecks(normalized: NormalizedTransfer): TransferCheck[] {
+  return [
+    { code: "checksum", status: normalized.formatVersion === FORMAT_VERSION ? "passed" : "warning" },
+    { code: "format", status: normalized.formatVersion === FORMAT_VERSION ? "passed" : "warning" },
+    { code: "schema", status: "passed" },
+    { code: "references", status: "passed" },
+    { code: "sqlite_foreign_keys", status: "not_run" },
+    { code: "sqlite_integrity", status: "not_run" }
+  ];
 }
 
 function missingReferences(data: ImportData): string[] {
@@ -487,20 +579,32 @@ function remapActorReferences(data: ImportData, actors: PortableActor[], fingerp
   return appDataImportSchema.parse(visit(data));
 }
 
-export function dryRunPortableTransfer(input: unknown): TransferDryRunResult {
+export function dryRunPortableTransfer(
+  input: unknown,
+  targetDatabase: Database.Database = db
+): TransferDryRunResult {
   const normalized = normalizeTransfer(input);
   const counts = countRecords(normalized.data);
+  const currentCounts = countRecords(exportDomainData(targetDatabase));
+  const comparison = transferComparison(counts, currentCounts);
+  const checks = baseChecks(normalized);
   if (Object.values(counts).reduce((sum, count) => sum + count, 0) > MAX_RECORDS) {
     throw new Error("Transfer package contains too many records.");
   }
   const references = missingReferences(normalized.data);
   if (references.length) {
+    checks.find((check) => check.code === "references")!.status = "failed";
     return {
       fingerprint: normalized.fingerprint,
       formatVersion: normalized.formatVersion,
       sourceVersion: normalized.sourceVersion,
+      ...(normalized.exportedAt ? { exportedAt: normalized.exportedAt } : {}),
       result: "blocked",
       counts,
+      comparison,
+      checks,
+      summary: transferSummary(comparison, normalized.warnings.length, normalized.actors.length),
+      skippedRuntimeCodes: skippedRuntimeCodes(),
       skippedRuntimeData: skippedRuntimeData(),
       missingReferences: references,
       warnings: normalized.warnings,
@@ -516,6 +620,8 @@ export function dryRunPortableTransfer(input: unknown): TransferDryRunResult {
     temporary.transaction(() => importData(data, "transfer-validation", temporary))();
     const foreignKeys = temporary.pragma("foreign_key_check") as unknown[];
     const integrity = temporary.pragma("integrity_check") as Array<{ integrity_check: string }>;
+    checks.find((check) => check.code === "sqlite_foreign_keys")!.status = foreignKeys.length ? "failed" : "passed";
+    checks.find((check) => check.code === "sqlite_integrity")!.status = integrity.some((row) => row.integrity_check !== "ok") ? "failed" : "passed";
     if (foreignKeys.length || integrity.some((row) => row.integrity_check !== "ok")) {
       throw new Error("Transfer package failed database integrity validation.");
     }
@@ -528,14 +634,23 @@ export function dryRunPortableTransfer(input: unknown): TransferDryRunResult {
     fingerprint: normalized.fingerprint,
     formatVersion: normalized.formatVersion,
     sourceVersion: normalized.sourceVersion,
+    ...(normalized.exportedAt ? { exportedAt: normalized.exportedAt } : {}),
     result,
     counts,
+    comparison,
+    checks,
+    summary: transferSummary(comparison, normalized.warnings.length, normalized.actors.length),
+    skippedRuntimeCodes: skippedRuntimeCodes(),
     skippedRuntimeData: skippedRuntimeData(),
     missingReferences: [],
     warnings: normalized.warnings,
     actors: normalized.actors.map((actor) => ({ ...actor, mappingRequired: true as const })),
     dryRunReceipt: dryRunReceipt(normalized.fingerprint, result)
   };
+}
+
+function skippedRuntimeCodes(): string[] {
+  return ["identity", "sessions", "feeds_push", "credentials", "external_urls"];
 }
 
 function skippedRuntimeData(): string[] {
@@ -587,7 +702,7 @@ export function importPortableTransfer(input: {
   confirmWarnings: boolean;
   actorId: string;
 }, database: Database.Database = db): TransferDryRunResult {
-  const result = dryRunPortableTransfer(input.package);
+  const result = dryRunPortableTransfer(input.package, database);
   if (result.result === "blocked") throw new Error("Transfer package is blocked.");
   if (result.fingerprint !== input.fingerprint) throw new Error("Transfer package differs from the tested package.");
   if (!verifyDryRunReceipt(input.dryRunReceipt, result.fingerprint, result.result)) {

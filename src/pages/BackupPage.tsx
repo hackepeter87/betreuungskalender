@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Icon } from "../components/Icon";
 import { FieldHelpButton } from "../components/FieldHelp";
 import { MobileExportNotice } from "../components/MobileExportNotice";
+import { Modal } from "../components/Modal";
 import { api } from "../lib/api";
 import { formatDate, formatDateTime, nowIso } from "../lib/date";
 import {
@@ -14,14 +15,64 @@ import {
 import { useAppStore } from "../store/AppStore";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
+import { createPrivacySafeTransferReviewReport } from "../lib/transferReview";
 import type {
   ApiImportedTransferActor,
   ApiMember,
+  ApiTransferCategoryCode,
+  ApiTransferCheckCode,
   ApiTransferDryRunResult,
   ApiWorkspaceRole
 } from "../../shared/api";
 
 const transferRoles: ApiWorkspaceRole[] = ["admin", "editor", "scheduler", "viewer"];
+
+function categoryLabel(locale: "de" | "en", category: ApiTransferCategoryCode): string {
+  const keys = {
+    children: "category_children",
+    care_parties: "category_care_parties",
+    care_entries: "category_care_entries",
+    holiday_periods: "category_holiday_periods",
+    unavailable_periods: "category_unavailable_periods",
+    external_calendar_sources: "category_external_calendar_sources",
+    external_calendar_events: "category_external_calendar_events",
+    contact_patterns: "category_contact_patterns",
+    contact_rules: "category_contact_rules",
+    audit_records: "category_audit_records",
+    month_closures: "category_month_closures"
+  } as const;
+  return copy(locale, "backup", keys[category]);
+}
+
+function checkLabel(locale: "de" | "en", code: ApiTransferCheckCode): string {
+  const keys = {
+    checksum: "check_checksum",
+    format: "check_format",
+    schema: "check_schema",
+    references: "check_references",
+    sqlite_foreign_keys: "check_sqlite_foreign_keys",
+    sqlite_integrity: "check_sqlite_integrity"
+  } as const;
+  return copy(locale, "backup", keys[code]);
+}
+
+function resultLabel(locale: "de" | "en", result: ApiTransferDryRunResult["result"]): string {
+  if (locale === "en") return result === "ready" ? "Ready" : result === "warnings" ? "Review notes" : "Blocked";
+  return result === "ready" ? "Bereit" : result === "warnings" ? "Hinweise prüfen" : "Blockiert";
+}
+
+function skippedRuntimeLabel(locale: "de" | "en", code: string): string {
+  const keys = {
+    identity: "skipped_identity",
+    sessions: "skipped_sessions",
+    feeds_push: "skipped_feeds_push",
+    credentials: "skipped_credentials",
+    external_urls: "skipped_external_urls"
+  } as const;
+  return code in keys
+    ? copy(locale, "backup", keys[code as keyof typeof keys])
+    : locale === "de" ? "Weitere Laufzeitdaten" : "Other runtime data";
+}
 
 function downloadJson(value: unknown, filename: string): void {
   const blob = new Blob([JSON.stringify(value, null, 2)], { type: "application/json" });
@@ -44,6 +95,7 @@ export function BackupPage() {
     isSaving
   } = useAppStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const actorsRef = useRef<HTMLElement>(null);
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
   const [transferPackage, setTransferPackage] = useState<unknown>();
   const [transferFileName, setTransferFileName] = useState("");
@@ -52,6 +104,9 @@ export function BackupPage() {
   const [actors, setActors] = useState<ApiImportedTransferActor[]>([]);
   const [members, setMembers] = useState<ApiMember[]>([]);
   const [actorLinks, setActorLinks] = useState<Record<string, string>>({});
+  const [confirmImportOpen, setConfirmImportOpen] = useState(false);
+  const [confirmImportChecked, setConfirmImportChecked] = useState(false);
+  const [completedImport, setCompletedImport] = useState<{ completedAt: string; result: ApiTransferDryRunResult } | null>(null);
   const isOwner = session.isOwner === true || !session.authRequired;
   const backupAgeDays = data.lastJsonBackupAt
     ? Math.floor(
@@ -98,6 +153,7 @@ export function BackupPage() {
       setTransferPackage(parsed);
       setTransferFileName(file.name);
       setDryRun(null);
+      setCompletedImport(null);
       setMessage(null);
     } catch (error) {
       setMessage({
@@ -113,6 +169,7 @@ export function BackupPage() {
     setMessage(null);
     try {
       setDryRun(await api.dryRunPortableTransfer(transferPackage));
+      setCompletedImport(null);
     } catch (error) {
       setDryRun(null);
       setMessage({ type: "error", text: error instanceof Error ? error.message : copy(locale, "backup", "importFailed") });
@@ -123,13 +180,9 @@ export function BackupPage() {
 
   const importTransfer = async () => {
     if (transferPackage === undefined || !dryRun || dryRun.result === "blocked" || !dryRun.dryRunReceipt) return;
-    if (!window.confirm(copy(locale, "backup", "importReplaceConfirm", {
-      current: data.entries.filter((entry) => !entry.deletedAt).length,
-      imported: dryRun.counts.entries ?? 0
-    }))) return;
     setTransferBusy(true);
     try {
-      await api.importPortableTransfer({
+      const result = await api.importPortableTransfer({
         package: transferPackage,
         fingerprint: dryRun.fingerprint,
         dryRunReceipt: dryRun.dryRunReceipt,
@@ -139,6 +192,9 @@ export function BackupPage() {
       const [nextActors, nextMembers] = await Promise.all([api.listTransferActors(), api.listMembers()]);
       setActors(nextActors);
       setMembers(nextMembers);
+      setCompletedImport({ completedAt: new Date().toISOString(), result });
+      setConfirmImportOpen(false);
+      setConfirmImportChecked(false);
       setMessage({ type: "success", text: copy(locale, "backup", "importSuccess") });
     } catch (error) {
       setMessage({ type: "error", text: error instanceof Error ? error.message : copy(locale, "backup", "importFailed") });
@@ -146,6 +202,24 @@ export function BackupPage() {
       setTransferBusy(false);
     }
   };
+
+  const downloadReview = () => {
+    if (!dryRun) return;
+    downloadJson(
+      createPrivacySafeTransferReviewReport(dryRun),
+      `betreuungskalender-transfer-review-${nowIso().slice(0, 10)}.json`
+    );
+  };
+
+  const copyFingerprint = async () => {
+    if (!dryRun) return;
+    await navigator.clipboard.writeText(dryRun.fingerprint.slice(0, 12));
+    setMessage({ type: "success", text: copy(locale, "backup", "fingerprintCopied") });
+  };
+
+  const visibleComparison = dryRun?.comparison.filter((item) => item.current > 0 || item.incoming > 0) ?? [];
+  const emptyComparison = dryRun?.comparison.filter((item) => item.current === 0 && item.incoming === 0) ?? [];
+  const destructiveComparison = dryRun?.comparison.filter((item) => item.current > 0 && item.afterImport === 0) ?? [];
 
   useEffect(() => {
     if (!isOwner) return;
@@ -279,27 +353,88 @@ export function BackupPage() {
           <div className="panel__header">
             <div>
               <h2>{copy(locale, "backup", "dryRunTitle")}</h2>
-              <p>{copy(locale, "backup", `dryRun_${dryRun.result}`)}</p>
+              <p>{dryRun.result === "ready"
+                ? copy(locale, "backup", "dryRun_ready")
+                : dryRun.result === "warnings"
+                  ? copy(locale, "backup", "dryRun_warnings")
+                  : copy(locale, "backup", "dryRun_blocked")}</p>
             </div>
-            <span className={`status-pill${dryRun.result === "ready" ? " status-pill--ok" : ""}`}>{dryRun.result}</span>
+            <span className={`status-pill transfer-status transfer-status--${dryRun.result}`}>{resultLabel(locale, dryRun.result)}</span>
           </div>
           <div className="transfer-result__body">
-            <dl className="transfer-counts">
-              {Object.entries(dryRun.counts).map(([label, count]) => <div key={label}><dt>{label}</dt><dd>{count}</dd></div>)}
+            <ol className="transfer-steps" aria-label={copy(locale, "backup", "dryRunTitle")}>
+              {["stepSelect", "stepTest", "stepReview", "stepPrepare", "stepReplace", "stepMap"].map((key, index) => (
+                <li className={index <= 2 ? "is-complete" : ""} key={key}>
+                  <span>{index + 1}</span>{copy(locale, "backup", key as "stepSelect")}
+                </li>
+              ))}
+            </ol>
+
+            <section className="transfer-review-section" aria-labelledby="transfer-package-title">
+              <h3 id="transfer-package-title">{copy(locale, "backup", "packageDetails")}</h3>
+              <dl className="transfer-package-meta">
+                <div><dt>{copy(locale, "backup", "sourceVersion")}</dt><dd>{dryRun.sourceVersion}</dd></div>
+                <div><dt>{copy(locale, "backup", "formatVersion")}</dt><dd>{dryRun.formatVersion}</dd></div>
+                <div><dt>{copy(locale, "backup", "exportedAt")}</dt><dd>{dryRun.exportedAt ? formatDateTime(dryRun.exportedAt, intlLocale) : copy(locale, "common", "notAvailable")}</dd></div>
+              </dl>
+            </section>
+
+            <dl className="transfer-summary">
+              <div><dt>{copy(locale, "backup", "replacedRecords")}</dt><dd>{dryRun.summary.replacedRecords}</dd></div>
+              <div><dt>{copy(locale, "backup", "totalIncoming")}</dt><dd>{dryRun.summary.incomingRecords}</dd></div>
+              <div><dt>{copy(locale, "backup", "warningCount")}</dt><dd>{dryRun.summary.warnings}</dd></div>
+              <div><dt>{copy(locale, "backup", "mappingCount")}</dt><dd>{dryRun.summary.actorMappingsRequired}</dd></div>
             </dl>
-            {dryRun.warnings.length ? <div className="notice notice--warning"><Icon name="alert" /><p>{dryRun.warnings.join(" ")}</p></div> : null}
-            {dryRun.missingReferences.length ? <div className="notice notice--error"><Icon name="alert" /><p>{dryRun.missingReferences.join(", ")}</p></div> : null}
-            <p className="transfer-result__meta">{copy(locale, "backup", "fingerprint")}: <code>{dryRun.fingerprint}</code></p>
-            <button className="button button--primary" data-testid="data-transfer-import" type="button" disabled={dryRun.result === "blocked" || transferBusy} onClick={() => void importTransfer()}>
-              <Icon name="upload" />
-              {copy(locale, "backup", "executeImport")}
-            </button>
+
+            <section className="transfer-review-section" aria-labelledby="transfer-comparison-title">
+              <div className="transfer-review-heading">
+                <div><h3 id="transfer-comparison-title">{copy(locale, "backup", "comparisonTitle")}</h3><p>{copy(locale, "backup", "comparisonDescription")}</p></div>
+              </div>
+              {destructiveComparison.length ? (
+                <div className="notice notice--error"><Icon name="alert" /><p>{copy(locale, "backup", "dataLossWarning")}</p></div>
+              ) : (
+                <div className="notice notice--success"><Icon name="check" /><p>{copy(locale, "backup", "noDataLoss")}</p></div>
+              )}
+              <div className="transfer-comparison-wrap">
+                <table className="transfer-comparison">
+                  <thead><tr><th>{copy(locale, "backup", "category")}</th><th>{copy(locale, "backup", "currentRecords")}</th><th>{copy(locale, "backup", "incomingRecords")}</th><th>{copy(locale, "backup", "afterImport")}</th></tr></thead>
+                  <tbody>{visibleComparison.map((item) => (
+                    <tr className={item.current > 0 && item.afterImport === 0 ? "is-destructive" : ""} key={item.category}>
+                      <th>{categoryLabel(locale, item.category)}</th><td>{item.current}</td><td>{item.incoming}</td><td>{item.afterImport}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              </div>
+              {emptyComparison.length ? <details className="transfer-details"><summary>{copy(locale, "backup", "otherCategories")} ({emptyComparison.length})</summary><ul>{emptyComparison.map((item) => <li key={item.category}>{categoryLabel(locale, item.category)}: 0</li>)}</ul></details> : null}
+            </section>
+
+            {dryRun.warnings.length ? <div className="notice notice--warning"><Icon name="alert" /><p>{copy(locale, "backup", "warningsGeneric")}</p></div> : null}
+            {dryRun.missingReferences.length ? <div className="notice notice--error"><Icon name="alert" /><p>{copy(locale, "backup", "referencesFailed")}</p></div> : null}
+
+            <details className="transfer-details">
+              <summary>{copy(locale, "backup", "technicalChecks")}</summary>
+              <ul className="transfer-checks">{dryRun.checks.map((check) => <li key={check.code}><span>{checkLabel(locale, check.code)}</span><strong className={`check-status check-status--${check.status}`}>{copy(locale, "backup", `check_${check.status}` as "check_passed")}</strong></li>)}</ul>
+            </details>
+            <details className="transfer-details">
+              <summary>{copy(locale, "backup", "skippedRuntimeTitle")}</summary>
+              <ul>{dryRun.skippedRuntimeCodes.map((code) => <li key={code}>{skippedRuntimeLabel(locale, code)}</li>)}</ul>
+            </details>
+
+            <div className="transfer-review-actions">
+              <div className="transfer-fingerprint"><span>{copy(locale, "backup", "fingerprintShort")}</span><code>{dryRun.fingerprint.slice(0, 12)}</code><button className="button button--icon" type="button" title={copy(locale, "backup", "copyFingerprint")} onClick={() => void copyFingerprint()}><Icon name="copy" /></button></div>
+              <button className="button button--secondary" type="button" onClick={downloadReview}><Icon name="download" />{copy(locale, "backup", "downloadReview")}</button>
+              <button className="button button--danger" data-testid="data-transfer-import" type="button" disabled={dryRun.result === "blocked" || transferBusy || !dryRun.dryRunReceipt} onClick={() => { setConfirmImportChecked(false); setConfirmImportOpen(true); }}>
+                <Icon name="upload" />{copy(locale, "backup", "prepareImport")}
+              </button>
+            </div>
           </div>
         </section>
       ) : null}
 
+      {completedImport ? <section className="notice notice--success transfer-complete" data-testid="data-transfer-complete"><Icon name="check" /><div><h2>{copy(locale, "backup", "importCompletedTitle")}</h2><p>{copy(locale, "backup", "importedAt")}: {formatDateTime(completedImport.completedAt, intlLocale)} · {copy(locale, "backup", "totalIncoming")}: {completedImport.result.summary.incomingRecords} · {copy(locale, "backup", "mappingCount")}: {completedImport.result.summary.actorMappingsRequired}</p>{actors.length ? <button className="button button--quiet" type="button" onClick={() => actorsRef.current?.scrollIntoView({ behavior: "smooth" })}>{copy(locale, "backup", "goToActors")}</button> : null}</div></section> : null}
+
       {isOwner && actors.length ? (
-        <section className="panel transfer-actors" data-testid="transfer-actors">
+        <section className="panel transfer-actors" data-testid="transfer-actors" ref={actorsRef}>
           <div className="panel__header">
             <div><h2>{copy(locale, "backup", "actorsTitle")}</h2><p>{copy(locale, "backup", "actorsDescription")}</p></div>
           </div>
@@ -367,6 +502,21 @@ export function BackupPage() {
         </div>
       </section>
       <MobileExportNotice />
+      {confirmImportOpen && dryRun ? (
+        <Modal title={copy(locale, "backup", "confirmImportTitle")} onClose={() => setConfirmImportOpen(false)}>
+          <div className="transfer-confirm">
+            <p>{copy(locale, "backup", "confirmImportDescription")}</p>
+            <dl className="transfer-summary">
+              <div><dt>{copy(locale, "backup", "replacedRecords")}</dt><dd>{dryRun.summary.replacedRecords}</dd></div>
+              <div><dt>{copy(locale, "backup", "totalIncoming")}</dt><dd>{dryRun.summary.incomingRecords}</dd></div>
+              <div><dt>{copy(locale, "backup", "warningCount")}</dt><dd>{dryRun.summary.warnings}</dd></div>
+              <div><dt>{copy(locale, "backup", "mappingCount")}</dt><dd>{dryRun.summary.actorMappingsRequired}</dd></div>
+            </dl>
+            <label className="check-row transfer-confirm__check"><input type="checkbox" checked={confirmImportChecked} onChange={(event) => setConfirmImportChecked(event.target.checked)} /><span>{copy(locale, "backup", "confirmImportCheckbox")}</span></label>
+            <div className="transfer-confirm__actions"><button className="button button--secondary" type="button" onClick={() => setConfirmImportOpen(false)}>{copy(locale, "common", "cancel")}</button><button className="button button--danger" data-testid="data-transfer-import-confirm" type="button" disabled={!confirmImportChecked || transferBusy} onClick={() => void importTransfer()}><Icon name="alert" />{copy(locale, "backup", "executeImport")}</button></div>
+          </div>
+        </Modal>
+      ) : null}
     </div>
   );
 }

@@ -362,12 +362,58 @@ export interface ApiTransferActorSnapshot {
   mappingRequired: true;
 }
 
+export type ApiTransferCategoryCode =
+  | "children"
+  | "care_parties"
+  | "care_entries"
+  | "holiday_periods"
+  | "unavailable_periods"
+  | "external_calendar_sources"
+  | "external_calendar_events"
+  | "contact_patterns"
+  | "contact_rules"
+  | "audit_records"
+  | "month_closures";
+
+export type ApiTransferCheckCode =
+  | "checksum"
+  | "format"
+  | "schema"
+  | "references"
+  | "sqlite_foreign_keys"
+  | "sqlite_integrity";
+
+export interface ApiTransferComparison {
+  category: ApiTransferCategoryCode;
+  current: number;
+  incoming: number;
+  afterImport: number;
+}
+
+export interface ApiTransferCheck {
+  code: ApiTransferCheckCode;
+  status: "passed" | "warning" | "failed" | "not_run";
+}
+
+export interface ApiTransferSummary {
+  currentRecords: number;
+  incomingRecords: number;
+  replacedRecords: number;
+  warnings: number;
+  actorMappingsRequired: number;
+}
+
 export interface ApiTransferDryRunResult {
   fingerprint: string;
   formatVersion: number;
   sourceVersion: string;
+  exportedAt?: string;
   result: "ready" | "warnings" | "blocked";
   counts: Record<string, number>;
+  comparison: ApiTransferComparison[];
+  checks: ApiTransferCheck[];
+  summary: ApiTransferSummary;
+  skippedRuntimeCodes: string[];
   skippedRuntimeData: string[];
   missingReferences: string[];
   warnings: string[];
