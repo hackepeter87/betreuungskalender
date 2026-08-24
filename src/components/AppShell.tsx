@@ -404,7 +404,7 @@ export function AppShell({
         <div className="sidebar__header">
           <button className="brand" type="button" onClick={() => navigate("dashboard")} aria-label={t("app.name")}>
             <span className="brand__mark">
-              <img className="brand__logo" src="/icons/app-icon.svg" alt="" data-testid="desktop-app-logo" />
+              <img className="brand__logo" src="/icons/app-logo-nav.svg" alt="" data-testid="desktop-app-logo" />
             </span>
             <span>
               <strong>{t("app.name")}</strong>
@@ -516,7 +516,7 @@ export function AppShell({
         <header className="mobile-header">
           <button className="brand brand--compact" type="button" onClick={() => navigate("dashboard")}>
             <span className="brand__mark">
-              <img className="brand__logo" src="/icons/app-icon.svg" alt="" data-testid="mobile-app-logo" />
+              <img className="brand__logo" src="/icons/app-logo-nav.svg" alt="" data-testid="mobile-app-logo" />
             </span>
             <strong>{t("app.name")}</strong>
           </button>

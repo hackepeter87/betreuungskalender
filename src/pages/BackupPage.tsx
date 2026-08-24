@@ -262,7 +262,7 @@ export function BackupPage() {
   };
 
   return (
-    <div className="page page--narrow" data-testid="page-backup">
+    <div className="page page--backup" data-testid="page-backup">
       <div className="page-header">
         <div>
           <p className="page-header__context">{copy(locale, "backup", "context")}</p>

@@ -142,7 +142,7 @@ test("does not classify ordinary code by generic backup or export words", () => 
   }
 });
 
-test("allows documentation screenshots and warns about images elsewhere", () => {
+test("allows controlled documentation and Playwright screenshots and warns elsewhere", () => {
   const allowed = [
     "docs/assets/screenshots/dashboard-desktop.png",
     "docs/assets/screenshots/calendar-desktop.jpg",
@@ -156,6 +156,10 @@ test("allows documentation screenshots and warns about images elsewhere", () => 
     "public/icons/apple-touch-icon.png",
     "public/icons/favicon-32.png"
   ];
+  const playwrightSnapshots = [
+    "e2e/desktop.spec.ts-snapshots/dashboard-fluid-desktop-desktop-darwin.png",
+    "e2e/iphone.spec.ts-snapshots/backup-fluid-iphone-iphone-darwin.png"
+  ];
   const suspicious = [
     "dashboard.png",
     "public/private-calendar.jpg",
@@ -167,6 +171,9 @@ test("allows documentation screenshots and warns about images elsewhere", () => 
     assert.equal(isImageOutsideScreenshotDirectory(path), false, path);
   }
   for (const path of icons) {
+    assert.equal(isImageOutsideScreenshotDirectory(path), false, path);
+  }
+  for (const path of playwrightSnapshots) {
     assert.equal(isImageOutsideScreenshotDirectory(path), false, path);
   }
   for (const path of suspicious) {

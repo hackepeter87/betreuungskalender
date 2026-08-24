@@ -942,7 +942,7 @@ export function SettingsPage() {
   };
 
   return (
-    <div className="page page--narrow" data-testid="page-settings">
+    <div className="page page--settings" data-testid="page-settings">
       <div className="page-header">
         <div>
           <p className="page-header__context">{t("settings.context")}</p>

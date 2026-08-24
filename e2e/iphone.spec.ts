@@ -21,7 +21,7 @@ test("keeps first-use setup readable on a narrow screen", async ({
   await openApp(page);
 
   await expect(page.getByTestId("mobile-app-logo")).toBeVisible();
-  await expect(page.getByTestId("mobile-app-logo")).toHaveAttribute("src", "/icons/app-icon.svg");
+  await expect(page.getByTestId("mobile-app-logo")).toHaveAttribute("src", "/icons/app-logo-nav.svg");
   await expect(page.getByTestId("setup-wizard")).toBeVisible();
   await expectNoDocumentHorizontalOverflow(page);
   const roleCards = page.locator('[data-testid="setup-person-grid"] > article');
@@ -47,6 +47,19 @@ test("keeps first-use setup readable on a narrow screen", async ({
   await expect(page.getByTestId("setup-child-card")).toHaveCount(3);
   await expectNoDocumentHorizontalOverflow(page);
   await expect(page.getByTestId("setup-wizard-submit")).toBeVisible();
+});
+
+test("matches the shared mobile layout baseline", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-08-24T10:00:00Z"));
+  await openApp(page);
+  await navigate(page, "backup");
+  await expectNoDocumentHorizontalOverflow(page);
+  await expect(page).toHaveScreenshot("backup-fluid-iphone.png", {
+    animations: "disabled",
+    caret: "hide",
+    fullPage: false,
+    maxDiffPixelRatio: 0.01
+  });
 });
 
 test("creates and displays a complete invitation link on mobile", async ({ page }) => {
