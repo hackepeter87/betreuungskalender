@@ -170,8 +170,8 @@ GitHub Container Registry. Prefer the immutable digest recorded in
 ghcr.io/hackepeter87/betreuungskalender@sha256:<digest>
 ```
 
-The managed update tool does not switch a deployment to a GHCR image. It
-manages the archive-based Compose layout where `deploy/compose.yml` or
+The archive update tool does not switch a deployment to a GHCR image. It
+updates the archive-based Compose layout where `deploy/compose.yml` or
 `deploy/compose.oidc.yml` builds `Dockerfile.release` from the verified
 extracted release directory.
 
@@ -203,7 +203,7 @@ For `v1.2.0`, the GHCR image was backfilled manually. It published
 `ghcr.io/hackepeter87/betreuungskalender:1.2.0`; it did not update `latest`.
 Release publication never updates `latest`; only production promotion moves it.
 
-## Managed Compose update
+## Archive-based Compose update
 
 Use the updater from a previously installed release. During first adoption,
 after validating the checksum, it is also acceptable to extract only

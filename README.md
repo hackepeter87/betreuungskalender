@@ -11,7 +11,7 @@ travel, costs, holidays, and unavailable periods.
 
 ## Project status
 
-- Latest published release: [v1.21.0](docs/release-notes/v1.21.0.md)
+- Latest published release: [v1.22.0](docs/release-notes/v1.22.0.md)
 - Current `main`: SQLite/API domain persistence, first-use setup, application
   memberships and invitations, optional invitation email delivery, native OIDC
   authentication, trusted-proxy compatibility, RRULE-compatible contact rules
@@ -52,7 +52,8 @@ included in repository screenshots.
 - Duty-related and other unavailable periods with overlap notices
 - Multiple trips and costs per care entry with period statistics
 - Monthly closure, data-quality checks, soft delete, and field-level audit log
-- JSON backup/import, separate CSV exports, neutral PDF report, and A4 print view
+- Verified SQLite backups plus portable, dry-run-validated instance transfers,
+  separate CSV exports, neutral PDF reports, and A4 print view
 - External calendar overlays from local `.ics` files or HTTPS feed URLs, with
   source visibility and optional holiday-source derivation; imported events do
   not affect care statistics or reports

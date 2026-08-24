@@ -1,7 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { config } from "../config.js";
-import { db } from "../db/connection.js";
-import { importData } from "./appData.js";
+import { dryRunPortableTransfer, importPortableTransfer } from "../services/dataTransfer.js";
 import {
   createEdgeCaseDemoData,
   edgeCaseDemoSummary
@@ -17,7 +16,14 @@ export async function demoDataRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const data = createEdgeCaseDemoData();
-    db.transaction(() => importData(data, request.userEmail))();
+    const dryRun = dryRunPortableTransfer(data);
+    importPortableTransfer({
+      package: data,
+      fingerprint: dryRun.fingerprint,
+      dryRunReceipt: dryRun.dryRunReceipt!,
+      confirmWarnings: true,
+      actorId: request.userEmail
+    });
     return reply.send(edgeCaseDemoSummary(data));
   });
 }

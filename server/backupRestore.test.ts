@@ -38,7 +38,8 @@ const expectedMigrations = [
   "026_oidc_login_context",
   "027_owner_setup_tokens",
   "028_workspace_permissions",
-  "029_local_development_identity_cleanup"
+  "029_local_development_identity_cleanup",
+  "030_portable_data_transfer"
 ];
 
 async function withTemporaryDirectory(

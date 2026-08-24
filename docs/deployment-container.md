@@ -5,7 +5,7 @@ The repository supports three container paths:
 - `Dockerfile` plus root-level `compose.yaml` for local evaluation and CI-style
   container checks from a checkout.
 - `Dockerfile.release` plus `deploy/compose.yml` for the supported release
-  archive runtime and managed update layout.
+  archive runtime and update layout.
 - `Dockerfile.release` plus `deploy/compose.oidc.yml` for the release archive
   runtime behind oauth2-proxy on one exposed host port.
 - Published GHCR release images for operators that want to pull an immutable
@@ -59,7 +59,7 @@ For a persistent production installation, use the separate stable bind-mount
 layout in [update.md](update.md), which installs `deploy/compose.yml` as
 `/opt/svc_betreuung/betreuungskalender/compose.yml`. It keeps `data/`,
 `backups/`, `.env`, and the active versioned release outside the runtime image
-and is the only layout managed by `npm run update`.
+and is the layout updated by `npm run update`.
 
 The release Compose file requires `APP_RELEASE_VERSION`, `APP_RELEASE_DIR`,
 `HOST_BIND_ADDRESS`, and `HOST_PORT` in `.env`; these values are included in
@@ -409,7 +409,7 @@ volume procedures. Browser-local JSON exports remain a separate backup.
 
 ## Update
 
-For the production bind-mount layout, use the checksummed archive and managed
+For the production bind-mount layout, use the checksummed archive and
 update procedure in [update.md](update.md). It validates a pre-update backup,
 runtime version, readiness, migrations, and SQLite integrity before accepting a
 new release, and restores both runtime and database on failure. Keep the prior

@@ -97,6 +97,53 @@ test("valid invitations can be accepted by authenticated users", () => {
   });
 });
 
+test("transfer-linked invitations apply only the selected role and proposed care parties", () => {
+  withDatabase((database) => {
+    const user = insertUser(database, "user_transferred");
+    const timestamp = "2026-07-05T10:00:00.000Z";
+    database.prepare(`
+      INSERT INTO care_parties (id, name, kind, created_by, updated_by, created_at, updated_at)
+      VALUES ('party-transfer', 'Care party', 'other', 'owner', 'owner', ?, ?)
+    `).run(timestamp, timestamp);
+    database.prepare(`
+      INSERT INTO data_transfer_runs (
+        id, package_fingerprint, format_version, source_version, result,
+        counts_json, warnings_json, created_by, created_at, imported_at
+      ) VALUES ('run-transfer', ?, 1, '1.22.0', 'imported', '{}', '[]', 'owner', ?, ?)
+    `).run("a".repeat(64), timestamp, timestamp);
+    database.prepare(`
+      INSERT INTO data_transfer_actors (
+        id, transfer_run_id, source_ref, display_name, suggested_role,
+        created_by, updated_by, created_at, updated_at
+      ) VALUES ('actor-transfer', 'run-transfer', 'source-actor', 'Historical actor',
+        'viewer', 'owner', 'owner', ?, ?)
+    `).run(timestamp, timestamp);
+    database.prepare(`
+      INSERT INTO data_transfer_actor_care_parties (
+        actor_id, source_care_party_id, target_care_party_id, created_at, updated_at
+      ) VALUES ('actor-transfer', 'source-party', 'party-transfer', ?, ?)
+    `).run(timestamp, timestamp);
+    const created = createInvitation({
+      role: "scheduler",
+      expiresAt: "2026-07-06T10:00:00.000Z",
+      actorId: "owner",
+      token: "test-token-transfer-invitation-000000",
+      timestamp,
+      dataTransferActorId: "actor-transfer"
+    }, database);
+
+    acceptInvitation(created.token, user, "2026-07-05T11:00:00.000Z", database);
+
+    assert.equal(membershipRoleForUser(user.id, database), "scheduler");
+    assert.deepEqual(database.prepare(`
+      SELECT care_party_id AS carePartyId
+      FROM app_user_care_party_assignments
+      WHERE user_id = ? AND deleted_at IS NULL
+    `).all(user.id), [{ carePartyId: "party-transfer" }]);
+    assert.equal((database.prepare("SELECT mapped_user_id AS mappedUserId FROM data_transfer_actors WHERE id = 'actor-transfer'").get() as { mappedUserId: string }).mappedUserId, user.id);
+  });
+});
+
 test("invitation login uses a hash and accepts after authentication", () => {
   withDatabase((database) => {
     const user = insertUser(database);

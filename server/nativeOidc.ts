@@ -13,6 +13,7 @@ export interface NativeOidcConfig {
   postLogoutRedirectUri?: string;
   scopes: string;
   groupsClaim: string;
+  displayNameClaim?: string;
   loginStateTtlSeconds: number;
 }
 
@@ -209,7 +210,9 @@ export class NativeOidcService {
     }
 
     const email = stringClaim(claims, "email");
-    const displayName = stringClaim(claims, "preferred_username") ?? stringClaim(claims, "name");
+    const displayName = stringClaim(claims, this.#config.displayNameClaim ?? "preferred_username")
+      ?? stringClaim(claims, "preferred_username")
+      ?? stringClaim(claims, "name");
 
     return {
       subject: subject.trim(),

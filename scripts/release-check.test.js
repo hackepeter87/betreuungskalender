@@ -118,6 +118,7 @@ test("detects real databases, exports, backups, and environment files", () => {
     "backups/backup.json",
     "secrets/credentials.txt",
     "betreuungskalender-backup-2026-06-07.json",
+    "betreuungskalender-transfer-2026-08-24.json",
     "backup-2026-06-07.json",
     "family.backup.json",
     "care.export.json"
@@ -177,7 +178,7 @@ test("reports exact missing gitignore safety rules", () => {
   const complete = REQUIRED_GITIGNORE_RULES.join("\n");
   assert.deepEqual(findMissingGitignoreRules(complete), []);
   assert.deepEqual(
-    findMissingGitignoreRules(complete.replace("backup-*.json\n", "")),
+    findMissingGitignoreRules(complete.replace("\nbackup-*.json\n", "\n")),
     ["backup-*.json"]
   );
 });

@@ -43,7 +43,7 @@ export async function auditRoutes(app: FastifyInstance): Promise<void> {
         audit_log.id,
         audit_log.timestamp,
         audit_log.user_email AS userEmail,
-        app_users.display_name AS userDisplayName,
+        COALESCE(app_users.display_name, transfer_actors.display_name) AS userDisplayName,
         audit_log.entity_type AS entityType,
         audit_log.entity_id AS entityId,
         audit_log.action,
@@ -53,6 +53,7 @@ export async function auditRoutes(app: FastifyInstance): Promise<void> {
         audit_log.metadata_json AS metadataJson
       FROM audit_log
       LEFT JOIN app_users ON app_users.id = audit_log.user_email
+      LEFT JOIN data_transfer_actors transfer_actors ON transfer_actors.id = audit_log.user_email
       WHERE ${conditions.join(" AND ")}
       ORDER BY audit_log.timestamp DESC, audit_log.id DESC
       LIMIT ?

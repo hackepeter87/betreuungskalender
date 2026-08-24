@@ -1,3 +1,4 @@
+import type Database from "better-sqlite3";
 import { db } from "../db/connection.js";
 
 export const settingsDefaults: Record<string, unknown> = {
@@ -13,8 +14,8 @@ export function isClientSettingKey(key: string): boolean {
   return !internalSettingPrefixes.some((prefix) => key.startsWith(prefix));
 }
 
-export function getStoredSettings(): Record<string, unknown> {
-  const rows = db.prepare(`
+export function getStoredSettings(database: Database.Database = db): Record<string, unknown> {
+  const rows = database.prepare(`
     SELECT key, value_json AS valueJson
     FROM settings
     WHERE deleted_at IS NULL
@@ -23,19 +24,19 @@ export function getStoredSettings(): Record<string, unknown> {
   return { ...settingsDefaults, ...stored };
 }
 
-export function getClientSettings(): Record<string, unknown> {
+export function getClientSettings(database: Database.Database = db): Record<string, unknown> {
   return Object.fromEntries(
-    Object.entries(getStoredSettings()).filter(([key]) => isClientSettingKey(key))
+    Object.entries(getStoredSettings(database)).filter(([key]) => isClientSettingKey(key))
   );
 }
 
-export function getDefaultResponsiblePartyId(): string | undefined {
-  const configured = getStoredSettings().defaultResponsiblePartyId;
+export function getDefaultResponsiblePartyId(database: Database.Database = db): string | undefined {
+  const configured = getStoredSettings(database).defaultResponsiblePartyId;
   if (typeof configured === "string" && configured.trim()) {
-    const active = db.prepare("SELECT 1 FROM care_parties WHERE id = ? AND deleted_at IS NULL").get(configured);
+    const active = database.prepare("SELECT 1 FROM care_parties WHERE id = ? AND deleted_at IS NULL").get(configured);
     if (active) return configured;
   }
-  const row = db.prepare(`
+  const row = database.prepare(`
     SELECT id
     FROM care_parties
     WHERE deleted_at IS NULL

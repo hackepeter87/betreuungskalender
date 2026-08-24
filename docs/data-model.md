@@ -349,16 +349,29 @@ The monthly closing stores a JSON summary, `closed_by`, and records changes
 after closing with `updated_by`. It is an organizational control, not a
 write-once archive.
 
-## Browser JSON export
+## Portable instance transfer
 
-The browser backup envelope contains an application identifier, export
-timestamp, schema version, children, care entries with trips and costs,
-care parties, holidays, contact patterns, unavailable periods, audit entries,
-monthly closures, settings, actor metadata, partial-care actual details, and
-backup metadata. Import normalizes
-older supported schema versions and fills missing actor metadata with the
-importing user or the legacy `local-dev` actor where no authenticated actor is
-available.
+The versioned portable transfer envelope contains the complete domain-data
+shape, source version, export time, historical actor snapshots, and a canonical
+SHA-256 checksum. Historical actors use transfer-local references and retain a
+display name, optional email hint, suggested workspace role, and proposed care
+party assignments. OIDC subjects and claims are deliberately excluded.
+
+`data_transfer_runs` records a completed import and its tested package
+fingerprint. `data_transfer_actors` stores non-login historical actor snapshots
+created by that import and an optional explicit mapping to a target
+`app_users` record. `data_transfer_actor_care_parties` stores proposed
+care-party mappings. `app_invitations.data_transfer_actor_id` can connect an
+invitation to one snapshot so accepting it applies only the explicitly selected
+role and care-party assignments.
+
+A dry run imports the same normalized data into a temporary current-schema
+SQLite database and runs foreign-key, integrity, and domain-reference checks.
+It does not write a transfer run, actor mapping, settings, audit entry, or file
+to the target installation. A real import replaces domain data in one
+transaction only after revalidation of the exact tested fingerprint. Existing
+legacy JSON exports remain supported as format version 0, without historical
+actor snapshots.
 
 ## Migrations
 
@@ -374,3 +387,8 @@ record remains available for existing audit references. Active memberships,
 care-party assignments, calendar feeds, push subscriptions, and unanswered
 confirmation requests are disabled. Local mode and an explicitly configured
 local development owner remain unchanged.
+
+Migration `030_portable_data_transfer` adds transfer runs, historical actor
+snapshots, proposed care-party mappings, optional target-member mappings, and
+the invitation link used for an explicitly mapped historical actor. It does not
+change existing domain records or authentication identities.

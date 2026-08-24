@@ -35,6 +35,9 @@ runtime:
 # Production authentication is intentionally not selected by the chart. A
 # deployment without an explicit secure authentication configuration fails
 # closed at application startup.
+# Portable instance transfers are kept in memory and are limited by
+# DATA_TRANSFER_MAX_BYTES (default 26214400). Override it through config only
+# after reviewing pod memory limits.
 config: {}
 
 # Use Kubernetes Secret or ConfigMap references for credentials and other

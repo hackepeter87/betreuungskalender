@@ -2177,6 +2177,141 @@ button.metric-card {
   font-weight: 700;
 }
 
+.transfer-actions {
+  display: grid;
+  gap: 10px;
+  margin-top: auto;
+}
+
+.transfer-actions small,
+.transfer-result__meta,
+.transfer-actor small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.transfer-result,
+.transfer-actors {
+  margin-top: 18px;
+}
+
+.transfer-result__body,
+.transfer-actor-list {
+  display: grid;
+  gap: 14px;
+  padding: 20px 24px 24px;
+}
+
+.transfer-counts {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.transfer-counts div {
+  min-width: 0;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-muted);
+}
+
+.transfer-counts dt {
+  color: var(--muted);
+  font-size: 0.64rem;
+  overflow-wrap: anywhere;
+}
+
+.transfer-counts dd {
+  margin: 4px 0 0;
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.transfer-result__meta code {
+  word-break: break-all;
+}
+
+.transfer-actor {
+  display: grid;
+  grid-template-columns: minmax(160px, 1.1fr) minmax(180px, 1fr) minmax(130px, 0.7fr) auto;
+  align-items: end;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+}
+
+.transfer-actor > div:first-child {
+  display: grid;
+  align-self: center;
+  gap: 3px;
+}
+
+.transfer-actor__actions,
+.transfer-actor__link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.transfer-actor__parties {
+  grid-column: 1 / -1;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.72rem;
+  overflow-wrap: anywhere;
+}
+
+.transfer-actor__link {
+  grid-column: 1 / -1;
+}
+
+.transfer-actor__link input {
+  min-width: 0;
+  flex: 1;
+}
+
+@media (max-width: 900px) {
+  .transfer-counts {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .transfer-actor {
+    grid-template-columns: 1fr 1fr;
+    align-items: stretch;
+  }
+
+  .transfer-actor > div:first-child,
+  .transfer-actor__actions {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 560px) {
+  .transfer-result__body,
+  .transfer-actor-list {
+    padding: 14px;
+  }
+
+  .transfer-counts,
+  .transfer-actor {
+    grid-template-columns: 1fr;
+  }
+
+  .transfer-actor > div:first-child,
+  .transfer-actor__actions,
+  .transfer-actor__link {
+    grid-column: 1;
+  }
+
+  .transfer-actor__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
 .settings-section {
   margin-bottom: 18px;
 }

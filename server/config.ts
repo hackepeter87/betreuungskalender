@@ -148,6 +148,7 @@ export const config = {
   oidcPostLogoutRedirectUri: process.env.OIDC_POST_LOGOUT_REDIRECT_URI?.trim() || undefined,
   oidcScopes: textEnv(process.env.OIDC_SCOPES, "openid email profile"),
   oidcGroupsClaim: textEnv(process.env.OIDC_GROUPS_CLAIM, "groups"),
+  oidcDisplayNameClaim: textEnv(process.env.OIDC_DISPLAY_NAME_CLAIM, "preferred_username"),
   oidcLoginStateTtlSeconds: positiveNumberEnv(process.env.OIDC_LOGIN_STATE_TTL_SECONDS, 600),
   ownerSetupTokenFile: textEnv(
     process.env.OWNER_SETUP_TOKEN_FILE,
@@ -193,6 +194,7 @@ export const config = {
   rateLimitSensitiveMax: positiveNumberEnv(process.env.RATE_LIMIT_SENSITIVE_MAX, 5),
   rateLimitExportMax: positiveNumberEnv(process.env.RATE_LIMIT_EXPORT_MAX, 15),
   rateLimitWindowMs: positiveNumberEnv(process.env.RATE_LIMIT_WINDOW_MS, 60_000),
+  dataTransferMaxBytes: positiveNumberEnv(process.env.DATA_TRANSFER_MAX_BYTES, 25 * 1024 * 1024),
   demoDatasetsEnabled: booleanEnv(process.env.DEMO_DATASETS_ENABLED),
   webPushSubject: process.env.WEB_PUSH_SUBJECT?.trim() || "mailto:admin@example.invalid",
   webPushPublicKey: process.env.WEB_PUSH_PUBLIC_KEY?.trim() || undefined,

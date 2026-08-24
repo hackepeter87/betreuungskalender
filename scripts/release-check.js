@@ -34,6 +34,7 @@ export const REQUIRED_GITIGNORE_RULES = [
   "*.tgz",
   "*.zip",
   "betreuungskalender-backup-*.json",
+  "betreuungskalender-transfer-*.json",
   "backup-*.json",
   "*.backup.json",
   "*.export.json",
@@ -78,6 +79,7 @@ export const REQUIRED_DOCKERIGNORE_RULES = [
   "*.tgz",
   "*.zip",
   "betreuungskalender-backup-*.json",
+  "betreuungskalender-transfer-*.json",
   "backup-*.json",
   "*.backup.json",
   "*.export.json"
@@ -199,6 +201,7 @@ export function classifySensitiveArtifact(filePath) {
   }
   if (
     /^betreuungskalender-backup-.*\.json$/i.test(fileName) ||
+    /^betreuungskalender-transfer-.*\.json$/i.test(fileName) ||
     /^backup-.*\.json$/i.test(fileName) ||
     /\.backup\.json$/i.test(fileName) ||
     /\.export\.json$/i.test(fileName)

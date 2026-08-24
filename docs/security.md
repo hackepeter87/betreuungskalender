@@ -48,6 +48,26 @@ API routes require authentication and use the stricter export rate-limit class;
 calendar feed URLs are the only unauthenticated export surface and are scoped
 bearer secrets, not general API credentials.
 
+Portable instance-transfer export, preview, dry run, import, actor mapping, and
+transfer-linked invitations are owner-only and use the sensitive-operation rate
+limit. JSON body size, structure depth, object width, string length, and total
+record count are bounded before import. A dry run uses the same import core in
+an in-memory current-schema SQLite database, performs integrity and relationship
+checks, and leaves the target database unchanged. The real import repeats every
+validation, requires the exact tested fingerprint, and commits domain
+replacement atomically.
+The successful dry run returns a short-lived server-signed confirmation, so a
+caller cannot substitute a self-computed checksum for the required test run.
+The confirmation is held by the browser only and is invalid after expiry or a
+server restart.
+
+Transfer responses are marked `no-store`. Logs and generic errors do not include
+package contents, fingerprints, actor details, tokens, or validation payloads.
+Transfer packages exclude OIDC subjects and claims, sessions, onboarding and
+feed tokens, push subscriptions, recovery credentials, runtime secrets, and
+private external-calendar feed URLs. Historical actors receive no access until
+the owner explicitly maps them or creates an invitation.
+
 Personal iCalendar feed URLs are bearer secrets. The application stores only a
 hash of the token, but anyone with the generated URL can read that feed until
 it is revoked. Feeds may cover all visible entries or one selected care party.

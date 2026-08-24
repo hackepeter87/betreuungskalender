@@ -6,6 +6,23 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.22.0] - 2026-08-24
+
+### Added
+
+- Add a versioned portable instance-transfer package for complete domain data
+  and historical actor snapshots without identity-provider credentials.
+- Add owner-only transfer preview, mandatory dry run, atomic import, explicit
+  actor mapping, and transfer-linked invitations.
+- Route integrated demo datasets through the same validation and import core.
+
+### Changed
+
+- Allow native OIDC display names to use a configurable presentation claim
+  while retaining the stable subject as the technical identity.
+- Treat portable transfer exports as sensitive backup artifacts in release and
+  container checks.
+
 ## [1.21.0] - 2026-08-23
 
 ### Added
