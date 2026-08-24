@@ -368,10 +368,16 @@ role and care-party assignments.
 A dry run imports the same normalized data into a temporary current-schema
 SQLite database and runs foreign-key, integrity, and domain-reference checks.
 It does not write a transfer run, actor mapping, settings, audit entry, or file
-to the target installation. A real import replaces domain data in one
-transaction only after revalidation of the exact tested fingerprint. Existing
-legacy JSON exports remain supported as format version 0, without historical
-actor snapshots.
+to the target installation. It also derives an aggregate comparison between the
+current domain data, incoming package data, and expected post-import state.
+Internal table names are not part of the public transfer contract. A real import
+replaces domain data in one transaction only after revalidation of the exact
+tested fingerprint. Existing legacy JSON exports remain supported as format
+version 0, without historical actor snapshots.
+
+The detailed review result is browser-local and is not stored as transfer
+history. The successful import replaces any previous `data_transfer_runs`
+state, retaining only the current run needed for historical actor mapping.
 
 ## Migrations
 

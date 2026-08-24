@@ -78,25 +78,37 @@ Every import follows this sequence:
 
 1. Initialize the target installation and establish its owner normally.
 2. Select the transfer JSON file in **Export & Import**.
-3. Run **Import testen**. The server validates the checksum, relationships,
+3. Run **Import prüfen**. The server validates the checksum, relationships,
    limits, and current schema in a temporary SQLite database without changing
-   the target database. A short-lived confirmation binds the later import to
-   this exact tested package; after a server restart or expiry, run the test
-   again.
-4. Resolve blocked results before continuing. Review and explicitly accept any
-   warnings.
-5. Confirm the complete replacement of target domain data. The server validates
-   the same package again, verifies its dry-run fingerprint, and imports it in
-   one transaction.
-6. Explicitly map historical actors to existing target members or create new
+   the target database. The result compares aggregate category counts in the
+   current installation with the package and the expected state after import.
+   A short-lived confirmation binds the later import to this exact tested
+   package; after a server restart or expiry, run the test again.
+4. Resolve blocked results before continuing. Review warnings, replacement
+   counts, omitted runtime data, and historical actors that require a later
+   mapping. Categories that would be replaced with no imported records are
+   highlighted explicitly.
+5. Optionally download the privacy-preserving review report. It contains only
+   versions, aggregate counts, check results, warning counts, a shortened
+   fingerprint, and the report time. It does not contain names, email addresses,
+   domain records, complete identifiers, URLs, claims, or tokens.
+6. Open the separate confirmation dialog and acknowledge the displayed
+   replacement counts. The server validates the same package again, verifies
+   its dry-run fingerprint, and imports it in one transaction.
+7. Explicitly map historical actors to existing target members or create new
    invitations. No actor is granted access based on a matching name or email.
-7. Reconfigure personal calendar feeds, push subscriptions, and external feed
+8. Reconfigure personal calendar feeds, push subscriptions, and external feed
    connections on the target installation.
 
 The transfer mechanism does not merge two independent data sets. Keep the
 source SQLite backup until the target has been checked. Legacy application JSON
 exports remain accepted, but they also require a dry run and do not contain the
 new historical actor snapshots.
+
+Dry-run details exist only in the current browser state and are not retained as
+an import-history log. After a successful import, the application keeps only the
+current technical transfer state required to map historical actors; older runs
+are not retained.
 
 JSON, CSV, and PDF files may contain sensitive personal data. Encrypt transfer
 files at rest and in transit, remove temporary copies after verification, and

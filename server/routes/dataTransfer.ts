@@ -22,9 +22,24 @@ const sensitive = {
   }
 };
 
-function errorReply(_error: unknown) {
+function noStore<T extends { header(name: string, value: string): unknown }>(reply: T): T {
+  reply.header("cache-control", "no-store, max-age=0");
+  reply.header("pragma", "no-cache");
+  reply.header("expires", "0");
+  return reply;
+}
+
+function errorReply(error: unknown) {
+  const message = error instanceof Error ? error.message : "";
+  const code = message.includes("checksum") || message.includes("differs from the tested package")
+    ? "data_transfer_package_changed"
+    : message.includes("format version")
+      ? "data_transfer_incompatible_format"
+      : message.includes("current successful dry run")
+        ? "data_transfer_dry_run_expired"
+        : "data_transfer_failed";
   return {
-    error: "data_transfer_failed",
+    error: code,
     message: "Data transfer could not be completed. Review the package and dry-run result."
   };
 }
@@ -37,8 +52,7 @@ function workspaceRole(value: unknown): WorkspaceRole | undefined {
 
 export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/data-transfer/export", sensitive, async (_request, reply) => {
-    return reply
-      .header("cache-control", "no-store, max-age=0")
+    return noStore(reply)
       .header("content-disposition", `attachment; filename="betreuungskalender-transfer-${new Date().toISOString().slice(0, 10)}.json"`)
       .send(createPortableTransfer());
   });
@@ -46,7 +60,7 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
   app.post("/api/data-transfer/preview", sensitive, async (request, reply) => {
     try {
       const result = dryRunPortableTransfer(request.body);
-      return reply.header("cache-control", "no-store, max-age=0").send({
+      return noStore(reply).send({
         fingerprint: result.fingerprint,
         formatVersion: result.formatVersion,
         sourceVersion: result.sourceVersion,
@@ -54,15 +68,15 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
         actors: result.actors
       });
     } catch (error) {
-      return reply.code(400).send(errorReply(error));
+      return noStore(reply).code(400).send(errorReply(error));
     }
   });
 
   app.post("/api/data-transfer/dry-run", sensitive, async (request, reply) => {
     try {
-      return reply.header("cache-control", "no-store, max-age=0").send(dryRunPortableTransfer(request.body));
+      return noStore(reply).send(dryRunPortableTransfer(request.body));
     } catch (error) {
-      return reply.code(400).send(errorReply(error));
+      return noStore(reply).code(400).send(errorReply(error));
     }
   });
 
@@ -74,7 +88,7 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
       confirmWarnings?: unknown;
     };
     if (!body || typeof body.fingerprint !== "string" || typeof body.dryRunReceipt !== "string" || !("package" in body)) {
-      return reply.code(400).send({ error: "validation_error", message: "Import request is incomplete." });
+      return noStore(reply).code(400).send({ error: "validation_error", message: "Import request is incomplete." });
     }
     try {
       const result = importPortableTransfer({
@@ -84,13 +98,13 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
         confirmWarnings: body.confirmWarnings === true,
         actorId: request.userEmail
       });
-      return reply.header("cache-control", "no-store, max-age=0").send(result);
+      return noStore(reply).send(result);
     } catch (error) {
-      return reply.code(400).send(errorReply(error));
+      return noStore(reply).code(400).send(errorReply(error));
     }
   });
 
-  app.get("/api/data-transfer/actors", sensitive, async () => listTransferActors());
+  app.get("/api/data-transfer/actors", sensitive, async (_request, reply) => noStore(reply).send(listTransferActors()));
 
   app.put<{ Params: { id: string } }>("/api/data-transfer/actors/:id/mapping", sensitive, async (request, reply) => {
     const body = request.body as { userId?: unknown; role?: unknown; carePartyIds?: unknown };
@@ -99,7 +113,7 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
       ? body.carePartyIds.filter((value): value is string => typeof value === "string")
       : [];
     if (typeof body?.userId !== "string" || !role) {
-      return reply.code(400).send({ error: "validation_error", message: "Mapping request is incomplete." });
+      return noStore(reply).code(400).send({ error: "validation_error", message: "Mapping request is incomplete." });
     }
     const userId = body.userId;
     const actorId = request.userEmail;
@@ -132,9 +146,9 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
           insert.run(randomUUID(), userId, carePartyId, actorId, actorId, timestamp, timestamp);
         }
       })();
-      return reply.send({ mapped: true });
+      return noStore(reply).send({ mapped: true });
     } catch (error) {
-      return reply.code(400).send(errorReply(error));
+      return noStore(reply).code(400).send(errorReply(error));
     }
   });
 
@@ -142,10 +156,10 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
     const body = request.body as { role?: unknown; expiresAt?: unknown; emailHint?: unknown };
     const role = workspaceRole(body?.role);
     if (!role || typeof body?.expiresAt !== "string") {
-      return reply.code(400).send({ error: "validation_error", message: "Invitation request is incomplete." });
+      return noStore(reply).code(400).send({ error: "validation_error", message: "Invitation request is incomplete." });
     }
     const actor = db.prepare("SELECT id, email_hint AS email FROM data_transfer_actors WHERE id = ?").get(request.params.id) as { id: string; email: string | null } | undefined;
-    if (!actor) return reply.code(404).send({ error: "not_found", message: "Imported actor was not found." });
+    if (!actor) return noStore(reply).code(404).send({ error: "not_found", message: "Imported actor was not found." });
     try {
       const created = createInvitation({
         role,
@@ -156,12 +170,12 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
       });
       db.prepare("UPDATE data_transfer_actors SET invitation_id = ?, updated_by = ?, updated_at = ? WHERE id = ?")
         .run(created.invitation.id, request.userEmail, new Date().toISOString(), actor.id);
-      return reply.code(201).header("cache-control", "no-store, max-age=0").send({
+      return noStore(reply).code(201).send({
         ...created,
         invitationUrl: invitationUrl(created.token, config.invitationPublicBaseUrl)
       });
     } catch (error) {
-      return reply.code(400).send(errorReply(error));
+      return noStore(reply).code(400).send(errorReply(error));
     }
   });
 }

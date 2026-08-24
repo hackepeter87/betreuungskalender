@@ -38,10 +38,15 @@ test("portable transfer dry run validates through the import core without target
     `).run();
     const transfer = createPortableTransfer(source);
     const before = target.serialize();
-    const dryRun = dryRunPortableTransfer(transfer);
+    const dryRun = dryRunPortableTransfer(transfer, target);
 
     assert.equal(dryRun.result, "ready");
     assert.equal(dryRun.counts.children, 3);
+    assert.equal(dryRun.exportedAt, transfer.exportedAt);
+    assert.equal(dryRun.comparison.find((item) => item.category === "children")?.current, 0);
+    assert.equal(dryRun.comparison.find((item) => item.category === "children")?.afterImport, 3);
+    assert.equal(dryRun.checks.every((check) => check.status === "passed"), true);
+    assert.equal(dryRun.summary.incomingRecords > 0, true);
     assert.equal(dryRun.actors.length > 0, true);
     assert.deepEqual(target.serialize(), before);
     assert.equal(JSON.stringify(transfer).includes("external_subject"), false);
@@ -65,7 +70,7 @@ test("portable import requires the exact dry-run fingerprint and preserves targe
   try {
     source.transaction(() => importData(createEdgeCaseDemoData(), "fixture-actor", source))();
     const transfer = createPortableTransfer(source);
-    const dryRun = dryRunPortableTransfer(transfer);
+    const dryRun = dryRunPortableTransfer(transfer, target);
     target.prepare(`
       INSERT INTO settings (key, value_json, created_by, updated_by, created_at, updated_at)
       VALUES ('setup.ownerUserId', '"target-owner"', 'target-owner', 'target-owner', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -102,7 +107,7 @@ test("portable import requires a receipt from the successful dry run", () => {
   try {
     source.transaction(() => importData(createEdgeCaseDemoData(), "fixture-actor", source))();
     const transfer = createPortableTransfer(source);
-    const dryRun = dryRunPortableTransfer(transfer);
+    const dryRun = dryRunPortableTransfer(transfer, target);
     assert.throws(() => importPortableTransfer({
       package: transfer,
       fingerprint: dryRun.fingerprint,
@@ -122,7 +127,7 @@ test("tampering with a portable package invalidates its checksum", () => {
     source.transaction(() => importData(createEdgeCaseDemoData(), "fixture-actor", source))();
     const transfer = createPortableTransfer(source);
     transfer.data.children[0]!.name = "Changed after export";
-    assert.throws(() => dryRunPortableTransfer(transfer), /checksum is invalid/);
+    assert.throws(() => dryRunPortableTransfer(transfer, source), /checksum is invalid/);
   } finally {
     source.close();
   }
@@ -132,7 +137,7 @@ test("legacy transfer warnings require explicit confirmation", () => {
   const target = database();
   try {
     const data = createEdgeCaseDemoData();
-    const dryRun = dryRunPortableTransfer(data);
+    const dryRun = dryRunPortableTransfer(data, target);
     assert.equal(dryRun.result, "warnings");
     assert.throws(() => importPortableTransfer({
       package: data,
@@ -147,10 +152,37 @@ test("legacy transfer warnings require explicit confirmation", () => {
 });
 
 test("dry run blocks missing domain references", () => {
+  const target = database();
   const data = createEdgeCaseDemoData();
-  data.entries[0]!.childIds = ["missing-child"];
-  const dryRun = dryRunPortableTransfer(data);
-  assert.equal(dryRun.result, "blocked");
-  assert.deepEqual(dryRun.missingReferences, ["entry:child"]);
-  assert.equal(dryRun.dryRunReceipt, undefined);
+  try {
+    data.entries[0]!.childIds = ["missing-child"];
+    const dryRun = dryRunPortableTransfer(data, target);
+    assert.equal(dryRun.result, "blocked");
+    assert.deepEqual(dryRun.missingReferences, ["entry:child"]);
+    assert.equal(dryRun.checks.find((check) => check.code === "references")?.status, "failed");
+    assert.equal(dryRun.dryRunReceipt, undefined);
+  } finally {
+    target.close();
+  }
+});
+
+test("dry run compares the package with current target records without writing", () => {
+  const source = database();
+  const target = database();
+  try {
+    source.transaction(() => importData(createEdgeCaseDemoData(), "fixture-actor", source))();
+    target.prepare(`
+      INSERT INTO children (id, name, birth_month, birth_year, color, created_at, updated_at)
+      VALUES ('target-child', 'Target child', 1, 2018, '#0f8b8d', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run();
+    const before = target.serialize();
+    const dryRun = dryRunPortableTransfer(createPortableTransfer(source), target);
+    const children = dryRun.comparison.find((item) => item.category === "children");
+    assert.deepEqual(children, { category: "children", current: 1, incoming: 3, afterImport: 3 });
+    assert.equal(dryRun.summary.currentRecords > 0, true);
+    assert.deepEqual(target.serialize(), before);
+  } finally {
+    source.close();
+    target.close();
+  }
 });
