@@ -6,6 +6,22 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.22.1] - 2026-08-24
+
+### Changed
+
+- Show a server-authoritative before-and-after comparison before replacing
+  domain data through a portable transfer.
+- Guide transfer imports through review, explicit confirmation, and historical
+  actor mapping instead of exposing implementation-oriented counters.
+- Provide a privacy-preserving local review report with aggregate validation
+  results and a shortened package fingerprint.
+
+### Security
+
+- Mark every transfer response as non-cacheable and return stable generic error
+  codes without package contents or personal data.
+
 ## [1.22.0] - 2026-08-24
 
 ### Added
