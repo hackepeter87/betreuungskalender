@@ -135,7 +135,6 @@ const SEMVER_PATTERN =
   /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|[a-zA-Z-][0-9a-zA-Z-]*))*)?(?:\+[0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*)?$/;
 const SCREENSHOT_DIRECTORY = "docs/assets/screenshots/";
 const PUBLIC_ICON_DIRECTORY = "public/icons/";
-const PLAYWRIGHT_SNAPSHOT_PATTERN = /^e2e\/[^/]+\.spec\.ts-snapshots\/[^/]+\.(?:png|jpe?g|webp)$/i;
 const IMAGE_PATTERN = /\.(?:png|jpe?g|webp)$/i;
 
 function normalizePath(filePath) {
@@ -218,8 +217,7 @@ export function isImageOutsideScreenshotDirectory(filePath) {
   return (
     IMAGE_PATTERN.test(normalized) &&
     !normalized.toLowerCase().startsWith(SCREENSHOT_DIRECTORY) &&
-    !normalized.toLowerCase().startsWith(PUBLIC_ICON_DIRECTORY) &&
-    !PLAYWRIGHT_SNAPSHOT_PATTERN.test(normalized)
+    !normalized.toLowerCase().startsWith(PUBLIC_ICON_DIRECTORY)
   );
 }
 

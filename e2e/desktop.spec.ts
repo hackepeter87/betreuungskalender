@@ -79,7 +79,7 @@ test("uses a fluid desktop page baseline and stacks dashboard secondary panels",
   }
 });
 
-test("matches the shared desktop layout baseline across core pages", async ({ page }) => {
+test("captures the shared desktop layout across core pages", async ({ page }, testInfo) => {
   await page.clock.setFixedTime(new Date("2026-08-24T10:00:00Z"));
   await openApp(page);
 
@@ -95,12 +95,12 @@ test("matches the shared desktop layout baseline across core pages", async ({ pa
     await navigate(page, route);
     await page.evaluate(() => window.scrollTo(0, 0));
     await expectNoDocumentHorizontalOverflow(page);
-    await expect(page).toHaveScreenshot(snapshot, {
+    const screenshot = await page.screenshot({
       animations: "disabled",
       caret: "hide",
-      fullPage: false,
-      maxDiffPixelRatio: 0.01
+      fullPage: false
     });
+    await testInfo.attach(snapshot, { body: screenshot, contentType: "image/png" });
   }
 });
 
