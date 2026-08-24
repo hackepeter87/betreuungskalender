@@ -6,6 +6,26 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.23.0] - 2026-08-24
+
+### Changed
+
+- Introduce a shared fluid page, spacing, typography, panel, and responsive
+  form baseline across the application.
+- Let dashboard, calendar, settings, report, backup, and documentation views
+  use the available desktop width while preserving focused inner content.
+- Place dashboard secondary information below the full-width calendar in a
+  balanced responsive grid.
+- Replace generic documentation-rule cards with concise practical guidance.
+
+### Fixed
+
+- Keep the collapsed sidebar account menu inside the viewport and preserve
+  immediate width recovery for the main content.
+- Use a transparent navigation variant of the established application logo.
+- Align settings grids, help controls, labels, and action spacing across
+  desktop, tablet, and mobile layouts.
+
 ## [1.22.1] - 2026-08-24
 
 ### Changed
