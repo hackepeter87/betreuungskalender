@@ -1286,9 +1286,13 @@ button.metric-card {
 
 .dashboard-sidebar {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
   align-items: start;
+}
+
+.dashboard-sidebar > * {
+  align-self: start;
 }
 
 .panel {
@@ -3086,6 +3090,15 @@ button.metric-card {
   padding: 18px;
 }
 
+.dashboard-confirmation-panel .confirmation-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
+.dashboard-confirmation-panel .confirmation-center__more {
+  grid-column: 1 / -1;
+}
+
 .notification-center__popover .confirmation-list {
   max-height: calc(min(720px, 100dvh - 104px) - 79px);
   overflow-y: auto;
@@ -4591,19 +4604,6 @@ button.metric-card {
 
 .member-management-grid--single .member-invite-card {
   max-width: none;
-}
-
-.dashboard-layout {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.dashboard-sidebar {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
-}
-
-.dashboard-sidebar > .privacy-card {
-  grid-column: auto;
-  min-height: 100%;
 }
 
 .documentation-topics {
@@ -6372,6 +6372,10 @@ button.metric-card {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .dashboard-confirmation-panel .confirmation-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .settings-form-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -6425,14 +6429,6 @@ button.metric-card {
 }
 
 @media (min-width: 1024px) and (max-width: 1199px) {
-  .dashboard-layout {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .dashboard-sidebar {
-    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  }
-
   .privacy-card {
     grid-column: auto;
   }
@@ -6703,6 +6699,10 @@ button.metric-card {
   }
 
   .dashboard-sidebar {
+    grid-template-columns: 1fr;
+  }
+
+  .dashboard-confirmation-panel .confirmation-list {
     grid-template-columns: 1fr;
   }
 

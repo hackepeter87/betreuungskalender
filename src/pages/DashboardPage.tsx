@@ -291,19 +291,19 @@ export function DashboardPage({
           </div>
         </section>
 
-        <aside className="dashboard-sidebar">
-          {openConfirmations.length ? (
-            <section className="panel confirmation-panel" data-testid="open-confirmations">
-              <div className="panel__header panel__header--compact">
-                <div>
-                  <h2>{copy(locale, "confirmation", "title")}</h2>
-                  <p>{copy(locale, "confirmation", "description")}</p>
-                </div>
+        {openConfirmations.length ? (
+          <section className="panel confirmation-panel dashboard-confirmation-panel" data-testid="open-confirmations">
+            <div className="panel__header panel__header--compact">
+              <div>
+                <h2>{copy(locale, "confirmation", "title")}</h2>
+                <p>{copy(locale, "confirmation", "description")}</p>
               </div>
-              <CareConfirmationCenter limit={4} onOpenEntry={onEditEntry} />
-            </section>
-          ) : null}
+            </div>
+            <CareConfirmationCenter limit={4} onOpenEntry={onEditEntry} />
+          </section>
+        ) : null}
 
+        <aside className="dashboard-sidebar" data-testid="dashboard-summary-grid">
           <section className="panel">
             <div className="panel__header panel__header--compact">
               <div>
@@ -343,7 +343,7 @@ export function DashboardPage({
             </dl>
           </section>
 
-          <section className={`privacy-card ${backupIsCurrent ? "" : "privacy-card--warning"}`}>
+          <section className={`privacy-card ${backupIsCurrent ? "" : "privacy-card--warning"}`} data-testid="dashboard-backup-status">
             <Icon name={backupIsCurrent ? "check" : "alert"} size={19} />
             <div>
               <strong>{backupIsCurrent ? copy(locale, "dashboard", "backupUpToDate") : copy(locale, "dashboard", "backupNeeded")}</strong>
