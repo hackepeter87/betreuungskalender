@@ -609,65 +609,67 @@ function CalendarFeedManager() {
           <p>{copy(locale, "calendarFeed", "description")}</p>
         </div>
       </div>
-      <div className="calendar-feed-status">
-        <span className={`status-pill ${status.active ? "status-pill--ok" : ""}`}>
-          {status.active && status.createdAt
-            ? copy(locale, "calendarFeed", "active", {
-                date: formatDateTime(status.createdAt, intlLocale)
-              })
-            : copy(locale, "calendarFeed", "inactive")}
-        </span>
-        <small>
-          {status.lastUsedAt
-            ? copy(locale, "calendarFeed", "lastUsed", {
-                date: formatDateTime(status.lastUsedAt, intlLocale)
-              })
-            : copy(locale, "calendarFeed", "neverUsed")}
-        </small>
-      </div>
-      <label className="field calendar-feed-scope-field">
-        <FieldHelpLabel fieldId="calendarFeed.scope">
-          {copy(locale, "calendarFeed", "scopeLabel")}
-        </FieldHelpLabel>
-        <select
-          data-testid="calendar-feed-scope"
-          value={selectedScope}
-          onChange={(event) => {
-            setSelectedScope(event.target.value as ApiCalendarFeedScope);
-            setMessage(null);
-          }}
-        >
-          {scopeOptions.map((option) => (
-            <option key={option.scope} value={option.scope}>
-              {option.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      {status.feedUrl ? (
-        <div className="calendar-feed-url">
-          <input readOnly value={status.feedUrl} data-testid="calendar-feed-url" />
-          <button className="button button--secondary" type="button" onClick={() => void copyUrl()}>
-            <Icon name="copy" size={17} />
-            {copy(locale, "calendarFeed", "copy")}
+      <div className="calendar-feed-content" data-testid="calendar-feed-content">
+        <div className="calendar-feed-status">
+          <span className={`status-pill ${status.active ? "status-pill--ok" : ""}`}>
+            {status.active && status.createdAt
+              ? copy(locale, "calendarFeed", "active", {
+                  date: formatDateTime(status.createdAt, intlLocale)
+                })
+              : copy(locale, "calendarFeed", "inactive")}
+          </span>
+          <small>
+            {status.lastUsedAt
+              ? copy(locale, "calendarFeed", "lastUsed", {
+                  date: formatDateTime(status.lastUsedAt, intlLocale)
+                })
+              : copy(locale, "calendarFeed", "neverUsed")}
+          </small>
+        </div>
+        <label className="field calendar-feed-scope-field">
+          <FieldHelpLabel fieldId="calendarFeed.scope">
+            {copy(locale, "calendarFeed", "scopeLabel")}
+          </FieldHelpLabel>
+          <select
+            data-testid="calendar-feed-scope"
+            value={selectedScope}
+            onChange={(event) => {
+              setSelectedScope(event.target.value as ApiCalendarFeedScope);
+              setMessage(null);
+            }}
+          >
+            {scopeOptions.map((option) => (
+              <option key={option.scope} value={option.scope}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {status.feedUrl ? (
+          <div className="calendar-feed-url">
+            <input readOnly value={status.feedUrl} data-testid="calendar-feed-url" />
+            <button className="button button--secondary" type="button" onClick={() => void copyUrl()}>
+              <Icon name="copy" size={17} />
+              {copy(locale, "calendarFeed", "copy")}
+            </button>
+          </div>
+        ) : status.active ? (
+          <p className="empty-copy">{copy(locale, "calendarFeed", "notAvailable")}</p>
+        ) : null}
+        <p className="settings-note">{copy(locale, "calendarFeed", "scope")}</p>
+        <div className="data-actions">
+          <button className="button button--primary" type="button" data-testid="calendar-feed-rotate" disabled={!canWrite || busy} onClick={() => void rotate()}>
+            <Icon name="calendar" size={17} />
+            {status.active ? copy(locale, "calendarFeed", "rotate") : copy(locale, "calendarFeed", "generate")}
+          </button>
+          <button className="button button--danger-quiet" type="button" data-testid="calendar-feed-revoke" disabled={!canWrite || busy || !status.active} onClick={() => void revoke()}>
+            <Icon name="trash" size={17} />
+            {copy(locale, "calendarFeed", "revoke")}
           </button>
         </div>
-      ) : status.active ? (
-        <p className="empty-copy">{copy(locale, "calendarFeed", "notAvailable")}</p>
-      ) : null}
-      <p className="settings-note">{copy(locale, "calendarFeed", "scope")}</p>
-      <div className="data-actions">
-        <button className="button button--primary" type="button" data-testid="calendar-feed-rotate" disabled={!canWrite || busy} onClick={() => void rotate()}>
-          <Icon name="calendar" size={17} />
-          {status.active ? copy(locale, "calendarFeed", "rotate") : copy(locale, "calendarFeed", "generate")}
-        </button>
-        <button className="button button--danger-quiet" type="button" data-testid="calendar-feed-revoke" disabled={!canWrite || busy || !status.active} onClick={() => void revoke()}>
-          <Icon name="trash" size={17} />
-          {copy(locale, "calendarFeed", "revoke")}
-        </button>
+        {message ? <p className="inline-message" role="status">{message}</p> : null}
+        {error ? <p className="form-error" role="alert">{error}</p> : null}
       </div>
-      {message ? <p className="inline-message" role="status">{message}</p> : null}
-      {error ? <p className="form-error" role="alert">{error}</p> : null}
     </section>
   );
 }
@@ -1090,14 +1092,14 @@ export function SettingsPage() {
         </div>
       </section> : null}
 
-      {canManageSettings ? <section className="panel settings-section">
+      {canManageSettings ? <section className="panel settings-section settings-section--defaults">
         <div className="panel__header panel__header--compact">
           <div>
             <h2>{copy(locale, "settings", "defaults")}</h2>
             <p>{copy(locale, "settings", "defaultsDescription")}</p>
           </div>
         </div>
-        <div className="settings-form-grid">
+        <div className="settings-form-grid" data-testid="settings-defaults-grid">
           <label className="field">
             <FieldHelpLabel fieldId="settings.kilometerRate">{copy(locale, "settings", "kilometerRate")}</FieldHelpLabel>
             <input
