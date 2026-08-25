@@ -771,7 +771,7 @@ test("shows a no-access page for a revoked workspace membership", async ({ page 
   await expect(page.getByTestId("auth-logout")).toBeVisible();
 });
 
-test("shows open care confirmations in the notification center", async ({ page }) => {
+test("shows open care confirmations in the notification center", async ({ page }, testInfo) => {
   const end = new Date(Date.now() - 86_400_000);
   end.setHours(18, 0, 0, 0);
   const start = new Date(end);
@@ -811,17 +811,18 @@ test("shows open care confirmations in the notification center", async ({ page }
           ? input.url
           : String(input);
       if (new URL(url, window.location.href).pathname === "/api/care-confirmations/open") {
-        return Promise.resolve(new Response(JSON.stringify([{
-          id: "confirm_notification_e2e",
-          careEntryId: confirmationEntry.id,
+        const requests = Array.from({ length: 3 }, (_, index) => ({
+          id: `confirm_notification_e2e_${index}`,
+          careEntryId: `${confirmationEntry.id}_${index}`,
           userId: "local-dev",
           dueAt: new Date().toISOString(),
           status: "open",
           reminderCount: 0,
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
-          entry: confirmationEntry
-        }]), {
+          entry: { ...confirmationEntry, id: `${confirmationEntry.id}_${index}` }
+        }));
+        return Promise.resolve(new Response(JSON.stringify(requests), {
           status: 200,
           headers: { "content-type": "application/json" }
         }));
@@ -831,13 +832,37 @@ test("shows open care confirmations in the notification center", async ({ page }
   }, entry);
 
   await openApp(page);
-  await expect(page.getByTestId("sidebar-notification-center-badge")).toHaveText("1");
+  await expect(page.getByTestId("sidebar-notification-center-badge")).toHaveText("3");
+
+  const calendar = page.locator(".dashboard-layout > .calendar-panel");
+  const confirmations = page.getByTestId("open-confirmations");
+  const summaries = page.getByTestId("dashboard-summary-grid");
+  await expect(confirmations).toBeVisible();
+  await expect(summaries).toBeVisible();
+  await expect(summaries.locator(":scope > *")).toHaveCount(3);
+
+  const calendarBox = await calendar.boundingBox();
+  const confirmationBox = await confirmations.boundingBox();
+  const summaryBox = await summaries.boundingBox();
+  const backupBox = await page.getByTestId("dashboard-backup-status").boundingBox();
+  expect(calendarBox).not.toBeNull();
+  expect(confirmationBox).not.toBeNull();
+  expect(summaryBox).not.toBeNull();
+  expect(backupBox).not.toBeNull();
+  expect(confirmationBox!.y).toBeGreaterThanOrEqual(calendarBox!.y + calendarBox!.height);
+  expect(summaryBox!.y).toBeGreaterThanOrEqual(confirmationBox!.y + confirmationBox!.height);
+  expect(backupBox!.height).toBeLessThan(220);
+  await testInfo.attach("dashboard-confirmation-layout.png", {
+    body: await page.screenshot({ animations: "disabled", caret: "hide", fullPage: false }),
+    contentType: "image/png"
+  });
+
   await page.getByTestId("sidebar-notification-center-trigger").click();
   const popover = page.getByTestId("sidebar-notification-center-popover");
   await expect(popover).toBeVisible();
   await expect(popover).toContainText("Offene Bestätigungen");
-  await expect(popover.getByTestId("confirmation-card")).toHaveCount(1);
-  await popover.getByText("Geplante Betreuung nachträglich bestätigen").click();
+  await expect(popover.getByTestId("confirmation-card")).toHaveCount(3);
+  await popover.getByText("Geplante Betreuung nachträglich bestätigen").first().click();
   await expect(page.getByRole("dialog", { name: "Betreuungseintrag bearbeiten" })).toBeVisible();
 });
 
