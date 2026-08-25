@@ -110,6 +110,7 @@ test("keeps settings forms composed on ultra-wide screens", async ({ page }) => 
   await navigate(page, "settings");
 
   const defaults = page.getByTestId("settings-defaults-grid");
+  const languageField = page.locator(".settings-form-grid").first().locator(".field");
   const externalCalendar = page.getByTestId("external-calendar-manager");
   const importGrid = externalCalendar.locator(".external-calendar-import-grid");
   const feedContent = page.getByTestId("calendar-feed-content");
@@ -118,12 +119,15 @@ test("keeps settings forms composed on ultra-wide screens", async ({ page }) => 
     await page.setViewportSize({ width, height: 1400 });
 
     const defaultsBox = await defaults.boundingBox();
+    const languageFieldBox = await languageField.boundingBox();
     const importBox = await importGrid.boundingBox();
     const feedBox = await feedContent.boundingBox();
     expect(defaultsBox).not.toBeNull();
+    expect(languageFieldBox).not.toBeNull();
     expect(importBox).not.toBeNull();
     expect(feedBox).not.toBeNull();
     expect(defaultsBox!.width).toBeLessThanOrEqual(1160);
+    expect(languageFieldBox!.width).toBeLessThanOrEqual(360);
     expect(importBox!.width).toBeLessThanOrEqual(1200);
     expect(feedBox!.width).toBeLessThanOrEqual(960);
 

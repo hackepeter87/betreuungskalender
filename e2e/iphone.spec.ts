@@ -62,6 +62,50 @@ test("captures the shared mobile layout", async ({ page }, testInfo) => {
   await testInfo.attach("backup-fluid-iphone.png", { body: screenshot, contentType: "image/png" });
 });
 
+test("stacks external calendar import controls within the settings panel", async ({ page }) => {
+  await openApp(page);
+  await navigate(page, "settings");
+
+  const manager = page.getByTestId("external-calendar-manager");
+  const importGrid = manager.locator(".external-calendar-import-grid");
+
+  const expectStackedImportControls = async (fieldSelector: string) => {
+    const layout = await importGrid.evaluate((grid, selector) => {
+      const field = grid.querySelector<HTMLElement>(selector);
+      const action = grid.querySelector<HTMLElement>('[data-testid="external-calendar-import"]');
+      if (!field || !action) throw new Error("External calendar import controls are missing");
+      const gridRect = grid.getBoundingClientRect();
+      const fieldRect = field.getBoundingClientRect();
+      const actionRect = action.getBoundingClientRect();
+      return {
+        gridLeft: gridRect.left,
+        gridRight: gridRect.right,
+        fieldLeft: fieldRect.left,
+        fieldRight: fieldRect.right,
+        fieldBottom: fieldRect.bottom,
+        actionLeft: actionRect.left,
+        actionRight: actionRect.right,
+        actionTop: actionRect.top
+      };
+    }, fieldSelector);
+
+    expect(layout.fieldLeft).toBeGreaterThanOrEqual(layout.gridLeft - 1);
+    expect(layout.fieldRight).toBeLessThanOrEqual(layout.gridRight + 1);
+    expect(layout.actionLeft).toBeGreaterThanOrEqual(layout.gridLeft - 1);
+    expect(layout.actionRight).toBeLessThanOrEqual(layout.gridRight + 1);
+    expect(layout.actionTop).toBeGreaterThanOrEqual(layout.fieldBottom - 1);
+  };
+
+  for (const width of [390, 767, 768]) {
+    await page.setViewportSize({ width, height: 844 });
+    await manager.getByRole("button", { name: "ICS-Datei", exact: true }).click();
+    await expectStackedImportControls(".external-calendar-file-field");
+    await manager.getByRole("button", { name: "Feed-URL", exact: true }).click();
+    await expectStackedImportControls(".external-calendar-url-field");
+    await expectNoDocumentHorizontalOverflow(page);
+  }
+});
+
 test("creates and displays a complete invitation link on mobile", async ({ page }) => {
   await page.addInitScript(() => {
     const originalFetch = window.fetch.bind(window);

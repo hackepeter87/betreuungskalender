@@ -2665,8 +2665,6 @@ button.metric-card {
 
 .settings-form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 360px));
-  justify-content: start;
   gap: 14px;
   padding: 18px;
 }
@@ -4162,6 +4160,12 @@ button.metric-card {
     grid-template-columns: 1fr;
   }
 
+  .external-calendar-file-field,
+  .external-calendar-url-field,
+  .external-calendar-import-grid > .button {
+    grid-column: 1;
+  }
+
   .child-settings-row--external-source {
     grid-template-columns: auto minmax(0, 1fr);
     align-items: start;
@@ -4572,10 +4576,6 @@ button.metric-card {
 .instance-readiness-grid {
   gap: var(--field-gap);
   padding: var(--panel-padding);
-}
-
-.settings-form-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
 }
 
 .instance-readiness-grid {
@@ -7930,7 +7930,8 @@ button.metric-card {
 }
 
 .settings-form-grid {
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 360px));
+  justify-content: start;
   align-items: start;
 }
 
