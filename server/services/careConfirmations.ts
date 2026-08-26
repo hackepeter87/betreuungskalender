@@ -306,6 +306,7 @@ export function createDueCareConfirmationRequests(referenceTime = new Date()): n
     WHERE deleted_at IS NULL
       AND status = 'planned'
       AND confirmed_at IS NULL
+      AND confirmation_suppressed = 0
       AND end_datetime < ?
     ORDER BY end_datetime, id
   `).all(referenceTime.toISOString()) as EntryRow[];

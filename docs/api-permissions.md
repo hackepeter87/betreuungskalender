@@ -21,7 +21,7 @@ token.
 | --- | --- |
 | `GET /api/care-entries`, `GET /api/care-entries/:id`, `GET /api/care-conflicts` | `notes:view` |
 | `GET /api/care-entries/schedule` | `appointments:view` |
-| `POST /api/care-entries` | `appointments:create` |
+| `POST /api/care-entries`, `POST /api/care-conflicts/preview`, `POST /api/care-conflicts/resolve` | `appointments:create` |
 | `PUT /api/care-entries/:id` | `appointments:edit` |
 | `DELETE /api/care-entries/:id` | `appointments:delete` |
 | `GET /api/care-confirmations/open` | `notifications:manage-own` |
@@ -43,7 +43,7 @@ token.
 | `POST /api/unavailable-periods`, `PUT/DELETE /api/unavailable-periods/:id` | `planning:manage` |
 | `GET /api/contact-patterns`, `GET /api/contact-rules` | `planning:view` |
 | `POST /api/contact-patterns`, `PUT/DELETE /api/contact-patterns/:id` | `planning:manage` |
-| `POST /api/contact-rules`, `PUT/DELETE /api/contact-rules/:id`, `POST /api/contact-rules/:id/sync` | `planning:manage` |
+| `POST /api/contact-rules`, `PUT/DELETE /api/contact-rules/:id`, `POST /api/contact-rules/:id/sync`, `POST /api/contact-rules/:id/sync-preview` | `planning:manage` |
 | `GET /api/month-closings` | `reports:view` |
 | `POST /api/month-closings` | `reports:view` |
 
@@ -59,6 +59,7 @@ token.
 | `GET/POST/DELETE /api/calendar-feed` | `feeds:manage-own` |
 | `GET /calendar/:token` | Scoped bearer token; never an API principal |
 | `GET /api/audit-log` | `audit:view` |
+| `GET /api/reports/snapshot` | `reports:view` |
 
 ## Membership and administration
 

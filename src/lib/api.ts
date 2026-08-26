@@ -15,6 +15,7 @@ import type {
   ApiChild,
   ApiChildSummary,
   ApiContactRule,
+  ApiContactRuleSyncPreview,
   ApiLogout,
   ApiSession,
   ApiScheduleEntry,
@@ -705,10 +706,19 @@ export const api = {
       { method: "PUT", body: JSON.stringify(input) }
     );
   },
-  syncContactRule(id: string) {
+  previewContactRuleSync(id: string, input: { startDate: string; endDate: string }) {
+    return request<ApiContactRuleSyncPreview>(
+      `/api/contact-rules/${encodeURIComponent(id)}/sync-preview`,
+      { method: "POST", body: JSON.stringify(input) }
+    );
+  },
+  syncContactRule(id: string, input?: { startDate: string; endDate: string; previewFingerprint: string }) {
     return request<ApiContactRule>(
       `/api/contact-rules/${encodeURIComponent(id)}/sync`,
-      { method: "POST" }
+      {
+        method: "POST",
+        ...(input ? { body: JSON.stringify(input) } : {})
+      }
     );
   },
   deleteContactRule(id: string) {
