@@ -2665,9 +2665,25 @@ button.metric-card {
 
 .settings-form-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 14px;
   padding: 18px;
+}
+
+.settings-section--defaults .settings-form-grid {
+  grid-template-columns: repeat(3, minmax(240px, 360px));
+  max-width: 1160px;
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .settings-section--defaults .settings-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .settings-section--defaults .settings-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .settings-section > .field {
@@ -2682,20 +2698,30 @@ button.metric-card {
 
 .external-calendar-import-grid {
   display: grid;
-  grid-template-columns:
-    minmax(190px, 1fr)
-    minmax(96px, 120px)
-    minmax(170px, 0.8fr)
-    minmax(240px, 1.1fr)
-    minmax(170px, auto);
+  grid-template-columns: minmax(320px, 2fr) 112px minmax(260px, 1fr);
   align-items: end;
   gap: 14px;
+  max-width: 1200px;
   padding: 18px;
 }
 
 .external-calendar-kind-control {
   grid-column: 1 / -1;
   justify-self: start;
+}
+
+.external-calendar-file-field,
+.external-calendar-url-field {
+  grid-column: 1 / 3;
+}
+
+.external-calendar-import-grid > .button {
+  grid-column: 3;
+  width: 100%;
+}
+
+.settings-section--external-calendar .child-settings-list {
+  max-width: 1400px;
 }
 
 .external-calendar-url-field {
@@ -2773,6 +2799,10 @@ button.metric-card {
   align-items: flex-start;
   gap: 10px;
   padding: 0 18px 12px;
+}
+
+.calendar-feed-content {
+  max-width: 960px;
 }
 
 .calendar-feed-scope-field {
@@ -4130,6 +4160,12 @@ button.metric-card {
     grid-template-columns: 1fr;
   }
 
+  .external-calendar-file-field,
+  .external-calendar-url-field,
+  .external-calendar-import-grid > .button {
+    grid-column: 1;
+  }
+
   .child-settings-row--external-source {
     grid-template-columns: auto minmax(0, 1fr);
     align-items: start;
@@ -4540,10 +4576,6 @@ button.metric-card {
 .instance-readiness-grid {
   gap: var(--field-gap);
   padding: var(--panel-padding);
-}
-
-.settings-form-grid {
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
 }
 
 .instance-readiness-grid {
@@ -7898,7 +7930,8 @@ button.metric-card {
 }
 
 .settings-form-grid {
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 360px));
+  justify-content: start;
   align-items: start;
 }
 

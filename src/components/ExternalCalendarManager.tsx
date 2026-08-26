@@ -72,7 +72,7 @@ export function ExternalCalendarManager() {
     }
   };
 
-  return <section className="panel settings-section" data-testid="external-calendar-manager">
+  return <section className="panel settings-section settings-section--external-calendar" data-testid="external-calendar-manager">
     <div className="panel__header panel__header--compact"><div><h2>{copy(locale, "externalCalendar", "title")}</h2><p>{copy(locale, "externalCalendar", "description")}</p></div></div>
     <div className="external-calendar-import-grid">
       <div className="segmented-control external-calendar-kind-control" role="group" aria-label={copy(locale, "externalCalendar", "sourceKind")}>

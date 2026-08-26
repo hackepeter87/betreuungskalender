@@ -104,6 +104,45 @@ test("captures the shared desktop layout across core pages", async ({ page }, te
   }
 });
 
+test("keeps settings forms composed on ultra-wide screens", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1000 });
+  await openApp(page);
+  await navigate(page, "settings");
+
+  const defaults = page.getByTestId("settings-defaults-grid");
+  const languageField = page.locator(".settings-form-grid").first().locator(".field");
+  const externalCalendar = page.getByTestId("external-calendar-manager");
+  const importGrid = externalCalendar.locator(".external-calendar-import-grid");
+  const feedContent = page.getByTestId("calendar-feed-content");
+
+  for (const width of [1280, 1440, 1920, 2560]) {
+    await page.setViewportSize({ width, height: 1400 });
+
+    const defaultsBox = await defaults.boundingBox();
+    const languageFieldBox = await languageField.boundingBox();
+    const importBox = await importGrid.boundingBox();
+    const feedBox = await feedContent.boundingBox();
+    expect(defaultsBox).not.toBeNull();
+    expect(languageFieldBox).not.toBeNull();
+    expect(importBox).not.toBeNull();
+    expect(feedBox).not.toBeNull();
+    expect(defaultsBox!.width).toBeLessThanOrEqual(1160);
+    expect(languageFieldBox!.width).toBeLessThanOrEqual(360);
+    expect(importBox!.width).toBeLessThanOrEqual(1200);
+    expect(feedBox!.width).toBeLessThanOrEqual(960);
+
+    const nameBox = await externalCalendar.getByTestId("external-calendar-name").boundingBox();
+    const fileBox = await externalCalendar.locator(".external-calendar-file-field").boundingBox();
+    const importButtonBox = await externalCalendar.getByTestId("external-calendar-import").boundingBox();
+    expect(nameBox).not.toBeNull();
+    expect(fileBox).not.toBeNull();
+    expect(importButtonBox).not.toBeNull();
+    expect(fileBox!.y).toBeGreaterThan(nameBox!.y + nameBox!.height);
+    expect(Math.abs(importButtonBox!.y + importButtonBox!.height - (fileBox!.y + fileBox!.height))).toBeLessThan(2);
+    await expectNoDocumentHorizontalOverflow(page);
+  }
+});
+
 test("offers PWA installation only after the browser reports availability", async ({
   page
 }) => {
