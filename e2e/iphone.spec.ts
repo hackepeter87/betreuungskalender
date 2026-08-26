@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import {
   createChild,
   createEntry,
+  dateInCurrentMonth,
   expectNoDocumentHorizontalOverflow,
   expectNoUnavailableModalOverflow,
   navigate,
@@ -218,6 +219,34 @@ test("uses mobile navigation and the agenda for entry creation", async ({
 
   await navigate(page, "entries");
   await expect(page.getByText(childName).first()).toBeVisible();
+  await expectNoDocumentHorizontalOverflow(page);
+});
+
+test("shows multi-day care on every covered agenda day", async ({ page }) => {
+  const childName = "Mehrtag Kind";
+  await openApp(page);
+  await createChild(page, childName);
+  await createEntry(page, {
+    childName,
+    startDay: 14,
+    startTime: "17:00",
+    endDay: 16,
+    endTime: "19:00",
+    note: "Fiktiver mehrtägiger Eintrag"
+  });
+
+  await navigate(page, "calendar");
+  await expect(page.getByTestId("calendar-view-agenda")).toHaveClass(/is-active/);
+
+  const startDay = page.getByTestId(`agenda-day-${dateInCurrentMonth(14)}`);
+  const middleDay = page.getByTestId(`agenda-day-${dateInCurrentMonth(15)}`);
+  const endDay = page.getByTestId(`agenda-day-${dateInCurrentMonth(16)}`);
+  await expect(startDay.getByText(childName, { exact: true })).toBeVisible();
+  await expect(middleDay.getByText(childName, { exact: true })).toBeVisible();
+  await expect(endDay.getByText(childName, { exact: true })).toBeVisible();
+  await expect(startDay.getByText("ab 17:00", { exact: true })).toBeVisible();
+  await expect(middleDay.getByText("Ganztägig", { exact: true })).toBeVisible();
+  await expect(endDay.getByText("bis 19:00", { exact: true })).toBeVisible();
   await expectNoDocumentHorizontalOverflow(page);
 });
 

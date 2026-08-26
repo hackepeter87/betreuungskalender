@@ -1,5 +1,12 @@
 import { useMemo } from "react";
-import { enumerateDateKeys, formatDate, formatShortDate, formatTime } from "../lib/date";
+import {
+  entryDateKeys,
+  enumerateDateKeys,
+  formatDate,
+  formatShortDate,
+  formatTime,
+  timedRangeDaySegment
+} from "../lib/date";
 import { unavailableForEntry } from "../lib/analytics";
 import {
   deviationLabel,
@@ -31,13 +38,33 @@ function durationLabel(entry: CareEntry, locale: "de" | "en"): string {
   });
 }
 
-function unavailableRangeLabel(period: UnavailablePeriod, intlLocale: string): string {
-  const startDate = period.startDateTime.slice(0, 10);
-  const endDate = period.endDateTime.slice(0, 10);
-  if (startDate === endDate) {
-    return `${formatTime(period.startDateTime, intlLocale)}–${formatTime(period.endDateTime, intlLocale)}`;
+function timedRangeLabelForDate(
+  startDateTime: string,
+  endDateTime: string,
+  dateKey: string,
+  locale: "de" | "en",
+  intlLocale: string
+): string {
+  const segment = timedRangeDaySegment(startDateTime, endDateTime, dateKey);
+  if (segment === "starts") {
+    return copy(locale, "agenda", "startsAt", { time: formatTime(startDateTime, intlLocale) });
   }
-  return `${formatShortDate(startDate, intlLocale)}, ${formatTime(period.startDateTime, intlLocale)} – ${formatShortDate(endDate, intlLocale)}, ${formatTime(period.endDateTime, intlLocale)}`;
+  if (segment === "ends") {
+    return copy(locale, "agenda", "endsAt", { time: formatTime(endDateTime, intlLocale) });
+  }
+  if (segment === "full-day") return copy(locale, "agenda", "allDay");
+  return `${formatTime(startDateTime, intlLocale)}–${formatTime(endDateTime, intlLocale)}`;
+}
+
+function fullTimedRangeLabel(
+  startDateTime: string,
+  endDateTime: string,
+  intlLocale: string
+): string | null {
+  const startDate = startDateTime.slice(0, 10);
+  const endDate = endDateTime.slice(0, 10);
+  if (startDate === endDate) return null;
+  return `${formatShortDate(startDate, intlLocale)}, ${formatTime(startDateTime, intlLocale)} – ${formatShortDate(endDate, intlLocale)}, ${formatTime(endDateTime, intlLocale)}`;
 }
 
 export function CalendarAgenda({
@@ -79,31 +106,33 @@ export function CalendarAgenda({
       string,
       { entries: CareEntry[]; unavailable: UnavailablePeriod[]; external: ExternalCalendarEvent[]; holidays: HolidayPeriod[] }
     >();
-    const firstVisibleDate = (date: string) =>
-      date < visibleStartDate ? visibleStartDate : date;
+    const visibleDateKeys = (startDateTime: string, endDateTime: string) =>
+      entryDateKeys(startDateTime, endDateTime).filter(
+        (date) => date >= visibleStartDate && date <= visibleEndDate
+      );
     for (const entry of entries.slice().sort((a, b) => a.startDateTime.localeCompare(b.startDateTime))) {
-      const date = firstVisibleDate(entry.startDateTime.slice(0, 10));
-      if (date > visibleEndDate) continue;
-      const group = groups.get(date) ?? { entries: [], unavailable: [], external: [], holidays: [] };
-      group.entries.push(entry);
-      groups.set(date, group);
+      for (const date of visibleDateKeys(entry.startDateTime, entry.endDateTime)) {
+        const group = groups.get(date) ?? { entries: [], unavailable: [], external: [], holidays: [] };
+        group.entries.push(entry);
+        groups.set(date, group);
+      }
     }
     for (const period of unavailablePeriods
       .filter((item) => !item.deletedAt)
       .slice()
       .sort((a, b) => a.startDateTime.localeCompare(b.startDateTime))) {
-      const date = firstVisibleDate(period.startDateTime.slice(0, 10));
-      if (date > visibleEndDate) continue;
-      const group = groups.get(date) ?? { entries: [], unavailable: [], external: [], holidays: [] };
-      group.unavailable.push(period);
-      groups.set(date, group);
+      for (const date of visibleDateKeys(period.startDateTime, period.endDateTime)) {
+        const group = groups.get(date) ?? { entries: [], unavailable: [], external: [], holidays: [] };
+        group.unavailable.push(period);
+        groups.set(date, group);
+      }
     }
     for (const event of externalEvents) {
-      const date = firstVisibleDate(event.startDateTime.slice(0, 10));
-      if (date > visibleEndDate) continue;
-      const group = groups.get(date) ?? { entries: [], unavailable: [], external: [], holidays: [] };
-      group.external.push(event);
-      groups.set(date, group);
+      for (const date of visibleDateKeys(event.startDateTime, event.endDateTime)) {
+        const group = groups.get(date) ?? { entries: [], unavailable: [], external: [], holidays: [] };
+        group.external.push(event);
+        groups.set(date, group);
+      }
     }
     for (const period of holidayPeriods.filter((item) => !item.deletedAt)) {
       const clippedStart = period.startDate < visibleStartDate ? visibleStartDate : period.startDate;
@@ -152,11 +181,26 @@ export function CalendarAgenda({
             </button>
           </header>
           <div className="agenda-day__entries">
-            {group.external.map((event) => (
-              <article className="agenda-card agenda-card--external" key={`external-${event.id}`} style={{ borderColor: event.sourceColor }} data-testid={`external-calendar-event-${event.id}`}>
-                <span className="agenda-card__main"><span className="agenda-card__topline"><strong>{event.title}</strong><span className="status-label status-label--external">{copy(locale, "externalCalendar", "readOnly")}</span></span><span className="agenda-card__details"><span><Icon name="calendar" size={15} />{event.sourceName}</span>{!event.allDay ? <span><Icon name="clock" size={15} />{formatTime(event.startDateTime, intlLocale)}–{formatTime(event.endDateTime, intlLocale)}</span> : null}</span></span>
-              </article>
-            ))}
+            {group.external.map((event) => {
+              const fullRange = event.allDay
+                ? null
+                : fullTimedRangeLabel(event.startDateTime, event.endDateTime, intlLocale);
+              return (
+                <article className="agenda-card agenda-card--external" key={`external-${event.id}`} style={{ borderColor: event.sourceColor }} data-testid={`external-calendar-event-${event.id}`}>
+                  <span className="agenda-card__main">
+                    <span className="agenda-card__topline">
+                      <strong>{event.title}</strong>
+                      <span className="status-label status-label--external">{copy(locale, "externalCalendar", "readOnly")}</span>
+                    </span>
+                    <span className="agenda-card__details">
+                      <span><Icon name="calendar" size={15} />{event.sourceName}</span>
+                      {!event.allDay ? <span><Icon name="clock" size={15} />{timedRangeLabelForDate(event.startDateTime, event.endDateTime, date, locale, intlLocale)}</span> : null}
+                      {fullRange ? <span className="agenda-card__range"><Icon name="calendar" size={15} />{fullRange}</span> : null}
+                    </span>
+                  </span>
+                </article>
+              );
+            })}
             {group.holidays.map((period) => (
               <article className="agenda-card agenda-card--holiday" key={`holiday-${period.id}`} data-testid={`agenda-holiday-${period.id}`}>
                 <span className="agenda-card__main">
@@ -170,37 +214,41 @@ export function CalendarAgenda({
                 </span>
               </article>
             ))}
-            {group.unavailable.map((period) => (
-              <button
-                className={`agenda-card agenda-card--unavailable ${period.dutyRelated ? "is-duty" : ""} ${period.scope === "external_contact_block" ? "is-external-block" : ""}`}
-                type="button"
-                key={`unavailable-${period.id}`}
-                onClick={() => onSelectUnavailable?.(period)}
-              >
-                <span className="agenda-card__unavailable-icon"><Icon name="briefcase" size={19} /></span>
-                <span className="agenda-card__main">
-                  <span className="agenda-card__topline">
-                    <strong>{unavailableCategoryLabels[period.category]}</strong>
-                    <span className="status-label status-label--unavailable">
-                      {period.scope === "external_contact_block"
-                        ? copy(locale, "agenda", "externalBlock")
-                        : period.dutyRelated
-                          ? copy(locale, "agenda", "dutyRelated")
-                          : copy(locale, "agenda", "unavailable")}
+            {group.unavailable.map((period) => {
+              const fullRange = fullTimedRangeLabel(period.startDateTime, period.endDateTime, intlLocale);
+              return (
+                <button
+                  className={`agenda-card agenda-card--unavailable ${period.dutyRelated ? "is-duty" : ""} ${period.scope === "external_contact_block" ? "is-external-block" : ""}`}
+                  type="button"
+                  key={`unavailable-${period.id}`}
+                  onClick={() => onSelectUnavailable?.(period)}
+                >
+                  <span className="agenda-card__unavailable-icon"><Icon name="briefcase" size={19} /></span>
+                  <span className="agenda-card__main">
+                    <span className="agenda-card__topline">
+                      <strong>{unavailableCategoryLabels[period.category]}</strong>
+                      <span className="status-label status-label--unavailable">
+                        {period.scope === "external_contact_block"
+                          ? copy(locale, "agenda", "externalBlock")
+                          : period.dutyRelated
+                            ? copy(locale, "agenda", "dutyRelated")
+                            : copy(locale, "agenda", "unavailable")}
+                      </span>
+                    </span>
+                    <span className="agenda-card__details">
+                      <span data-testid={`agenda-unavailable-day-${period.id}`}><Icon name="clock" size={15} />{timedRangeLabelForDate(period.startDateTime, period.endDateTime, date, locale, intlLocale)}</span>
+                      {fullRange ? <span className="agenda-card__range" data-testid={`agenda-unavailable-range-${period.id}`}><Icon name="calendar" size={15} />{fullRange}</span> : null}
+                      {period.location ? <span><Icon name="home" size={15} />{period.location}</span> : null}
+                    </span>
+                    <span className="agenda-card__flags">
+                      {period.affectsContact ? <span><Icon name="repeat" size={14} />{copy(locale, "agenda", "affectsContact")}</span> : null}
+                      {period.affectsHolidays ? <span><Icon name="sun" size={14} />{copy(locale, "agenda", "affectsHolidays")}</span> : null}
                     </span>
                   </span>
-                  <span className="agenda-card__details">
-                    <span data-testid={`agenda-unavailable-range-${period.id}`}><Icon name="calendar" size={15} />{unavailableRangeLabel(period, intlLocale)}</span>
-                    {period.location ? <span><Icon name="home" size={15} />{period.location}</span> : null}
-                  </span>
-                  <span className="agenda-card__flags">
-                    {period.affectsContact ? <span><Icon name="repeat" size={14} />{copy(locale, "agenda", "affectsContact")}</span> : null}
-                    {period.affectsHolidays ? <span><Icon name="sun" size={14} />{copy(locale, "agenda", "affectsHolidays")}</span> : null}
-                  </span>
-                </span>
-                <Icon name="chevronRight" size={18} />
-              </button>
-            ))}
+                  <Icon name="chevronRight" size={18} />
+                </button>
+              );
+            })}
             {group.entries.map((entry) => {
               const entryChildren = entry.childIds
                 .map((id) => childById.get(id))
@@ -214,11 +262,13 @@ export function CalendarAgenda({
               const hasHolidayOverlap =
                 Boolean(entry.contactRuleId || entry.generatedByPatternId) &&
                 group.holidays.length > 0;
+              const fullRange = fullTimedRangeLabel(entry.startDateTime, entry.endDateTime, intlLocale);
               return (
                 <button
                   className={`agenda-card agenda-card--${entry.status}`}
                   type="button"
                   key={entry.id}
+                  data-testid={`agenda-entry-${entry.id}-${date}`}
                   onClick={() => onSelectEntry(entry)}
                 >
                   <span className="agenda-card__colors" aria-hidden="true">
@@ -234,7 +284,8 @@ export function CalendarAgenda({
                       </span>
                     </span>
                     <span className="agenda-card__details">
-                      <span><Icon name="calendar" size={15} />{formatTime(entry.startDateTime, intlLocale)}–{formatTime(entry.endDateTime, intlLocale)}</span>
+                      <span><Icon name="clock" size={15} />{timedRangeLabelForDate(entry.startDateTime, entry.endDateTime, date, locale, intlLocale)}</span>
+                      {fullRange ? <span className="agenda-card__range"><Icon name="calendar" size={15} />{fullRange}</span> : null}
                       <span><Icon name="history" size={15} />{durationLabel(entry, locale)}</span>
                       <span><Icon name="home" size={15} />{entry.customLocation || locationLabels[entry.location]}</span>
                     </span>

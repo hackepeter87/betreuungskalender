@@ -49,9 +49,9 @@ test("imports, manages, and removes an external calendar through the UI", async 
   await expect(agendaViewButton).toBeVisible();
   await agendaViewButton.click();
   const agendaEvent = page.locator(".agenda-list").getByTestId(`external-calendar-event-${event?.id}`);
-  await expect(agendaEvent).toHaveCount(1);
-  await expect(agendaEvent.getByText("E2E Holiday", { exact: true })).toBeVisible();
-  const agendaEventContentBox = await agendaEvent.locator(".agenda-card__main").boundingBox();
+  await expect(agendaEvent).toHaveCount(2);
+  await expect(agendaEvent.first().getByText("E2E Holiday", { exact: true })).toBeVisible();
+  const agendaEventContentBox = await agendaEvent.first().locator(".agenda-card__main").boundingBox();
   expect(agendaEventContentBox?.width ?? 0).toBeGreaterThan(250);
   await expectNoDocumentHorizontalOverflow(page);
 

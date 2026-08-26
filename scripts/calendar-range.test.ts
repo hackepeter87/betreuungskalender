@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { calendarGridRange, filterCalendarOverlayEvents, isoWeekNumber } from "../src/lib/calendar";
+import { timedRangeDaySegment } from "../src/lib/date";
 import type { ExternalCalendarEvent, ExternalCalendarSource } from "../src/types";
 
 test("calendar grid range covers all six visible weeks", () => {
@@ -14,6 +15,35 @@ test("ISO calendar weeks use Monday-based week years", () => {
   assert.equal(isoWeekNumber("2026-01-01"), 1);
   assert.equal(isoWeekNumber("2027-01-01"), 53);
   assert.equal(isoWeekNumber("2027-01-04"), 1);
+});
+
+test("multi-day timed ranges expose accurate agenda segments", () => {
+  const start = "2026-08-03T17:00:00.000Z";
+  const end = "2026-08-06T19:00:00.000Z";
+
+  assert.equal(timedRangeDaySegment(start, end, "2026-08-02"), null);
+  assert.equal(timedRangeDaySegment(start, end, "2026-08-03"), "starts");
+  assert.equal(timedRangeDaySegment(start, end, "2026-08-04"), "full-day");
+  assert.equal(timedRangeDaySegment(start, end, "2026-08-05"), "full-day");
+  assert.equal(timedRangeDaySegment(start, end, "2026-08-06"), "ends");
+});
+
+test("an exclusive midnight ending does not create another agenda day", () => {
+  const start = "2026-08-03T00:00:00.000Z";
+  const end = "2026-08-05T00:00:00.000Z";
+
+  assert.equal(timedRangeDaySegment(start, end, "2026-08-03"), "full-day");
+  assert.equal(timedRangeDaySegment(start, end, "2026-08-04"), "full-day");
+  assert.equal(timedRangeDaySegment(start, end, "2026-08-05"), null);
+});
+
+test("agenda segments remain continuous across a month boundary", () => {
+  const start = "2026-08-31T17:00:00.000Z";
+  const end = "2026-09-02T19:00:00.000Z";
+
+  assert.equal(timedRangeDaySegment(start, end, "2026-08-31"), "starts");
+  assert.equal(timedRangeDaySegment(start, end, "2026-09-01"), "full-day");
+  assert.equal(timedRangeDaySegment(start, end, "2026-09-02"), "ends");
 });
 
 test("holiday sources are not rendered as duplicate calendar overlays", () => {

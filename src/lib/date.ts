@@ -1,3 +1,9 @@
+import {
+  dateKeysForTimedRange,
+  isValidDateKey,
+  isValidTimedRange
+} from "../../shared/temporal";
+
 export function localDate(value: string | Date): Date {
   if (value instanceof Date) return new Date(value);
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date(`${value}T12:00:00`);
@@ -162,6 +168,29 @@ export function entryDateKeys(startDateTime: string, endDateTime: string): strin
   return dateKeysForTimedRange(startDateTime, endDateTime);
 }
 
+export type TimedRangeDaySegment = "same-day" | "starts" | "full-day" | "ends";
+
+export function timedRangeDaySegment(
+  startDateTime: string,
+  endDateTime: string,
+  dateKey: string
+): TimedRangeDaySegment | null {
+  if (!isValidDateKey(dateKey) || !isValidTimedRange(startDateTime, endDateTime)) return null;
+
+  const startDate = startDateTime.slice(0, 10);
+  const endDate = endDateTime.slice(0, 10);
+  const endsAtMidnight = endDateTime.slice(11, 16) === "00:00";
+  if (dateKey < startDate || dateKey > endDate || (dateKey === endDate && endsAtMidnight)) {
+    return null;
+  }
+  if (startDate === endDate) return "same-day";
+
+  const startsAtMidnight = startDateTime.slice(11, 16) === "00:00";
+  if (dateKey === startDate && !startsAtMidnight) return "starts";
+  if (dateKey === endDate) return "ends";
+  return "full-day";
+}
+
 export function isWeekendDate(dateKey: string): boolean {
   const day = localDate(dateKey).getDay();
   return day === 0 || day === 6;
@@ -199,4 +228,3 @@ function dateFormatter(
   formatterCache.set(key, formatter);
   return formatter;
 }
-import { dateKeysForTimedRange } from "../../shared/temporal";
