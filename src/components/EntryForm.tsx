@@ -10,6 +10,8 @@ import {
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
 import { useAppStore } from "../store/AppStore";
+import { api } from "../lib/api";
+import type { ApiCareConflictPreview } from "../../shared/api";
 import type {
   CareEntry,
   CareDeviationType,
@@ -25,6 +27,7 @@ import type {
 import { FieldHelpButton, FieldHelpLabel } from "./FieldHelp";
 import { Icon } from "./Icon";
 import { isValidTimedRange } from "../../shared/temporal";
+import { DateTimeRange } from "./DateTimeRange";
 
 interface EntryFormProps {
   entry?: CareEntry;
@@ -112,7 +115,7 @@ export function EntryForm({
   onCancel
 }: EntryFormProps) {
   const { locale, intlLocale } = useI18n();
-  const { data, saveEntry, removeEntry, canWrite, isSaving, session } = useAppStore();
+  const { data, saveEntry, removeEntry, canWrite, isSaving, session, reload } = useAppStore();
   const scheduler = session.workspaceRole === "scheduler";
   const schedulerCanEdit = !scheduler || !entry || (
     entry.status === "planned" && Date.parse(entry.startDateTime) > Date.now()
@@ -194,6 +197,8 @@ export function EntryForm({
   );
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [conflictPreview, setConflictPreview] = useState<ApiCareConflictPreview | null>(null);
+  const [confirmedConflictFingerprint, setConfirmedConflictFingerprint] = useState<string>();
 
   const startDateTime = `${startDate}T${startTime}`;
   const endDateTime = `${endDate}T${endTime}`;
@@ -209,6 +214,17 @@ export function EntryForm({
         .filter((child) => childIds.includes(child.id))
         .map((child) => child.name),
     [childIds, data.children]
+  );
+  const existingConflicts = useMemo(
+    () => entry
+      ? data.careConflicts.flatMap((conflict) => {
+          if (!conflict.entryIds.includes(entry.id)) return [];
+          const otherId = conflict.entryIds.find((id) => id !== entry.id);
+          const otherEntry = data.entries.find((item) => item.id === otherId);
+          return otherEntry ? [{ conflict, entry: otherEntry }] : [];
+        })
+      : [],
+    [data.careConflicts, data.entries, entry]
   );
 
   const toggleOvernight = (checked: boolean) => {
@@ -282,7 +298,7 @@ export function EntryForm({
       return;
     }
 
-    const saved = await saveEntry({
+    const entryInput = {
       id: entry?.id,
       date: startDate,
       startDateTime,
@@ -328,9 +344,42 @@ export function EntryForm({
       costs: costs.map((cost) => ({
         ...cost,
         notes: cost.notes?.trim() || undefined
-      }))
-    });
+      })),
+      confirmPlannedConflict: Boolean(confirmedConflictFingerprint),
+      conflictFingerprint: confirmedConflictFingerprint
+    };
+    if (status === "planned") {
+      try {
+        const preview = await api.previewCareConflicts(entryInput, entry?.id);
+        if (preview.items.length && preview.fingerprint !== confirmedConflictFingerprint) {
+          setConflictPreview(preview);
+          setConfirmedConflictFingerprint(undefined);
+          return;
+        }
+        setConflictPreview(null);
+      } catch {
+        setError(copy(locale, "careConflict", "previewFailed"));
+        return;
+      }
+    }
+    const saved = await saveEntry(entryInput);
     if (saved) onSaved();
+  };
+
+  const resolveRuleConflict = async (conflictId: string) => {
+    if (!entry) return;
+    setError("");
+    try {
+      await api.resolveCareConflict({
+        conflictId,
+        entryId: entry.id,
+        action: "replace_rule_occurrence"
+      });
+      await reload();
+      onSaved();
+    } catch {
+      setError(copy(locale, "careConflict", "changed"));
+    }
   };
 
   const handleDelete = async () => {
@@ -350,6 +399,33 @@ export function EntryForm({
             <p>{copy(locale, "entryForm", "plannedRuleDescription")}</p>
           </div>
         </div>
+      ) : null}
+
+      {existingConflicts.length ? (
+        <section className="conflict-review" aria-labelledby="existing-conflicts-title">
+          <div className="conflict-review__heading">
+            <Icon name="alert" size={19} />
+            <div>
+              <h3 id="existing-conflicts-title">{copy(locale, "careConflict", "reviewTitle")}</h3>
+              <p>{copy(locale, "careConflict", "reviewDescription")}</p>
+            </div>
+          </div>
+          {existingConflicts.map((item) => (
+            <div className="conflict-review__item" key={item.conflict.id}>
+              <div>
+                <strong>{data.children.filter((child) => item.entry.childIds.includes(child.id)).map((child) => child.name).join(", ")}</strong>
+                <DateTimeRange startDateTime={item.entry.startDateTime} endDateTime={item.entry.endDateTime} />
+                <small>{data.careParties.find((party) => party.id === item.entry.responsiblePartyId)?.name ?? copy(locale, "common", "notAvailable")}</small>
+              </div>
+              {entry?.contactRuleId && entry.status === "planned" ? (
+                <button className="button button--danger-quiet" type="button" onClick={() => void resolveRuleConflict(item.conflict.id)}>
+                  <Icon name="repeat" size={16} />
+                  {copy(locale, "careConflict", "replaceOccurrence")}
+                </button>
+              ) : <span>{copy(locale, "careConflict", "editGuidance")}</span>}
+            </div>
+          ))}
+        </section>
       ) : null}
 
       {data.children.length === 0 ? (
@@ -893,6 +969,35 @@ export function EntryForm({
       </details> : null}
 
       {error ? <p className="form-error" role="alert">{error}</p> : null}
+
+      {conflictPreview?.items.length ? (
+        <section className="conflict-review" aria-labelledby="preview-conflicts-title">
+          <div className="conflict-review__heading">
+            <Icon name="alert" size={19} />
+            <div>
+              <h3 id="preview-conflicts-title">{copy(locale, "careConflict", "confirmTitle")}</h3>
+              <p>{copy(locale, "careConflict", "confirmDescription")}</p>
+            </div>
+          </div>
+          {conflictPreview.items.map((item) => (
+            <div className="conflict-review__item" key={item.conflict.id}>
+              <div>
+                <strong>{data.children.filter((child) => item.entry.childIds.includes(child.id)).map((child) => child.name).join(", ")}</strong>
+                <DateTimeRange startDateTime={item.entry.startDateTime} endDateTime={item.entry.endDateTime} />
+                <small>{data.careParties.find((party) => party.id === item.entry.responsiblePartyId)?.name ?? copy(locale, "common", "notAvailable")}</small>
+              </div>
+            </div>
+          ))}
+          <label className="check-row conflict-review__confirmation">
+            <input
+              type="checkbox"
+              checked={confirmedConflictFingerprint === conflictPreview.fingerprint}
+              onChange={(event) => setConfirmedConflictFingerprint(event.target.checked ? conflictPreview.fingerprint : undefined)}
+            />
+            <span>{copy(locale, "careConflict", "confirmCheckbox")}</span>
+          </label>
+        </section>
+      ) : null}
 
       <footer className="form-actions">
         {entry && session.permissions?.includes("appointments:delete") ? (

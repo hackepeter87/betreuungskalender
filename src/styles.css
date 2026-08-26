@@ -5366,6 +5366,75 @@ button.calendar-day-popover__item:hover {
   font-weight: 700;
 }
 
+.historical-sync {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-soft);
+}
+
+.historical-sync__heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.historical-sync__heading p,
+.historical-sync__result > p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+}
+
+.historical-sync__result {
+  display: grid;
+  gap: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+}
+
+.historical-sync__result dl {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.historical-sync__result dl > div {
+  display: grid;
+  gap: 3px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+}
+
+.historical-sync__result dt {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.historical-sync__result dd {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+@media (max-width: 640px) {
+  .historical-sync__heading {
+    display: grid;
+  }
+
+  .historical-sync__heading .button,
+  .historical-sync__result .button {
+    width: 100%;
+  }
+}
+
 .summary-strip--five {
   grid-template-columns: repeat(5, 1fr);
 }
@@ -7651,6 +7720,64 @@ button.calendar-day-popover__item:hover {
   margin-top: 5px;
   padding: 3px 6px;
   font-size: 0.59rem;
+}
+
+.conflict-review {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid var(--amber);
+  border-radius: var(--radius);
+  background: var(--amber-soft);
+}
+
+.conflict-review__heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.conflict-review__heading h3,
+.conflict-review__heading p {
+  margin: 0;
+}
+
+.conflict-review__heading p {
+  margin-top: 4px;
+  color: var(--muted);
+}
+
+.conflict-review__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.conflict-review__item > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+
+.conflict-review__item small {
+  color: var(--muted);
+}
+
+.conflict-review__confirmation {
+  align-items: flex-start;
+  font-weight: 700;
+}
+
+@media (max-width: 640px) {
+  .conflict-review__item {
+    align-items: stretch;
+    flex-direction: column;
+  }
 }
 
 .calendar-event--conflict-planned_warning {

@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import { createHash } from "node:crypto";
 import type { ApiCareConflict, ApiEntryStatus } from "../../shared/api.js";
 import {
   CareConflictDetectionLimitError,
@@ -43,6 +44,16 @@ export class CareConflictWorkLimitError extends Error {
   constructor() {
     super("Care conflict work limit exceeded.");
     this.name = "CareConflictWorkLimitError";
+  }
+}
+
+export class PlannedCareConflictPreviewRequiredError extends Error {
+  readonly code = "planned_care_conflict_confirmation_required";
+  readonly statusCode = 409;
+
+  constructor(readonly fingerprint: string) {
+    super("A current conflict preview must be confirmed before saving.");
+    this.name = "PlannedCareConflictPreviewRequiredError";
   }
 }
 
@@ -153,11 +164,11 @@ export function listCareConflictEntries(
           )
         )
       ))
-      OR (status = 'completed' AND EXISTS (
-        SELECT 1 FROM care_entry_children completed_child
-        WHERE completed_child.care_entry_id = care_entries.id
-          AND completed_child.deleted_at IS NULL
-          AND completed_child.child_id IN (${placeholders})
+      OR (status != 'partial' AND EXISTS (
+        SELECT 1 FROM care_entry_children planned_child
+        WHERE planned_child.care_entry_id = care_entries.id
+          AND planned_child.deleted_at IS NULL
+          AND planned_child.child_id IN (${placeholders})
       ))
     )`);
     values.push(...childIds, ...childIds, ...childIds);
@@ -192,6 +203,72 @@ export function listCareConflicts(
   return detectCareConflicts(listCareConflictEntries(database), {
     maxConflicts: MAX_CARE_CONFLICT_RESULTS
   });
+}
+
+const previewCandidateId = "__care_conflict_candidate__";
+
+export function previewPlannedCareConflicts(
+  candidate: Omit<CareConflictEntry, "id">,
+  database: Database.Database,
+  excludeId?: string
+): { conflicts: ApiCareConflict[]; fingerprint: string } {
+  if (candidate.status !== "planned") {
+    return { conflicts: [], fingerprint: createHash("sha256").update("no-planned-conflict").digest("hex") };
+  }
+  const entries = listCareConflictEntries(database, {
+    childIds: candidate.childIds,
+    endAfter: candidate.startDateTime,
+    excludeId,
+    maxChildLinks: MAX_ACTUAL_CONFLICT_CHILD_LINKS,
+    maxEntries: MAX_ACTUAL_CONFLICT_CANDIDATES,
+    startBefore: candidate.endDateTime
+  });
+  const conflicts = detectCareConflicts([
+    ...entries,
+    { ...candidate, id: previewCandidateId }
+  ], { maxConflicts: MAX_ACTUAL_CONFLICT_CANDIDATES })
+    .filter((conflict) => conflict.entryIds.includes(previewCandidateId));
+  const fingerprint = createHash("sha256").update(JSON.stringify({
+    candidate: {
+      startDateTime: candidate.startDateTime,
+      endDateTime: candidate.endDateTime,
+      childIds: [...new Set(candidate.childIds)].sort(),
+      status: candidate.status
+    },
+    conflicts: conflicts.map((conflict) => ({
+      entryIds: conflict.entryIds.filter((id) => id !== previewCandidateId),
+      childIds: conflict.childIds,
+      startDateTime: conflict.startDateTime,
+      endDateTime: conflict.endDateTime,
+      severity: conflict.severity
+    }))
+  })).digest("hex");
+  return { conflicts, fingerprint };
+}
+
+export function assertPlannedCareConflictAcknowledged(input: {
+  candidate: Omit<CareConflictEntry, "id">;
+  confirmPlannedConflict: boolean;
+  conflictFingerprint?: string;
+  database: Database.Database;
+  excludeId?: string;
+}): void {
+  const preview = previewPlannedCareConflicts(input.candidate, input.database, input.excludeId);
+  if (
+    preview.conflicts.length &&
+    (!input.confirmPlannedConflict || input.conflictFingerprint !== preview.fingerprint)
+  ) {
+    throw new PlannedCareConflictPreviewRequiredError(preview.fingerprint);
+  }
+}
+
+export function careConflictEntryIds(database: Database.Database): Set<string> | undefined {
+  try {
+    return new Set(listCareConflicts(database).flatMap((conflict) => conflict.entryIds));
+  } catch (error) {
+    if (isCareConflictWorkLimitError(error)) return undefined;
+    throw error;
+  }
 }
 
 export function assertNoActualCareConflict(
@@ -239,6 +316,13 @@ export function assertNoActualCareConflict(
 export function isCareEntryConflictError(error: unknown): error is CareEntryConflictError {
   return error instanceof CareEntryConflictError ||
     (error instanceof Error && (error as { code?: string }).code === "care_entry_conflict");
+}
+
+export function isPlannedCareConflictPreviewRequiredError(
+  error: unknown
+): error is PlannedCareConflictPreviewRequiredError {
+  return error instanceof PlannedCareConflictPreviewRequiredError ||
+    (error instanceof Error && (error as { code?: string }).code === "planned_care_conflict_confirmation_required");
 }
 
 export function isCareConflictWorkLimitError(error: unknown): boolean {

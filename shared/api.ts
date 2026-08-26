@@ -205,6 +205,22 @@ export interface ApiCareConflictList {
   complete: boolean;
 }
 
+export interface ApiCareConflictPreviewItem {
+  conflict: ApiCareConflict;
+  entry: ApiCareEntry;
+}
+
+export interface ApiCareConflictPreview {
+  fingerprint: string;
+  items: ApiCareConflictPreviewItem[];
+}
+
+export interface ApiCareConflictResolutionInput {
+  conflictId: string;
+  entryId: string;
+  action: "replace_rule_occurrence";
+}
+
 export interface ApiCareConfirmationRequest {
   id: string;
   careEntryId: string;
@@ -590,6 +606,17 @@ export interface ApiContactRuleSyncSummary {
   updated: number;
   skipped: number;
   preserved: number;
+}
+
+export interface ApiContactRuleSyncPreview {
+  fingerprint: string;
+  startDate: string;
+  endDate: string;
+  create: number;
+  alreadyPresent: number;
+  manualExceptions: number;
+  conflicts: number;
+  pastOccurrences: number;
 }
 
 export interface ApiContactRule {

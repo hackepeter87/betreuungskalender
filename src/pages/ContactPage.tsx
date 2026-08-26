@@ -27,6 +27,7 @@ import { useAppStore } from "../store/AppStore";
 import type { CareEntry } from "../types";
 import type {
   ApiContactRuleSegment,
+  ApiContactRuleSyncPreview,
   ContactRuleMonthlyOrdinal,
   ContactRuleRecurrence,
   ContactRuleWeekday
@@ -213,6 +214,8 @@ export function ContactPage({
     data,
     saveContactRule,
     syncContactRule,
+    previewHistoricalContactRuleSync,
+    syncHistoricalContactRule,
     canWrite,
     isSaving
   } = useAppStore();
@@ -262,6 +265,9 @@ export function ContactPage({
   const [generationStart, setGenerationStart] = useState(defaultRange.startDate);
   const [generationEnd, setGenerationEnd] = useState(defaultRange.endDate);
   const [message, setMessage] = useState("");
+  const [historicalPreview, setHistoricalPreview] = useState<ApiContactRuleSyncPreview | null>(null);
+  const [historicalPreviewConfirmed, setHistoricalPreviewConfirmed] = useState(false);
+  const [historicalPreviewLoading, setHistoricalPreviewLoading] = useState(false);
   const [mobileRuleStep, setMobileRuleStep] = useState<MobileRuleStep>(1);
   const recurrence = useMemo<ContactRuleRecurrence>(() => {
     return {
@@ -429,6 +435,41 @@ export function ContactPage({
             to: formatDate(synced.syncSummary.endDate, intlLocale)
           })
         : contactSyncMessage(locale, "noChanges")
+    );
+  };
+
+  const invalidateHistoricalPreview = () => {
+    setHistoricalPreview(null);
+    setHistoricalPreviewConfirmed(false);
+  };
+
+  const previewHistoricalSync = async () => {
+    if (!ruleId) {
+      setMessage(copy(locale, "contact", "saveFirst"));
+      return;
+    }
+    setHistoricalPreviewLoading(true);
+    try {
+      const preview = await previewHistoricalContactRuleSync(ruleId, generationStart, generationEnd);
+      setHistoricalPreview(preview);
+      setHistoricalPreviewConfirmed(false);
+      if (preview) setMessage("");
+    } finally {
+      setHistoricalPreviewLoading(false);
+    }
+  };
+
+  const executeHistoricalSync = async () => {
+    if (!ruleId || !historicalPreview || !historicalPreviewConfirmed) return;
+    const synced = await syncHistoricalContactRule(ruleId, historicalPreview);
+    if (!synced?.syncSummary) return;
+    const changed = synced.syncSummary.created + synced.syncSummary.updated;
+    setHistoricalPreview(null);
+    setHistoricalPreviewConfirmed(false);
+    setMessage(
+      changed
+        ? copy(locale, "contactHistory", "completed", { count: changed })
+        : copy(locale, "contactHistory", "noChanges")
     );
   };
 
@@ -761,11 +802,17 @@ export function ContactPage({
             <div className="form-grid form-grid--two">
               <label className="field">
                 <FieldHelpLabel fieldId="contactPattern.generationRange">{copy(locale, "common", "from")}</FieldHelpLabel>
-                <input data-testid="contact-generation-start" type="date" value={generationStart} onChange={(event) => setGenerationStart(event.target.value)} />
+                <input data-testid="contact-generation-start" type="date" value={generationStart} onChange={(event) => {
+                  setGenerationStart(event.target.value);
+                  invalidateHistoricalPreview();
+                }} />
               </label>
               <label className="field">
                 <FieldHelpLabel fieldId="contactPattern.generationRange">{copy(locale, "common", "to")}</FieldHelpLabel>
-                <input data-testid="contact-generation-end" type="date" value={generationEnd} onChange={(event) => setGenerationEnd(event.target.value)} />
+                <input data-testid="contact-generation-end" type="date" value={generationEnd} onChange={(event) => {
+                  setGenerationEnd(event.target.value);
+                  invalidateHistoricalPreview();
+                }} />
               </label>
             </div>
             <div className="contact-generation-preview" data-testid="contact-generation-preview">
@@ -824,6 +871,56 @@ export function ContactPage({
                 ) : null}
               </div>
             </div>
+            {ruleId ? (
+              <div className="historical-sync" data-testid="contact-historical-sync">
+                <div className="historical-sync__heading">
+                  <div>
+                    <strong>{copy(locale, "contactHistory", "title")}</strong>
+                    <p>{copy(locale, "contactHistory", "description")}</p>
+                  </div>
+                  <button
+                    className="button button--secondary"
+                    type="button"
+                    onClick={() => void previewHistoricalSync()}
+                    disabled={!canWrite || isSaving || historicalPreviewLoading || generationEnd < generationStart}
+                  >
+                    <Icon name="history" size={17} />
+                    {copy(locale, "contactHistory", "preview")}
+                  </button>
+                </div>
+                {historicalPreview ? (
+                  <div className="historical-sync__result" data-testid="contact-historical-sync-result">
+                    <dl>
+                      <div><dt>{copy(locale, "contactHistory", "create")}</dt><dd>{historicalPreview.create}</dd></div>
+                      <div><dt>{copy(locale, "contactHistory", "existing")}</dt><dd>{historicalPreview.alreadyPresent}</dd></div>
+                      <div><dt>{copy(locale, "contactHistory", "exceptions")}</dt><dd>{historicalPreview.manualExceptions}</dd></div>
+                      <div><dt>{copy(locale, "contactHistory", "conflicts")}</dt><dd>{historicalPreview.conflicts}</dd></div>
+                      <div><dt>{copy(locale, "contactHistory", "past")}</dt><dd>{historicalPreview.pastOccurrences}</dd></div>
+                    </dl>
+                    <p>{copy(locale, "contactHistory", "reminderNotice")}</p>
+                    <label className="checkbox-row">
+                      <input
+                        type="checkbox"
+                        checked={historicalPreviewConfirmed}
+                        onChange={(event) => setHistoricalPreviewConfirmed(event.target.checked)}
+                      />
+                      <span>{copy(locale, "contactHistory", "confirm")}</span>
+                    </label>
+                    <div className="form-actions__right">
+                      <button
+                        className="button button--primary"
+                        type="button"
+                        onClick={() => void executeHistoricalSync()}
+                        disabled={!historicalPreviewConfirmed || !canWrite || isSaving}
+                      >
+                        <Icon name="repeat" size={17} />
+                        {copy(locale, "contactHistory", "execute")}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <FieldHelpButton fieldId="contactPattern.duplicatePrevention" showRequirement={false} />
             {message ? <p className="inline-message" role="status" data-testid="contact-message">{message}</p> : null}
           </div>

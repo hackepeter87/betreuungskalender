@@ -234,6 +234,12 @@ test("batches multiple due confirmations into one push per user", async () => {
     FROM care_entries WHERE id = ?
   `).run("entry-confirmation-b", "entry-confirmation-a");
   db.prepare(`
+    UPDATE care_entries
+    SET start_datetime = '2026-07-02T18:00:00.000Z',
+      end_datetime = '2026-07-02T20:00:00.000Z'
+    WHERE id = 'entry-confirmation-b'
+  `).run();
+  db.prepare(`
     INSERT INTO care_entry_children (
       care_entry_id, child_id, created_at, updated_at
     )
@@ -261,6 +267,36 @@ test("batches multiple due confirmations into one push per user", async () => {
   assert.equal(deliveries, 1);
   assert.equal(rows.length, 2);
   assert.equal(rows.every((row) => Boolean(row.sentAt) && row.reminderCount === 1), true);
+});
+
+test("suppresses existing confirmation requests while a planned conflict is open", async () => {
+  insertPastPlannedEntry();
+  assert.equal(createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z")), 1);
+  db.prepare(`
+    INSERT INTO care_entries (
+      id, start_datetime, end_datetime, status, care_scope,
+      overnight, school_handover, holiday, weekend, additional_care,
+      responsible_party_id, duration_minutes, is_contact_time, created_by, updated_by,
+      created_at, updated_at
+    )
+    SELECT 'entry-conflicting', start_datetime, end_datetime, status, care_scope,
+      overnight, school_handover, holiday, weekend, additional_care,
+      responsible_party_id, duration_minutes, is_contact_time, created_by, updated_by,
+      created_at, updated_at
+    FROM care_entries WHERE id = 'entry-confirmation-a'
+  `).run();
+  db.prepare(`
+    INSERT INTO care_entry_children (care_entry_id, child_id, created_at, updated_at)
+    SELECT 'entry-conflicting', child_id, created_at, updated_at
+    FROM care_entry_children WHERE care_entry_id = 'entry-confirmation-a'
+  `).run();
+
+  const open = await listOpenCareConfirmations("local-dev");
+  const activeRequests = db.prepare(`
+    SELECT COUNT(*) AS count FROM care_confirmation_requests WHERE deleted_at IS NULL
+  `).get() as { count: number };
+  assert.deepEqual(open, []);
+  assert.equal(activeRequests.count, 0);
 });
 
 test("answers a confirmation request and stores partial status with audit metadata", () => {
@@ -334,6 +370,7 @@ test("answers a confirmation request and stores partial status with audit metada
 
 test("rejects confirmation when actual care would overlap an existing actual entry", () => {
   insertPastPlannedEntry();
+  createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z"));
   db.prepare(`
     INSERT INTO care_entries (
       id, start_datetime, end_datetime, status, care_scope,
@@ -352,7 +389,6 @@ test("rejects confirmation when actual care would overlap an existing actual ent
     SELECT ?, child_id, created_at, updated_at
     FROM care_entry_children WHERE care_entry_id = ?
   `).run("entry-confirmation-conflict", "entry-confirmation-a");
-  createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z"));
   const request = db.prepare(`
     SELECT id FROM care_confirmation_requests
     WHERE care_entry_id = ? AND user_id = ?
