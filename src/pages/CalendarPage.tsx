@@ -5,9 +5,10 @@ import { Icon } from "../components/Icon";
 import { MonthToolbar } from "../components/MonthToolbar";
 import { UnavailablePeriodForm } from "../components/UnavailablePeriodForm";
 import { Modal } from "../components/Modal";
-import { entriesForMonth, unavailablePeriodsForRange } from "../lib/analytics";
+import { entriesForRange, unavailablePeriodsForRange } from "../lib/analytics";
 import { formatMonth } from "../lib/date";
 import { rangeForMonth } from "../lib/date";
+import { calendarGridRange, filterCalendarOverlayEvents } from "../lib/calendar";
 import { useAppStore } from "../store/AppStore";
 import { useMediaQuery } from "../hooks/useMediaQuery";
 import { useI18n } from "../i18n/I18nProvider";
@@ -49,33 +50,59 @@ export function CalendarPage({
   const canCreateAppointments = session.permissions?.includes("appointments:create") ?? true;
   const canManagePlanning = session.permissions?.includes("planning:manage") ?? true;
   const canViewPlanning = session.permissions?.includes("planning:view") ?? true;
-  const visibleRange = useMemo(() => rangeForMonth(monthKey), [monthKey]);
-  const entries = useMemo(() => entriesForMonth(data.entries, monthKey), [data.entries, monthKey]);
-  const holidayPeriods = useMemo(
+  const monthRange = useMemo(() => rangeForMonth(monthKey), [monthKey]);
+  const gridRange = useMemo(() => calendarGridRange(monthKey), [monthKey]);
+  const monthEntries = useMemo(
+    () => entriesForRange(data.entries, monthRange.startDate, monthRange.endDate),
+    [data.entries, monthRange.endDate, monthRange.startDate]
+  );
+  const gridEntries = useMemo(
+    () => entriesForRange(data.entries, gridRange.startDate, gridRange.endDate),
+    [data.entries, gridRange.endDate, gridRange.startDate]
+  );
+  const monthHolidayPeriods = useMemo(
     () => holidayPeriodsForMonth(data.holidayPeriods, monthKey),
     [data.holidayPeriods, monthKey]
   );
-  const unavailablePeriods = useMemo(
+  const gridHolidayPeriods = useMemo(
+    () => data.holidayPeriods.filter((period) =>
+      !period.deletedAt && period.startDate <= gridRange.endDate && period.endDate >= gridRange.startDate
+    ),
+    [data.holidayPeriods, gridRange.endDate, gridRange.startDate]
+  );
+  const monthUnavailablePeriods = useMemo(
     () => unavailablePeriodsForRange(
       data.unavailablePeriods,
-      visibleRange.startDate,
-      visibleRange.endDate
+      monthRange.startDate,
+      monthRange.endDate
     ),
-    [data.unavailablePeriods, visibleRange.endDate, visibleRange.startDate]
+    [data.unavailablePeriods, monthRange.endDate, monthRange.startDate]
+  );
+  const gridUnavailablePeriods = useMemo(
+    () => unavailablePeriodsForRange(
+      data.unavailablePeriods,
+      gridRange.startDate,
+      gridRange.endDate
+    ),
+    [data.unavailablePeriods, gridRange.endDate, gridRange.startDate]
+  );
+  const overlayEvents = useMemo(
+    () => filterCalendarOverlayEvents(externalEvents, data.externalCalendarSources),
+    [data.externalCalendarSources, externalEvents]
   );
   const hasCalendarContent =
-    entries.length > 0 ||
-    holidayPeriods.length > 0 ||
-    unavailablePeriods.length > 0 ||
-    externalEvents.length > 0;
+    monthEntries.length > 0 ||
+    monthHolidayPeriods.length > 0 ||
+    monthUnavailablePeriods.length > 0 ||
+    overlayEvents.length > 0;
 
   useEffect(() => {
     if (!canViewPlanning) {
       setExternalEvents([]);
       return;
     }
-    void api.listExternalCalendarEvents(`${visibleRange.startDate}T00:00:00.000Z`, `${visibleRange.endDate}T23:59:59.999Z`).then(setExternalEvents).catch(() => setExternalEvents([]));
-  }, [canViewPlanning, visibleRange.endDate, visibleRange.startDate]);
+    void api.listExternalCalendarEvents(`${gridRange.startDate}T00:00:00.000Z`, `${gridRange.endDate}T23:59:59.999Z`).then(setExternalEvents).catch(() => setExternalEvents([]));
+  }, [canViewPlanning, gridRange.endDate, gridRange.startDate]);
 
   useEffect(() => {
     setView(isMobile ? "agenda" : "month");
@@ -150,12 +177,12 @@ export function CalendarPage({
 
       {view === "agenda" ? (
         <CalendarAgenda
-          entries={entries}
-          unavailablePeriods={unavailablePeriods}
-          externalEvents={externalEvents}
-          holidayPeriods={holidayPeriods}
-          visibleStartDate={visibleRange.startDate}
-          visibleEndDate={visibleRange.endDate}
+          entries={monthEntries}
+          unavailablePeriods={monthUnavailablePeriods}
+          externalEvents={overlayEvents}
+          holidayPeriods={monthHolidayPeriods}
+          visibleStartDate={monthRange.startDate}
+          visibleEndDate={monthRange.endDate}
           children={data.children}
           conflicts={data.careConflicts}
           canWrite={canWrite}
@@ -169,10 +196,10 @@ export function CalendarPage({
           <section className="panel calendar-panel calendar-panel--large" data-testid="calendar-month-view">
             <CalendarGrid
               monthKey={monthKey}
-              entries={entries}
-              unavailablePeriods={unavailablePeriods}
-              externalEvents={externalEvents}
-              holidayPeriods={holidayPeriods}
+              entries={gridEntries}
+              unavailablePeriods={gridUnavailablePeriods}
+              externalEvents={overlayEvents}
+              holidayPeriods={gridHolidayPeriods}
               children={data.children}
               conflicts={data.careConflicts}
               onSelectDate={onNewEntry}
