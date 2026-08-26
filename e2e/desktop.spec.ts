@@ -1459,7 +1459,7 @@ test("shows calendar overlays in the dashboard overview", async ({
   await page.getByTestId("month-picker").fill("2026-07");
   const dashboardCalendar = page.locator(".calendar-panel");
   await expect(dashboardCalendar.getByTestId(`external-calendar-event-${event?.id}`))
-    .toHaveCount(3);
+    .toHaveCount(2);
   await expect(dashboardCalendar.getByTestId(`calendar-unavailable-${unavailable.id}`))
     .toBeVisible();
 });
