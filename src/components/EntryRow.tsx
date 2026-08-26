@@ -1,10 +1,11 @@
-import { formatDate, formatDateTime, formatTime } from "../lib/date";
+import { formatDateTime } from "../lib/date";
 import { deviationLabel, locationLabels, statusLabels } from "../lib/labels";
 import type { CareConflict, CareEntry, Child } from "../types";
 import { CareConflictIndicator } from "./CareConflictIndicator";
 import { Icon } from "./Icon";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
+import { DateTimeRange } from "./DateTimeRange";
 
 export function EntryRow({
   entry,
@@ -28,15 +29,14 @@ export function EntryRow({
     .filter((child): child is Child => Boolean(child));
   const activeTrips = entry.trips.filter((trip) => !trip.deletedAt);
   const plannedRange = entry.plannedStartDateTime && entry.plannedEndDateTime
-    ? `${formatDate(entry.plannedStartDateTime, intlLocale)} ${formatTime(entry.plannedStartDateTime, intlLocale)}-${formatTime(entry.plannedEndDateTime, intlLocale)}`
+    ? <DateTimeRange startDateTime={entry.plannedStartDateTime} endDateTime={entry.plannedEndDateTime} />
     : undefined;
 
   return (
     <button className="entry-row" type="button" data-testid={`entry-row-${entry.id}`} onClick={onClick}>
       <span className={`status-rail status-rail--${entry.status}`} />
       <span className="entry-row__date">
-        <strong>{formatDate(entry.startDateTime, intlLocale)}</strong>
-        <small>{formatTime(entry.startDateTime, intlLocale)}–{formatTime(entry.endDateTime, intlLocale)}</small>
+        <DateTimeRange startDateTime={entry.startDateTime} endDateTime={entry.endDateTime} />
       </span>
       <span className="entry-row__children">
         <span className="child-dots">

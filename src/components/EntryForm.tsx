@@ -24,6 +24,7 @@ import type {
 } from "../types";
 import { FieldHelpButton, FieldHelpLabel } from "./FieldHelp";
 import { Icon } from "./Icon";
+import { isValidTimedRange } from "../../shared/temporal";
 
 interface EntryFormProps {
   entry?: CareEntry;
@@ -200,6 +201,8 @@ export function EntryForm({
   const actualEndDateTime = `${actualEndDate}T${actualEndTime}`;
   const originalPlanStart = entry?.plannedStartDateTime ?? entry?.startDateTime ?? startDateTime;
   const originalPlanEnd = entry?.plannedEndDateTime ?? entry?.endDateTime ?? endDateTime;
+  const rangeInvalid = !isValidTimedRange(startDateTime, endDateTime);
+  const actualRangeInvalid = status === "partial" && !isValidTimedRange(actualStartDateTime, actualEndDateTime);
   const selectedNames = useMemo(
     () =>
       data.children
@@ -235,14 +238,14 @@ export function EntryForm({
     if (!childIds.length) {
       nextErrors.children = copy(locale, "entryForm", "childRequired");
     }
-    if (new Date(endDateTime) <= new Date(startDateTime)) {
+    if (rangeInvalid) {
       nextErrors.endDateTime = copy(locale, "entryForm", "endAfterStart");
     }
     const selectedActualChildIds = actualChildIds.filter((id) => childIds.includes(id));
     if (status === "partial" && !selectedActualChildIds.length) {
       nextErrors.actualChildren = copy(locale, "entryForm", "childRequired");
     }
-    if (status === "partial" && new Date(actualEndDateTime) <= new Date(actualStartDateTime)) {
+    if (actualRangeInvalid) {
       nextErrors.actualEndDateTime = copy(locale, "entryForm", "endAfterStart");
     }
     if (status === "cancelled" && !cancellationReason.trim()) {
@@ -578,7 +581,9 @@ export function EntryForm({
                 type="date"
                 data-testid="entry-actual-end-date"
                 value={actualEndDate}
-                aria-invalid={Boolean(fieldErrors.actualEndDateTime)}
+                min={actualStartDate}
+                aria-invalid={actualRangeInvalid || Boolean(fieldErrors.actualEndDateTime)}
+                aria-describedby={actualRangeInvalid ? "actual-range-error" : undefined}
                 onChange={(event) => {
                   setActualEndDate(event.target.value);
                   setFieldErrors((errors) => ({ ...errors, actualEndDateTime: "" }));
@@ -591,7 +596,8 @@ export function EntryForm({
                 type="time"
                 data-testid="entry-actual-end-time"
                 value={actualEndTime}
-                aria-invalid={Boolean(fieldErrors.actualEndDateTime)}
+                aria-invalid={actualRangeInvalid || Boolean(fieldErrors.actualEndDateTime)}
+                aria-describedby={actualRangeInvalid ? "actual-range-error" : undefined}
                 onChange={(event) => {
                   setActualEndTime(event.target.value);
                   setFieldErrors((errors) => ({ ...errors, actualEndDateTime: "" }));
@@ -599,7 +605,7 @@ export function EntryForm({
               />
             </label>
           </div>
-          {fieldErrors.actualEndDateTime ? <p className="field-error">{fieldErrors.actualEndDateTime}</p> : null}
+          {actualRangeInvalid || fieldErrors.actualEndDateTime ? <p className="field-error" id="actual-range-error">{copy(locale, "entryForm", "endAfterStart")}</p> : null}
           {data.careParties.length ? (
             <label className="field">
               <span>{copy(locale, "confirmation", "actualCareParty")}</span>
@@ -630,8 +636,10 @@ export function EntryForm({
               type="date"
               data-testid="entry-end-date"
               required
+              min={startDate}
               value={endDate}
-              aria-invalid={Boolean(fieldErrors.endDateTime)}
+              aria-invalid={rangeInvalid || Boolean(fieldErrors.endDateTime)}
+              aria-describedby={rangeInvalid ? "entry-range-error" : undefined}
               onChange={(event) => {
                 setEndDate(event.target.value);
                 setFieldErrors((errors) => ({ ...errors, endDateTime: "" }));
@@ -645,7 +653,8 @@ export function EntryForm({
               data-testid="entry-end-time"
               required
               value={endTime}
-              aria-invalid={Boolean(fieldErrors.endDateTime)}
+              aria-invalid={rangeInvalid || Boolean(fieldErrors.endDateTime)}
+              aria-describedby={rangeInvalid ? "entry-range-error" : undefined}
               onChange={(event) => {
                 setEndTime(event.target.value);
                 setFieldErrors((errors) => ({ ...errors, endDateTime: "" }));
@@ -653,7 +662,7 @@ export function EntryForm({
             />
           </label>
         </div>
-        {fieldErrors.endDateTime ? <p className="field-error">{fieldErrors.endDateTime}</p> : null}
+        {rangeInvalid || fieldErrors.endDateTime ? <p className="field-error" id="entry-range-error">{copy(locale, "entryForm", "endAfterStart")}</p> : null}
         {!scheduler ? <div className="toggle-row">
           <label className="toggle">
             <input data-testid="entry-overnight" type="checkbox" checked={overnight} onChange={(event) => toggleOvernight(event.target.checked)} />
@@ -894,7 +903,7 @@ export function EntryForm({
         ) : <span />}
         <div className="form-actions__right">
           <button className="button button--secondary" type="button" onClick={onCancel}>{copy(locale, "common", "cancel")}</button>
-          <button className="button button--primary" data-testid="entry-submit" type="submit" disabled={data.children.length === 0 || !canWrite || !schedulerCanEdit || isSaving}>
+          <button className="button button--primary" data-testid="entry-submit" type="submit" disabled={data.children.length === 0 || !canWrite || !schedulerCanEdit || isSaving || rangeInvalid || actualRangeInvalid}>
             <Icon name="check" size={17} />
             {entry ? copy(locale, "entryForm", "saveChanges") : copy(locale, "entryForm", "saveEntry")}
           </button>

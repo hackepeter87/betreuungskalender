@@ -1844,6 +1844,22 @@ button.metric-card {
   font-size: 0.63rem;
 }
 
+.date-time-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 0.25rem;
+  line-height: 1.35;
+}
+
+.date-time-range__part {
+  white-space: nowrap;
+}
+
+.date-time-range__separator {
+  white-space: pre;
+}
+
 .entry-row__children {
   display: flex;
   min-width: 0;
