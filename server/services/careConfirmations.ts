@@ -13,7 +13,11 @@ import { config } from "../config.js";
 import { markClosedMonthsChanged, recordAudit, recordFieldChanges } from "./audit.js";
 import { assertCanUseCareParty, canUseCareParty } from "./carePartyAccess.js";
 import { assertActiveCareParty } from "./careParties.js";
-import { assertNoActualCareConflict } from "./careConflicts.js";
+import {
+  CareEntryConflictError,
+  assertNoActualCareConflict,
+  careConflictEntryIds
+} from "./careConflicts.js";
 import { assertActiveChildren, bool, makeId, nowIso, syncJunction } from "./common.js";
 import { userHasWorkspacePermission } from "./memberships.js";
 import { findAuthenticatedUserBySubject } from "./users.js";
@@ -285,12 +289,24 @@ export function invalidateInaccessibleCareConfirmations(
 
 export function createDueCareConfirmationRequests(referenceTime = new Date()): number {
   const timestamp = nowIso();
+  const conflictEntryIds = careConflictEntryIds(db);
+  if (!conflictEntryIds) return 0;
+  if (conflictEntryIds.size) {
+    const placeholders = [...conflictEntryIds].map(() => "?").join(", ");
+    db.prepare(`
+      UPDATE care_confirmation_requests
+      SET deleted_at = ?, updated_at = ?
+      WHERE answered_at IS NULL AND deleted_at IS NULL
+        AND care_entry_id IN (${placeholders})
+    `).run(timestamp, timestamp, ...conflictEntryIds);
+  }
   const entries = db.prepare(`
     SELECT *
     FROM care_entries
     WHERE deleted_at IS NULL
       AND status = 'planned'
       AND confirmed_at IS NULL
+      AND confirmation_suppressed = 0
       AND end_datetime < ?
     ORDER BY end_datetime, id
   `).all(referenceTime.toISOString()) as EntryRow[];
@@ -302,6 +318,7 @@ export function createDueCareConfirmationRequests(referenceTime = new Date()): n
       ) VALUES (?, ?, ?, ?, 'open', ?, ?)
     `);
     for (const entry of entries) {
+      if (conflictEntryIds.has(entry.id)) continue;
       for (const userId of usersForEntry(entry)) {
         const result = insert.run(
           makeId("confirm"),
@@ -494,6 +511,8 @@ export async function sendDueCareConfirmationPushes(
   deliverPush = sendPushForRequest
 ): Promise<number> {
   const now = referenceTime.toISOString();
+  const conflictEntryIds = careConflictEntryIds(db);
+  if (!conflictEntryIds) return 0;
   const rows = db.prepare(`
     SELECT *
     FROM care_confirmation_requests
@@ -507,6 +526,7 @@ export async function sendDueCareConfirmationPushes(
   `).all(now, now) as RequestRow[];
   const rowsByUser = new Map<string, RequestRow[]>();
   for (const row of rows) {
+    if (conflictEntryIds.has(row.care_entry_id)) continue;
     const entry = db.prepare("SELECT * FROM care_entries WHERE id = ? AND deleted_at IS NULL")
       .get(row.care_entry_id) as EntryRow | undefined;
     if (!entry || !canAccessConfirmation(currentUserForId(row.user_id), entry)) continue;
@@ -550,6 +570,8 @@ export async function runCareConfirmationSweep(referenceTime = new Date()): Prom
 
 export async function listOpenCareConfirmations(userOrId: RequestUser | string): Promise<ApiCareConfirmationRequest[]> {
   await runCareConfirmationSweep();
+  const conflictEntryIds = careConflictEntryIds(db);
+  if (!conflictEntryIds) return [];
   const user = typeof userOrId === "string" ? currentUserForId(userOrId) : userOrId;
   if (!user) return [];
   const rows = db.prepare(`
@@ -562,6 +584,7 @@ export async function listOpenCareConfirmations(userOrId: RequestUser | string):
     ORDER BY due_at, id
   `).all(user.id) as RequestRow[];
   return rows.flatMap((row) => {
+    if (conflictEntryIds.has(row.care_entry_id)) return [];
     const entry = db.prepare("SELECT * FROM care_entries WHERE id = ? AND deleted_at IS NULL")
       .get(row.care_entry_id) as EntryRow | undefined;
     return entry && canAccessConfirmation(user, entry) ? [mapRequest(row, entry)] : [];
@@ -583,6 +606,8 @@ export function answerCareConfirmation(
   const before = db.prepare("SELECT * FROM care_entries WHERE id = ? AND deleted_at IS NULL")
     .get(request.care_entry_id) as EntryRow | undefined;
   if (!before) return undefined;
+  const conflictEntryIds = careConflictEntryIds(db);
+  if (!conflictEntryIds || conflictEntryIds.has(before.id)) throw new CareEntryConflictError();
   if (typeof userOrId !== "string") {
     if (!canAccessConfirmation(userOrId, before)) return undefined;
     if (before.responsible_party_id) assertCanUseCareParty(userOrId, before.responsible_party_id);

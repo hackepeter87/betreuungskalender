@@ -205,6 +205,22 @@ export interface ApiCareConflictList {
   complete: boolean;
 }
 
+export interface ApiCareConflictPreviewItem {
+  conflict: ApiCareConflict;
+  entry: ApiCareEntry;
+}
+
+export interface ApiCareConflictPreview {
+  fingerprint: string;
+  items: ApiCareConflictPreviewItem[];
+}
+
+export interface ApiCareConflictResolutionInput {
+  conflictId: string;
+  entryId: string;
+  action: "replace_rule_occurrence";
+}
+
 export interface ApiCareConfirmationRequest {
   id: string;
   careEntryId: string;
@@ -478,6 +494,26 @@ export interface ApiAuditEntry {
   oldValue?: string;
   newValue?: string;
   metadataJson?: string;
+  effectiveDate?: string;
+}
+
+export interface ApiReportSnapshot {
+  reportId: string;
+  generatedAt: string;
+  startDate: string;
+  endDate: string;
+  dataUpdatedAt: string;
+  data: {
+    schemaVersion: number;
+    children: ApiChild[];
+    careParties: ApiCareParty[];
+    entries: ApiCareEntry[];
+    holidayPeriods: ApiHolidayPeriod[];
+    unavailablePeriods: ApiUnavailablePeriod[];
+    settings: Record<string, unknown>;
+    auditLog: ApiAuditEntry[];
+    monthClosures: ApiMonthlyClosing[];
+  };
 }
 
 export interface ApiSession {
@@ -570,6 +606,17 @@ export interface ApiContactRuleSyncSummary {
   updated: number;
   skipped: number;
   preserved: number;
+}
+
+export interface ApiContactRuleSyncPreview {
+  fingerprint: string;
+  startDate: string;
+  endDate: string;
+  create: number;
+  alreadyPresent: number;
+  manualExceptions: number;
+  conflicts: number;
+  pastOccurrences: number;
 }
 
 export interface ApiContactRule {

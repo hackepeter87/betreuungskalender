@@ -257,6 +257,12 @@ manually changed and must be preserved. The older `generated_by_pattern_id` and
 `rule_occurrence_date` columns remain for compatibility with legacy
 contact-pattern data and migration paths.
 
+Migration `031_historical_contact_rule_sync` adds
+`confirmation_suppressed` to `care_entries`. It is set only for past recurring
+occurrences created through the explicit historical synchronization flow.
+These entries remain planned and visible for grouped domain review, but they do
+not create automatic confirmation or reminder tasks.
+
 Confirmed care entries can store `confirmation_note`, `confirmed_at`, and
 `confirmed_by`. The note is optional and meant for short factual context such
 as a partial completion note. `confirmed_by` stores the stable `app_users.id`
@@ -317,6 +323,13 @@ two-week interval, Friday anchor, and a Friday-to-Sunday segment.
 `responsible_party_id` is copied from the rule to generated planned entries.
 Occurrence keys keep synchronization idempotent, while cancelled or manually
 changed entries are preserved as exceptions.
+
+Historical synchronization is a separate previewed action. Its requested range
+must stay within the rule and may cover at most 36 months. The server returns
+aggregate counts for new occurrences, existing entries, manual exceptions,
+overlaps, and past occurrences together with a preview fingerprint. The write
+recomputes the preview transactionally and accepts only the unchanged
+fingerprint.
 
 ## Holidays and unavailable periods
 
