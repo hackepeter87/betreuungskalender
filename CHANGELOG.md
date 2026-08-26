@@ -6,6 +6,17 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.23.1] - 2026-08-26
+
+### Fixed
+
+- Keep dashboard confirmation, child summary, data quality, and backup panels
+  proportionate across wide desktop and responsive tablet layouts.
+- Compose settings fields into bounded, readable columns on wide screens while
+  preserving the fluid section baseline.
+- Stack external-calendar file and feed controls within their settings panel on
+  tablet and mobile viewports without horizontal overflow.
+
 ## [1.23.0] - 2026-08-24
 
 ### Changed
