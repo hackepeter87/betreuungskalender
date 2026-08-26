@@ -46,7 +46,8 @@ included in repository screenshots.
 - Mobile agenda, tablet/desktop calendar, responsive forms, PWA manifest, and
   touch-friendly help for all input fields
 - Flexible RRULE-compatible recurring contact rules with calendar preview,
-  automatic planned-entry synchronization, and planned-versus-actual analysis
+  automatic planned-entry synchronization, previewed historical backfill, and
+  planned-versus-actual analysis
 - Care parties for domain-level caregiver assignment, separate from app users
 - Additional care, holiday blocks and allocation, and actual holiday statistics
 - Duty-related and other unavailable periods with overlap notices

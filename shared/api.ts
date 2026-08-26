@@ -608,6 +608,17 @@ export interface ApiContactRuleSyncSummary {
   preserved: number;
 }
 
+export interface ApiContactRuleSyncPreview {
+  fingerprint: string;
+  startDate: string;
+  endDate: string;
+  create: number;
+  alreadyPresent: number;
+  manualExceptions: number;
+  conflicts: number;
+  pastOccurrences: number;
+}
+
 export interface ApiContactRule {
   id: string;
   name: string;

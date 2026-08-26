@@ -6,7 +6,9 @@ import test from "node:test";
 import Database from "better-sqlite3";
 import { migrateDatabase } from "./db/migrationRunner.js";
 import {
+  isContactRuleSyncPreviewChangedError,
   expandContactRule,
+  previewContactRuleSync,
   syncContactRule,
   upsertContactRule,
   upsertContactRuleFromPattern
@@ -633,5 +635,74 @@ test("sync updates child assignments for unchanged planned entries", () => {
     `).all() as Array<{ childId: string; deletedAt: string | null }>;
     assert.equal(rows.find((row) => row.childId === "child-a")?.deletedAt, timestamp);
     assert.equal(rows.find((row) => row.childId === "child-b")?.deletedAt, null);
+  });
+});
+
+test("historical sync requires a current preview and suppresses automatic confirmations", () => {
+  withDatabase((database) => {
+    insertChild(database);
+    insertLegacyPattern(database);
+    upsertContactRuleFromPattern({
+      id: "pattern-a",
+      name: "14-Tage-Regel",
+      startDate: "2026-07-03",
+      fridayStartTime: "16:00",
+      sundayEndTime: "18:00",
+      childIds: ["child-a"],
+      active: true,
+      createdBy: "tester",
+      updatedBy: "tester",
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }, database);
+
+    const preview = previewContactRuleSync("pattern-a", {
+      database,
+      startDate: "2026-07-03",
+      endDate: "2026-07-31",
+      now: "2026-08-26T12:00:00.000Z"
+    });
+    assert.deepEqual(
+      [preview.create, preview.alreadyPresent, preview.manualExceptions, preview.pastOccurrences],
+      [3, 0, 0, 3]
+    );
+
+    const summary = syncContactRule("pattern-a", {
+      database,
+      userEmail: "tester",
+      startDate: preview.startDate,
+      endDate: preview.endDate,
+      previewFingerprint: preview.fingerprint,
+      suppressPastConfirmations: true,
+      now: "2026-08-26T12:00:00.000Z"
+    });
+    assert.equal(summary.created, 3);
+    const suppressed = database.prepare(`
+      SELECT COUNT(*) AS count
+      FROM care_entries
+      WHERE contact_rule_id = ? AND confirmation_suppressed = 1
+    `).get("pattern-a") as { count: number };
+    assert.equal(suppressed.count, 3);
+
+    assert.throws(
+      () => syncContactRule("pattern-a", {
+        database,
+        userEmail: "tester",
+        startDate: preview.startDate,
+        endDate: preview.endDate,
+        previewFingerprint: preview.fingerprint,
+        suppressPastConfirmations: true,
+        now: "2026-08-26T12:00:00.000Z"
+      }),
+      isContactRuleSyncPreviewChangedError
+    );
+
+    const repeated = previewContactRuleSync("pattern-a", {
+      database,
+      startDate: "2026-07-03",
+      endDate: "2026-07-31",
+      now: "2026-08-26T12:00:00.000Z"
+    });
+    assert.deepEqual([repeated.create, repeated.alreadyPresent], [0, 3]);
   });
 });
