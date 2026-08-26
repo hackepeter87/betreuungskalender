@@ -34,6 +34,7 @@ import type {
   ApiPushSubscriptionInput,
   ApiWorkspaceRole,
   ApiTransferDryRunResult,
+  ApiReportSnapshot,
   CareScope
 } from "../../shared/api";
 import type {
@@ -83,13 +84,14 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = 5_000): 
     response = await fetch(path, {
       ...init,
       cache: "no-store",
-      signal: controller.signal,
+      signal: init?.signal ? AbortSignal.any([controller.signal, init.signal]) : controller.signal,
       headers: {
         ...(init?.body ? { "content-type": "application/json" } : {}),
         ...init?.headers
       }
     });
   } catch {
+    if (init?.signal?.aborted) throw new DOMException("Aborted", "AbortError");
     throw new ApiError(SERVER_UNAVAILABLE_MESSAGE, 0, true);
   } finally {
     window.clearTimeout(timeout);
@@ -114,6 +116,23 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = 5_000): 
   }
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
+}
+
+export function mapReportSnapshotData(snapshot: ApiReportSnapshot): AppData {
+  const empty = createEmptyData();
+  return {
+    ...empty,
+    schemaVersion: snapshot.data.schemaVersion as AppData["schemaVersion"],
+    children: snapshot.data.children as Child[],
+    careParties: snapshot.data.careParties as CareParty[],
+    entries: snapshot.data.entries.map(mapEntry),
+    holidayPeriods: snapshot.data.holidayPeriods,
+    unavailablePeriods: snapshot.data.unavailablePeriods.map(({ warnings: _warnings, ...period }) => period),
+    settings: { ...empty.settings, ...snapshot.data.settings } as AppSettings,
+    auditLog: snapshot.data.auditLog.map(mapAudit),
+    monthClosures: snapshot.data.monthClosures as MonthlyClosure[],
+    updatedAt: snapshot.dataUpdatedAt
+  };
 }
 
 async function requestOptionalCareConflicts(): Promise<ApiCareConflictList> {
@@ -332,6 +351,7 @@ function mapAudit(entry: ApiAuditEntry): AppData["auditLog"][number] {
     objectType: objectTypeMap[entry.entityType] ?? "appData",
     objectId: entry.entityId,
     objectLabel: `${entry.entityType} ${entry.entityId}`,
+    effectiveDate: entry.effectiveDate,
     field: entry.fieldName ?? entry.action,
     oldValue: displayValue(entry.oldValue),
     newValue: displayValue(entry.newValue),
@@ -482,6 +502,14 @@ export async function loadRestrictedAppData(): Promise<AppData> {
 }
 
 export const api = {
+  reportSnapshot(startDate: string, endDate: string, includeAuditHistory: boolean, signal?: AbortSignal) {
+    const query = new URLSearchParams({
+      startDate,
+      endDate,
+      includeAuditHistory: String(includeAuditHistory)
+    });
+    return request<ApiReportSnapshot>(`/api/reports/snapshot?${query}`, { signal }, 15_000);
+  },
   getSession() {
     return loadSession();
   },

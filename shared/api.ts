@@ -478,6 +478,26 @@ export interface ApiAuditEntry {
   oldValue?: string;
   newValue?: string;
   metadataJson?: string;
+  effectiveDate?: string;
+}
+
+export interface ApiReportSnapshot {
+  reportId: string;
+  generatedAt: string;
+  startDate: string;
+  endDate: string;
+  dataUpdatedAt: string;
+  data: {
+    schemaVersion: number;
+    children: ApiChild[];
+    careParties: ApiCareParty[];
+    entries: ApiCareEntry[];
+    holidayPeriods: ApiHolidayPeriod[];
+    unavailablePeriods: ApiUnavailablePeriod[];
+    settings: Record<string, unknown>;
+    auditLog: ApiAuditEntry[];
+    monthClosures: ApiMonthlyClosing[];
+  };
 }
 
 export interface ApiSession {

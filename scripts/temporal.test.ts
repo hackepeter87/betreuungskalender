@@ -4,6 +4,7 @@ import {
   dateKeysForInclusiveRange,
   dateKeysForTimedRange,
   formatDateTimeRange,
+  isValidDateKey,
   isValidTimedRange
 } from "../shared/temporal.js";
 
@@ -27,6 +28,13 @@ test("date-only ranges include their declared end date", () => {
     "2026-08-08",
     "2026-08-09"
   ]);
+});
+
+test("date keys reject normalized and impossible calendar dates", () => {
+  assert.equal(isValidDateKey("2028-02-29"), true);
+  assert.equal(isValidDateKey("2027-02-29"), false);
+  assert.equal(isValidDateKey("2026-13-01"), false);
+  assert.deepEqual(dateKeysForInclusiveRange("2026-02-30", "2026-03-02"), []);
 });
 
 test("timed range validation rejects equal and reversed ranges", () => {

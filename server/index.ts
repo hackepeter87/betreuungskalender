@@ -44,6 +44,7 @@ import { publicSetupState } from "./services/setupState.js";
 import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "./services/users.js";
 import { runCareConfirmationSweep } from "./services/careConfirmations.js";
 import { disableLocalDevelopmentIdentityAccess } from "./services/localDevelopmentIdentity.js";
+import { reportRoutes } from "./routes/reports.js";
 
 runMigrations();
 if (config.authMode !== "local") {
@@ -455,6 +456,7 @@ await app.register(auditRoutes);
 await app.register(appUserRoutes);
 await app.register(appDataRoutes);
 await app.register(dataTransferRoutes);
+await app.register(reportRoutes);
 await app.register(demoDataRoutes);
 
 const confirmationSweep = setInterval(() => {

@@ -68,6 +68,9 @@ const de = {
   "report.print": "Drucken",
   "report.download": "PDF herunterladen",
   "report.creating": "PDF wird erstellt …",
+  "report.refresh": "Bericht aktualisieren",
+  "report.loading": "Berichtsdaten werden aktualisiert …",
+  "report.stale": "Der angezeigte Bericht konnte nicht aktualisiert werden und kann veraltet sein.",
   "report.emptyTitle": "Noch keine Berichtsdaten",
   "report.emptyDescription": "Sobald Einträge gespeichert sind, enthält der Bericht Zeiten, Auswertungen und Nachweise für den gewählten Zeitraum.",
   "report.documentTitle": "Bericht zu dokumentierten Betreuungszeiten"
@@ -131,6 +134,9 @@ const en: TranslationResource = {
   "report.print": "Print",
   "report.download": "Download PDF",
   "report.creating": "Creating PDF …",
+  "report.refresh": "Refresh report",
+  "report.loading": "Refreshing report data …",
+  "report.stale": "The displayed report could not be refreshed and may be out of date.",
   "report.emptyTitle": "No report data yet",
   "report.emptyDescription": "After entries are saved, the report contains times, analytics, and documentation for the selected period.",
   "report.documentTitle": "Report on documented care periods"
