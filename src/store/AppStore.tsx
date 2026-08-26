@@ -50,6 +50,8 @@ type CarePartyInput = Omit<CareParty, "id" | "createdBy" | "updatedBy" | "create
 };
 type EntryInput = Omit<CareEntry, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt"> & {
   id?: string;
+  confirmPlannedConflict?: boolean;
+  conflictFingerprint?: string;
 };
 type HolidayInput = Omit<HolidayPeriod, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt" | "deletedAt"> & { id?: string };
 type PatternInput = Omit<ContactPattern, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt"> & { id?: string };
@@ -474,7 +476,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
             endDateTime: payload.endDateTime,
             childIds: payload.childIds,
             responsiblePartyId: payload.responsiblePartyId,
-            location: payload.location === "other" ? undefined : payload.location
+            location: payload.location === "other" ? undefined : payload.location,
+            confirmPlannedConflict: payload.confirmPlannedConflict,
+            conflictFingerprint: payload.conflictFingerprint
           };
           if (id) await api.updateScheduleEntry(id, schedulePayload);
           else await api.createScheduleEntry(schedulePayload);

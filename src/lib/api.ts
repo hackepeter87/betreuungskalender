@@ -5,6 +5,8 @@ import type {
   ApiCalendarFeedScope,
   ApiCreatedInvitation,
   ApiCareConflictList,
+  ApiCareConflictPreview,
+  ApiCareConflictResolutionInput,
   ApiCareConfirmationAnswer,
   ApiCareConfirmationRequest,
   ApiCareEntry,
@@ -243,10 +245,14 @@ function mapConfirmation(request: ApiCareConfirmationRequest): CareConfirmationR
   };
 }
 
-type CareEntryWriteInput = Omit<CareEntry, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt">;
+type CareEntryWriteInput = Omit<CareEntry, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt"> & {
+  confirmPlannedConflict?: boolean;
+  conflictFingerprint?: string;
+};
 type ScheduleEntryWriteInput = Pick<
   CareEntryWriteInput,
-  "startDateTime" | "endDateTime" | "childIds" | "responsiblePartyId"
+  "startDateTime" | "endDateTime" | "childIds" | "responsiblePartyId" |
+  "confirmPlannedConflict" | "conflictFingerprint"
 > & {
   location?: Exclude<CareLocation, "other">;
 };
@@ -305,7 +311,9 @@ function entryPayload(entry: CareEntryWriteInput) {
       .map(({ createdBy: _createdBy, updatedBy: _updatedBy, deletedAt: _deletedAt, ...trip }) => trip),
     costs: entry.costs
       .filter((cost) => !cost.deletedAt)
-      .map(({ createdBy: _createdBy, updatedBy: _updatedBy, deletedAt: _deletedAt, ...cost }) => cost)
+      .map(({ createdBy: _createdBy, updatedBy: _updatedBy, deletedAt: _deletedAt, ...cost }) => cost),
+    confirmPlannedConflict: entry.confirmPlannedConflict,
+    conflictFingerprint: entry.conflictFingerprint
   };
 }
 
@@ -502,6 +510,19 @@ export async function loadRestrictedAppData(): Promise<AppData> {
 }
 
 export const api = {
+  previewCareConflicts(input: CareEntryWriteInput, entryId?: string) {
+    const query = entryId ? `?entryId=${encodeURIComponent(entryId)}` : "";
+    return request<ApiCareConflictPreview>(`/api/care-conflicts/preview${query}`, {
+      method: "POST",
+      body: JSON.stringify(entryPayload(input))
+    });
+  },
+  resolveCareConflict(input: ApiCareConflictResolutionInput) {
+    return request<ApiCareEntry>("/api/care-conflicts/resolve", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
+  },
   reportSnapshot(startDate: string, endDate: string, includeAuditHistory: boolean, signal?: AbortSignal) {
     const query = new URLSearchParams({
       startDate,

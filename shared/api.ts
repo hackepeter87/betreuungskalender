@@ -205,6 +205,22 @@ export interface ApiCareConflictList {
   complete: boolean;
 }
 
+export interface ApiCareConflictPreviewItem {
+  conflict: ApiCareConflict;
+  entry: ApiCareEntry;
+}
+
+export interface ApiCareConflictPreview {
+  fingerprint: string;
+  items: ApiCareConflictPreviewItem[];
+}
+
+export interface ApiCareConflictResolutionInput {
+  conflictId: string;
+  entryId: string;
+  action: "replace_rule_occurrence";
+}
+
 export interface ApiCareConfirmationRequest {
   id: string;
   careEntryId: string;

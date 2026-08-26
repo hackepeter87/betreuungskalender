@@ -1,5 +1,13 @@
 import type { FastifyInstance } from "fastify";
-import type { ApiCareConflictList, ApiCareEntry, ApiCost, ApiScheduleEntry, ApiTrip } from "../../shared/api.js";
+import type {
+  ApiCareConflictList,
+  ApiCareConflictPreview,
+  ApiCareConflictResolutionInput,
+  ApiCareEntry,
+  ApiCost,
+  ApiScheduleEntry,
+  ApiTrip
+} from "../../shared/api.js";
 import type { RequestUser } from "../auth.js";
 import { config } from "../config.js";
 import { db } from "../db/connection.js";
@@ -13,8 +21,11 @@ import { assignedCarePartyIds } from "../services/carePartyAccess.js";
 import { assertActiveCareParty } from "../services/careParties.js";
 import {
   assertNoActualCareConflict,
+  assertPlannedCareConflictAcknowledged,
   isCareConflictWorkLimitError,
   isCareEntryConflictError,
+  isPlannedCareConflictPreviewRequiredError,
+  previewPlannedCareConflicts,
   listCareConflicts
 } from "../services/careConflicts.js";
 import { assertActiveChildren, bool, makeId, nowIso, syncJunction } from "../services/common.js";
@@ -533,6 +544,21 @@ function persistEntry(
     assertActiveCareParty(actualResponsiblePartyId);
     assertCanUseCareParty(user, actualResponsiblePartyId);
   }
+  assertPlannedCareConflictAcknowledged({
+    candidate: {
+      status: input.status,
+      startDateTime: input.startDateTime,
+      endDateTime: input.endDateTime,
+      childIds: input.childIds,
+      actualStartDateTime: input.actualStartDateTime,
+      actualEndDateTime: input.actualEndDateTime,
+      actualChildIds
+    },
+    confirmPlannedConflict: input.confirmPlannedConflict,
+    conflictFingerprint: input.conflictFingerprint,
+    database: db,
+    excludeId: existing?.id
+  });
   assertNoActualCareConflict({
     id,
     status: input.status,
@@ -678,6 +704,84 @@ function persistEntry(
 }
 
 export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
+  app.post<{ Querystring: { entryId?: string } }>(
+    "/api/care-conflicts/preview",
+    createLimit,
+    async (request, reply): Promise<ApiCareConflictPreview | unknown> => {
+      const parsed = careEntryInputSchema.safeParse(request.body);
+      if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
+      const input = parsed.data;
+      const preview = previewPlannedCareConflicts({
+        status: input.status,
+        startDateTime: input.startDateTime,
+        endDateTime: input.endDateTime,
+        childIds: input.childIds
+      }, db, request.query.entryId);
+      const items = preview.conflicts.flatMap((conflict) => {
+        const conflictingId = conflict.entryIds.find((id) => id !== "__care_conflict_candidate__");
+        const entry = conflictingId ? getEntry(conflictingId) : undefined;
+        return entry ? [{ conflict, entry }] : [];
+      });
+      return { fingerprint: preview.fingerprint, items };
+    }
+  );
+
+  app.post(
+    "/api/care-conflicts/resolve",
+    editLimit,
+    async (request, reply) => {
+      const input = request.body as Partial<ApiCareConflictResolutionInput> | null;
+      if (
+        !input || input.action !== "replace_rule_occurrence" ||
+        typeof input.conflictId !== "string" || typeof input.entryId !== "string"
+      ) {
+        return reply.code(400).send({ error: "validation_error" });
+      }
+      try {
+        return db.transaction(() => {
+          const conflict = listCareConflicts(db).find((item) =>
+            item.id === input.conflictId && item.entryIds.includes(input.entryId!)
+          );
+          const existing = getEntry(input.entryId!);
+          if (!conflict || !existing || !existing.contactRuleId || existing.status !== "planned") {
+            return reply.code(409).send({ error: "care_conflict_changed" });
+          }
+          assertCanUseCareParty(request.user, existing.responsiblePartyId);
+          const timestamp = nowIso();
+          db.prepare(`
+            UPDATE care_entries
+            SET status = 'cancelled', deviation_type = 'cancelled',
+              cancellation_reason = 'Regeltermin wegen Überschneidung ersetzt.',
+              planned_start_datetime = COALESCE(planned_start_datetime, start_datetime),
+              planned_end_datetime = COALESCE(planned_end_datetime, end_datetime),
+              contact_rule_sync_state = 'manual_override',
+              updated_by = ?, updated_at = ?
+            WHERE id = ? AND deleted_at IS NULL
+          `).run(request.userEmail, timestamp, input.entryId);
+          const updated = getEntry(input.entryId!);
+          if (!updated) throw new Error("Resolved care entry could not be loaded.");
+          recordFieldChanges(request.userEmail, "care_entry", input.entryId!, existing, updated, [
+            "updatedAt", "updatedBy", "trips", "costs"
+          ]);
+          markClosedMonthsChanged(
+            request.userEmail,
+            "care_entry",
+            input.entryId!,
+            existing.startDateTime.slice(0, 10),
+            existing.endDateTime.slice(0, 10),
+            timestamp
+          );
+          return updated;
+        })();
+      } catch (error) {
+        if (isCareConflictWorkLimitError(error)) {
+          return reply.code(409).send({ error: "care_conflict_changed" });
+        }
+        throw error;
+      }
+    }
+  );
+
   app.get<{ Querystring: { startDate?: string; endDate?: string } }>(
     "/api/care-entries/schedule",
     scheduleLimit,
@@ -790,6 +894,12 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
     try {
       db.transaction(() => persistEntry(id, input, request.userEmail, undefined, request.user))();
     } catch (error) {
+      if (isPlannedCareConflictPreviewRequiredError(error)) {
+        return reply.code(409).send({
+          error: "planned_care_conflict_confirmation_required",
+          fingerprint: error.fingerprint
+        });
+      }
       if (isCareEntryConflictError(error)) {
         return reply.code(409).send({ error: "care_entry_conflict" });
       }
@@ -813,6 +923,12 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
     try {
       db.transaction(() => persistEntry(request.params.id, input, request.userEmail, existing, request.user))();
     } catch (error) {
+      if (isPlannedCareConflictPreviewRequiredError(error)) {
+        return reply.code(409).send({
+          error: "planned_care_conflict_confirmation_required",
+          fingerprint: error.fingerprint
+        });
+      }
       if (isCareEntryConflictError(error)) {
         return reply.code(409).send({ error: "care_entry_conflict" });
       }
