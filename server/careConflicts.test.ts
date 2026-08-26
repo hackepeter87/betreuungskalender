@@ -7,12 +7,13 @@ import { join, resolve } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import test from "node:test";
 import Database from "better-sqlite3";
-import type { ApiCareConflictList, ApiCareEntry, ApiCareParty, ApiChild } from "../shared/api.js";
+import type { ApiCareConflictList, ApiCareConflictPreview, ApiCareEntry, ApiCareParty, ApiChild } from "../shared/api.js";
 import {
   CareConflictDetectionLimitError,
   CareEntryConflictError,
   assertNoActualCareConflict,
-  detectCareConflicts
+  detectCareConflicts,
+  previewPlannedCareConflicts
 } from "./services/careConflicts.js";
 
 const projectRoot = resolve(import.meta.dirname, "..");
@@ -161,6 +162,46 @@ test("actual conflict validation only considers matching children and times", ()
   database.close();
 });
 
+test("planned conflict previews are stable and change with the candidate range", () => {
+  const database = new Database(":memory:");
+  database.exec(`
+    CREATE TABLE care_entries (
+      id TEXT PRIMARY KEY, status TEXT NOT NULL, start_datetime TEXT NOT NULL,
+      end_datetime TEXT NOT NULL, actual_start_datetime TEXT,
+      actual_end_datetime TEXT, deleted_at TEXT
+    );
+    CREATE TABLE care_entry_children (care_entry_id TEXT, child_id TEXT, deleted_at TEXT);
+    CREATE TABLE care_entry_actual_children (care_entry_id TEXT, child_id TEXT, deleted_at TEXT);
+    INSERT INTO care_entries VALUES (
+      'existing', 'planned', '2026-07-04T17:00:00.000Z',
+      '2026-07-04T19:00:00.000Z', NULL, NULL, NULL
+    );
+    INSERT INTO care_entry_children VALUES ('existing', 'child-a', NULL);
+  `);
+  const first = previewPlannedCareConflicts({
+    status: "planned",
+    startDateTime: "2026-07-04T16:00:00.000Z",
+    endDateTime: "2026-07-04T18:00:00.000Z",
+    childIds: ["child-a"]
+  }, database);
+  const repeated = previewPlannedCareConflicts({
+    status: "planned",
+    startDateTime: "2026-07-04T16:00:00.000Z",
+    endDateTime: "2026-07-04T18:00:00.000Z",
+    childIds: ["child-a"]
+  }, database);
+  const changed = previewPlannedCareConflicts({
+    status: "planned",
+    startDateTime: "2026-07-04T15:00:00.000Z",
+    endDateTime: "2026-07-04T18:00:00.000Z",
+    childIds: ["child-a"]
+  }, database);
+  assert.equal(first.conflicts.length, 1);
+  assert.equal(first.fingerprint, repeated.fingerprint);
+  assert.notEqual(first.fingerprint, changed.fingerprint);
+  database.close();
+});
+
 async function freePort(): Promise<number> {
   const server = createServer();
   server.listen(0, "127.0.0.1");
@@ -280,9 +321,26 @@ test("care-entry API serializes actual writes and returns generic conflicts", as
   const rejected = concurrent.find((response) => response.status === 409);
   assert.deepEqual(await rejected?.json(), { error: "care_entry_conflict" });
 
-  const planned = await jsonRequest<ApiCareEntry>(baseUrl, "/api/care-entries", {
+  const rejectedPlanned = await fetch(`${baseUrl}/api/care-entries`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ...baseInput, status: "planned" })
+  });
+  assert.equal(rejectedPlanned.status, 409);
+  assert.equal((await rejectedPlanned.json() as { error: string }).error, "planned_care_conflict_confirmation_required");
+  const preview = await jsonRequest<ApiCareConflictPreview>(baseUrl, "/api/care-conflicts/preview", {
     method: "POST",
     body: JSON.stringify({ ...baseInput, status: "planned" })
+  });
+  assert.equal(preview.items.length, 1);
+  const planned = await jsonRequest<ApiCareEntry>(baseUrl, "/api/care-entries", {
+    method: "POST",
+    body: JSON.stringify({
+      ...baseInput,
+      status: "planned",
+      confirmPlannedConflict: true,
+      conflictFingerprint: preview.fingerprint
+    })
   });
   const conflicts = await jsonRequest<ApiCareConflictList>(baseUrl, "/api/care-conflicts");
   assert.equal(conflicts.complete, true);
@@ -297,6 +355,24 @@ test("care-entry API serializes actual writes and returns generic conflicts", as
   });
   assert.equal(actualUpdate.status, 409);
   assert.deepEqual(await actualUpdate.json(), { error: "care_entry_conflict" });
+
+  const resolutionDatabase = new Database(join(root, "app.sqlite"));
+  resolutionDatabase.prepare(`
+    UPDATE care_entries
+    SET contact_rule_id = 'test-rule', contact_rule_sync_state = 'generated'
+    WHERE id = ?
+  `).run(planned.id);
+  resolutionDatabase.close();
+  const resolved = await jsonRequest<ApiCareEntry>(baseUrl, "/api/care-conflicts/resolve", {
+    method: "POST",
+    body: JSON.stringify({
+      conflictId: conflicts.items[0]!.id,
+      entryId: planned.id,
+      action: "replace_rule_occurrence"
+    })
+  });
+  assert.equal(resolved.status, "cancelled");
+  assert.equal(resolved.contactRuleSyncState, "manual_override");
 
   await jsonRequest<ApiCareEntry>(baseUrl, "/api/care-entries", {
     method: "POST",

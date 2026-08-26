@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { calendarGridRange, filterCalendarOverlayEvents } from "../src/lib/calendar";
+import { calendarGridRange, filterCalendarOverlayEvents, isoWeekNumber } from "../src/lib/calendar";
 import type { ExternalCalendarEvent, ExternalCalendarSource } from "../src/types";
 
 test("calendar grid range covers all six visible weeks", () => {
@@ -8,6 +8,12 @@ test("calendar grid range covers all six visible weeks", () => {
     startDate: "2026-07-27",
     endDate: "2026-09-06"
   });
+});
+
+test("ISO calendar weeks use Monday-based week years", () => {
+  assert.equal(isoWeekNumber("2026-01-01"), 1);
+  assert.equal(isoWeekNumber("2027-01-01"), 53);
+  assert.equal(isoWeekNumber("2027-01-04"), 1);
 });
 
 test("holiday sources are not rendered as duplicate calendar overlays", () => {
