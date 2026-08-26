@@ -18,7 +18,7 @@ import {
   loadSession,
   SERVER_UNAVAILABLE_MESSAGE
 } from "../lib/api";
-import type { ApiCareConfirmationAnswer, ApiSession } from "../../shared/api";
+import type { ApiCareConfirmationAnswer, ApiContactRuleSyncPreview, ApiSession } from "../../shared/api";
 import { generatePatternEntries } from "../lib/contact";
 import { buildMonthlyClosureSummary, monthKeysForRange } from "../lib/monthClosure";
 import type {
@@ -50,6 +50,8 @@ type CarePartyInput = Omit<CareParty, "id" | "createdBy" | "updatedBy" | "create
 };
 type EntryInput = Omit<CareEntry, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt"> & {
   id?: string;
+  confirmPlannedConflict?: boolean;
+  conflictFingerprint?: string;
 };
 type HolidayInput = Omit<HolidayPeriod, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt" | "deletedAt"> & { id?: string };
 type PatternInput = Omit<ContactPattern, "id" | "createdBy" | "updatedBy" | "createdAt" | "updatedAt"> & { id?: string };
@@ -100,6 +102,15 @@ interface AppStoreValue {
   saveContactPattern: (input: PatternInput) => Promise<PatternSaveResult | null>;
   saveContactRule: (input: ContactRuleInput) => Promise<ContactRuleSaveResult | null>;
   syncContactRule: (id: string) => Promise<ContactRuleSaveResult | null>;
+  previewHistoricalContactRuleSync: (
+    id: string,
+    startDate: string,
+    endDate: string
+  ) => Promise<ApiContactRuleSyncPreview | null>;
+  syncHistoricalContactRule: (
+    id: string,
+    preview: Pick<ApiContactRuleSyncPreview, "startDate" | "endDate" | "fingerprint">
+  ) => Promise<ContactRuleSaveResult | null>;
   removeContactPattern: (id: string) => Promise<boolean>;
   generateContactEntries: (
     patternId: string,
@@ -474,7 +485,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
             endDateTime: payload.endDateTime,
             childIds: payload.childIds,
             responsiblePartyId: payload.responsiblePartyId,
-            location: payload.location === "other" ? undefined : payload.location
+            location: payload.location === "other" ? undefined : payload.location,
+            confirmPlannedConflict: payload.confirmPlannedConflict,
+            conflictFingerprint: payload.conflictFingerprint
           };
           if (id) await api.updateScheduleEntry(id, schedulePayload);
           else await api.createScheduleEntry(schedulePayload);
@@ -647,6 +660,35 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     [performWrite]
   );
 
+  const previewHistoricalContactRuleSync = useCallback(
+    async (id: string, startDate: string, endDate: string) => {
+      try {
+        const preview = await api.previewContactRuleSync(id, { startDate, endDate });
+        setError(null);
+        return preview;
+      } catch (reason) {
+        handleError(reason);
+        return null;
+      }
+    },
+    [handleError]
+  );
+
+  const syncHistoricalContactRule = useCallback(
+    async (
+      id: string,
+      preview: Pick<ApiContactRuleSyncPreview, "startDate" | "endDate" | "fingerprint">
+    ) => performWrite(async () => {
+      const synced = await api.syncContactRule(id, {
+        startDate: preview.startDate,
+        endDate: preview.endDate,
+        previewFingerprint: preview.fingerprint
+      });
+      return { id: synced.id, syncSummary: synced.syncSummary };
+    }, null),
+    [performWrite]
+  );
+
   const removeContactPattern = useCallback(
     async (id: string) =>
       performWrite(async () => {
@@ -785,6 +827,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       saveContactPattern,
       saveContactRule,
       syncContactRule,
+      previewHistoricalContactRuleSync,
+      syncHistoricalContactRule,
       removeContactPattern,
       generateContactEntries,
       replaceData,
@@ -824,6 +868,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       saveContactPattern,
       saveContactRule,
       syncContactRule,
+      previewHistoricalContactRuleSync,
+      syncHistoricalContactRule,
       saveEntry,
       saveHolidayPeriod,
       saveUnavailablePeriod,

@@ -40,7 +40,7 @@ test("imports, manages, and removes an external calendar through the UI", async 
   if (await monthViewButton.isVisible()) await monthViewButton.click();
   const gridEvents = page.getByTestId("calendar-month-view")
     .getByTestId(`external-calendar-event-${event?.id}`);
-  await expect(gridEvents).toHaveCount(3);
+  await expect(gridEvents).toHaveCount(2);
   await gridEvents.first().click({ force: true });
   await expect(page.getByTestId("entry-form")).toHaveCount(0);
 
@@ -80,7 +80,7 @@ test("imports, manages, and removes an external calendar through the UI", async 
   }
   const grid = page.getByTestId("calendar-month-view");
   await expect(grid.getByText("E2E Holiday", { exact: true })).toHaveCount(0);
-  await expect(grid.getByText("E2E Replacement Holiday", { exact: true })).toHaveCount(3);
+  await expect(grid.getByText("E2E Replacement Holiday", { exact: true })).toHaveCount(2);
 
   await navigate(page, "settings");
   page.once("dialog", (dialog) => dialog.accept());

@@ -141,7 +141,9 @@ export const careEntryInputSchema = z
     evidenceReference: z.string().trim().max(2000).optional(),
     hasEvidence: z.boolean().default(false),
     trips: z.array(tripInputSchema).default([]),
-    costs: z.array(costInputSchema).default([])
+    costs: z.array(costInputSchema).default([]),
+    confirmPlannedConflict: z.boolean().default(false),
+    conflictFingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional()
   })
   .superRefine((entry, context) => {
     const start = Date.parse(entry.startDateTime);
@@ -190,7 +192,9 @@ export const schedulerCareEntryInputSchema = z.object({
   endDateTime: isoDateTime,
   childIds,
   responsiblePartyId: z.string().trim().min(1).max(200),
-  location: z.enum(["commuterApartment", "mainResidence", "mother", "school", "ogs"]).optional()
+  location: z.enum(["commuterApartment", "mainResidence", "mother", "school", "ogs"]).optional(),
+  confirmPlannedConflict: z.boolean().default(false),
+  conflictFingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional()
 }).strict().refine(
   (entry) => Date.parse(entry.endDateTime) > Date.parse(entry.startDateTime),
   { path: ["endDateTime"], message: "Das Ende muss nach dem Beginn liegen." }

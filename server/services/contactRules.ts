@@ -1,8 +1,10 @@
 import type Database from "better-sqlite3";
+import { createHash } from "node:crypto";
 import * as rrule from "rrule";
 import type {
   ApiContactRule,
   ApiContactRuleSegment,
+  ApiContactRuleSyncPreview,
   ApiContactRuleSyncSummary,
   ContactRuleMonthlyOrdinal,
   ContactRuleRecurrence,
@@ -11,6 +13,7 @@ import type {
 import { db as defaultDb } from "../db/connection.js";
 import { recordAudit } from "./audit.js";
 import { bool, makeId, nowIso } from "./common.js";
+import { previewPlannedCareConflicts } from "./careConflicts.js";
 
 const rruleExports = rrule as typeof rrule & {
   default?: typeof rrule;
@@ -84,6 +87,9 @@ export interface ContactRuleSyncOptions {
   now?: string;
   userEmail: string;
   database?: Database.Database;
+  previewFingerprint?: string;
+  suppressPastConfirmations?: boolean;
+  strictWindow?: boolean;
 }
 
 export interface ExpandedContactRuleEntry {
@@ -92,6 +98,15 @@ export interface ExpandedContactRuleEntry {
   segmentId: string;
   startDateTime: string;
   endDateTime: string;
+}
+
+export class ContactRuleSyncPreviewChangedError extends Error {
+  readonly code = "contact_rule_sync_preview_changed";
+
+  constructor() {
+    super("The contact-rule sync preview is no longer current.");
+    this.name = "ContactRuleSyncPreviewChangedError";
+  }
 }
 
 function optional<T>(value: T | null): T | undefined {
@@ -553,16 +568,34 @@ function syncWindow(rule: ApiContactRule, options: ContactRuleSyncOptions): { st
     if (rule.endDate > maximumEndDate) {
       throw new Error("Der vollständige Regelzeitraum darf höchstens 36 Monate umfassen.");
     }
-    return {
+    const result = {
       startDate: options.startDate ?? rule.startDate,
       endDate: options.endDate ?? rule.endDate
     };
+    assertSyncWindow(rule, result, Boolean(options.strictWindow || options.previewFingerprint));
+    return result;
   }
   const currentMonth = firstDayOfMonth((options.now ?? nowIso()).slice(0, 10));
   const startDate = options.startDate ?? (rule.startDate > currentMonth ? rule.startDate : currentMonth);
   const defaultEnd = addDays(addMonths(startDate, rule.syncHorizonMonths), -1);
   const endDate = options.endDate ?? defaultEnd;
-  return { startDate, endDate };
+  const result = { startDate, endDate };
+  assertSyncWindow(rule, result, Boolean(options.strictWindow || options.previewFingerprint));
+  return result;
+}
+
+function assertSyncWindow(
+  rule: ApiContactRule,
+  window: { startDate: string; endDate: string },
+  strict: boolean
+): void {
+  if (window.startDate > window.endDate) throw new Error("Der Synchronisierungszeitraum ist ungültig.");
+  if (strict && (window.startDate < rule.startDate || (rule.endDate && window.endDate > rule.endDate))) {
+    throw new Error("Der Synchronisierungszeitraum muss innerhalb der Regel liegen.");
+  }
+  if (strict && window.endDate >= addMonths(window.startDate, 36)) {
+    throw new Error("Der Synchronisierungszeitraum darf höchstens 36 Monate umfassen.");
+  }
 }
 
 interface ExistingGeneratedRow {
@@ -596,6 +629,7 @@ function insertGeneratedEntry(input: {
   expanded: ExpandedContactRuleEntry;
   timestamp: string;
   userEmail: string;
+  confirmationSuppressed?: boolean;
 }): void {
   const id = makeId("entry");
   const durationMinutes = Math.round(
@@ -610,8 +644,8 @@ function insertGeneratedEntry(input: {
       overnight, school_handover, holiday, weekend, additional_care, location,
       custom_location, handover_from, handover_to, notes, evidence_reference,
       has_evidence, duration_minutes, is_contact_time, created_by, updated_by,
-      created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      created_at, updated_at, confirmation_suppressed
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     id,
     input.rule.sourceContactPatternId ?? input.rule.id,
@@ -643,7 +677,8 @@ function insertGeneratedEntry(input: {
     input.userEmail,
     input.userEmail,
     input.timestamp,
-    input.timestamp
+    input.timestamp,
+    Number(input.confirmationSuppressed)
   );
 
   const childInsert = input.database.prepare(`
@@ -772,6 +807,17 @@ export function syncContactRule(ruleId: string, options: ContactRuleSyncOptions)
   assertActiveRuleChildren(database, rule.childIds);
 
   const window = syncWindow(rule, options);
+  if (options.previewFingerprint) {
+    const preview = previewContactRuleSync(ruleId, {
+      startDate: window.startDate,
+      endDate: window.endDate,
+      now: options.now,
+      database
+    });
+    if (preview.fingerprint !== options.previewFingerprint) {
+      throw new ContactRuleSyncPreviewChangedError();
+    }
+  }
   const expanded = expandContactRule({
     startDate: rule.startDate,
     endDate: rule.endDate,
@@ -795,7 +841,17 @@ export function syncContactRule(ruleId: string, options: ContactRuleSyncOptions)
   for (const item of expanded) {
     const existing = existingGeneratedEntry(database, rule.id, item.occurrenceKey, item.occurrenceDate);
     if (!existing) {
-      insertGeneratedEntry({ database, rule, expanded: item, timestamp, userEmail: options.userEmail });
+      insertGeneratedEntry({
+        database,
+        rule,
+        expanded: item,
+        timestamp,
+        userEmail: options.userEmail,
+        confirmationSuppressed: Boolean(
+          options.suppressPastConfirmations &&
+          Date.parse(item.endDateTime) < Date.parse(options.now ?? timestamp)
+        )
+      });
       summary.created += 1;
       continue;
     }
@@ -812,4 +868,76 @@ export function syncContactRule(ruleId: string, options: ContactRuleSyncOptions)
   }
 
   return summary;
+}
+
+export function isContactRuleSyncPreviewChangedError(error: unknown): boolean {
+  return error instanceof ContactRuleSyncPreviewChangedError ||
+    (error instanceof Error && (error as { code?: string }).code === "contact_rule_sync_preview_changed");
+}
+
+export function previewContactRuleSync(
+  ruleId: string,
+  options: Pick<ContactRuleSyncOptions, "startDate" | "endDate" | "now" | "database">
+): ApiContactRuleSyncPreview {
+  const database = options.database ?? defaultDb;
+  const rule = getContactRule(ruleId, database);
+  if (!rule) throw new Error("Umgangsregel wurde nicht gefunden.");
+  const window = syncWindow(rule, { ...options, userEmail: "preview", strictWindow: true });
+  const expanded = expandContactRule({
+    startDate: rule.startDate,
+    endDate: rule.endDate,
+    recurrence: rule.recurrence,
+    segments: rule.segments,
+    active: rule.active,
+    childIds: rule.childIds,
+    rangeStart: window.startDate,
+    rangeEnd: window.endDate
+  });
+  const today = (options.now ?? nowIso()).slice(0, 10);
+  let create = 0;
+  let alreadyPresent = 0;
+  let manualExceptions = 0;
+  let conflicts = 0;
+  let pastOccurrences = 0;
+  const evidence: Array<Record<string, unknown>> = [];
+
+  for (const item of expanded) {
+    if (item.occurrenceDate < today) pastOccurrences += 1;
+    const existing = existingGeneratedEntry(database, rule.id, item.occurrenceKey, item.occurrenceDate);
+    if (!existing) {
+      create += 1;
+      const conflictPreview = previewPlannedCareConflicts({
+        status: "planned",
+        startDateTime: item.startDateTime,
+        endDateTime: item.endDateTime,
+        childIds: rule.childIds
+      }, database);
+      conflicts += conflictPreview.conflicts.length;
+      evidence.push({ occurrenceKey: item.occurrenceKey, conflicts: conflictPreview.fingerprint });
+    } else if (
+      existing.deleted_at || existing.status !== "planned" ||
+      existing.contact_rule_sync_state === "manual_override"
+    ) {
+      manualExceptions += 1;
+      evidence.push({ occurrenceKey: item.occurrenceKey, state: "manual" });
+    } else {
+      alreadyPresent += 1;
+      evidence.push({ occurrenceKey: item.occurrenceKey, state: "existing" });
+    }
+  }
+  const fingerprint = createHash("sha256").update(JSON.stringify({
+    ruleId,
+    ruleUpdatedAt: rule.updatedAt,
+    window,
+    evidence
+  })).digest("hex");
+  return {
+    fingerprint,
+    ...window,
+    create,
+    alreadyPresent,
+    manualExceptions,
+    conflicts,
+    pastOccurrences
+  };
 }

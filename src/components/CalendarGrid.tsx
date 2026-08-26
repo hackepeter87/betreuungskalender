@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import { unavailableForEntry } from "../lib/analytics";
 import { entryDateKeys, enumerateDateKeys, formatTime, getCalendarDays } from "../lib/date";
 import { statusLabel, unavailableCategoryLabels } from "../lib/labels";
@@ -7,6 +8,13 @@ import type { CareConflict, CareEntry, Child, ExternalCalendarEvent, HolidayPeri
 import { Icon } from "./Icon";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy, copyList } from "../i18n/catalog";
+import { formatDate } from "../lib/date";
+import { isoWeekNumber } from "../lib/calendar";
+
+interface OpenDay {
+  dateKey: string;
+  anchor: DOMRect;
+}
 
 export function CalendarGrid({
   monthKey,
@@ -34,6 +42,8 @@ export function CalendarGrid({
   allowCreate?: boolean;
 }) {
   const { locale, intlLocale } = useI18n();
+  const [openDay, setOpenDay] = useState<OpenDay | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const calendarDays = useMemo(() => getCalendarDays(monthKey), [monthKey]);
   const childMap = useMemo(
     () => new Map(children.map((child) => [child.id, child])),
@@ -76,9 +86,29 @@ export function CalendarGrid({
     return map;
   }, [holidayPeriods]);
 
+  useEffect(() => {
+    if (!openDay) return;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenDay(null);
+    };
+    window.addEventListener("keydown", closeOnEscape);
+    closeButtonRef.current?.focus();
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [openDay]);
+
+  const openDayEntries = openDay ? entriesByDate.get(openDay.dateKey) ?? [] : [];
+  const openDayUnavailable = openDay ? unavailableByDate.get(openDay.dateKey) ?? [] : [];
+  const openDayExternal = openDay ? externalByDate.get(openDay.dateKey) ?? [] : [];
+  const openDayHolidays = openDay ? holidaysByDate.get(openDay.dateKey) ?? [] : [];
+  const popoverStyle = openDay ? {
+    "--day-popover-left": `${Math.max(12, Math.min(openDay.anchor.left, window.innerWidth - 372))}px`,
+    "--day-popover-top": `${Math.max(12, Math.min(openDay.anchor.bottom + 8, window.innerHeight - 460))}px`
+  } as CSSProperties : undefined;
+
   return (
     <div className="calendar-wrap">
       <div className="calendar-weekdays">
+        <div className="calendar-weekdays__week">{copy(locale, "calendar", "weekNumber")}</div>
         {copyList(locale, "calendar", "weekdays").map((label) => <div key={label}>{label}</div>)}
       </div>
       <div className="calendar-grid">
@@ -103,6 +133,12 @@ export function CalendarGrid({
             renderedUnavailable.length +
             renderedEntries.length;
           return (
+            <Fragment key={day.dateKey}>
+            {calendarDays.indexOf(day) % 7 === 0 ? (
+              <div className="calendar-week-number" aria-label={`${copy(locale, "calendar", "weekNumber")} ${isoWeekNumber(day.dateKey)}`}>
+                {isoWeekNumber(day.dateKey)}
+              </div>
+            ) : null}
             <div
               className={[
                 "calendar-day",
@@ -110,7 +146,6 @@ export function CalendarGrid({
                 day.isToday ? "calendar-day--today" : "",
                 day.isWeekend ? "calendar-day--weekend" : ""
               ].filter(Boolean).join(" ")}
-              key={day.dateKey}
             >
               <button
                 className="calendar-day__number"
@@ -229,12 +264,61 @@ export function CalendarGrid({
                   </button>
                   );
                 })}
-                {visibleCount > renderedCount ? <span className="calendar-day__more">{copy(locale, "calendar", "more", { count: visibleCount - renderedCount })}</span> : null}
+                {visibleCount > renderedCount ? (
+                  <button
+                    className="calendar-day__more"
+                    type="button"
+                    aria-haspopup="dialog"
+                    onClick={(event) => setOpenDay({ dateKey: day.dateKey, anchor: event.currentTarget.getBoundingClientRect() })}
+                  >
+                    {copy(locale, "calendar", "more", { count: visibleCount - renderedCount })}
+                  </button>
+                ) : null}
               </div>
             </div>
+            </Fragment>
           );
         })}
       </div>
+      {openDay ? createPortal(
+        <div className="calendar-day-popover-layer" role="presentation" onMouseDown={() => setOpenDay(null)}>
+          <section
+            className="calendar-day-popover"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="calendar-day-popover-title"
+            style={popoverStyle}
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <header className="calendar-day-popover__header">
+              <div>
+                <span>{copy(locale, "calendar", "weekNumber")} {isoWeekNumber(openDay.dateKey)}</span>
+                <h2 id="calendar-day-popover-title">{copy(locale, "calendar", "dayOverview", { date: formatDate(openDay.dateKey, intlLocale) })}</h2>
+              </div>
+              <button ref={closeButtonRef} className="icon-button" type="button" onClick={() => setOpenDay(null)} aria-label={copy(locale, "calendar", "closeDayOverview")}>
+                <Icon name="close" size={18} />
+              </button>
+            </header>
+            <div className="calendar-day-popover__body">
+              {openDayEntries.length ? <section>
+                <h3>{copy(locale, "calendar", "careItems")}</h3>
+                {openDayEntries.map((entry) => (
+                  <button className="calendar-day-popover__item" type="button" key={entry.id} onClick={() => { setOpenDay(null); onSelectEntry(entry); }}>
+                    <span className="calendar-event__colors">{entry.childIds.map((id) => <span key={id} style={{ backgroundColor: childMap.get(id)?.color ?? "#94a3b8" }} />)}</span>
+                    <span><strong>{entry.childIds.map((id) => childMap.get(id)?.name).filter(Boolean).join(locale === "en" ? " and " : " und ")}</strong><small>{formatTime(entry.startDateTime, intlLocale)}–{formatTime(entry.endDateTime, intlLocale)} · {statusLabel(entry.status, locale)}</small></span>
+                    <Icon name="chevronRight" size={16} />
+                  </button>
+                ))}
+              </section> : null}
+              {openDayHolidays.length ? <section><h3>{copy(locale, "calendar", "holidayItems")}</h3>{openDayHolidays.map((period) => <div className="calendar-day-popover__item is-static" key={period.id}><Icon name="sun" size={16} /><span><strong>{period.name}</strong></span></div>)}</section> : null}
+              {openDayUnavailable.length ? <section><h3>{copy(locale, "calendar", "unavailableItems")}</h3>{openDayUnavailable.map((period) => onSelectUnavailable ? <button className="calendar-day-popover__item" type="button" key={period.id} onClick={() => { setOpenDay(null); onSelectUnavailable(period); }}><Icon name="briefcase" size={16} /><span><strong>{unavailableCategoryLabels[period.category]}</strong><small>{formatTime(period.startDateTime, intlLocale)}–{formatTime(period.endDateTime, intlLocale)}</small></span><Icon name="chevronRight" size={16} /></button> : <div className="calendar-day-popover__item is-static" key={period.id}><Icon name="briefcase" size={16} /><span><strong>{unavailableCategoryLabels[period.category]}</strong></span></div>)}</section> : null}
+              {openDayExternal.length ? <section><h3>{copy(locale, "calendar", "externalItems")}</h3>{openDayExternal.map((event) => <div className="calendar-day-popover__item is-static" key={event.id}><Icon name="calendar" size={16} /><span><strong>{event.title}</strong><small>{event.sourceName}</small></span></div>)}</section> : null}
+            </div>
+            {allowCreate ? <footer className="calendar-day-popover__footer"><button className="button button--primary" type="button" onClick={() => { setOpenDay(null); onSelectDate(openDay.dateKey); }}><Icon name="plus" size={17} />{copy(locale, "calendar", "createOnDay")}</button></footer> : null}
+          </section>
+        </div>,
+        document.body
+      ) : null}
     </div>
   );
 }
