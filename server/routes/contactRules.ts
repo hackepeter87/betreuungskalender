@@ -1,4 +1,6 @@
 import type { FastifyInstance } from "fastify";
+import { z } from "zod";
+import { isValidDateKey } from "../../shared/temporal.js";
 import { config } from "../config.js";
 import { db } from "../db/connection.js";
 import { recordAudit, recordFieldChanges } from "../services/audit.js";
@@ -7,6 +9,8 @@ import { assertActiveCareParty } from "../services/careParties.js";
 import { assertActiveChildren, makeId, nowIso } from "../services/common.js";
 import {
   getContactRule,
+  isContactRuleSyncPreviewChangedError,
+  previewContactRuleSync,
   syncContactRule,
   upsertContactRule
 } from "../services/contactRules.js";
@@ -19,6 +23,18 @@ const readLimit = {
 const writeLimit = {
   config: { permission: "planning:manage" as const, rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
 };
+
+const syncRangeFields = {
+  startDate: z.string().refine(isValidDateKey),
+  endDate: z.string().refine(isValidDateKey)
+};
+const syncRangeSchema = z.object(syncRangeFields)
+  .refine((range) => range.endDate >= range.startDate, { path: ["endDate"] });
+
+const syncInputSchema = z.object({
+  ...syncRangeFields,
+  previewFingerprint: z.string().regex(/^[a-f0-9]{64}$/)
+}).refine((range) => range.endDate >= range.startDate, { path: ["endDate"] });
 
 export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/contact-rules", readLimit, async () => {
@@ -119,16 +135,49 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
     return { ...getContactRule(request.params.id), syncSummary };
   });
 
+  app.post<{ Params: { id: string } }>("/api/contact-rules/:id/sync-preview", writeLimit, async (request, reply) => {
+    const rule = getContactRule(request.params.id);
+    if (!rule) return reply.code(404).send({ error: "not_found" });
+    const parsed = syncRangeSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
+    try {
+      assertCanUseCareParty(request.user, rule.responsiblePartyId);
+      return previewContactRuleSync(request.params.id, parsed.data);
+    } catch (error) {
+      return reply.code(400).send({
+        error: "invalid_sync_range",
+        message: error instanceof Error ? error.message : String(error)
+      });
+    }
+  });
+
   app.post<{ Params: { id: string } }>("/api/contact-rules/:id/sync", writeLimit, async (request, reply) => {
     const rule = getContactRule(request.params.id);
     if (!rule) return reply.code(404).send({ error: "not_found" });
     try {
       assertCanUseCareParty(request.user, rule.responsiblePartyId);
+      const ranged = request.body && Object.keys(request.body as object).length
+        ? syncInputSchema.safeParse(request.body)
+        : undefined;
+      if (ranged && !ranged.success) {
+        return reply.code(400).send({ error: "validation_error", issues: ranged.error.issues });
+      }
       const syncSummary = db.transaction(() =>
-        syncContactRule(request.params.id, { userEmail: request.userEmail })
+        syncContactRule(request.params.id, {
+          userEmail: request.userEmail,
+          ...(ranged?.success ? {
+            startDate: ranged.data.startDate,
+            endDate: ranged.data.endDate,
+            previewFingerprint: ranged.data.previewFingerprint,
+            suppressPastConfirmations: true
+          } : {})
+        })
       )();
       return { ...getContactRule(request.params.id), syncSummary };
     } catch (error) {
+      if (isContactRuleSyncPreviewChangedError(error)) {
+        return reply.code(409).send({ error: "contact_rule_sync_preview_changed" });
+      }
       return reply.code(400).send({
         error: "invalid_relation",
         message: error instanceof Error ? error.message : String(error)

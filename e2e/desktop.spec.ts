@@ -1459,7 +1459,7 @@ test("shows calendar overlays in the dashboard overview", async ({
   await page.getByTestId("month-picker").fill("2026-07");
   const dashboardCalendar = page.locator(".calendar-panel");
   await expect(dashboardCalendar.getByTestId(`external-calendar-event-${event?.id}`))
-    .toHaveCount(3);
+    .toHaveCount(2);
   await expect(dashboardCalendar.getByTestId(`calendar-unavailable-${unavailable.id}`))
     .toBeVisible();
 });
@@ -1647,14 +1647,24 @@ test("shows planned care conflicts consistently across care views", async ({
       endDateTime: `${date}T17:00`
     }
   });
+  expect(firstResponse.ok()).toBeTruthy();
+  const secondEntry = {
+    ...baseEntry,
+    startDateTime: `${date}T16:00`,
+    endDateTime: `${date}T19:00`
+  };
+  const previewResponse = await request.post("/api/care-conflicts/preview", {
+    data: secondEntry
+  });
+  expect(previewResponse.ok()).toBeTruthy();
+  const preview = await previewResponse.json() as { fingerprint: string };
   const secondResponse = await request.post("/api/care-entries", {
     data: {
-      ...baseEntry,
-      startDateTime: `${date}T16:00`,
-      endDateTime: `${date}T19:00`
+      ...secondEntry,
+      confirmPlannedConflict: true,
+      conflictFingerprint: preview.fingerprint
     }
   });
-  expect(firstResponse.ok()).toBeTruthy();
   expect(secondResponse.ok()).toBeTruthy();
   const first = await firstResponse.json() as { id: string };
 

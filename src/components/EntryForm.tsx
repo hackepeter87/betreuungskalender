@@ -10,6 +10,8 @@ import {
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
 import { useAppStore } from "../store/AppStore";
+import { api } from "../lib/api";
+import type { ApiCareConflictPreview } from "../../shared/api";
 import type {
   CareEntry,
   CareDeviationType,
@@ -24,6 +26,8 @@ import type {
 } from "../types";
 import { FieldHelpButton, FieldHelpLabel } from "./FieldHelp";
 import { Icon } from "./Icon";
+import { isValidTimedRange } from "../../shared/temporal";
+import { DateTimeRange } from "./DateTimeRange";
 
 interface EntryFormProps {
   entry?: CareEntry;
@@ -111,7 +115,7 @@ export function EntryForm({
   onCancel
 }: EntryFormProps) {
   const { locale, intlLocale } = useI18n();
-  const { data, saveEntry, removeEntry, canWrite, isSaving, session } = useAppStore();
+  const { data, saveEntry, removeEntry, canWrite, isSaving, session, reload } = useAppStore();
   const scheduler = session.workspaceRole === "scheduler";
   const schedulerCanEdit = !scheduler || !entry || (
     entry.status === "planned" && Date.parse(entry.startDateTime) > Date.now()
@@ -193,6 +197,8 @@ export function EntryForm({
   );
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const [conflictPreview, setConflictPreview] = useState<ApiCareConflictPreview | null>(null);
+  const [confirmedConflictFingerprint, setConfirmedConflictFingerprint] = useState<string>();
 
   const startDateTime = `${startDate}T${startTime}`;
   const endDateTime = `${endDate}T${endTime}`;
@@ -200,12 +206,25 @@ export function EntryForm({
   const actualEndDateTime = `${actualEndDate}T${actualEndTime}`;
   const originalPlanStart = entry?.plannedStartDateTime ?? entry?.startDateTime ?? startDateTime;
   const originalPlanEnd = entry?.plannedEndDateTime ?? entry?.endDateTime ?? endDateTime;
+  const rangeInvalid = !isValidTimedRange(startDateTime, endDateTime);
+  const actualRangeInvalid = status === "partial" && !isValidTimedRange(actualStartDateTime, actualEndDateTime);
   const selectedNames = useMemo(
     () =>
       data.children
         .filter((child) => childIds.includes(child.id))
         .map((child) => child.name),
     [childIds, data.children]
+  );
+  const existingConflicts = useMemo(
+    () => entry
+      ? data.careConflicts.flatMap((conflict) => {
+          if (!conflict.entryIds.includes(entry.id)) return [];
+          const otherId = conflict.entryIds.find((id) => id !== entry.id);
+          const otherEntry = data.entries.find((item) => item.id === otherId);
+          return otherEntry ? [{ conflict, entry: otherEntry }] : [];
+        })
+      : [],
+    [data.careConflicts, data.entries, entry]
   );
 
   const toggleOvernight = (checked: boolean) => {
@@ -235,14 +254,14 @@ export function EntryForm({
     if (!childIds.length) {
       nextErrors.children = copy(locale, "entryForm", "childRequired");
     }
-    if (new Date(endDateTime) <= new Date(startDateTime)) {
+    if (rangeInvalid) {
       nextErrors.endDateTime = copy(locale, "entryForm", "endAfterStart");
     }
     const selectedActualChildIds = actualChildIds.filter((id) => childIds.includes(id));
     if (status === "partial" && !selectedActualChildIds.length) {
       nextErrors.actualChildren = copy(locale, "entryForm", "childRequired");
     }
-    if (status === "partial" && new Date(actualEndDateTime) <= new Date(actualStartDateTime)) {
+    if (actualRangeInvalid) {
       nextErrors.actualEndDateTime = copy(locale, "entryForm", "endAfterStart");
     }
     if (status === "cancelled" && !cancellationReason.trim()) {
@@ -279,7 +298,7 @@ export function EntryForm({
       return;
     }
 
-    const saved = await saveEntry({
+    const entryInput = {
       id: entry?.id,
       date: startDate,
       startDateTime,
@@ -325,9 +344,42 @@ export function EntryForm({
       costs: costs.map((cost) => ({
         ...cost,
         notes: cost.notes?.trim() || undefined
-      }))
-    });
+      })),
+      confirmPlannedConflict: Boolean(confirmedConflictFingerprint),
+      conflictFingerprint: confirmedConflictFingerprint
+    };
+    if (status === "planned") {
+      try {
+        const preview = await api.previewCareConflicts(entryInput, entry?.id);
+        if (preview.items.length && preview.fingerprint !== confirmedConflictFingerprint) {
+          setConflictPreview(preview);
+          setConfirmedConflictFingerprint(undefined);
+          return;
+        }
+        setConflictPreview(null);
+      } catch {
+        setError(copy(locale, "careConflict", "previewFailed"));
+        return;
+      }
+    }
+    const saved = await saveEntry(entryInput);
     if (saved) onSaved();
+  };
+
+  const resolveRuleConflict = async (conflictId: string) => {
+    if (!entry) return;
+    setError("");
+    try {
+      await api.resolveCareConflict({
+        conflictId,
+        entryId: entry.id,
+        action: "replace_rule_occurrence"
+      });
+      await reload();
+      onSaved();
+    } catch {
+      setError(copy(locale, "careConflict", "changed"));
+    }
   };
 
   const handleDelete = async () => {
@@ -347,6 +399,33 @@ export function EntryForm({
             <p>{copy(locale, "entryForm", "plannedRuleDescription")}</p>
           </div>
         </div>
+      ) : null}
+
+      {existingConflicts.length ? (
+        <section className="conflict-review" aria-labelledby="existing-conflicts-title">
+          <div className="conflict-review__heading">
+            <Icon name="alert" size={19} />
+            <div>
+              <h3 id="existing-conflicts-title">{copy(locale, "careConflict", "reviewTitle")}</h3>
+              <p>{copy(locale, "careConflict", "reviewDescription")}</p>
+            </div>
+          </div>
+          {existingConflicts.map((item) => (
+            <div className="conflict-review__item" key={item.conflict.id}>
+              <div>
+                <strong>{data.children.filter((child) => item.entry.childIds.includes(child.id)).map((child) => child.name).join(", ")}</strong>
+                <DateTimeRange startDateTime={item.entry.startDateTime} endDateTime={item.entry.endDateTime} />
+                <small>{data.careParties.find((party) => party.id === item.entry.responsiblePartyId)?.name ?? copy(locale, "common", "notAvailable")}</small>
+              </div>
+              {entry?.contactRuleId && entry.status === "planned" ? (
+                <button className="button button--danger-quiet" type="button" onClick={() => void resolveRuleConflict(item.conflict.id)}>
+                  <Icon name="repeat" size={16} />
+                  {copy(locale, "careConflict", "replaceOccurrence")}
+                </button>
+              ) : <span>{copy(locale, "careConflict", "editGuidance")}</span>}
+            </div>
+          ))}
+        </section>
       ) : null}
 
       {data.children.length === 0 ? (
@@ -578,7 +657,9 @@ export function EntryForm({
                 type="date"
                 data-testid="entry-actual-end-date"
                 value={actualEndDate}
-                aria-invalid={Boolean(fieldErrors.actualEndDateTime)}
+                min={actualStartDate}
+                aria-invalid={actualRangeInvalid || Boolean(fieldErrors.actualEndDateTime)}
+                aria-describedby={actualRangeInvalid ? "actual-range-error" : undefined}
                 onChange={(event) => {
                   setActualEndDate(event.target.value);
                   setFieldErrors((errors) => ({ ...errors, actualEndDateTime: "" }));
@@ -591,7 +672,8 @@ export function EntryForm({
                 type="time"
                 data-testid="entry-actual-end-time"
                 value={actualEndTime}
-                aria-invalid={Boolean(fieldErrors.actualEndDateTime)}
+                aria-invalid={actualRangeInvalid || Boolean(fieldErrors.actualEndDateTime)}
+                aria-describedby={actualRangeInvalid ? "actual-range-error" : undefined}
                 onChange={(event) => {
                   setActualEndTime(event.target.value);
                   setFieldErrors((errors) => ({ ...errors, actualEndDateTime: "" }));
@@ -599,7 +681,7 @@ export function EntryForm({
               />
             </label>
           </div>
-          {fieldErrors.actualEndDateTime ? <p className="field-error">{fieldErrors.actualEndDateTime}</p> : null}
+          {actualRangeInvalid || fieldErrors.actualEndDateTime ? <p className="field-error" id="actual-range-error">{copy(locale, "entryForm", "endAfterStart")}</p> : null}
           {data.careParties.length ? (
             <label className="field">
               <span>{copy(locale, "confirmation", "actualCareParty")}</span>
@@ -630,8 +712,10 @@ export function EntryForm({
               type="date"
               data-testid="entry-end-date"
               required
+              min={startDate}
               value={endDate}
-              aria-invalid={Boolean(fieldErrors.endDateTime)}
+              aria-invalid={rangeInvalid || Boolean(fieldErrors.endDateTime)}
+              aria-describedby={rangeInvalid ? "entry-range-error" : undefined}
               onChange={(event) => {
                 setEndDate(event.target.value);
                 setFieldErrors((errors) => ({ ...errors, endDateTime: "" }));
@@ -645,7 +729,8 @@ export function EntryForm({
               data-testid="entry-end-time"
               required
               value={endTime}
-              aria-invalid={Boolean(fieldErrors.endDateTime)}
+              aria-invalid={rangeInvalid || Boolean(fieldErrors.endDateTime)}
+              aria-describedby={rangeInvalid ? "entry-range-error" : undefined}
               onChange={(event) => {
                 setEndTime(event.target.value);
                 setFieldErrors((errors) => ({ ...errors, endDateTime: "" }));
@@ -653,7 +738,7 @@ export function EntryForm({
             />
           </label>
         </div>
-        {fieldErrors.endDateTime ? <p className="field-error">{fieldErrors.endDateTime}</p> : null}
+        {rangeInvalid || fieldErrors.endDateTime ? <p className="field-error" id="entry-range-error">{copy(locale, "entryForm", "endAfterStart")}</p> : null}
         {!scheduler ? <div className="toggle-row">
           <label className="toggle">
             <input data-testid="entry-overnight" type="checkbox" checked={overnight} onChange={(event) => toggleOvernight(event.target.checked)} />
@@ -885,6 +970,35 @@ export function EntryForm({
 
       {error ? <p className="form-error" role="alert">{error}</p> : null}
 
+      {conflictPreview?.items.length ? (
+        <section className="conflict-review" aria-labelledby="preview-conflicts-title">
+          <div className="conflict-review__heading">
+            <Icon name="alert" size={19} />
+            <div>
+              <h3 id="preview-conflicts-title">{copy(locale, "careConflict", "confirmTitle")}</h3>
+              <p>{copy(locale, "careConflict", "confirmDescription")}</p>
+            </div>
+          </div>
+          {conflictPreview.items.map((item) => (
+            <div className="conflict-review__item" key={item.conflict.id}>
+              <div>
+                <strong>{data.children.filter((child) => item.entry.childIds.includes(child.id)).map((child) => child.name).join(", ")}</strong>
+                <DateTimeRange startDateTime={item.entry.startDateTime} endDateTime={item.entry.endDateTime} />
+                <small>{data.careParties.find((party) => party.id === item.entry.responsiblePartyId)?.name ?? copy(locale, "common", "notAvailable")}</small>
+              </div>
+            </div>
+          ))}
+          <label className="check-row conflict-review__confirmation">
+            <input
+              type="checkbox"
+              checked={confirmedConflictFingerprint === conflictPreview.fingerprint}
+              onChange={(event) => setConfirmedConflictFingerprint(event.target.checked ? conflictPreview.fingerprint : undefined)}
+            />
+            <span>{copy(locale, "careConflict", "confirmCheckbox")}</span>
+          </label>
+        </section>
+      ) : null}
+
       <footer className="form-actions">
         {entry && session.permissions?.includes("appointments:delete") ? (
           <button className="button button--danger-quiet" type="button" onClick={() => void handleDelete()} disabled={!canWrite || isSaving}>
@@ -894,7 +1008,7 @@ export function EntryForm({
         ) : <span />}
         <div className="form-actions__right">
           <button className="button button--secondary" type="button" onClick={onCancel}>{copy(locale, "common", "cancel")}</button>
-          <button className="button button--primary" data-testid="entry-submit" type="submit" disabled={data.children.length === 0 || !canWrite || !schedulerCanEdit || isSaving}>
+          <button className="button button--primary" data-testid="entry-submit" type="submit" disabled={data.children.length === 0 || !canWrite || !schedulerCanEdit || isSaving || rangeInvalid || actualRangeInvalid}>
             <Icon name="check" size={17} />
             {entry ? copy(locale, "entryForm", "saveChanges") : copy(locale, "entryForm", "saveEntry")}
           </button>

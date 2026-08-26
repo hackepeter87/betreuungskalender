@@ -159,7 +159,7 @@ export function getCalendarDays(monthKey: string): Array<{
 }
 
 export function entryDateKeys(startDateTime: string, endDateTime: string): string[] {
-  return enumerateDateKeys(startDateTime.slice(0, 10), endDateTime.slice(0, 10));
+  return dateKeysForTimedRange(startDateTime, endDateTime);
 }
 
 export function isWeekendDate(dateKey: string): boolean {
@@ -199,3 +199,4 @@ function dateFormatter(
   formatterCache.set(key, formatter);
   return formatter;
 }
+import { dateKeysForTimedRange } from "../../shared/temporal";

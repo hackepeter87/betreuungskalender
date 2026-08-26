@@ -24,8 +24,10 @@ import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
 import { reportMessages } from "../i18n/reportMessages";
 import { reportClosureDescription } from "../lib/monthClosure";
-import { exportPdfReport, makeReportId } from "../lib/report";
+import { exportPdfReport } from "../lib/report";
 import { useAppStore } from "../store/AppStore";
+import { api, mapReportSnapshotData } from "../lib/api";
+import type { ApiReportSnapshot } from "../../shared/api";
 
 export function ReportPage() {
   const { locale, intlLocale, t } = useI18n();
@@ -38,28 +40,33 @@ export function ReportPage() {
       }),
     [intlLocale]
   );
-  const { data } = useAppStore();
+  const { data, session } = useAppStore();
   const [selection, setSelection] = useState<PeriodSelection>(() =>
     periodSelection("month", toMonthKey(new Date()))
   );
   const [creatingPdf, setCreatingPdf] = useState(false);
   const [includeAuditHistory, setIncludeAuditHistory] = useState(false);
-  const [reportId, setReportId] = useState(makeReportId);
+  const [reportId, setReportId] = useState("");
   const [reportCreatedAt, setReportCreatedAt] = useState(() => new Date().toISOString());
+  const [reportData, setReportData] = useState(data);
+  const [loadingSnapshot, setLoadingSnapshot] = useState(true);
+  const [staleSnapshot, setStaleSnapshot] = useState(false);
+  const [refreshRevision, setRefreshRevision] = useState(0);
+  const canIncludeAuditHistory = session.permissions?.includes("audit:view") ?? false;
   const stats = useMemo(
-    () => calculatePeriodStats(data, selection.startDate, selection.endDate),
-    [data, selection.endDate, selection.startDate]
+    () => calculatePeriodStats(reportData, selection.startDate, selection.endDate),
+    [reportData, selection.endDate, selection.startDate]
   );
   const entries = useMemo(
     () =>
-      entriesForRange(data.entries, selection.startDate, selection.endDate)
+      entriesForRange(reportData.entries, selection.startDate, selection.endDate)
         .slice()
         .sort((a, b) => a.startDateTime.localeCompare(b.startDateTime)),
-    [data.entries, selection.endDate, selection.startDate]
+    [reportData.entries, selection.endDate, selection.startDate]
   );
   const auditEntries = useMemo(
     () =>
-      data.auditLog
+      reportData.auditLog
         .filter(
           (entry) =>
             entry.effectiveDate &&
@@ -68,45 +75,64 @@ export function ReportPage() {
         )
         .slice()
         .sort((a, b) => a.timestamp.localeCompare(b.timestamp)),
-    [data.auditLog, selection.endDate, selection.startDate]
+    [reportData.auditLog, selection.endDate, selection.startDate]
   );
   const unavailablePeriods = useMemo(
     () =>
       unavailablePeriodsForRange(
-        data.unavailablePeriods,
+        reportData.unavailablePeriods,
         selection.startDate,
         selection.endDate
       ).sort((a, b) => a.startDateTime.localeCompare(b.startDateTime)),
-    [data.unavailablePeriods, selection.endDate, selection.startDate]
+    [reportData.unavailablePeriods, selection.endDate, selection.startDate]
   );
   const closureDescription = useMemo(
     () =>
       reportClosureDescription(
-        data,
+        reportData,
         selection.startDate,
         selection.endDate,
         locale
       ),
-    [data, locale, selection.endDate, selection.startDate]
+    [reportData, locale, selection.endDate, selection.startDate]
   );
-  const hasAnyEntries = data.entries.some((entry) => !entry.deletedAt);
+  const hasAnyEntries = reportData.entries.some((entry) => !entry.deletedAt);
 
   useEffect(() => {
-    setReportId(makeReportId());
-    setReportCreatedAt(new Date().toISOString());
-  }, [data.updatedAt, selection.endDate, selection.startDate]);
+    if (selection.endDate < selection.startDate) return;
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setLoadingSnapshot(true);
+      void api.reportSnapshot(
+        selection.startDate,
+        selection.endDate,
+        canIncludeAuditHistory && includeAuditHistory,
+        controller.signal
+      ).then((snapshot: ApiReportSnapshot) => {
+        setReportData(mapReportSnapshotData(snapshot));
+        setReportId(snapshot.reportId);
+        setReportCreatedAt(snapshot.generatedAt);
+        setStaleSnapshot(false);
+      }).catch((error: unknown) => {
+        if (error instanceof DOMException && error.name === "AbortError") return;
+        setStaleSnapshot(true);
+      }).finally(() => {
+        if (!controller.signal.aborted) setLoadingSnapshot(false);
+      });
+    }, 250);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [canIncludeAuditHistory, includeAuditHistory, refreshRevision, selection.endDate, selection.startDate]);
 
   const createPdf = async () => {
     setCreatingPdf(true);
     try {
-      const nextReportId = makeReportId();
-      const nextCreatedAt = new Date().toISOString();
-      setReportId(nextReportId);
-      setReportCreatedAt(nextCreatedAt);
-      await exportPdfReport(data, selection.startDate, selection.endDate, {
-        reportId: nextReportId,
+      await exportPdfReport(reportData, selection.startDate, selection.endDate, {
+        reportId,
         includeAuditHistory,
-        createdAt: nextCreatedAt,
+        createdAt: reportCreatedAt,
         locale
       });
     } finally {
@@ -122,17 +148,21 @@ export function ReportPage() {
           <h1>{t("report.pageTitle")}</h1>
         </div>
         <div className="page-header__actions">
-          <label className="check-row report-history-toggle">
+          {canIncludeAuditHistory ? <label className="check-row report-history-toggle">
             <input type="checkbox" checked={includeAuditHistory} onChange={(event) => setIncludeAuditHistory(event.target.checked)} />
             <FieldHelpLabel fieldId="export.includeAudit">
               {t("report.includeHistory")}
             </FieldHelpLabel>
-          </label>
-          <button className="button button--secondary" type="button" onClick={() => window.print()}>
+          </label> : null}
+          <button className="button button--secondary" type="button" onClick={() => setRefreshRevision((value) => value + 1)} disabled={loadingSnapshot}>
+            <Icon name="history" size={17} />
+            {t("report.refresh")}
+          </button>
+          <button className="button button--secondary" type="button" onClick={() => window.print()} disabled={loadingSnapshot || staleSnapshot}>
             <Icon name="printer" size={17} />
             {t("report.print")}
           </button>
-          <button className="button button--primary" type="button" onClick={createPdf} disabled={creatingPdf}>
+          <button className="button button--primary" type="button" onClick={createPdf} disabled={creatingPdf || loadingSnapshot || staleSnapshot}>
             <Icon name="download" size={17} />
             {creatingPdf ? t("report.creating") : t("report.download")}
           </button>
@@ -144,6 +174,9 @@ export function ReportPage() {
         <PeriodSelector value={selection} onChange={setSelection} />
         <MobileExportNotice />
       </div>
+
+      {loadingSnapshot ? <div className="notice no-print" role="status"><Icon name="history" size={17} />{t("report.loading")}</div> : null}
+      {staleSnapshot ? <div className="notice notice--warning no-print" role="alert"><Icon name="alert" size={17} />{t("report.stale")}</div> : null}
 
       {!hasAnyEntries ? (
         <section className="panel empty-state no-print" data-testid="report-empty-state">
@@ -163,9 +196,9 @@ export function ReportPage() {
             <div><dt>{messages.createdAt}</dt><dd>{formatDateTime(reportCreatedAt, intlLocale)}</dd></div>
             <div><dt>{messages.reportId}</dt><dd>{reportId}</dd></div>
             <div><dt>{messages.period}</dt><dd>{formatDate(selection.startDate, intlLocale)} {messages.through} {formatDate(selection.endDate, intlLocale)}</dd></div>
-            <div><dt>{messages.dataAsOf}</dt><dd>{formatDateTime(data.updatedAt, intlLocale)}</dd></div>
+            <div><dt>{messages.dataAsOf}</dt><dd>{formatDateTime(reportData.updatedAt, intlLocale)}</dd></div>
             <div><dt>{messages.closureStatus}</dt><dd>{closureDescription}</dd></div>
-            <div><dt>{messages.children}</dt><dd>{data.children.map((child) => child.name).join(", ") || messages.noChildren}</dd></div>
+            <div><dt>{messages.children}</dt><dd>{reportData.children.map((child) => child.name).join(", ") || messages.noChildren}</dd></div>
           </dl>
         </header>
 
@@ -188,7 +221,7 @@ export function ReportPage() {
               <tbody>
                 {stats.byChild.map((childStats) => (
                   <tr key={childStats.childId}>
-                    <td data-label={messages.child}>{data.children.find((child) => child.id === childStats.childId)?.name}</td>
+                    <td data-label={messages.child}>{reportData.children.find((child) => child.id === childStats.childId)?.name}</td>
                     <td data-label={messages.careDays}>{childStats.careDays}</td>
                     <td data-label={messages.overnights}>{childStats.overnights}</td>
                     <td data-label={messages.weekends}>{childStats.weekends}</td>
@@ -291,12 +324,12 @@ export function ReportPage() {
                     <td data-label={messages.category}>{unavailableCategoryLabel(period.category, locale)}</td>
                     <td data-label={messages.careParty}>
                       {period.responsiblePartyId
-                        ? data.careParties.find((party) => party.id === period.responsiblePartyId)?.name ?? period.responsiblePartyId
+                        ? reportData.careParties.find((party) => party.id === period.responsiblePartyId)?.name ?? period.responsiblePartyId
                         : "–"}
                     </td>
                     <td data-label={messages.children}>
                       {period.childIds.length
-                        ? period.childIds.map((id) => data.children.find((child) => child.id === id)?.name ?? id).join(", ")
+                        ? period.childIds.map((id) => reportData.children.find((child) => child.id === id)?.name ?? id).join(", ")
                         : "–"}
                     </td>
                     <td data-label={messages.dutyRelated}>{period.dutyRelated ? messages.yes : messages.no}</td>
@@ -338,7 +371,7 @@ export function ReportPage() {
                 {entries.map((entry) => (
                   <tr key={entry.id}>
                     <td data-label={messages.period}>{formatDate(entry.startDateTime, intlLocale)} {formatTime(entry.startDateTime, intlLocale)}<br />{messages.through} {formatDate(entry.endDateTime, intlLocale)} {formatTime(entry.endDateTime, intlLocale)}</td>
-                    <td data-label={messages.children}>{entry.childIds.map((id) => data.children.find((child) => child.id === id)?.name).filter(Boolean).join(", ")}</td>
+                    <td data-label={messages.children}>{entry.childIds.map((id) => reportData.children.find((child) => child.id === id)?.name).filter(Boolean).join(", ")}</td>
                     <td data-label={messages.status}>{statusLabel(entry.status, locale)}</td>
                     <td data-label={messages.classification}>
                       {entry.generatedByPatternId ? messages.plannedDate : entry.additionalCare ? messages.additionalCare : messages.singleDate}

@@ -161,6 +161,11 @@ limit and care-party authorization checks. Fully bounded rules are limited to
 sync remains idempotent and does not overwrite cancelled or manually changed
 entries.
 
+Historical contact-rule synchronization requires a server-generated preview
+fingerprint and validates the selected range again during the write. Backfilled
+past entries are excluded from automatic confirmation and push-reminder
+creation; users review them in the authenticated application instead.
+
 Derived care-conflict responses enforce fixed candidate, child-association,
 and result budgets. When a complete overview cannot be produced within these
 budgets, the API returns an explicit incomplete state instead of a partial
