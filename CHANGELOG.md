@@ -6,6 +6,37 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.24.0] - 2026-08-26
+
+### Added
+
+- Add ISO week numbers and accessible day-overflow navigation to the month
+  calendar.
+- Add server-authoritative care-conflict previews and explicit resolution for
+  individual recurring occurrences.
+- Add previewed, idempotent synchronization of past recurring dates for a
+  selected period of up to 36 months.
+- Add consistent server-side report snapshots for custom reporting periods.
+
+### Changed
+
+- Use shared half-open time-range semantics and inclusive civil-date ranges
+  across frontend and server validation.
+- Query the complete visible six-week month grid for care, holidays,
+  unavailability, and external calendar items.
+- Display normalized holiday periods without duplicating their imported source
+  events.
+- Keep report statistics, metadata, print output, and PDF output on the same
+  immutable snapshot.
+
+### Fixed
+
+- Reject invalid date and time ranges before saving.
+- Show multi-day care ranges consistently on adjacent-month calendar days.
+- Suppress confirmation and reminder delivery while care overlaps remain open.
+- Exclude explicitly backfilled past recurring dates from automatic reminder
+  creation while leaving them available for domain review.
+
 ## [1.23.1] - 2026-08-26
 
 ### Fixed

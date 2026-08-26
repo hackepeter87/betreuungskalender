@@ -662,7 +662,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
 
   const previewHistoricalContactRuleSync = useCallback(
     async (id: string, startDate: string, endDate: string) => {
-      setIsSaving(true);
       try {
         const preview = await api.previewContactRuleSync(id, { startDate, endDate });
         setError(null);
@@ -670,8 +669,6 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       } catch (reason) {
         handleError(reason);
         return null;
-      } finally {
-        setIsSaving(false);
       }
     },
     [handleError]

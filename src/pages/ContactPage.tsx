@@ -267,6 +267,7 @@ export function ContactPage({
   const [message, setMessage] = useState("");
   const [historicalPreview, setHistoricalPreview] = useState<ApiContactRuleSyncPreview | null>(null);
   const [historicalPreviewConfirmed, setHistoricalPreviewConfirmed] = useState(false);
+  const [historicalPreviewLoading, setHistoricalPreviewLoading] = useState(false);
   const [mobileRuleStep, setMobileRuleStep] = useState<MobileRuleStep>(1);
   const recurrence = useMemo<ContactRuleRecurrence>(() => {
     return {
@@ -447,10 +448,15 @@ export function ContactPage({
       setMessage(copy(locale, "contact", "saveFirst"));
       return;
     }
-    const preview = await previewHistoricalContactRuleSync(ruleId, generationStart, generationEnd);
-    setHistoricalPreview(preview);
-    setHistoricalPreviewConfirmed(false);
-    if (preview) setMessage("");
+    setHistoricalPreviewLoading(true);
+    try {
+      const preview = await previewHistoricalContactRuleSync(ruleId, generationStart, generationEnd);
+      setHistoricalPreview(preview);
+      setHistoricalPreviewConfirmed(false);
+      if (preview) setMessage("");
+    } finally {
+      setHistoricalPreviewLoading(false);
+    }
   };
 
   const executeHistoricalSync = async () => {
@@ -876,7 +882,7 @@ export function ContactPage({
                     className="button button--secondary"
                     type="button"
                     onClick={() => void previewHistoricalSync()}
-                    disabled={!canWrite || isSaving || generationEnd < generationStart}
+                    disabled={!canWrite || isSaving || historicalPreviewLoading || generationEnd < generationStart}
                   >
                     <Icon name="history" size={17} />
                     {copy(locale, "contactHistory", "preview")}
