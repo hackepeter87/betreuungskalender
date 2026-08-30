@@ -149,9 +149,13 @@ External calendar imports and external calendar feed URLs are treated as
 untrusted input. The server parses ICS data with `ical.js`, rejects oversized
 calendars, excessive event counts, unsupported recurrence rules, invalid date
 ranges, and overlong text fields, and returns only generic error codes for
-rejected sources. URL feeds must use HTTPS, reject obvious local/private hosts,
-are fetched with timeout and size limits, and are shown only in redacted form
-because provider URLs can contain bearer-like query tokens. Imported summary,
+rejected sources. URL feeds must use HTTPS. Every literal address and every DNS
+result must be a public unicast address; mixed public/private DNS answers are
+rejected. The selected address is pinned to the HTTPS request, and every
+redirect is resolved and checked again before it is followed. Redirect count,
+the complete fetch duration, transferred bytes, decompressed bytes, and parsed
+event counts are bounded. Feed URLs are shown only in redacted form because
+provider URLs can contain bearer-like query tokens. Imported summary,
 description, and location values are stored as data and must not be logged or
 rendered as trusted HTML.
 

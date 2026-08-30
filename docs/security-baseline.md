@@ -59,9 +59,12 @@ incident response.
   trips, costs, audit metadata, deleted entries, and cancelled entries.
 - External ICS imports and external calendar feed URLs are size-limited,
   count-limited, validated, rejected for unsupported recurrence, and returned
-  with generic error codes on failure. Feed URLs must use HTTPS, reject obvious
-  local/private hosts, and are shown only redacted because they can contain
-  bearer-like provider tokens.
+  with generic error codes on failure. Feed URLs must use HTTPS. Literal and
+  DNS-resolved destinations must contain only public unicast addresses, the
+  selected address is pinned for the HTTPS connection, and every redirect is
+  resolved and checked again. Redirects, total duration, transferred bytes,
+  and decompressed bytes are bounded. URLs are shown only redacted because they
+  can contain bearer-like provider tokens.
 - Request URL logging redacts feed tokens and common OIDC or token query
   parameters.
 - Release checks reject tracked and untracked sensitive artifacts such as real
