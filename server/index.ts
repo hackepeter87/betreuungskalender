@@ -7,36 +7,20 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { resolveRequestUser, sessionInfo, workspacePermissionsForRole, type RequestUser } from "./auth.js";
 import { createApiAuthHook } from "./authHook.js";
+import {
+  assertApplicationApiRouteAuthorization,
+  registerProtectedApplicationRoutes
+} from "./applicationRoutes.js";
 import { config } from "./config.js";
 import { cookieValue } from "./cookies.js";
 import { db } from "./db/connection.js";
 import { runMigrations } from "./db/migrate.js";
 import { sanitizeRequestUrl } from "./logging.js";
 import { isTrustedProxyAddress } from "./trustedProxy.js";
-import { auditRoutes } from "./routes/audit.js";
-import { appDataRoutes } from "./routes/appData.js";
-import { careConfirmationRoutes } from "./routes/careConfirmations.js";
-import { appUserRoutes } from "./routes/appUsers.js";
-import { careEntryRoutes } from "./routes/careEntries.js";
-import { carePartyRoutes } from "./routes/careParties.js";
-import { childrenRoutes } from "./routes/children.js";
-import { contactPatternRoutes } from "./routes/contactPatterns.js";
-import { contactRuleRoutes } from "./routes/contactRules.js";
-import { demoDataRoutes } from "./routes/demoData.js";
-import { dataTransferRoutes } from "./routes/dataTransfer.js";
-import { holidayRoutes } from "./routes/holidays.js";
-import { instanceReadinessRoutes } from "./routes/instanceReadiness.js";
-import { invitationRoutes } from "./routes/invitations.js";
 import { setupRoutes } from "./routes/setup.js";
-import { monthClosingRoutes } from "./routes/monthClosings.js";
-import { migrationRoutes } from "./routes/migration.js";
 import { nativeOidcRoutes } from "./routes/nativeOidc.js";
 import { recoveryAdminRoutes } from "./routes/recoveryAdmin.js";
 import { installRateLimitPolicy } from "./rateLimitPolicy.js";
-import { settingsRoutes } from "./routes/settings.js";
-import { unavailablePeriodRoutes } from "./routes/unavailablePeriods.js";
-import { externalCalendarRoutes } from "./routes/externalCalendars.js";
-import { calendarFeedRoutes } from "./routes/calendarFeeds.js";
 import { OidcSessionStore } from "./services/oidcSessions.js";
 import { RecoveryAdminStore } from "./services/recoveryAdmin.js";
 import { applyLegacyPreOwnerMembershipRole } from "./services/memberships.js";
@@ -44,7 +28,6 @@ import { publicSetupState } from "./services/setupState.js";
 import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "./services/users.js";
 import { runCareConfirmationSweep } from "./services/careConfirmations.js";
 import { disableLocalDevelopmentIdentityAccess } from "./services/localDevelopmentIdentity.js";
-import { reportRoutes } from "./routes/reports.js";
 
 runMigrations();
 if (config.authMode !== "local") {
@@ -90,6 +73,8 @@ const app = Fastify({
     ? (address) => isTrustedProxyAddress(address, config.trustedProxyRules)
     : config.trustProxyAuth
 });
+
+app.addHook("onRoute", assertApplicationApiRouteAuthorization);
 
 function workspaceSession(user: RequestUser) {
   return {
@@ -436,28 +421,8 @@ app.get("/api/session", readLimit, async (request) => {
 
 await app.register(recoveryAdminRoutes, { config, store: recoveryAdmin });
 await app.register(nativeOidcRoutes, { config, sessions: nativeOidcSessions });
-await app.register(childrenRoutes);
-await app.register(carePartyRoutes);
-await app.register(careEntryRoutes);
-await app.register(careConfirmationRoutes);
-await app.register(holidayRoutes);
-await app.register(contactPatternRoutes);
-await app.register(contactRuleRoutes);
-await app.register(settingsRoutes);
-await app.register(instanceReadinessRoutes);
-await app.register(invitationRoutes);
 await app.register(setupRoutes, { nativeSessions: nativeOidcSessions });
-await app.register(unavailablePeriodRoutes);
-await app.register(externalCalendarRoutes);
-await app.register(calendarFeedRoutes);
-await app.register(monthClosingRoutes);
-await app.register(migrationRoutes);
-await app.register(auditRoutes);
-await app.register(appUserRoutes);
-await app.register(appDataRoutes);
-await app.register(dataTransferRoutes);
-await app.register(reportRoutes);
-await app.register(demoDataRoutes);
+await registerProtectedApplicationRoutes(app);
 
 const confirmationSweep = setInterval(() => {
   void runCareConfirmationSweep().catch((error) => {

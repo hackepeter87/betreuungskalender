@@ -2,9 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   displayNameForIdentity,
-  hasPermission,
   requestIdentity,
-  requiredPermissionForRequest,
   resolveRequestIdentity,
   resolveRequestUser,
   roleFromGroups,
@@ -188,41 +186,6 @@ test("maps native OIDC claims to stable users and role permissions", () => {
     groups: ["/other"]
   }, options);
   assert.deepEqual(missing, { authenticated: false, reason: "missing_role" });
-});
-
-test("enforces read, write and admin authorization decisions", () => {
-  const readonlyUser = {
-    id: "user_readonly",
-    externalSubject: "readonly",
-    displayName: "readonly",
-    groups: ["readers"],
-    role: "readonly" as const,
-    permissions: ["read" as const]
-  };
-  const parentUser = {
-    ...readonlyUser,
-    role: "parent" as const,
-    permissions: ["read" as const, "write" as const]
-  };
-  const adminUser = {
-    ...readonlyUser,
-    role: "admin" as const,
-    permissions: ["read" as const, "write" as const, "admin" as const]
-  };
-
-  assert.equal(requiredPermissionForRequest("GET", "/api/children"), "read");
-  assert.equal(requiredPermissionForRequest("POST", "/api/children"), "write");
-  assert.equal(requiredPermissionForRequest("PUT", "/api/app-data"), "admin");
-  assert.equal(requiredPermissionForRequest("GET", "/api/app-users"), "admin");
-  assert.equal(requiredPermissionForRequest("GET", "/api/user-care-party-assignments"), "admin");
-  assert.equal(requiredPermissionForRequest("POST", "/api/demo-data/edge-cases"), "admin");
-  assert.equal(requiredPermissionForRequest("POST", "/api/migration/legacy-import"), "admin");
-
-  assert.equal(hasPermission(readonlyUser, "read"), true);
-  assert.equal(hasPermission(readonlyUser, "write"), false);
-  assert.equal(hasPermission(parentUser, "write"), true);
-  assert.equal(hasPermission(parentUser, "admin"), false);
-  assert.equal(hasPermission(adminUser, "admin"), true);
 });
 
 test("workspace roles expose the fixed permission matrix", () => {

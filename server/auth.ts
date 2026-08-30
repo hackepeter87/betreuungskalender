@@ -112,7 +112,7 @@ export function permissionsForRole(role: AuthRole): AuthPermission[] {
   return ["read"];
 }
 
-const allWorkspacePermissions: WorkspacePermission[] = [
+export const workspacePermissionValues: readonly WorkspacePermission[] = Object.freeze([
   "appointments:view",
   "appointments:create",
   "appointments:edit",
@@ -134,7 +134,9 @@ const allWorkspacePermissions: WorkspacePermission[] = [
   "members:manage",
   "exports:run",
   "admin:destructive"
-];
+]);
+
+const allWorkspacePermissions = [...workspacePermissionValues];
 
 export function workspacePermissionsForRole(
   role: WorkspaceRole,
@@ -381,31 +383,4 @@ export function sessionInfo(
       : {}),
     ...(options.authLogoutUrl ? { logoutUrl: options.authLogoutUrl } : {})
   };
-}
-
-export function requiredPermissionForRequest(
-  method: string,
-  url: string
-): AuthPermission {
-  const normalizedMethod = method.toUpperCase();
-  if (
-    url.startsWith("/api/app-data") ||
-    url.startsWith("/api/app-users") ||
-    url.startsWith("/api/instance-readiness") ||
-    url.startsWith("/api/invitations") ||
-    url.startsWith("/api/members") ||
-    url.startsWith("/api/user-care-party-assignments") ||
-    url.startsWith("/api/demo-data") ||
-    url.startsWith("/api/migration/")
-  ) {
-    return "admin";
-  }
-  if (normalizedMethod === "GET" || normalizedMethod === "HEAD" || normalizedMethod === "OPTIONS") {
-    return "read";
-  }
-  return "write";
-}
-
-export function hasPermission(user: RequestUser, permission: AuthPermission): boolean {
-  return user.permissions.includes(permission);
 }
