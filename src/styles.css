@@ -6485,6 +6485,14 @@ button.calendar-day-popover__item:hover {
   overflow-wrap: anywhere;
 }
 
+.agenda-card__details .agenda-card__range {
+  grid-column: 1 / -1;
+  align-items: flex-start;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
 .agenda-card__flags {
   display: flex;
   flex-wrap: wrap;

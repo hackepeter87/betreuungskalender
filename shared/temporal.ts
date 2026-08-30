@@ -96,6 +96,16 @@ export function timedRangesOverlap(
   return Date.parse(firstStart) < Date.parse(secondEnd) && Date.parse(firstEnd) > Date.parse(secondStart);
 }
 
+export function formatCivilTime(value: string, locale: string): string {
+  const parts = civilDateTimeParts(value);
+  if (!parts) return value;
+  return new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "UTC"
+  }).format(new Date(Date.UTC(parts.year, parts.month - 1, parts.day, parts.hour, parts.minute)));
+}
+
 export function formatDateTimeRange(
   startDateTime: string,
   endDateTime: string,
@@ -112,26 +122,23 @@ export function formatDateTimeRange(
     year: "numeric",
     timeZone: "UTC"
   });
-  const time = new Intl.DateTimeFormat(locale, {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "UTC"
-  });
   const startValue = new Date(Date.UTC(start.year, start.month - 1, start.day, start.hour, start.minute));
   const endValue = new Date(Date.UTC(end.year, end.month - 1, end.day, end.hour, end.minute));
+  const startTime = formatCivilTime(startDateTime, locale);
+  const endTime = formatCivilTime(endDateTime, locale);
   const sameDay = start.dateKey === end.dateKey;
 
   if (sameDay) {
     return {
       start: date.format(startValue),
-      end: `${time.format(startValue)}–${time.format(endValue)}`,
+      end: `${startTime}–${endTime}`,
       sameDay
     };
   }
 
   return {
-    start: `${date.format(startValue)}, ${time.format(startValue)}`,
-    end: `${date.format(endValue)}, ${time.format(endValue)}`,
+    start: `${date.format(startValue)}, ${startTime}`,
+    end: `${date.format(endValue)}, ${endTime}`,
     sameDay
   };
 }

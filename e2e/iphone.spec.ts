@@ -270,6 +270,112 @@ test("keeps mobile agenda scoped to the selected month", async ({
   await expectNoDocumentHorizontalOverflow(page);
 });
 
+test("shows multi-day care and unavailability on every occupied agenda day", async ({
+  page,
+  request
+}) => {
+  const childResponse = await request.post("/api/children", {
+    data: {
+      name: "Mehrtag Kind",
+      birthMonth: 5,
+      birthYear: 2018,
+      color: "#0f8b83"
+    }
+  });
+  expect(childResponse.ok()).toBeTruthy();
+  const child = await childResponse.json() as { id: string };
+
+  const partyResponse = await request.post("/api/care-parties", {
+    data: { name: "Betreuung", kind: "other" }
+  });
+  expect(partyResponse.ok()).toBeTruthy();
+  const party = await partyResponse.json() as { id: string };
+
+  const careResponse = await request.post("/api/care-entries", {
+    data: {
+      startDateTime: "2026-08-03T17:00:00+02:00",
+      endDateTime: "2026-08-05T19:00:00+02:00",
+      childIds: [child.id],
+      status: "completed",
+      overnight: true,
+      schoolHandover: false,
+      holiday: false,
+      weekend: false,
+      additionalCare: false,
+      responsiblePartyId: party.id,
+      location: "other",
+      customLocation: "Fiktiver Ort",
+      hasEvidence: false,
+      trips: [],
+      costs: []
+    }
+  });
+  expect(careResponse.ok()).toBeTruthy();
+  const care = await careResponse.json() as { id: string };
+
+  const midnightResponse = await request.post("/api/care-entries", {
+    data: {
+      startDateTime: "2026-08-07T16:00:00+02:00",
+      endDateTime: "2026-08-08T00:00:00+02:00",
+      childIds: [child.id],
+      status: "completed",
+      overnight: false,
+      schoolHandover: false,
+      holiday: false,
+      weekend: false,
+      additionalCare: false,
+      responsiblePartyId: party.id,
+      location: "other",
+      customLocation: "Fiktiver Ort",
+      hasEvidence: false,
+      trips: [],
+      costs: []
+    }
+  });
+  expect(midnightResponse.ok()).toBeTruthy();
+  const midnight = await midnightResponse.json() as { id: string };
+
+  const unavailableResponse = await request.post("/api/unavailable-periods", {
+    data: {
+      startDateTime: "2026-08-10T08:00:00+02:00",
+      endDateTime: "2026-08-12T17:00:00+02:00",
+      category: "duty",
+      dutyRelated: true,
+      affectsContact: false,
+      affectsHolidays: false,
+      scope: "own_unavailability",
+      location: "Fiktive Dienststätte",
+      childIds: []
+    }
+  });
+  expect(unavailableResponse.ok()).toBeTruthy();
+  const unavailable = await unavailableResponse.json() as { id: string };
+
+  await openApp(page);
+  await navigate(page, "calendar");
+  await page.getByTestId("month-picker").fill("2026-08");
+
+  const careCards = page.getByTestId(`agenda-entry-${care.id}`);
+  await expect(careCards).toHaveCount(3);
+  await expect(page.getByTestId("agenda-day-2026-08-03").getByTestId(`agenda-entry-${care.id}-day`)).toHaveText("Beginn 17:00");
+  await expect(page.getByTestId("agenda-day-2026-08-04").getByTestId(`agenda-entry-${care.id}-day`)).toHaveText("Ganzer Tag");
+  await expect(page.getByTestId("agenda-day-2026-08-05").getByTestId(`agenda-entry-${care.id}-day`)).toHaveText("Ende 19:00");
+  for (const range of await page.getByTestId(`agenda-entry-${care.id}-range`).all()) {
+    await expect(range).toContainText("03.08.2026");
+    await expect(range).toContainText("05.08.2026");
+  }
+
+  await expect(page.getByTestId(`agenda-entry-${midnight.id}`)).toHaveCount(1);
+  await expect(page.getByTestId("agenda-day-2026-08-07").getByTestId(`agenda-entry-${midnight.id}`)).toBeVisible();
+  await expect(page.getByTestId("agenda-day-2026-08-08").getByTestId(`agenda-entry-${midnight.id}`)).toHaveCount(0);
+
+  await expect(page.getByTestId(`agenda-unavailable-${unavailable.id}`)).toHaveCount(3);
+  await expect(page.getByTestId("agenda-day-2026-08-10").getByTestId(`agenda-unavailable-${unavailable.id}-day`)).toHaveText("Beginn 08:00");
+  await expect(page.getByTestId("agenda-day-2026-08-11").getByTestId(`agenda-unavailable-${unavailable.id}-day`)).toHaveText("Ganzer Tag");
+  await expect(page.getByTestId("agenda-day-2026-08-12").getByTestId(`agenda-unavailable-${unavailable.id}-day`)).toHaveText("Ende 17:00");
+  await expectNoDocumentHorizontalOverflow(page);
+});
+
 test("keeps critical mobile pages within the viewport", async ({
   page,
   request
@@ -341,7 +447,7 @@ test("keeps critical mobile pages within the viewport", async ({
   await page.getByTestId("month-picker").fill("2026-07");
   await expect(page.getByTestId("mobile-entry-create")).toHaveCount(0);
   await expect(page.getByTestId("calendar-add-entry")).toBeVisible();
-  const unavailableRange = page.locator('[data-testid^="agenda-unavailable-range-"]').first();
+  const unavailableRange = page.locator('[data-testid^="agenda-unavailable-"][data-testid$="-range"]').first();
   await expect(unavailableRange).toContainText("02.07.");
   await expect(unavailableRange).toContainText("04.07.");
   await page.getByTestId("calendar-add-entry").click();
