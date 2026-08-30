@@ -6,6 +6,23 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.24.1] - 2026-08-30
+
+### Changed
+
+- Apply one explicit protected-route registry to authenticated application
+  routes and validate its coverage when the server starts.
+- Keep public and pre-authentication entry points explicit while preserving
+  the existing Local, Native OIDC, and Trusted Proxy sign-in flows.
+
+### Fixed
+
+- Validate every resolved address and redirect before retrieving an external
+  HTTPS calendar.
+- Bound external calendar downloads by redirect count, elapsed time, and
+  compressed and decoded response size.
+- Return generic external-calendar errors without exposing source details.
+
 ## [1.24.0] - 2026-08-26
 
 ### Added
