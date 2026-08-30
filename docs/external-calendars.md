@@ -31,10 +31,14 @@ reschedule, or cancel the actual care entry.
 ## Feed URLs
 
 Feed URLs must use HTTPS, must not contain embedded username/password
-credentials, and must not point to obvious local/private hosts. They may still
-contain bearer-like query tokens from the calendar provider. Treat them like
-passwords. The server stores the full URL so the feed can be refreshed, but API
-responses and the UI show only a redacted URL.
+credentials, and may resolve only to public internet addresses. Literal IP
+addresses, all DNS answers, and every redirect target are checked. Mixed DNS
+answers that contain a local, private, reserved, or otherwise non-public
+address are rejected. The selected public address is pinned to the HTTPS
+connection so a later DNS change cannot redirect that request. Feed URLs may
+still contain bearer-like query tokens from the calendar provider. Treat them
+like passwords. The server stores the full URL so the feed can be refreshed,
+but API responses and the UI show only a redacted URL.
 
 Refreshing a URL feed validates the new content before replacing stored events.
 If refresh fails, the existing events remain available and the source records a
@@ -42,9 +46,11 @@ generic refresh error.
 
 ## Limits and exclusions
 
-Files and fetched feeds are limited to 1 MB and 2,000 events. Feed downloads use
-a timeout and size checks. Recurrence rules (`RRULE`) are rejected rather than
-silently expanded or misrepresented; explicit recurrence instances with
+Files and fetched feeds are limited to 1 MB and 2,000 events. Feed downloads
+allow at most five redirects and use one timeout for DNS resolution, redirects,
+transfer, and body processing. Both transferred and decompressed content are
+size-limited. Recurrence rules (`RRULE`) are rejected rather than silently
+expanded or misrepresented; explicit recurrence instances with
 `RECURRENCE-ID` are supported. CalDAV, provider-specific behavior, background
 sync scheduling, and editing imported events are not supported.
 

@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { ExternalCalendarError, fetchExternalCalendarFeedContent, normalizeExternalCalendarFeedUrl, parseIcs, redactExternalCalendarFeedUrl } from "./services/externalCalendars.js";
+import { gzipSync } from "node:zlib";
+import {
+  ExternalCalendarError,
+  type ExternalCalendarFetchDependencies,
+  fetchExternalCalendarFeedContent,
+  normalizeExternalCalendarFeedUrl,
+  parseIcs,
+  redactExternalCalendarFeedUrl
+} from "./services/externalCalendars.js";
 
 const calendar = (event: string) => `BEGIN:VCALENDAR\r\nVERSION:2.0\r\n${event}\r\nEND:VCALENDAR\r\n`;
 const event = (id: number, body = "SUMMARY:Import test") => [
@@ -109,21 +117,127 @@ test("validates and redacts external calendar feed URLs", () => {
   assertExternalCalendarError(() => normalizeExternalCalendarFeedUrl("https://user:secret@calendar.example.net/private.ics"), "external_calendar_invalid");
   assertExternalCalendarError(() => normalizeExternalCalendarFeedUrl("https://localhost/private.ics"), "external_calendar_invalid");
   assertExternalCalendarError(() => normalizeExternalCalendarFeedUrl("https://192.168.1.10/private.ics"), "external_calendar_invalid");
+  assertExternalCalendarError(() => normalizeExternalCalendarFeedUrl("https://[::ffff:169.254.169.254]/private.ics"), "external_calendar_invalid");
+  for (const address of ["0.0.0.0", "100.64.0.1", "192.0.2.1", "224.0.0.1", "::", "::1", "2001:db8::1", "fe80::1", "fd00::1"]) {
+    assertExternalCalendarError(
+      () => normalizeExternalCalendarFeedUrl(`https://${address.includes(":") ? `[${address}]` : address}/private.ics`),
+      "external_calendar_invalid"
+    );
+  }
 });
 
-test("fetches external calendar feeds with generic errors and size limits", async () => {
+function response(
+  body: string | AsyncIterable<Uint8Array>,
+  options: { statusCode?: number; headers?: Record<string, string | undefined> } = {}
+) {
+  return {
+    statusCode: options.statusCode ?? 200,
+    headers: options.headers ?? {},
+    body: typeof body === "string"
+      ? (async function* () { yield Buffer.from(body); })()
+      : body,
+    cancel() {}
+  };
+}
+
+function dependencies(
+  request: ExternalCalendarFetchDependencies["request"],
+  resolve: ExternalCalendarFetchDependencies["resolve"] = async () => [
+    { address: "93.184.216.34", family: 4 }
+  ]
+): ExternalCalendarFetchDependencies {
+  return { request, resolve, timeoutMs: 100 };
+}
+
+test("fetches valid external calendar feeds with pinned public addresses", async () => {
   const validCalendar = calendar(event(10));
-  const successfulFetch: typeof fetch = async () => new Response(validCalendar, {
-    status: 200,
-    headers: { "content-length": String(Buffer.byteLength(validCalendar, "utf8")) }
-  });
+  const requested: Array<{ url: string; address: string }> = [];
   assert.equal(
-    await fetchExternalCalendarFeedContent("https://calendar.example.net/private.ics?token=RAW_PRIVATE_TOKEN", successfulFetch),
+    await fetchExternalCalendarFeedContent(
+      "https://calendar.example.net/private.ics?token=RAW_PRIVATE_TOKEN",
+      dependencies(async (url, address) => {
+        requested.push({ url: url.href, address: address.address });
+        return response(validCalendar, {
+          headers: { "content-length": String(Buffer.byteLength(validCalendar, "utf8")) }
+        });
+      })
+    ),
     validCalendar
   );
+  assert.deepEqual(requested, [{
+    url: "https://calendar.example.net/private.ics?token=RAW_PRIVATE_TOKEN",
+    address: "93.184.216.34"
+  }]);
 
+  const compressedCalendar = gzipSync(validCalendar);
+  assert.equal(
+    await fetchExternalCalendarFeedContent(
+      "https://calendar.example.net/compressed.ics",
+      dependencies(async () => response((async function* () {
+        yield compressedCalendar;
+      })(), { headers: { "content-encoding": "gzip" } }))
+    ),
+    validCalendar
+  );
+});
+
+test("rejects non-public and mixed DNS results before requesting a feed", async () => {
+  let requested = false;
+  const request: ExternalCalendarFetchDependencies["request"] = async () => {
+    requested = true;
+    return response("");
+  };
   await assert.rejects(
-    () => fetchExternalCalendarFeedContent("https://calendar.example.net/private.ics?token=RAW_PRIVATE_TOKEN", async () => new Response("", { status: 403 })),
+    () => fetchExternalCalendarFeedContent(
+      "https://calendar.example.net/private.ics",
+      dependencies(request, async () => [{ address: "127.0.0.1", family: 4 }])
+    ),
+    (error: unknown) => error instanceof ExternalCalendarError && error.code === "external_calendar_fetch_failed"
+  );
+  await assert.rejects(
+    () => fetchExternalCalendarFeedContent(
+      "https://calendar.example.net/private.ics",
+      dependencies(request, async () => [
+        { address: "93.184.216.34", family: 4 },
+        { address: "::ffff:10.0.0.5", family: 6 }
+      ])
+    ),
+    (error: unknown) => error instanceof ExternalCalendarError && error.code === "external_calendar_fetch_failed"
+  );
+  assert.equal(requested, false);
+});
+
+test("validates every redirect and limits redirect chains", async () => {
+  const redirecting = dependencies(async () => response("", {
+    statusCode: 302,
+    headers: { location: "https://127.0.0.1/private.ics" }
+  }));
+  await assert.rejects(
+    () => fetchExternalCalendarFeedContent("https://calendar.example.net/start.ics", redirecting),
+    (error: unknown) => error instanceof ExternalCalendarError && error.code === "external_calendar_fetch_failed"
+  );
+
+  let requests = 0;
+  const looping = dependencies(async (url) => {
+    requests += 1;
+    return response("", {
+      statusCode: 302,
+      headers: { location: `/redirect-${requests}.ics` }
+    });
+  });
+  await assert.rejects(
+    () => fetchExternalCalendarFeedContent("https://calendar.example.net/start.ics", looping),
+    (error: unknown) => error instanceof ExternalCalendarError && error.code === "external_calendar_fetch_failed"
+  );
+  assert.equal(requests, 6);
+});
+
+test("returns generic feed errors without URL details", async () => {
+  await assert.rejects(
+    () => fetchExternalCalendarFeedContent(
+      "https://calendar.example.net/private.ics?token=RAW_PRIVATE_TOKEN",
+      dependencies(async () => response("", { statusCode: 403 }))
+    ),
     (error: unknown) => {
       assert.ok(error instanceof ExternalCalendarError);
       assert.equal(error.code, "external_calendar_fetch_failed");
@@ -131,12 +245,53 @@ test("fetches external calendar feeds with generic errors and size limits", asyn
       return true;
     }
   );
+});
+
+test("enforces streamed feed size limits without Content-Length", async () => {
+  const oversizedBody = (async function* () {
+    yield Buffer.alloc(750_000, "A");
+    yield Buffer.alloc(300_001, "B");
+  })();
+  await assert.rejects(
+    () => fetchExternalCalendarFeedContent(
+      "https://calendar.example.net/large.ics",
+      dependencies(async () => response(oversizedBody))
+    ),
+    (error: unknown) => error instanceof ExternalCalendarError && error.code === "external_calendar_limit"
+  );
+});
+
+test("aborts feed retrieval when the whole-operation timeout expires", async () => {
+  let aborted = false;
+  await assert.rejects(
+    () => fetchExternalCalendarFeedContent(
+      "https://calendar.example.net/slow.ics",
+      {
+        resolve: async () => [{ address: "93.184.216.34", family: 4 }],
+        timeoutMs: 5,
+        request: async (_url, _address, signal) => new Promise((resolve, reject) => {
+          signal.addEventListener("abort", () => {
+            aborted = true;
+            reject(signal.reason);
+          }, { once: true });
+        })
+      }
+    ),
+    (error: unknown) => error instanceof ExternalCalendarError && error.code === "external_calendar_fetch_failed"
+  );
+  assert.equal(aborted, true);
 
   await assert.rejects(
-    () => fetchExternalCalendarFeedContent("https://calendar.example.net/large.ics", async () => new Response("", {
-      status: 200,
-      headers: { "content-length": "1000001" }
-    })),
-    (error: unknown) => error instanceof ExternalCalendarError && error.code === "external_calendar_limit"
+    () => fetchExternalCalendarFeedContent(
+      "https://calendar.example.net/slow-body.ics",
+      {
+        resolve: async () => [{ address: "93.184.216.34", family: 4 }],
+        timeoutMs: 5,
+        request: async () => response((async function* () {
+          await new Promise(() => undefined);
+        })())
+      }
+    ),
+    (error: unknown) => error instanceof ExternalCalendarError && error.code === "external_calendar_fetch_failed"
   );
 });

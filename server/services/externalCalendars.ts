@@ -1,6 +1,11 @@
 import { createHash, randomUUID } from "node:crypto";
-import { isIP } from "node:net";
+import { lookup } from "node:dns/promises";
+import { request as httpsRequest } from "node:https";
+import { isIP, type LookupFunction } from "node:net";
+import { Readable } from "node:stream";
+import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import ICAL from "ical.js";
+import ipaddr from "ipaddr.js";
 import type { ApiExternalCalendarSourceKind, ApiExternalCalendarSourceType } from "../../shared/api.js";
 import { db } from "../db/connection.js";
 import { markClosedMonthsChanged, recordAudit } from "./audit.js";
@@ -11,6 +16,7 @@ const MAX_ICS_EVENTS = 2_000;
 const MAX_TEXT_LENGTH = 10_000;
 const MAX_FEED_URL_LENGTH = 2_048;
 const FEED_FETCH_TIMEOUT_MS = 10_000;
+const MAX_FEED_REDIRECTS = 5;
 
 type ExternalCalendarErrorCode =
   | "external_calendar_invalid"
@@ -128,32 +134,25 @@ function truncate(value: string, limit: number): string {
   return value.length > limit ? value.slice(0, limit - 1) : value;
 }
 
+function normalizedIpAddress(input: string): ipaddr.IPv4 | ipaddr.IPv6 | undefined {
+  try {
+    const address = ipaddr.parse(input);
+    if (address.kind() !== "ipv6") return address;
+    const ipv6Address = address as ipaddr.IPv6;
+    return ipv6Address.isIPv4MappedAddress() ? ipv6Address.toIPv4Address() : ipv6Address;
+  } catch {
+    return undefined;
+  }
+}
+
+function isPublicIpAddress(input: string): boolean {
+  return normalizedIpAddress(input)?.range() === "unicast";
+}
+
 function isBlockedFeedHost(hostname: string): boolean {
   const normalized = hostname.toLowerCase().replace(/^\[/, "").replace(/\]$/, "").replace(/\.$/, "");
   if (normalized === "localhost" || normalized.endsWith(".localhost") || normalized.endsWith(".local")) return true;
-  const ipVersion = isIP(normalized);
-  if (ipVersion === 4) {
-    const [a = 0, b = 0] = normalized.split(".").map((part) => Number.parseInt(part, 10));
-    return a === 0 ||
-      a === 10 ||
-      a === 127 ||
-      a === 169 && b === 254 ||
-      a === 172 && b >= 16 && b <= 31 ||
-      a === 192 && b === 168 ||
-      a === 100 && b >= 64 && b <= 127 ||
-      a === 198 && (b === 18 || b === 19);
-  }
-  if (ipVersion === 6) {
-    return normalized === "::" ||
-      normalized === "::1" ||
-      normalized.startsWith("fe80:") ||
-      normalized.startsWith("fc") ||
-      normalized.startsWith("fd") ||
-      normalized.startsWith("::ffff:10.") ||
-      normalized.startsWith("::ffff:127.") ||
-      normalized.startsWith("::ffff:192.168.");
-  }
-  return false;
+  return isIP(normalized) !== 0 && !isPublicIpAddress(normalized);
 }
 
 export function normalizeExternalCalendarFeedUrl(input: string): string {
@@ -187,31 +186,186 @@ export function redactExternalCalendarFeedUrl(input: string): string {
   }
 }
 
+export interface ExternalCalendarResolvedAddress {
+  address: string;
+  family: 4 | 6;
+}
+
+export interface ExternalCalendarResponse {
+  statusCode: number;
+  headers: Record<string, string | string[] | undefined>;
+  body: AsyncIterable<Uint8Array>;
+  cancel(): void;
+}
+
+export interface ExternalCalendarFetchDependencies {
+  resolve(hostname: string): Promise<ExternalCalendarResolvedAddress[]>;
+  request(
+    url: URL,
+    address: ExternalCalendarResolvedAddress,
+    signal: AbortSignal
+  ): Promise<ExternalCalendarResponse>;
+  timeoutMs?: number;
+}
+
+function pinnedLookup(address: ExternalCalendarResolvedAddress): LookupFunction {
+  return (_hostname, options, callback) => {
+    if (options.all) {
+      callback(null, [address]);
+      return;
+    }
+    callback(null, address.address, address.family);
+  };
+}
+
+const defaultFetchDependencies: ExternalCalendarFetchDependencies = {
+  async resolve(hostname) {
+    const literal = hostname.replace(/^\[/, "").replace(/\]$/, "");
+    const family = isIP(literal);
+    if (family === 4 || family === 6) return [{ address: literal, family }];
+    const addresses = await lookup(hostname, { all: true, verbatim: true });
+    return addresses.flatMap(({ address, family }) =>
+      family === 4 || family === 6 ? [{ address, family }] : []);
+  },
+  request(url, address, signal) {
+    return new Promise((resolve, reject) => {
+      const request = httpsRequest(url, {
+        headers: {
+          accept: "text/calendar, text/plain;q=0.8, */*;q=0.1",
+          "accept-encoding": "gzip, deflate, br"
+        },
+        lookup: pinnedLookup(address),
+        signal
+      }, (response) => {
+        resolve({
+          statusCode: response.statusCode ?? 0,
+          headers: response.headers,
+          body: response,
+          cancel: () => response.destroy()
+        });
+      });
+      request.once("error", reject);
+      request.end();
+    });
+  }
+};
+
+function singleHeader(headers: ExternalCalendarResponse["headers"], name: string): string | undefined {
+  const value = headers[name];
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) return Promise.reject(signal.reason);
+  return new Promise((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+    operation.then(resolve, reject).finally(() => signal.removeEventListener("abort", abort));
+  });
+}
+
+async function resolvePublicAddress(
+  url: URL,
+  dependencies: ExternalCalendarFetchDependencies,
+  signal: AbortSignal
+): Promise<ExternalCalendarResolvedAddress> {
+  const addresses = await abortable(
+    dependencies.resolve(url.hostname.replace(/^\[/, "").replace(/\]$/, "")),
+    signal
+  );
+  if (addresses.length === 0 || addresses.some(({ address }) => !isPublicIpAddress(address))) {
+    throw new ExternalCalendarError("external_calendar_fetch_failed", "Calendar feed could not be fetched.");
+  }
+  return addresses[0] as ExternalCalendarResolvedAddress;
+}
+
+async function* limitedByteStream(
+  body: AsyncIterable<Uint8Array>,
+  signal: AbortSignal
+): AsyncGenerator<Uint8Array> {
+  const iterator = body[Symbol.asyncIterator]();
+  let receivedBytes = 0;
+  try {
+    while (true) {
+      const item = await abortable(iterator.next(), signal);
+      if (item.done) return;
+      const chunk = Buffer.from(item.value);
+      receivedBytes += chunk.byteLength;
+      if (receivedBytes > MAX_ICS_BYTES) {
+        throw new ExternalCalendarError("external_calendar_limit", "Calendar feed exceeds the supported size.");
+      }
+      yield chunk;
+    }
+  } finally {
+    if (!signal.aborted) await iterator.return?.();
+  }
+}
+
+function decodedBody(response: ExternalCalendarResponse, signal: AbortSignal): AsyncIterable<Uint8Array> {
+  const encoding = singleHeader(response.headers, "content-encoding")?.toLowerCase().trim();
+  const source = limitedByteStream(response.body, signal);
+  if (!encoding || encoding === "identity") return source;
+  const compressedSource = Readable.from(source);
+  if (encoding === "gzip") return compressedSource.pipe(createGunzip());
+  if (encoding === "deflate") return compressedSource.pipe(createInflate());
+  if (encoding === "br") return compressedSource.pipe(createBrotliDecompress());
+  throw new ExternalCalendarError("external_calendar_fetch_failed", "Calendar feed could not be fetched.");
+}
+
+async function readLimitedFeed(response: ExternalCalendarResponse, signal: AbortSignal): Promise<string> {
+  const declaredLength = Number(singleHeader(response.headers, "content-length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_ICS_BYTES) {
+    throw new ExternalCalendarError("external_calendar_limit", "Calendar feed exceeds the supported size.");
+  }
+  const chunks: Buffer[] = [];
+  let receivedBytes = 0;
+  for await (const chunk of limitedByteStream(decodedBody(response, signal), signal)) {
+    const buffer = Buffer.from(chunk);
+    receivedBytes += buffer.byteLength;
+    if (receivedBytes > MAX_ICS_BYTES) {
+      throw new ExternalCalendarError("external_calendar_limit", "Calendar feed exceeds the supported size.");
+    }
+    chunks.push(buffer);
+  }
+  return Buffer.concat(chunks, receivedBytes).toString("utf8");
+}
+
 export async function fetchExternalCalendarFeedContent(
   input: string,
-  fetcher: typeof fetch = fetch
+  dependencies: ExternalCalendarFetchDependencies = defaultFetchDependencies
 ): Promise<string> {
-  const url = normalizeExternalCalendarFeedUrl(input);
+  let url = new URL(normalizeExternalCalendarFeedUrl(input));
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), FEED_FETCH_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(), dependencies.timeoutMs ?? FEED_FETCH_TIMEOUT_MS);
   try {
-    const response = await fetcher(url, {
-      headers: { accept: "text/calendar, text/plain;q=0.8, */*;q=0.1" },
-      redirect: "follow",
-      signal: controller.signal
-    });
-    if (!response.ok) {
-      throw new ExternalCalendarError("external_calendar_fetch_failed", "Calendar feed could not be fetched.");
+    for (let redirectCount = 0; redirectCount <= MAX_FEED_REDIRECTS; redirectCount += 1) {
+      const address = await resolvePublicAddress(url, dependencies, controller.signal);
+      const response = await abortable(
+        dependencies.request(url, address, controller.signal),
+        controller.signal
+      );
+      const location = singleHeader(response.headers, "location");
+      if ([301, 302, 303, 307, 308].includes(response.statusCode) && location) {
+        response.cancel();
+        if (redirectCount === MAX_FEED_REDIRECTS) break;
+        try {
+          url = new URL(normalizeExternalCalendarFeedUrl(new URL(location, url).href));
+        } catch {
+          throw new ExternalCalendarError("external_calendar_fetch_failed", "Calendar feed could not be fetched.");
+        }
+        continue;
+      }
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        response.cancel();
+        throw new ExternalCalendarError("external_calendar_fetch_failed", "Calendar feed could not be fetched.");
+      }
+      try {
+        return await readLimitedFeed(response, controller.signal);
+      } finally {
+        response.cancel();
+      }
     }
-    const length = response.headers.get("content-length");
-    if (length && Number(length) > MAX_ICS_BYTES) {
-      throw new ExternalCalendarError("external_calendar_limit", "Calendar feed exceeds the supported size.");
-    }
-    const content = await response.text();
-    if (Buffer.byteLength(content, "utf8") > MAX_ICS_BYTES) {
-      throw new ExternalCalendarError("external_calendar_limit", "Calendar feed exceeds the supported size.");
-    }
-    return content;
+    throw new ExternalCalendarError("external_calendar_fetch_failed", "Calendar feed could not be fetched.");
   } catch (error) {
     if (error instanceof ExternalCalendarError) throw error;
     throw new ExternalCalendarError("external_calendar_fetch_failed", "Calendar feed could not be fetched.");
