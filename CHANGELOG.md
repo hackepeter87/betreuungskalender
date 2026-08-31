@@ -6,6 +6,17 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.24.2] - 2026-08-31
+
+### Fixed
+
+- Show multi-day care, unavailability, and timed external-calendar records on
+  every occupied day in the responsive agenda.
+- Preserve exclusive midnight and all-day end semantics while keeping the
+  complete date and time range visible on repeated agenda cards.
+- Keep agenda day counts aligned with the records shown on each day without
+  expanding the agenda beyond the selected month.
+
 ## [1.24.1] - 2026-08-30
 
 ### Changed
