@@ -1835,8 +1835,12 @@ test("derives unavailability impact hints from planned contact and holidays", as
   await expect(form).toContainText("Prüfe, ob „Betrifft Umgang“ markiert");
   await expect(form).toContainText("Prüfe, ob „Betrifft Ferien“ markiert");
 
-  await form.getByTestId("unavailable-affects-contact").check({ force: true });
-  await form.getByTestId("unavailable-affects-holidays").check({ force: true });
+  const affectsContact = form.getByTestId("unavailable-affects-contact");
+  const affectsHolidays = form.getByTestId("unavailable-affects-holidays");
+  await affectsContact.locator("..").click();
+  await affectsHolidays.locator("..").click();
+  await expect(affectsContact).toBeChecked();
+  await expect(affectsHolidays).toBeChecked();
   await expectNoUnavailableModalOverflow(page);
   await expect(form.getByTestId("unavailable-derived-impact")).toContainText(
     "wird im Soll-Ist-Hinweis berücksichtigt"
