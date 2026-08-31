@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   dateKeysForInclusiveRange,
   dateKeysForTimedRange,
+  formatCivilTime,
   formatDateTimeRange,
   isValidDateKey,
   isValidTimedRange
@@ -52,4 +53,9 @@ test("date-time ranges render same-day and multi-day values without hiding the e
     formatDateTimeRange("2026-08-07T16:00:00+02:00", "2026-08-09T18:00:00+02:00", "de-DE"),
     { start: "07.08.2026, 16:00", end: "09.08.2026, 18:00", sameDay: false }
   );
+});
+
+test("civil times remain stable across host time zones", () => {
+  assert.equal(formatCivilTime("2026-08-07T16:00:00+02:00", "de-DE"), "16:00");
+  assert.equal(formatCivilTime("2026-08-07T15:00:00.000Z", "de-DE"), "15:00");
 });

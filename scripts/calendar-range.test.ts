@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { agendaDateKeys, agendaDayPhase } from "../src/lib/agenda";
 import { calendarGridRange, filterCalendarOverlayEvents, isoWeekNumber } from "../src/lib/calendar";
 import type { ExternalCalendarEvent, ExternalCalendarSource } from "../src/types";
 
@@ -65,4 +66,32 @@ test("holiday sources are not rendered as duplicate calendar overlays", () => {
   ];
 
   assert.deepEqual(filterCalendarOverlayEvents(events, sources).map((event) => event.id), ["overlay-event"]);
+});
+
+test("agenda ranges cover every occupied day inside the selected month", () => {
+  assert.deepEqual(
+    agendaDateKeys(
+      "2026-07-31T17:00:00.000Z",
+      "2026-08-03T19:00:00.000Z",
+      "2026-08-01",
+      "2026-08-31"
+    ),
+    ["2026-08-01", "2026-08-02", "2026-08-03"]
+  );
+});
+
+test("agenda day phases preserve the actual range across month boundaries", () => {
+  const start = "2026-07-31T17:00:00.000Z";
+  const end = "2026-08-03T19:00:00.000Z";
+  assert.equal(agendaDayPhase(start, end, "2026-07-31"), "start");
+  assert.equal(agendaDayPhase(start, end, "2026-08-01"), "middle");
+  assert.equal(agendaDayPhase(start, end, "2026-08-03"), "end");
+});
+
+test("agenda ranges exclude a midnight end date", () => {
+  const start = "2026-08-07T16:00:00.000Z";
+  const end = "2026-08-08T00:00:00.000Z";
+  assert.deepEqual(agendaDateKeys(start, end, "2026-08-01", "2026-08-31"), ["2026-08-07"]);
+  assert.equal(agendaDayPhase(start, end, "2026-08-07"), "single");
+  assert.equal(agendaDayPhase(start, end, "2026-08-08"), null);
 });

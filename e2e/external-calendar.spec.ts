@@ -49,9 +49,12 @@ test("imports, manages, and removes an external calendar through the UI", async 
   await expect(agendaViewButton).toBeVisible();
   await agendaViewButton.click();
   const agendaEvent = page.locator(".agenda-list").getByTestId(`external-calendar-event-${event?.id}`);
-  await expect(agendaEvent).toHaveCount(1);
-  await expect(agendaEvent.getByText("E2E Holiday", { exact: true })).toBeVisible();
-  const agendaEventContentBox = await agendaEvent.locator(".agenda-card__main").boundingBox();
+  await expect(agendaEvent).toHaveCount(2);
+  await expect(agendaEvent.first().getByText("E2E Holiday", { exact: true })).toBeVisible();
+  await expect(page.getByTestId("agenda-day-2026-07-01").getByTestId(`external-calendar-event-${event?.id}`)).toBeVisible();
+  await expect(page.getByTestId("agenda-day-2026-07-02").getByTestId(`external-calendar-event-${event?.id}`)).toBeVisible();
+  await expect(page.getByTestId("agenda-day-2026-07-03").getByTestId(`external-calendar-event-${event?.id}`)).toHaveCount(0);
+  const agendaEventContentBox = await agendaEvent.first().locator(".agenda-card__main").boundingBox();
   expect(agendaEventContentBox?.width ?? 0).toBeGreaterThan(250);
   await expectNoDocumentHorizontalOverflow(page);
 
@@ -99,6 +102,56 @@ test("imports, manages, and removes an external calendar through the UI", async 
   await expect(manager.getByTestId("external-calendar-message")).toBeVisible();
   const invalidSources = await request.get("/api/external-calendars");
   expect(await invalidSources.json()).toEqual([]);
+});
+
+test("shows a timed external record on every occupied agenda day", async ({
+  page,
+  request
+}) => {
+  const importResponse = await request.post("/api/external-calendars/import", {
+    data: {
+      name: "Synthetic timed calendar",
+      color: "#2563eb",
+      sourceType: "overlay",
+      content: [
+        "BEGIN:VCALENDAR",
+        "VERSION:2.0",
+        "PRODID:-//Betreuungskalender E2E//EN",
+        "BEGIN:VEVENT",
+        "UID:e2e-multi-day@example.test",
+        "DTSTART:20260804T170000Z",
+        "DTEND:20260806T180000Z",
+        "SUMMARY:Synthetic multi-day appointment",
+        "END:VEVENT",
+        "END:VCALENDAR"
+      ].join("\r\n")
+    }
+  });
+  expect(importResponse.ok()).toBeTruthy();
+
+  const eventsResponse = await request.get(
+    "/api/external-calendar-events?from=2026-08-01T00%3A00%3A00.000Z&to=2026-09-01T00%3A00%3A00.000Z"
+  );
+  expect(eventsResponse.ok()).toBeTruthy();
+  const events = await eventsResponse.json() as Array<{ id: string; title: string }>;
+  const event = events.find((item) => item.title === "Synthetic multi-day appointment");
+  expect(event).toBeTruthy();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openApp(page);
+  await navigate(page, "calendar");
+  await page.getByTestId("month-picker").fill("2026-08");
+
+  await expect(page.getByTestId(`external-calendar-event-${event!.id}`)).toHaveCount(3);
+  await expect(page.getByTestId("agenda-day-2026-08-04").getByTestId(`agenda-external-${event!.id}-day`)).toHaveText("Beginn 17:00");
+  await expect(page.getByTestId("agenda-day-2026-08-05").getByTestId(`agenda-external-${event!.id}-day`)).toHaveText("Ganzer Tag");
+  await expect(page.getByTestId("agenda-day-2026-08-06").getByTestId(`agenda-external-${event!.id}-day`)).toHaveText("Ende 18:00");
+  await expect(page.getByTestId("agenda-day-2026-08-07").getByTestId(`external-calendar-event-${event!.id}`)).toHaveCount(0);
+  for (const range of await page.getByTestId(`agenda-external-${event!.id}-range`).all()) {
+    await expect(range).toContainText("04.08.2026");
+    await expect(range).toContainText("06.08.2026");
+  }
+  await expectNoDocumentHorizontalOverflow(page);
 });
 
 test("derives holiday blocks from a classified external holiday calendar", async ({
