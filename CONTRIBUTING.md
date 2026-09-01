@@ -92,6 +92,10 @@ release-labelled override blocks to the stylesheet. Extend an existing shared
 primitive or add a feature rule to its owning layer, then run the affected
 responsive browser tests.
 
+Secondary pages and report dependencies follow the loading and bundle contract
+in [`docs/frontend-loading.md`](docs/frontend-loading.md). Keep the dashboard
+and first-use setup available in the eager application path.
+
 ## Data model and security changes
 
 - Add a numbered migration for every persistent schema change.

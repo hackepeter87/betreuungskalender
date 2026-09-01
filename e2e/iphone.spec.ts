@@ -753,6 +753,8 @@ test("explains read-only mode on mobile when the server is unavailable", async (
   page
 }) => {
   await openApp(page);
+  await navigate(page, "calendar");
+  await navigate(page, "dashboard");
 
   await context.setOffline(true);
   await page.evaluate(() => window.dispatchEvent(new Event("offline")));

@@ -21,7 +21,9 @@ export default defineConfig({
     video: "retain-on-failure"
   },
   webServer: {
-    command: process.env.CI ? "npm start" : "npm run build && npm start",
+    command: process.env.CI
+      ? "npm start"
+      : "NODE_ENV=production npm run build && npm start",
     url: `${baseURL}/api/ready`,
     reuseExistingServer: false,
     timeout: 120_000,

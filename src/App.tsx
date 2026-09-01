@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { AppShell, canAccessPage, type PageId } from "./components/AppShell";
+import { DeferredDialogContent, DeferredPage } from "./components/DeferredPage";
 import { EntryForm } from "./components/EntryForm";
 import { Modal } from "./components/Modal";
-import { LegacyMigrationDialog } from "./components/LegacyMigrationDialog";
 import { api } from "./lib/api";
 import { useI18n } from "./i18n/I18nProvider";
 import { copy } from "./i18n/catalog";
@@ -12,19 +12,8 @@ import {
   type LegacyBrowserData
 } from "./migration/legacyLocalStorage";
 import { toMonthKey } from "./lib/date";
-import { AnalyticsPage } from "./pages/AnalyticsPage";
-import { AuditLogPage } from "./pages/AuditLogPage";
-import { BackupPage } from "./pages/BackupPage";
-import { CalendarPage } from "./pages/CalendarPage";
-import { ContactPage } from "./pages/ContactPage";
 import { DashboardPage } from "./pages/DashboardPage";
-import { DocumentationRulesPage } from "./pages/DocumentationRulesPage";
-import { EntriesPage } from "./pages/EntriesPage";
-import { HolidaysPage } from "./pages/HolidaysPage";
-import { ReportPage } from "./pages/ReportPage";
-import { SettingsPage } from "./pages/SettingsPage";
 import { SetupWizardPage } from "./pages/SetupWizardPage";
-import { UnavailablePeriodsPage } from "./pages/UnavailablePeriodsPage";
 import { Icon } from "./components/Icon";
 import { PwaInstallPrompt } from "./components/PwaInstallPrompt";
 import type { CareEntry } from "./types";
@@ -38,6 +27,31 @@ interface EntryDialogState {
 }
 
 type OnboardingNotice = "owner-setup" | "invitation";
+
+const loadAnalyticsPage = () => import("./pages/AnalyticsPage")
+  .then(({ AnalyticsPage }) => ({ default: AnalyticsPage }));
+const loadAuditLogPage = () => import("./pages/AuditLogPage")
+  .then(({ AuditLogPage }) => ({ default: AuditLogPage }));
+const loadBackupPage = () => import("./pages/BackupPage")
+  .then(({ BackupPage }) => ({ default: BackupPage }));
+const loadCalendarPage = () => import("./pages/CalendarPage")
+  .then(({ CalendarPage }) => ({ default: CalendarPage }));
+const loadContactPage = () => import("./pages/ContactPage")
+  .then(({ ContactPage }) => ({ default: ContactPage }));
+const loadDocumentationRulesPage = () => import("./pages/DocumentationRulesPage")
+  .then(({ DocumentationRulesPage }) => ({ default: DocumentationRulesPage }));
+const loadEntriesPage = () => import("./pages/EntriesPage")
+  .then(({ EntriesPage }) => ({ default: EntriesPage }));
+const loadHolidaysPage = () => import("./pages/HolidaysPage")
+  .then(({ HolidaysPage }) => ({ default: HolidaysPage }));
+const loadReportPage = () => import("./pages/ReportPage")
+  .then(({ ReportPage }) => ({ default: ReportPage }));
+const loadSettingsPage = () => import("./pages/SettingsPage")
+  .then(({ SettingsPage }) => ({ default: SettingsPage }));
+const loadUnavailablePeriodsPage = () => import("./pages/UnavailablePeriodsPage")
+  .then(({ UnavailablePeriodsPage }) => ({ default: UnavailablePeriodsPage }));
+const loadLegacyMigrationDialog = () => import("./components/LegacyMigrationDialog")
+  .then(({ LegacyMigrationDialog }) => ({ default: LegacyMigrationDialog }));
 
 export function App() {
   const { locale } = useI18n();
@@ -136,42 +150,86 @@ export function App() {
     page = <SetupWizardPage />;
   } else switch (activePage) {
     case "calendar":
-      page = <CalendarPage monthKey={monthKey} onMonthChange={setMonthKey} onNewEntry={openNewEntry} onEditEntry={openEditEntry} />;
+      page = (
+        <DeferredPage
+          pageId="calendar"
+          loader={loadCalendarPage}
+          componentProps={{
+            monthKey,
+            onMonthChange: setMonthKey,
+            onNewEntry: openNewEntry,
+            onEditEntry: openEditEntry
+          }}
+        />
+      );
       break;
     case "entries":
-      page = <EntriesPage monthKey={monthKey} onMonthChange={setMonthKey} onNewEntry={() => openNewEntry()} onEditEntry={openEditEntry} />;
+      page = (
+        <DeferredPage
+          pageId="entries"
+          loader={loadEntriesPage}
+          componentProps={{
+            monthKey,
+            onMonthChange: setMonthKey,
+            onNewEntry: () => openNewEntry(),
+            onEditEntry: openEditEntry
+          }}
+        />
+      );
       break;
     case "analytics":
-      page = <AnalyticsPage monthKey={monthKey} />;
+      page = (
+        <DeferredPage
+          pageId="analytics"
+          loader={loadAnalyticsPage}
+          componentProps={{ monthKey }}
+        />
+      );
       break;
     case "contact":
       page = (
-        <ContactPage
-          onEditEntry={openEditEntry}
-          onNewEntry={() => openNewEntry(undefined, true)}
+        <DeferredPage
+          pageId="contact"
+          loader={loadContactPage}
+          componentProps={{
+            onEditEntry: openEditEntry,
+            onNewEntry: () => openNewEntry(undefined, true)
+          }}
         />
       );
       break;
     case "holidays":
-      page = <HolidaysPage />;
+      page = <DeferredPage pageId="holidays" loader={loadHolidaysPage} componentProps={{}} />;
       break;
     case "unavailable":
-      page = <UnavailablePeriodsPage />;
+      page = (
+        <DeferredPage
+          pageId="unavailable"
+          loader={loadUnavailablePeriodsPage}
+          componentProps={{}}
+        />
+      );
       break;
     case "report":
-      page = <ReportPage />;
+      page = <DeferredPage pageId="report" loader={loadReportPage} componentProps={{}} />;
       break;
     case "backup":
-      page = <BackupPage />;
+      page = <DeferredPage pageId="backup" loader={loadBackupPage} componentProps={{}} />;
       break;
     case "audit":
-      page = <AuditLogPage />;
+      page = <DeferredPage pageId="audit" loader={loadAuditLogPage} componentProps={{}} />;
       break;
     case "rules":
-      page = <DocumentationRulesPage />;
+      page = (
+        <DeferredPage
+          pageId="rules"
+          loader={loadDocumentationRulesPage}
+          componentProps={{}}
+        />
+      );
       break;
     case "settings":
-      page = <SettingsPage />;
+      page = <DeferredPage pageId="settings" loader={loadSettingsPage} componentProps={{}} />;
       break;
     default:
       page = (
@@ -233,10 +291,14 @@ export function App() {
         </Modal>
       ) : null}
       {legacyMigration ? (
-        <LegacyMigrationDialog
-          legacy={legacyMigration.legacy}
-          database={legacyMigration.database}
-          onClose={() => setLegacyMigration(null)}
+        <DeferredDialogContent
+          pageId="legacy-migration"
+          loader={loadLegacyMigrationDialog}
+          componentProps={{
+            legacy: legacyMigration.legacy,
+            database: legacyMigration.database,
+            onClose: () => setLegacyMigration(null)
+          }}
         />
       ) : null}
     </>
