@@ -69,6 +69,10 @@
 }
 
 @media (min-width: 768px) and (max-width: 1199px) {
+  .csv-export-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .settings-section--defaults .settings-form-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }

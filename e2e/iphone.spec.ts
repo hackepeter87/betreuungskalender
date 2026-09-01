@@ -49,19 +49,6 @@ test("keeps first-use setup readable on a narrow screen", async ({
   await expect(page.getByTestId("setup-wizard-submit")).toBeVisible();
 });
 
-test("captures the shared mobile layout", async ({ page }, testInfo) => {
-  await page.clock.setFixedTime(new Date("2026-08-24T10:00:00Z"));
-  await openApp(page);
-  await navigate(page, "backup");
-  await expectNoDocumentHorizontalOverflow(page);
-  const screenshot = await page.screenshot({
-    animations: "disabled",
-    caret: "hide",
-    fullPage: false
-  });
-  await testInfo.attach("backup-fluid-iphone.png", { body: screenshot, contentType: "image/png" });
-});
-
 test("stacks external calendar import controls within the settings panel", async ({ page }) => {
   await openApp(page);
   await navigate(page, "settings");

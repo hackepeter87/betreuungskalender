@@ -348,6 +348,9 @@ export function AppShell({
   const { t } = useI18n();
   const [showMore, setShowMore] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const moreTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const moreCloseRef = useRef<HTMLButtonElement | null>(null);
+  const moreWasOpenRef = useRef(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       return window.localStorage.getItem(sidebarCollapsedStorageKey) === "true";
@@ -379,6 +382,22 @@ export function AppShell({
       // Local UI preference only; failure should not affect navigation.
     }
   }, [sidebarCollapsed]);
+
+  useEffect(() => {
+    if (!showMore) {
+      if (moreWasOpenRef.current) moreTriggerRef.current?.focus();
+      moreWasOpenRef.current = false;
+      return;
+    }
+
+    moreWasOpenRef.current = true;
+    moreCloseRef.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowMore(false);
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [showMore]);
 
   const logout = async () => {
     if (!session.logoutUrl) return;
@@ -500,11 +519,13 @@ export function AppShell({
           </button>
         ))}
         <button
+          ref={moreTriggerRef}
           type="button"
           data-testid="mobile-nav-more"
           className={showMore || !mobileNavItems.filter((item) => canAccessPage(session, item.id)).some((item) => item.id === activePage) ? "is-active" : ""}
           onClick={() => setShowMore((current) => !current)}
           aria-expanded={showMore}
+          aria-controls="mobile-more-sheet"
           aria-label={t("nav.openMore")}
         >
           <Icon name="list" size={19} />
@@ -594,6 +615,7 @@ export function AppShell({
       {showMore && !setupMode ? (
         <div className="mobile-more-backdrop" role="presentation" onClick={() => setShowMore(false)}>
           <section
+            id="mobile-more-sheet"
             className="mobile-more-sheet"
             role="dialog"
             data-testid="mobile-more-sheet"
@@ -603,7 +625,7 @@ export function AppShell({
           >
             <div className="mobile-more-sheet__header">
               <strong>{t("nav.moreAreas")}</strong>
-              <button className="icon-button" type="button" onClick={() => setShowMore(false)} aria-label={t("nav.closeMenu")}>
+              <button ref={moreCloseRef} className="icon-button" type="button" onClick={() => setShowMore(false)} aria-label={t("nav.closeMenu")}>
                 <Icon name="close" size={19} />
               </button>
             </div>

@@ -197,31 +197,6 @@ test("uses a fluid desktop page baseline and stacks dashboard secondary panels",
   }
 });
 
-test("captures the shared desktop layout across core pages", async ({ page }, testInfo) => {
-  await page.clock.setFixedTime(new Date("2026-08-24T10:00:00Z"));
-  await openApp(page);
-
-  const pages = [
-    ["dashboard", "dashboard-fluid-desktop.png"],
-    ["settings", "settings-fluid-desktop.png"],
-    ["backup", "backup-fluid-desktop.png"],
-    ["report", "report-fluid-desktop.png"],
-    ["rules", "documentation-fluid-desktop.png"]
-  ] as const;
-
-  for (const [route, snapshot] of pages) {
-    await navigate(page, route);
-    await page.evaluate(() => window.scrollTo(0, 0));
-    await expectNoDocumentHorizontalOverflow(page);
-    const screenshot = await page.screenshot({
-      animations: "disabled",
-      caret: "hide",
-      fullPage: false
-    });
-    await testInfo.attach(snapshot, { body: screenshot, contentType: "image/png" });
-  }
-});
-
 test("keeps settings forms composed on ultra-wide screens", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 1000 });
   await openApp(page);

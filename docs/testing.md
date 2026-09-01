@@ -41,6 +41,9 @@ external events are present without raw ICS content or runtime secrets.
 Generated Playwright reports, databases, and downloads remain in ignored test
 output directories and must not be committed.
 
+The deterministic cross-page screenshot suite and its privacy rules are
+documented in [Visual regression testing](visual-regression-testing.md).
+
 ## Demo edge-case dataset
 
 Demo and staging environments can opt in to synthetic edge-case data with:

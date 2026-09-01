@@ -4,6 +4,7 @@ import { App } from "./App";
 import { HelpPreferencesProvider } from "./context/HelpPreferences";
 import { I18nProvider } from "./i18n/I18nProvider";
 import { AppStoreProvider } from "./store/AppStore";
+import "@fontsource-variable/inter/wght.css";
 import "./styles.css";
 
 createRoot(document.getElementById("root")!).render(

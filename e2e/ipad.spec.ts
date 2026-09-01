@@ -74,20 +74,6 @@ test("avoids page overflow at compact and landscape tablet sizes", async ({
   await expectNoPageOverflow(page);
 });
 
-test("captures the shared tablet layout", async ({ page }, testInfo) => {
-  await page.clock.setFixedTime(new Date("2026-08-24T10:00:00Z"));
-  await page.setViewportSize({ width: 1194, height: 834 });
-  await openApp(page);
-  await navigate(page, "settings");
-  await expectNoPageOverflow(page);
-  const screenshot = await page.screenshot({
-    animations: "disabled",
-    caret: "hide",
-    fullPage: false
-  });
-  await testInfo.attach("settings-fluid-ipad.png", { body: screenshot, contentType: "image/png" });
-});
-
 test("keeps the unavailability modal contained on tablet viewports", async ({
   page
 }) => {
