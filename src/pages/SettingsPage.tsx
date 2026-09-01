@@ -892,7 +892,8 @@ export function SettingsPage() {
     clearAll,
     session,
     canWrite,
-    isSaving
+    isSaving,
+    actorLabels
   } = useAppStore();
   const hasPermission = (permission: NonNullable<ApiSession["permissions"]>[number]) =>
     session.permissions?.includes(permission) ?? true;
@@ -1040,7 +1041,7 @@ export function SettingsPage() {
                 <small>{carePartyKindLabel(party.kind, locale)}</small>
                 <small>
                   {copy(locale, "common", "updatedBy", {
-                    actor: actorDisplayName(data, party.updatedBy),
+                    actor: actorDisplayName(actorLabels, party.updatedBy),
                     date: formatDateTime(party.updatedAt, intlLocale)
                   })}
                 </small>
@@ -1077,7 +1078,7 @@ export function SettingsPage() {
                 <small>{copy(locale, "settings", "born", { month: String(child.birthMonth).padStart(2, "0"), year: child.birthYear })}</small>
                 <small>
                   {copy(locale, "common", "updatedBy", {
-                    actor: actorDisplayName(data, child.updatedBy),
+                    actor: actorDisplayName(actorLabels, child.updatedBy),
                     date: formatDateTime(child.updatedAt, intlLocale)
                   })}
                 </small>

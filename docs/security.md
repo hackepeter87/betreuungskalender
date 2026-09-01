@@ -136,6 +136,13 @@ proxy identity headers, production-safe error responses, prepared SQLite
 statements, validation, and an unprivileged container user. It does not use
 external analytics, tracking services, or CDN runtime dependencies.
 
+Audit history is loaded only in its protected view or as an explicitly
+requested part of a report snapshot. The normal application startup does not
+receive the audit log. Cursor-based audit responses are bounded, not cached,
+and require `audit:view`. Display-name resolution accepts only a bounded list of
+actor IDs referenced by domain records and returns no email addresses, claims,
+or unrelated accounts.
+
 The current review baseline, implemented controls, residual risks, and deferred
 security work are summarized in [security-baseline.md](security-baseline.md).
 

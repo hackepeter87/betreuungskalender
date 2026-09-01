@@ -209,7 +209,7 @@ function HolidayForm({
 
 export function HolidaysPage() {
   const { locale, intlLocale } = useI18n();
-  const { data, removeHolidayPeriod, canWrite } = useAppStore();
+  const { data, actorLabels, removeHolidayPeriod, canWrite } = useAppStore();
   const [selection, setSelection] = useState<PeriodSelection>(() =>
     periodSelection("year", toMonthKey(new Date()))
   );
@@ -334,7 +334,7 @@ export function HolidaysPage() {
                 <small>{formatDate(period.startDate, intlLocale)} {copy(locale, "common", "to")} {formatDate(period.endDate, intlLocale)}</small>
                 <small>
                   {copy(locale, "common", "updatedBy", {
-                    actor: actorDisplayName(data, period.updatedBy),
+                    actor: actorDisplayName(actorLabels, period.updatedBy),
                     date: formatDateTime(period.updatedAt, intlLocale)
                   })}
                 </small>

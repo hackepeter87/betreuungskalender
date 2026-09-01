@@ -18,7 +18,7 @@ import { copy } from "../i18n/catalog";
 
 export function UnavailablePeriodsPage() {
   const { locale, intlLocale } = useI18n();
-  const { data, removeUnavailablePeriod, canWrite } = useAppStore();
+  const { data, actorLabels, removeUnavailablePeriod, canWrite } = useAppStore();
   const [selection, setSelection] = useState<PeriodSelection>(() =>
     periodSelection("year", toMonthKey(new Date()))
   );
@@ -118,7 +118,7 @@ export function UnavailablePeriodsPage() {
                 ) : null}
                 <small>
                   {copy(locale, "common", "updatedBy", {
-                    actor: actorDisplayName(data, period.updatedBy),
+                    actor: actorDisplayName(actorLabels, period.updatedBy),
                     date: formatDateTime(period.updatedAt, intlLocale)
                   })}
                 </small>

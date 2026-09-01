@@ -20,6 +20,7 @@ import {
 } from "../lib/api";
 import type { ApiCareConfirmationAnswer, ApiContactRuleSyncPreview, ApiSession } from "../../shared/api";
 import { generatePatternEntries } from "../lib/contact";
+import { actorIdsForData, type ActorLabels } from "../lib/actors";
 import { buildMonthlyClosureSummary, monthKeysForRange } from "../lib/monthClosure";
 import type {
   AppData,
@@ -66,6 +67,7 @@ export type ServerStatus = "checking" | "online" | "offline";
 
 interface AppStoreValue {
   data: AppData;
+  actorLabels: ActorLabels;
   session: ApiSession;
   serverStatus: ServerStatus;
   isLoading: boolean;
@@ -154,6 +156,7 @@ function urlBase64ToUint8Array(value: string): ArrayBuffer {
 
 export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [data, setData] = useState<AppData>(createEmptyData);
+  const [actorLabels, setActorLabels] = useState<ActorLabels>({});
   const [session, setSession] = useState<ApiSession>(defaultSession);
   const [serverStatus, setServerStatus] = useState<ServerStatus>("checking");
   const [isLoading, setIsLoading] = useState(true);
@@ -184,6 +187,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     const empty = createEmptyData();
     dataRef.current = empty;
     setData(empty);
+    setActorLabels({});
     setOpenConfirmations([]);
     setNotificationPreferences(null);
     setSession(nextSession);
@@ -211,14 +215,23 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           restricted
             ? loadRestrictedAppData()
             : loadAppData({
-                includeSettings: sessionCan(nextSession, "settings:view"),
-                includeAudit: sessionCan(nextSession, "audit:view")
+                includeSettings: sessionCan(nextSession, "settings:view")
               }),
           sessionCan(nextSession, "notifications:manage-own") ? api.listOpenCareConfirmations() : Promise.resolve([]),
           sessionCan(nextSession, "notifications:manage-own") ? api.getNotificationPreferences() : Promise.resolve(null)
         ]);
+        let nextActorLabels: ActorLabels = {};
+        if (!restricted && sessionCan(nextSession, "planning:view")) {
+          try {
+            const labels = await api.resolveActorLabels(actorIdsForData(next));
+            nextActorLabels = Object.fromEntries(labels.map((label) => [label.id, label.displayName]));
+          } catch {
+            // Display labels are optional metadata and must not block domain data loading.
+          }
+        }
         dataRef.current = next;
         setData(next);
+        setActorLabels(nextActorLabels);
         setOpenConfirmations(confirmations);
         setNotificationPreferences(preferences);
         setServerStatus("online");
@@ -794,6 +807,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const value = useMemo<AppStoreValue>(
     () => ({
       data,
+      actorLabels,
       session,
       serverStatus,
       isLoading,
