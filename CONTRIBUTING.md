@@ -84,6 +84,14 @@ place real instance data there merely because it is ignored. Temporary review
 output must not be committed, attached to public issues, or included in release
 artifacts.
 
+## Frontend styles
+
+Follow the layer ownership and responsive rules in
+[`docs/style-architecture.md`](docs/style-architecture.md). Do not append
+release-labelled override blocks to the stylesheet. Extend an existing shared
+primitive or add a feature rule to its owning layer, then run the affected
+responsive browser tests.
+
 ## Data model and security changes
 
 - Add a numbered migration for every persistent schema change.

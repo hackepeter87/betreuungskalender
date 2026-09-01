@@ -1,0 +1,92 @@
+/* Print-only report and document presentation. */
+@media print {
+  .report-page {
+    width: auto !important;
+  }
+}
+
+@media print {
+  @page {
+    size: A4 portrait;
+    margin: 14mm;
+  }
+
+  html,
+  body {
+    width: 210mm;
+    min-width: 0;
+    background: #fff !important;
+  }
+
+  .sidebar,
+  .mobile-header,
+  .mobile-nav,
+  .no-print,
+  .report-page > .page-header {
+    display: none !important;
+  }
+
+  .main {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .page,
+  .report-page {
+    width: auto !important;
+    max-width: none !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .report-document {
+    padding: 0 !important;
+    border: 0 !important;
+    box-shadow: none !important;
+  }
+
+  .report-document__header {
+    grid-template-columns: 1fr 65mm;
+  }
+
+  .report-section,
+  .report-summary-grid > div,
+  .report-table tr {
+    break-inside: avoid;
+  }
+
+  .table-scroll {
+    overflow: visible !important;
+  }
+
+  .report-table {
+    display: table !important;
+    font-size: 7pt;
+  }
+
+  .report-table thead {
+    display: table-header-group !important;
+  }
+
+  .report-table tbody {
+    display: table-row-group !important;
+  }
+
+  .report-table tr {
+    display: table-row !important;
+  }
+
+  .report-table th,
+  .report-table td {
+    display: table-cell !important;
+    padding: 4pt;
+  }
+
+  .report-table td::before {
+    display: none !important;
+  }
+
+  .report-document__footer {
+    margin-top: 8mm;
+  }
+}
