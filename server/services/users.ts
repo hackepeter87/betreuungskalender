@@ -1,6 +1,5 @@
-import { db } from "../db/connection.js";
 import { permissionsForRole, type AuthRole, type RequestUser } from "../auth.js";
-import type Database from "better-sqlite3";
+import type { PersistenceExecutor } from "../db/runtime.js";
 import {
   applyMembershipRole,
   type MembershipResolutionPolicy
@@ -31,12 +30,12 @@ function isAuthRole(value: string): value is AuthRole {
   return value === "admin" || value === "parent" || value === "readonly";
 }
 
-export function upsertAuthenticatedUser(
+export async function upsertAuthenticatedUser(
   user: RequestUser,
-  timestamp = new Date().toISOString(),
-  database: Database.Database = db
-): void {
-  database.prepare(`
+  database: PersistenceExecutor,
+  timestamp = new Date().toISOString()
+): Promise<void> {
+  await database.run(`
     INSERT INTO app_users (
       id, external_subject, email, display_name, role, groups_json,
       last_seen_at, created_at, updated_at
@@ -49,7 +48,7 @@ export function upsertAuthenticatedUser(
       last_seen_at = excluded.last_seen_at,
       updated_at = excluded.updated_at,
       deleted_at = NULL
-  `).run(
+  `, [
     user.id,
     user.externalSubject,
     user.email ?? null,
@@ -59,22 +58,22 @@ export function upsertAuthenticatedUser(
     timestamp,
     timestamp,
     timestamp
-  );
+  ]);
 }
 
-export function findAuthenticatedUserBySubject(
+export async function findAuthenticatedUserBySubject(
   externalSubject: string,
-  database: Database.Database = db,
+  database: PersistenceExecutor,
   policy: MembershipResolutionPolicy = "strict"
-): RequestUser | undefined {
-  const row = database.prepare(`
+): Promise<RequestUser | undefined> {
+  const row = await database.one<AppUserRow>(`
     SELECT id, external_subject, email, display_name, role, groups_json
     FROM app_users
     WHERE external_subject = ?
       AND deleted_at IS NULL
-  `).get(externalSubject) as AppUserRow | undefined;
+  `, [externalSubject]);
   if (!row || !isAuthRole(row.role)) return undefined;
-  return applyMembershipRole({
+  return (await applyMembershipRole({
     id: row.id,
     externalSubject: row.external_subject,
     ...(row.email ? { email: row.email } : {}),
@@ -82,28 +81,34 @@ export function findAuthenticatedUserBySubject(
     groups: parseGroups(row.groups_json),
     role: row.role,
     permissions: permissionsForRole(row.role)
-  }, database, policy).user;
+  }, database, policy)).user;
 }
 
-export function listAppUsers(
-  database: Database.Database = db,
+export async function listAppUsers(
+  database: PersistenceExecutor,
   options: { includeLocalDevelopmentIdentity?: boolean } = {
     includeLocalDevelopmentIdentity: true
   }
-) {
-  const rows = database.prepare(`
-    SELECT id, external_subject, email, display_name, role, last_seen_at
-    FROM app_users
-    WHERE deleted_at IS NULL
-    ORDER BY display_name COLLATE NOCASE, id
-  `).all() as Array<{
+): Promise<Array<{
+  id: string;
+  displayName: string;
+  role: AuthRole;
+  email?: string;
+  lastSeenAt: string;
+}>> {
+  const rows = await database.all<{
     id: string;
     external_subject: string;
     email: string | null;
     display_name: string;
     role: AuthRole;
     last_seen_at: string;
-  }>;
+  }>(`
+    SELECT id, external_subject, email, display_name, role, last_seen_at
+    FROM app_users
+    WHERE deleted_at IS NULL
+    ORDER BY display_name COLLATE NOCASE, id
+  `);
   return rows.filter((row) =>
     options.includeLocalDevelopmentIdentity || !isLocalDevelopmentIdentity({
       id: row.id,

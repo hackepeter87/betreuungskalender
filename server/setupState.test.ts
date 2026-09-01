@@ -6,6 +6,7 @@ import test from "node:test";
 import Database from "better-sqlite3";
 import { permissionsForRole, type RequestUser } from "./auth.js";
 import { migrateDatabase } from "./db/migrationRunner.js";
+import { createSqlitePersistenceRuntime, type PersistenceRuntime } from "./db/runtime.js";
 import { membershipRoleForUser } from "./services/memberships.js";
 import { completeFirstUseSetup } from "./services/setupBootstrap.js";
 import { buildSetupState, publicSetupState } from "./services/setupState.js";
@@ -15,13 +16,15 @@ import { setupFirstUseInputSchema } from "./validation/schemas.js";
 const migrationsDirectory = resolve(process.cwd(), "server/migrations");
 const timestamp = "2026-07-05T10:00:00.000Z";
 
-function withDatabase(run: (database: Database.Database) => void): void {
+async function withDatabase(
+  run: (database: Database.Database, persistence: PersistenceRuntime) => Promise<void>
+): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), "betreuungskalender-setup-state-"));
   const database = new Database(join(root, "app.sqlite"));
   database.pragma("foreign_keys = ON");
   try {
     migrateDatabase(database, migrationsDirectory);
-    run(database);
+    await run(database, createSqlitePersistenceRuntime(database));
   } finally {
     database.close();
     rmSync(root, { recursive: true, force: true });
@@ -91,10 +94,10 @@ function setupUser(): RequestUser {
   };
 }
 
-test("detects a fresh installation without browser state", () => {
-  withDatabase((database) => {
-    const setup = buildSetupState(database);
-    const publicState = publicSetupState(database);
+test("detects a fresh installation without browser state", async () => {
+  await withDatabase(async (_database, persistence) => {
+    const setup = await buildSetupState(persistence);
+    const publicState = await publicSetupState(persistence);
 
     assert.equal(setup.complete, false);
     assert.equal(setup.required, true);
@@ -111,12 +114,12 @@ test("detects a fresh installation without browser state", () => {
   });
 });
 
-test("treats existing installations with domain setup data as complete", () => {
-  withDatabase((database) => {
+test("treats existing installations with domain setup data as complete", async () => {
+  await withDatabase(async (database, persistence) => {
     insertChild(database);
     insertCareParty(database);
 
-    const setup = buildSetupState(database);
+    const setup = await buildSetupState(persistence);
 
     assert.equal(setup.complete, true);
     assert.equal(setup.required, false);
@@ -126,12 +129,12 @@ test("treats existing installations with domain setup data as complete", () => {
   });
 });
 
-test("supports explicit setup completion metadata for later owner bootstrap", () => {
-  withDatabase((database) => {
+test("supports explicit setup completion metadata for later owner bootstrap", async () => {
+  await withDatabase(async (database, persistence) => {
     insertSetting(database, "setup.completedAt", "2026-07-05T11:00:00.000Z");
     insertSetting(database, "setup.completedBy", "user_owner");
 
-    const setup = buildSetupState(database);
+    const setup = await buildSetupState(persistence);
 
     assert.equal(setup.complete, true);
     assert.equal(setup.required, false);
@@ -143,8 +146,8 @@ test("supports explicit setup completion metadata for later owner bootstrap", ()
   });
 });
 
-test("owner setup token claims an owner once without completing the wizard", () => {
-  withDatabase((database) => {
+test("owner setup token claims an owner once without completing the wizard", async () => {
+  await withDatabase(async (database, persistence) => {
     const directory = mkdtempSync(join(tmpdir(), "betreuungskalender-owner-token-"));
     const tokenFile = join(directory, "owner-token");
     try {
@@ -154,9 +157,9 @@ test("owner setup token claims an owner once without completing the wizard", () 
       const store = new OwnerSetupTokenStore({
         tokenFile,
         ttlSeconds: 3600,
-        database
+        database: persistence
       });
-      const hash = store.begin(
+      const hash = await store.begin(
         "fictional-owner-secret",
         new Date("2026-07-05T11:15:00.000Z")
       );
@@ -168,16 +171,16 @@ test("owner setup token claims an owner once without completing the wizard", () 
       assert.equal(stored.tokenHash, hash);
       assert.equal(stored.tokenHash.includes("fictional-owner-secret"), false);
 
-      store.consumeAndClaim(
+      await store.consumeAndClaim(
         hash,
         setupUser(),
         new Date("2026-07-05T11:20:00.000Z")
       );
-      assert.equal(membershipRoleForUser("local-dev", database), "admin");
-      assert.equal(buildSetupState(database).complete, false);
+      assert.equal(await membershipRoleForUser("local-dev", persistence), "admin");
+      assert.equal((await buildSetupState(persistence)).complete, false);
 
-      assert.throws(
-        () => store.begin(
+      await assert.rejects(
+        store.begin(
           "fictional-owner-secret",
           new Date("2026-07-05T11:25:00.000Z")
         ),
@@ -202,8 +205,8 @@ test("owner setup token claims an owner once without completing the wizard", () 
   });
 });
 
-test("owner setup token claims an owner for existing data without changing domain records", () => {
-  withDatabase((database) => {
+test("owner setup token claims an owner for existing data without changing domain records", async () => {
+  await withDatabase(async (database, persistence) => {
     insertChild(database);
     insertCareParty(database);
     const before = {
@@ -216,16 +219,16 @@ test("owner setup token claims an owner for existing data without changing domai
       writeFileSync(tokenFile, "fictional-existing-owner-secret\n", { mode: 0o600 });
       const issuedAt = new Date("2026-07-05T11:00:00.000Z");
       utimesSync(tokenFile, issuedAt, issuedAt);
-      const store = new OwnerSetupTokenStore({ tokenFile, ttlSeconds: 3600, database });
-      const hash = store.begin(
+      const store = new OwnerSetupTokenStore({ tokenFile, ttlSeconds: 3600, database: persistence });
+      const hash = await store.begin(
         "fictional-existing-owner-secret",
         new Date("2026-07-05T11:05:00.000Z")
       );
 
-      store.consumeAndClaim(hash, setupUser(), new Date("2026-07-05T11:10:00.000Z"));
+      await store.consumeAndClaim(hash, setupUser(), new Date("2026-07-05T11:10:00.000Z"));
 
       assert.equal(settingValue(database, "setup.ownerUserId"), "local-dev");
-      assert.equal(buildSetupState(database).source, "existing-data");
+      assert.equal((await buildSetupState(persistence)).source, "existing-data");
       assert.deepEqual(
         database.prepare("SELECT * FROM children WHERE id = ?").get("child-setup-state"),
         before.child
@@ -241,25 +244,25 @@ test("owner setup token claims an owner for existing data without changing domai
   });
 });
 
-test("owner setup rejects a pending context after the mounted token rotates", () => {
-  withDatabase((database) => {
+test("owner setup rejects a pending context after the mounted token rotates", async () => {
+  await withDatabase(async (database, persistence) => {
     const directory = mkdtempSync(join(tmpdir(), "betreuungskalender-owner-rotation-"));
     const tokenFile = join(directory, "owner-token");
     try {
       const issuedAt = new Date("2026-07-05T11:00:00.000Z");
       writeFileSync(tokenFile, "fictional-owner-secret-a\n", { mode: 0o600 });
       utimesSync(tokenFile, issuedAt, issuedAt);
-      const store = new OwnerSetupTokenStore({ tokenFile, ttlSeconds: 3600, database });
-      const hash = store.begin("fictional-owner-secret-a", new Date("2026-07-05T11:05:00.000Z"));
+      const store = new OwnerSetupTokenStore({ tokenFile, ttlSeconds: 3600, database: persistence });
+      const hash = await store.begin("fictional-owner-secret-a", new Date("2026-07-05T11:05:00.000Z"));
 
       writeFileSync(tokenFile, "fictional-owner-secret-b\n", { mode: 0o600 });
       utimesSync(tokenFile, issuedAt, issuedAt);
 
-      assert.throws(
-        () => store.consumeAndClaim(hash, setupUser(), new Date("2026-07-05T11:10:00.000Z")),
+      await assert.rejects(
+        store.consumeAndClaim(hash, setupUser(), new Date("2026-07-05T11:10:00.000Z")),
         (error) => error instanceof OwnerSetupTokenError && error.code === "owner_setup_invalid"
       );
-      assert.equal(membershipRoleForUser("local-dev", database), "admin");
+      assert.equal(await membershipRoleForUser("local-dev", persistence), "admin");
       assert.equal(settingValue(database, "setup.ownerUserId"), undefined);
       const audits = database.prepare(`
         SELECT field_name AS fieldName, new_value AS newValue
@@ -275,24 +278,24 @@ test("owner setup rejects a pending context after the mounted token rotates", ()
   });
 });
 
-test("owner setup rejects a pending context after the mounted token is removed", () => {
-  withDatabase((database) => {
+test("owner setup rejects a pending context after the mounted token is removed", async () => {
+  await withDatabase(async (database, persistence) => {
     const directory = mkdtempSync(join(tmpdir(), "betreuungskalender-owner-removal-"));
     const tokenFile = join(directory, "owner-token");
     try {
       const issuedAt = new Date("2026-07-05T11:00:00.000Z");
       writeFileSync(tokenFile, "fictional-owner-secret\n", { mode: 0o600 });
       utimesSync(tokenFile, issuedAt, issuedAt);
-      const store = new OwnerSetupTokenStore({ tokenFile, ttlSeconds: 3600, database });
-      const hash = store.begin("fictional-owner-secret", new Date("2026-07-05T11:05:00.000Z"));
+      const store = new OwnerSetupTokenStore({ tokenFile, ttlSeconds: 3600, database: persistence });
+      const hash = await store.begin("fictional-owner-secret", new Date("2026-07-05T11:05:00.000Z"));
 
       unlinkSync(tokenFile);
 
-      assert.throws(
-        () => store.consumeAndClaim(hash, setupUser(), new Date("2026-07-05T11:10:00.000Z")),
+      await assert.rejects(
+        store.consumeAndClaim(hash, setupUser(), new Date("2026-07-05T11:10:00.000Z")),
         (error) => error instanceof OwnerSetupTokenError && error.code === "owner_setup_invalid"
       );
-      assert.equal(membershipRoleForUser("local-dev", database), "admin");
+      assert.equal(await membershipRoleForUser("local-dev", persistence), "admin");
       assert.equal(settingValue(database, "setup.ownerUserId"), undefined);
     } finally {
       rmSync(directory, { recursive: true, force: true });
@@ -300,9 +303,9 @@ test("owner setup rejects a pending context after the mounted token is removed",
   });
 });
 
-test("completes first-use setup with owner, care parties, multiple children, and defaults", () => {
-  withDatabase((database) => {
-    const result = completeFirstUseSetup(
+test("completes first-use setup with owner, care parties, multiple children, and defaults", async () => {
+  await withDatabase(async (database, persistence) => {
+    const result = await completeFirstUseSetup(
       setupUser(),
       {
         installationLabel: "Private calendar",
@@ -337,11 +340,11 @@ test("completes first-use setup with owner, care parties, multiple children, and
           }
         ]
       },
-      "2026-07-05T12:30:00.000Z",
-      database
+      persistence,
+      "2026-07-05T12:30:00.000Z"
     );
 
-    const setup = buildSetupState(database);
+    const setup = await buildSetupState(persistence);
     const careParties = database.prepare(`
       SELECT id, name, kind
       FROM care_parties
@@ -383,7 +386,7 @@ test("completes first-use setup with owner, care parties, multiple children, and
     });
     assert.equal(result.owner.id, "local-dev");
     assert.equal(result.owner.role, "admin");
-    assert.equal(membershipRoleForUser("local-dev", database), "admin");
+    assert.equal(await membershipRoleForUser("local-dev", persistence), "admin");
     assert.equal(setup.complete, true);
     assert.equal(setup.required, false);
     assert.equal(setup.counts.children, 3);
@@ -455,28 +458,28 @@ test("validates every setup child and limits the initial child list", () => {
   }).success, false);
 });
 
-test("allows first-use setup without children", () => {
-  withDatabase((database) => {
-    const result = completeFirstUseSetup(
+test("allows first-use setup without children", async () => {
+  await withDatabase(async (_database, persistence) => {
+    const result = await completeFirstUseSetup(
       setupUser(),
       {
         careParty: { name: "Care party", kind: "other" },
         defaultCareParty: "primary",
         children: []
       },
-      "2026-07-05T12:30:00.000Z",
-      database
+      persistence,
+      "2026-07-05T12:30:00.000Z"
     );
 
     assert.deepEqual(result.created.childIds, []);
     assert.equal(result.created.childId, undefined);
-    assert.equal(buildSetupState(database).counts.children, 0);
+    assert.equal((await buildSetupState(persistence)).counts.children, 0);
   });
 });
 
-test("rolls back the complete first-use setup when one child cannot be stored", () => {
-  withDatabase((database) => {
-    assert.throws(() => completeFirstUseSetup(
+test("rolls back the complete first-use setup when one child cannot be stored", async () => {
+  await withDatabase(async (database, persistence) => {
+    await assert.rejects(completeFirstUseSetup(
       setupUser(),
       {
         careParty: { name: "Care party", kind: "other" },
@@ -486,14 +489,14 @@ test("rolls back the complete first-use setup when one child cannot be stored", 
           { name: "Invalid child", birthMonth: 13, birthYear: 2019, color: "#6d5bd0" }
         ]
       },
-      "2026-07-05T12:30:00.000Z",
-      database
+      persistence,
+      "2026-07-05T12:30:00.000Z"
     ));
 
     const childCount = database.prepare("SELECT COUNT(*) AS count FROM children").get() as { count: number };
     const carePartyCount = database.prepare("SELECT COUNT(*) AS count FROM care_parties").get() as { count: number };
     assert.equal(childCount.count, 0);
     assert.equal(carePartyCount.count, 0);
-    assert.equal(buildSetupState(database).complete, false);
+    assert.equal((await buildSetupState(persistence)).complete, false);
   });
 });

@@ -11,6 +11,7 @@ import test, { type TestContext } from "node:test";
 import Database from "better-sqlite3";
 import ICAL from "ical.js";
 import { migrateDatabase } from "../server/db/migrationRunner.js";
+import { createSqlitePersistenceRuntime } from "../server/db/runtime.js";
 import { createInvitation } from "../server/services/invitations.js";
 import { oidcSessionTokenForTesting } from "../server/services/oidcSessions.js";
 
@@ -928,43 +929,44 @@ test("production runtime preserves token-bound native OIDC onboarding routes", a
   const seededDatabase = new Database(databasePath);
   seededDatabase.pragma("foreign_keys = ON");
   migrateDatabase(seededDatabase);
+  const seededPersistence = createSqlitePersistenceRuntime(seededDatabase);
   const future = new Date(Date.now() + 60 * 60 * 1000).toISOString();
   const past = new Date(Date.now() - 60 * 60 * 1000).toISOString();
-  const validInvitation = createInvitation({
+  const validInvitation = await createInvitation({
     role: "viewer",
     expiresAt: future,
     actorId: "system",
     token: validInvitationToken
-  }, seededDatabase);
-  createInvitation({
+  }, seededPersistence);
+  await createInvitation({
     role: "viewer",
     expiresAt: past,
     actorId: "system",
     token: expiredInvitationToken
-  }, seededDatabase);
-  const revokedInvitation = createInvitation({
+  }, seededPersistence);
+  const revokedInvitation = await createInvitation({
     role: "viewer",
     expiresAt: future,
     actorId: "system",
     token: revokedInvitationToken
-  }, seededDatabase);
+  }, seededPersistence);
   seededDatabase.prepare(`
     UPDATE app_invitations
     SET revoked_at = ?, updated_at = ?
     WHERE id = ?
   `).run(new Date().toISOString(), new Date().toISOString(), revokedInvitation.invitation.id);
-  const acceptedInvitation = createInvitation({
+  const acceptedInvitation = await createInvitation({
     role: "viewer",
     expiresAt: future,
     actorId: "system",
     token: acceptedInvitationToken
-  }, seededDatabase);
+  }, seededPersistence);
   seededDatabase.prepare(`
     UPDATE app_invitations
     SET accepted_at = ?, updated_at = ?
     WHERE id = ?
   `).run(new Date().toISOString(), new Date().toISOString(), acceptedInvitation.invitation.id);
-  seededDatabase.close();
+  await seededPersistence.close();
 
   const port = await freePort();
   const issuer = "https://idp.example.invalid/realms/runtime";

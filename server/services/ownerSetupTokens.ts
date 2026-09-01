@@ -1,8 +1,7 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
-import type Database from "better-sqlite3";
 import type { RequestUser } from "../auth.js";
-import { db as defaultDb } from "../db/connection.js";
+import type { PersistenceExecutor, PersistenceRuntime } from "../db/runtime.js";
 import { setMembershipRole } from "./memberships.js";
 
 export class OwnerSetupTokenError extends Error {
@@ -23,7 +22,7 @@ export class OwnerSetupTokenError extends Error {
 interface OwnerSetupTokenOptions {
   tokenFile: string;
   ttlSeconds: number;
-  database?: Database.Database;
+  database: PersistenceRuntime;
 }
 
 function tokenHash(token: string): string {
@@ -37,23 +36,23 @@ function hashesEqual(left: string, right: string): boolean {
   return timingSafeEqual(Buffer.from(left, "hex"), Buffer.from(right, "hex"));
 }
 
-function setting(database: Database.Database, key: string): unknown {
-  const row = database.prepare(`
+async function setting(database: PersistenceExecutor, key: string): Promise<unknown> {
+  const row = await database.one<{ value_json: string }>(`
     SELECT value_json
     FROM settings
     WHERE key = ? AND deleted_at IS NULL
-  `).get(key) as { value_json: string } | undefined;
+  `, [key]);
   return row ? JSON.parse(row.value_json) : undefined;
 }
 
-function upsertSetting(
-  database: Database.Database,
+async function upsertSetting(
+  database: PersistenceExecutor,
   key: string,
   value: unknown,
   actorId: string,
   timestamp: string
-): void {
-  database.prepare(`
+): Promise<void> {
+  await database.run(`
     INSERT INTO settings (key, value_json, created_by, updated_by, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?)
     ON CONFLICT(key) DO UPDATE SET
@@ -61,30 +60,33 @@ function upsertSetting(
       updated_by = excluded.updated_by,
       updated_at = excluded.updated_at,
       deleted_at = NULL
-  `).run(key, JSON.stringify(value), actorId, actorId, timestamp, timestamp);
+  `, [key, JSON.stringify(value), actorId, actorId, timestamp, timestamp]);
 }
 
-function recordAudit(
-  database: Database.Database,
+async function recordAudit(
+  database: PersistenceExecutor,
   actorId: string,
   fieldName: string,
   timestamp: string
-): void {
-  database.prepare(`
+): Promise<void> {
+  await database.run(`
     INSERT INTO audit_log (
       timestamp, user_email, entity_type, entity_id, action, field_name,
       old_value, new_value, created_at, updated_at
     ) VALUES (?, ?, 'setup', 'installation', 'updated', ?, NULL, ?, ?, ?)
-  `).run(timestamp, actorId, fieldName, JSON.stringify({ recorded: true }), timestamp, timestamp);
+  `, [
+    timestamp, actorId, fieldName, JSON.stringify({ recorded: true }),
+    timestamp, timestamp
+  ]);
 }
 
 export class OwnerSetupTokenStore {
-  readonly #database: Database.Database;
+  readonly #database: PersistenceRuntime;
   readonly #tokenFile: string;
   readonly #ttlSeconds: number;
 
   constructor(options: OwnerSetupTokenOptions) {
-    this.#database = options.database ?? defaultDb;
+    this.#database = options.database;
     this.#tokenFile = options.tokenFile;
     this.#ttlSeconds = options.ttlSeconds;
   }
@@ -125,8 +127,8 @@ export class OwnerSetupTokenStore {
     };
   }
 
-  #rejectStaleContext(now: Date): never {
-    recordAudit(
+  async #rejectStaleContext(now: Date): Promise<never> {
+    await recordAudit(
       this.#database,
       "system",
       "owner_setup_context_rejected",
@@ -139,7 +141,7 @@ export class OwnerSetupTokenStore {
     );
   }
 
-  begin(rawToken: string, now = new Date()): string {
+  async begin(rawToken: string, now = new Date()): Promise<string> {
     if (!rawToken.trim()) {
       throw new OwnerSetupTokenError(
         "owner_setup_invalid",
@@ -159,21 +161,21 @@ export class OwnerSetupTokenStore {
       );
     }
 
-    this.#database.prepare(`
+    await this.#database.run(`
       INSERT INTO owner_setup_tokens (token_hash, created_at, expires_at)
       VALUES (?, ?, ?)
       ON CONFLICT(token_hash) DO NOTHING
-    `).run(
+    `, [
       configuredHash,
       currentToken.createdAt.toISOString(),
       currentToken.expiresAt.toISOString()
-    );
+    ]);
 
-    const row = this.#database.prepare(`
+    const row = await this.#database.one<{ consumed_at: string | null; expires_at: string }>(`
       SELECT consumed_at, expires_at
       FROM owner_setup_tokens
       WHERE token_hash = ?
-    `).get(configuredHash) as { consumed_at: string | null; expires_at: string } | undefined;
+    `, [configuredHash]);
     if (!row || row.expires_at <= now.toISOString()) {
       throw new OwnerSetupTokenError(
         "owner_setup_expired",
@@ -182,14 +184,19 @@ export class OwnerSetupTokenStore {
       );
     }
     if (row?.consumed_at) {
-      recordAudit(this.#database, "system", "owner_setup_reuse_rejected", now.toISOString());
+      await recordAudit(
+        this.#database,
+        "system",
+        "owner_setup_reuse_rejected",
+        now.toISOString()
+      );
       throw new OwnerSetupTokenError(
         "owner_setup_consumed",
         409,
         "Der Owner-Setup-Link wurde bereits verwendet."
       );
     }
-    if (setting(this.#database, "setup.ownerUserId")) {
+    if (await setting(this.#database, "setup.ownerUserId")) {
       throw new OwnerSetupTokenError(
         "setup_already_complete",
         409,
@@ -199,19 +206,23 @@ export class OwnerSetupTokenStore {
     return configuredHash;
   }
 
-  consumeAndClaim(tokenDigest: string, user: RequestUser, now = new Date()): void {
+  async consumeAndClaim(
+    tokenDigest: string,
+    user: RequestUser,
+    now = new Date()
+  ): Promise<void> {
     let currentToken: { hash: string; createdAt: Date; expiresAt: Date };
     try {
       currentToken = this.#currentToken(now);
     } catch {
-      this.#rejectStaleContext(now);
+      return this.#rejectStaleContext(now);
     }
     if (!hashesEqual(currentToken.hash, tokenDigest)) {
-      this.#rejectStaleContext(now);
+      return this.#rejectStaleContext(now);
     }
 
-    this.#database.transaction(() => {
-      if (setting(this.#database, "setup.ownerUserId")) {
+    await this.#database.transaction(async (transaction) => {
+      if (await setting(transaction, "setup.ownerUserId")) {
         throw new OwnerSetupTokenError(
           "setup_already_complete",
           409,
@@ -219,24 +230,24 @@ export class OwnerSetupTokenStore {
         );
       }
       const timestamp = now.toISOString();
-      const update = this.#database.prepare(`
+      const update = await transaction.run(`
         UPDATE owner_setup_tokens
         SET consumed_at = ?, consumed_by = ?
         WHERE token_hash = ?
           AND consumed_at IS NULL
           AND expires_at > ?
-      `).run(timestamp, user.id, tokenDigest, timestamp);
-      if (update.changes !== 1) {
+      `, [timestamp, user.id, tokenDigest, timestamp]);
+      if (update.affectedRows !== 1) {
         throw new OwnerSetupTokenError(
           "owner_setup_consumed",
           409,
           "Der Owner-Setup-Link ist ungültig, abgelaufen oder bereits verwendet."
         );
       }
-      setMembershipRole(user.id, "admin", user.id, timestamp, this.#database);
-      upsertSetting(this.#database, "setup.ownerUserId", user.id, user.id, timestamp);
-      recordAudit(this.#database, user.id, "owner_setup_token_consumed", timestamp);
-      recordAudit(this.#database, user.id, "owner_bootstrap", timestamp);
-    })();
+      await setMembershipRole(user.id, "admin", user.id, transaction, timestamp);
+      await upsertSetting(transaction, "setup.ownerUserId", user.id, user.id, timestamp);
+      await recordAudit(transaction, user.id, "owner_setup_token_consumed", timestamp);
+      await recordAudit(transaction, user.id, "owner_bootstrap", timestamp);
+    });
   }
 }

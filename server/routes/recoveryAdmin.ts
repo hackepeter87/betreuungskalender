@@ -130,7 +130,7 @@ export async function recoveryAdminRoutes(
     initialPasswordFile: options.config.recoveryAdminInitialPasswordFile,
     initialPassword: options.config.recoveryAdminInitialPassword,
     sessionTtlSeconds: options.config.recoveryAdminSessionTtlSeconds
-  });
+  }, app.persistence);
   const authRateLimit = {
     config: {
       rateLimit: {
@@ -158,7 +158,7 @@ export async function recoveryAdminRoutes(
     if (!options.config.recoveryAdminEnabled) return notFound(reply);
     try {
       const body = credentials(request.body);
-      const login = store.login(body.username ?? "", body.password ?? "");
+      const login = await store.login(body.username ?? "", body.password ?? "");
       const cookie = serializeSessionCookie({
         name: options.config.recoveryAdminSessionCookieName,
         value: login.token,
@@ -204,7 +204,7 @@ export async function recoveryAdminRoutes(
 
   app.get("/auth/recovery/change-password", authRateLimit, async (request, reply) => {
     if (!options.config.recoveryAdminEnabled) return notFound(reply);
-    const session = store.findSessionByToken(
+    const session = await store.findSessionByToken(
       cookieValue(request.headers.cookie, options.config.recoveryAdminSessionCookieName)
     );
     if (!session) return reply.redirect("/auth/recovery");
@@ -215,7 +215,7 @@ export async function recoveryAdminRoutes(
     if (!options.config.recoveryAdminEnabled) return notFound(reply);
     try {
       const body = credentials(request.body);
-      const changed = store.changePassword(
+      const changed = await store.changePassword(
         cookieValue(request.headers.cookie, options.config.recoveryAdminSessionCookieName),
         body.newPassword ?? ""
       );
@@ -250,7 +250,7 @@ export async function recoveryAdminRoutes(
 
   app.get("/auth/recovery/logout", authRateLimit, async (request, reply) => {
     if (!options.config.recoveryAdminEnabled) return notFound(reply);
-    store.revokeByToken(
+    await store.revokeByToken(
       cookieValue(request.headers.cookie, options.config.recoveryAdminSessionCookieName)
     );
     return reply
@@ -260,7 +260,7 @@ export async function recoveryAdminRoutes(
 
   app.post("/auth/recovery/logout", authRateLimit, async (request, reply) => {
     if (!options.config.recoveryAdminEnabled) return notFound(reply);
-    store.revokeByToken(
+    await store.revokeByToken(
       cookieValue(request.headers.cookie, options.config.recoveryAdminSessionCookieName)
     );
     return reply

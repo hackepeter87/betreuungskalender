@@ -1,5 +1,4 @@
-import type Database from "better-sqlite3";
-import { db as defaultDb } from "../db/connection.js";
+import type { PersistenceExecutor, PersistenceRuntime } from "../db/runtime.js";
 
 export type OidcLoginContext =
   | { type: "normal" }
@@ -43,20 +42,20 @@ function toRecord(row: OidcLoginStateRow): OidcLoginStateRecord {
 }
 
 export class OidcLoginStateStore {
-  readonly #db: Database.Database;
+  readonly #database: PersistenceRuntime;
 
-  constructor(database: Database.Database = defaultDb) {
-    this.#db = database;
+  constructor(database: PersistenceRuntime) {
+    this.#database = database;
   }
 
-  create(
+  async create(
     record: Pick<OidcLoginStateRecord, "state" | "nonce" | "pkceVerifier" | "redirectUri"> & {
       context?: OidcLoginContext;
     },
     ttlSeconds: number,
     now = new Date()
-  ): OidcLoginStateRecord {
-    this.deleteExpired(now);
+  ): Promise<OidcLoginStateRecord> {
+    await this.deleteExpired(now);
     const createdAt = now.toISOString();
     const expiresAt = new Date(now.getTime() + ttlSeconds * 1000).toISOString();
     const context = record.context ?? { type: "normal" as const };
@@ -64,12 +63,12 @@ export class OidcLoginStateStore {
     if (tokenHash !== null && !/^[0-9a-f]{64}$/.test(tokenHash)) {
       throw new Error("OIDC login context token hash must be a SHA-256 hex digest.");
     }
-    this.#db.prepare(`
+    await this.#database.run(`
       INSERT INTO native_oidc_login_states (
         state, nonce, pkce_verifier, redirect_uri, context_type,
         context_token_hash, created_at, expires_at
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
+    `, [
       record.state,
       record.nonce,
       record.pkceVerifier,
@@ -78,38 +77,38 @@ export class OidcLoginStateStore {
       tokenHash,
       createdAt,
       expiresAt
-    );
+    ]);
     return { ...record, context, createdAt, expiresAt };
   }
 
-  consume(state: string, now = new Date()): OidcLoginStateRecord | undefined {
-    const consumeState = this.#db.transaction(() => {
+  async consume(state: string, now = new Date()): Promise<OidcLoginStateRecord | undefined> {
+    return this.#database.transaction(async (transaction) => {
       const nowIso = now.toISOString();
-      const row = this.#db.prepare(`
+      const row = await transaction.one<OidcLoginStateRow>(`
         SELECT state, nonce, pkce_verifier, redirect_uri, context_type,
                context_token_hash, created_at, expires_at
         FROM native_oidc_login_states
         WHERE state = ?
           AND consumed_at IS NULL
           AND expires_at > ?
-      `).get(state, nowIso) as OidcLoginStateRow | undefined;
+      `, [state, nowIso]);
       if (!row) return undefined;
-      this.#db.prepare(`
+      const update = await transaction.run(`
         UPDATE native_oidc_login_states
         SET consumed_at = ?
         WHERE state = ?
           AND consumed_at IS NULL
-      `).run(nowIso, state);
+      `, [nowIso, state]);
+      if (update.affectedRows !== 1) return undefined;
       return toRecord(row);
     });
-    return consumeState();
   }
 
-  deleteExpired(now = new Date()): void {
-    this.#db.prepare(`
+  async deleteExpired(now = new Date()): Promise<void> {
+    await this.#database.run(`
       DELETE FROM native_oidc_login_states
       WHERE expires_at <= ?
         OR consumed_at IS NOT NULL
-    `).run(now.toISOString());
+    `, [now.toISOString()]);
   }
 }

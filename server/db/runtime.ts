@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
 import {
+  CompiledQuery,
   Kysely,
   SqliteDialect,
   sql,
@@ -11,7 +12,23 @@ import { migrateDatabase } from "./migrationRunner.js";
 
 export type DatabaseDriver = "sqlite";
 export type PersistenceSchema = Record<string, never>;
-export type PersistenceTransaction = Transaction<PersistenceSchema>;
+type QueryExecutor = Kysely<PersistenceSchema> | Transaction<PersistenceSchema>;
+
+export type PersistenceValue = string | number | bigint | boolean | null | Uint8Array;
+
+export interface PersistenceMutationResult {
+  affectedRows: number;
+  insertId?: bigint;
+}
+
+export interface PersistenceExecutor {
+  one<T>(statement: string, parameters?: readonly PersistenceValue[]): Promise<T | undefined>;
+  all<T>(statement: string, parameters?: readonly PersistenceValue[]): Promise<T[]>;
+  run(
+    statement: string,
+    parameters?: readonly PersistenceValue[]
+  ): Promise<PersistenceMutationResult>;
+}
 
 export interface PersistenceStatus {
   reachable: boolean;
@@ -26,12 +43,12 @@ export interface ClassifiedDatabaseError {
   code: string;
 }
 
-export interface PersistenceRuntime {
+export interface PersistenceRuntime extends PersistenceExecutor {
   readonly driver: DatabaseDriver;
   readonly query: Kysely<PersistenceSchema>;
   migrate(): Promise<void>;
   status(): Promise<PersistenceStatus>;
-  transaction<T>(work: (transaction: PersistenceTransaction) => Promise<T>): Promise<T>;
+  transaction<T>(work: (transaction: PersistenceExecutor) => Promise<T>): Promise<T>;
   close(): Promise<void>;
 }
 
@@ -66,13 +83,15 @@ export class SqlitePersistenceRuntime implements PersistenceRuntime {
   private closed = false;
 
   constructor(
-    databasePath: string,
+    databasePath: string | Database.Database,
     private readonly migrationsDirectory?: string
   ) {
-    if (databasePath !== ":memory:") {
+    if (typeof databasePath === "string" && databasePath !== ":memory:") {
       mkdirSync(dirname(databasePath), { recursive: true });
     }
-    this.legacyDatabase = new Database(databasePath);
+    this.legacyDatabase = typeof databasePath === "string"
+      ? new Database(databasePath)
+      : databasePath;
     this.legacyDatabase.pragma("journal_mode = WAL");
     this.legacyDatabase.pragma("foreign_keys = ON");
     this.legacyDatabase.pragma("busy_timeout = 5000");
@@ -108,11 +127,37 @@ export class SqlitePersistenceRuntime implements PersistenceRuntime {
     }
   }
 
+  async one<T>(
+    statement: string,
+    parameters: readonly PersistenceValue[] = []
+  ): Promise<T | undefined> {
+    this.assertOpen();
+    return executeOne<T>(this.query, statement, parameters);
+  }
+
+  async all<T>(
+    statement: string,
+    parameters: readonly PersistenceValue[] = []
+  ): Promise<T[]> {
+    this.assertOpen();
+    return executeAll<T>(this.query, statement, parameters);
+  }
+
+  async run(
+    statement: string,
+    parameters: readonly PersistenceValue[] = []
+  ): Promise<PersistenceMutationResult> {
+    this.assertOpen();
+    return executeMutation(this.query, statement, parameters);
+  }
+
   async transaction<T>(
-    work: (transaction: PersistenceTransaction) => Promise<T>
+    work: (transaction: PersistenceExecutor) => Promise<T>
   ): Promise<T> {
     this.assertOpen();
-    return this.query.transaction().execute(work);
+    return this.query.transaction().execute((transaction) => work(
+      persistenceExecutor(transaction)
+    ));
   }
 
   async close(): Promise<void> {
@@ -130,8 +175,56 @@ export class SqlitePersistenceRuntime implements PersistenceRuntime {
   }
 }
 
+function compiledQuery(
+  statement: string,
+  parameters: readonly PersistenceValue[]
+): CompiledQuery<unknown> {
+  return CompiledQuery.raw(statement, [...parameters]);
+}
+
+async function executeOne<T>(
+  executor: QueryExecutor,
+  statement: string,
+  parameters: readonly PersistenceValue[]
+): Promise<T | undefined> {
+  const result = await executor.executeQuery(compiledQuery(statement, parameters));
+  return result.rows[0] as T | undefined;
+}
+
+async function executeAll<T>(
+  executor: QueryExecutor,
+  statement: string,
+  parameters: readonly PersistenceValue[]
+): Promise<T[]> {
+  const result = await executor.executeQuery(compiledQuery(statement, parameters));
+  return result.rows as T[];
+}
+
+async function executeMutation(
+  executor: QueryExecutor,
+  statement: string,
+  parameters: readonly PersistenceValue[]
+): Promise<PersistenceMutationResult> {
+  const result = await executor.executeQuery(compiledQuery(statement, parameters));
+  return {
+    affectedRows: Number(result.numAffectedRows ?? 0),
+    ...(result.insertId === undefined ? {} : { insertId: result.insertId })
+  };
+}
+
+function persistenceExecutor(executor: QueryExecutor): PersistenceExecutor {
+  return {
+    one: <T>(statement: string, parameters: readonly PersistenceValue[] = []) =>
+      executeOne<T>(executor, statement, parameters),
+    all: <T>(statement: string, parameters: readonly PersistenceValue[] = []) =>
+      executeAll<T>(executor, statement, parameters),
+    run: (statement: string, parameters: readonly PersistenceValue[] = []) =>
+      executeMutation(executor, statement, parameters)
+  };
+}
+
 export function createSqlitePersistenceRuntime(
-  databasePath: string,
+  databasePath: string | Database.Database,
   migrationsDirectory?: string
 ): SqlitePersistenceRuntime {
   return new SqlitePersistenceRuntime(databasePath, migrationsDirectory);

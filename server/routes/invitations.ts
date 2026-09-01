@@ -60,7 +60,7 @@ function preventInvitationCache(reply: FastifyReply): FastifyReply {
 export async function invitationRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/invitations/capabilities", readLimit, async (request, reply) => {
     try {
-      assertCanAdministerMembers(request.user);
+      await assertCanAdministerMembers(request.user, app.persistence);
     } catch (error) {
       const normalized = normalizeMemberError(error);
       return reply.code(normalized.statusCode).send({
@@ -73,7 +73,7 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
 
   app.get("/api/invitations", readLimit, async (request, reply) => {
     try {
-      assertCanAdministerMembers(request.user);
+      await assertCanAdministerMembers(request.user, app.persistence);
     } catch (error) {
       const normalized = normalizeMemberError(error);
       return reply.code(normalized.statusCode).send({
@@ -81,13 +81,13 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
         message: normalized.message
       });
     }
-    return listInvitations();
+    return listInvitations(app.persistence);
   });
 
   app.post("/api/invitations", writeLimit, async (request, reply) => {
     const invitationReply = preventInvitationCache(reply);
     try {
-      assertCanAdministerMembers(request.user);
+      await assertCanAdministerMembers(request.user, app.persistence);
     } catch (error) {
       const normalized = normalizeMemberError(error);
       return invitationReply.code(normalized.statusCode).send({
@@ -102,10 +102,10 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
         issues: parsed.error.issues
       });
     }
-    const created = createInvitation({
+    const created = await createInvitation({
       ...parsed.data,
       actorId: request.userEmail
-    });
+    }, app.persistence);
     const publicInvitationUrl = invitationUrl(created.token, config.invitationPublicBaseUrl);
     if (!parsed.data.sendEmail) {
       return invitationReply.code(201).send({
@@ -146,7 +146,7 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete<{ Params: { id: string } }>("/api/invitations/:id", writeLimit, async (request, reply) => {
     try {
-      assertCanAdministerMembers(request.user);
+      await assertCanAdministerMembers(request.user, app.persistence);
     } catch (error) {
       const normalized = normalizeMemberError(error);
       return reply.code(normalized.statusCode).send({
@@ -154,7 +154,11 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
         message: normalized.message
       });
     }
-    const invitation = revokeInvitation(request.params.id, request.userEmail);
+    const invitation = await revokeInvitation(
+      request.params.id,
+      request.userEmail,
+      app.persistence
+    );
     if (!invitation) {
       return reply.code(404).send({
         error: "not_found",

@@ -118,34 +118,36 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
     const userId = body.userId;
     const actorId = request.userEmail;
     try {
-      db.transaction(() => {
-        const actor = db.prepare("SELECT id FROM data_transfer_actors WHERE id = ?").get(request.params.id);
-        const user = db.prepare("SELECT id FROM app_users WHERE id = ? AND deleted_at IS NULL").get(userId);
+      await app.persistence.transaction(async (transaction) => {
+        const actor = await transaction.one("SELECT id FROM data_transfer_actors WHERE id = ?", [request.params.id]);
+        const user = await transaction.one("SELECT id FROM app_users WHERE id = ? AND deleted_at IS NULL", [userId]);
         if (!actor || !user) throw new Error("Actor or target user was not found.");
-        const effectiveRole = userId === installationOwnerId(db) ? "admin" : role;
-        setMembershipRole(userId, effectiveRole, actorId, new Date().toISOString(), db);
+        const effectiveRole = userId === await installationOwnerId(transaction) ? "admin" : role;
         const timestamp = new Date().toISOString();
-        db.prepare(`
+        await setMembershipRole(userId, effectiveRole, actorId, transaction, timestamp);
+        await transaction.run(`
           UPDATE data_transfer_actors
           SET mapped_user_id = ?, updated_by = ?, updated_at = ?
           WHERE id = ?
-        `).run(userId, actorId, timestamp, request.params.id);
-        db.prepare(`
+        `, [userId, actorId, timestamp, request.params.id]);
+        await transaction.run(`
           UPDATE app_user_care_party_assignments
           SET deleted_at = ?, updated_by = ?, updated_at = ?
           WHERE user_id = ? AND deleted_at IS NULL
-        `).run(timestamp, actorId, timestamp, userId);
-        const insert = db.prepare(`
-          INSERT INTO app_user_care_party_assignments (
-            id, user_id, care_party_id, created_by, updated_by, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        `);
+        `, [timestamp, actorId, timestamp, userId]);
         for (const carePartyId of carePartyIds) {
-          const exists = db.prepare("SELECT 1 FROM care_parties WHERE id = ? AND deleted_at IS NULL").get(carePartyId);
+          const exists = await transaction.one(
+            "SELECT 1 FROM care_parties WHERE id = ? AND deleted_at IS NULL",
+            [carePartyId]
+          );
           if (!exists) throw new Error("Care-party mapping is invalid.");
-          insert.run(randomUUID(), userId, carePartyId, actorId, actorId, timestamp, timestamp);
+          await transaction.run(`
+            INSERT INTO app_user_care_party_assignments (
+              id, user_id, care_party_id, created_by, updated_by, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          `, [randomUUID(), userId, carePartyId, actorId, actorId, timestamp, timestamp]);
         }
-      })();
+      });
       return noStore(reply).send({ mapped: true });
     } catch (error) {
       return noStore(reply).code(400).send(errorReply(error));
@@ -161,13 +163,13 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
     const actor = db.prepare("SELECT id, email_hint AS email FROM data_transfer_actors WHERE id = ?").get(request.params.id) as { id: string; email: string | null } | undefined;
     if (!actor) return noStore(reply).code(404).send({ error: "not_found", message: "Imported actor was not found." });
     try {
-      const created = createInvitation({
+      const created = await createInvitation({
         role,
         expiresAt: body.expiresAt,
         actorId: request.userEmail,
         emailHint: typeof body.emailHint === "string" ? body.emailHint : actor.email ?? undefined,
         dataTransferActorId: actor.id
-      });
+      }, app.persistence);
       db.prepare("UPDATE data_transfer_actors SET invitation_id = ?, updated_by = ?, updated_at = ? WHERE id = ?")
         .run(created.invitation.id, request.userEmail, new Date().toISOString(), actor.id);
       return noStore(reply).code(201).send({

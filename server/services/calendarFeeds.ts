@@ -1,6 +1,7 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { ApiCalendarFeedScope } from "../../shared/api.js";
 import { db } from "../db/connection.js";
+import type { PersistenceExecutor } from "../db/runtime.js";
 import { nowIso } from "./common.js";
 import { assignedCarePartyIds, canUseCareParty, sharedCarePartyModeEnabled } from "./carePartyAccess.js";
 import { getCareParty } from "./careParties.js";
@@ -131,7 +132,11 @@ export function calendarFeedStatus(
   };
 }
 
-function assertScopeAllowed(userId: string, scope: ApiCalendarFeedScope): void {
+async function assertScopeAllowed(
+  userId: string,
+  scope: ApiCalendarFeedScope,
+  persistence: PersistenceExecutor
+): Promise<void> {
   const parsed = parseCalendarFeedScope(scope);
   if (parsed.type !== "party") return;
   if (!parsed.partyId || !getCareParty(parsed.partyId)) {
@@ -142,18 +147,21 @@ function assertScopeAllowed(userId: string, scope: ApiCalendarFeedScope): void {
     FROM app_users
     WHERE id = ? AND deleted_at IS NULL
   `).get(userId) as { externalSubject: string } | undefined;
-  const requestUser = user ? findAuthenticatedUserBySubject(user.externalSubject) : undefined;
+  const requestUser = user
+    ? await findAuthenticatedUserBySubject(user.externalSubject, persistence)
+    : undefined;
   if (requestUser && !canUseCareParty(requestUser, parsed.partyId)) {
     throw new Error("Diese betreuende Person ist für deinen Benutzer nicht freigegeben.");
   }
 }
 
-export function rotateCalendarFeedToken(
+export async function rotateCalendarFeedToken(
   userId: string,
-  scope: ApiCalendarFeedScope
-): { token: string; status: CalendarFeedStatus } {
+  scope: ApiCalendarFeedScope,
+  persistence: PersistenceExecutor
+): Promise<{ token: string; status: CalendarFeedStatus }> {
   const parsed = parseCalendarFeedScope(scope);
-  assertScopeAllowed(userId, scope);
+  await assertScopeAllowed(userId, scope, persistence);
   const token = randomBytes(TOKEN_BYTES).toString("base64url");
   const timestamp = nowIso();
   db.transaction(() => {
@@ -185,7 +193,10 @@ export function revokeCalendarFeedTokens(userId: string, scope?: ApiCalendarFeed
   `).run(nowIso(), userId, ...(parsed ? [parsed.type, parsed.partyId ?? ""] : []));
 }
 
-export function resolveCalendarFeedToken(token: string): TokenRow | undefined {
+export async function resolveCalendarFeedToken(
+  token: string,
+  persistence: PersistenceExecutor
+): Promise<TokenRow | undefined> {
   const normalized = token.trim();
   if (!/^[A-Za-z0-9_-]{32,128}$/.test(normalized)) return undefined;
   const row = db.prepare(`
@@ -199,8 +210,8 @@ export function resolveCalendarFeedToken(token: string): TokenRow | undefined {
     WHERE t.token_hash = ? AND t.revoked_at IS NULL AND u.deleted_at IS NULL
   `).get(hashToken(normalized)) as TokenRow | undefined;
   if (!row) return undefined;
-  if (!userHasWorkspacePermission(row.user_id, "feeds:manage-own")) return undefined;
-  const requestUser = findAuthenticatedUserBySubject(row.external_subject);
+  if (!(await userHasWorkspacePermission(row.user_id, "feeds:manage-own", persistence))) return undefined;
+  const requestUser = await findAuthenticatedUserBySubject(row.external_subject, persistence);
   if (!requestUser?.workspaceAccess) return undefined;
   if (row.scope_type === "party") {
     if (!row.scope_party_id || !row.scope_party_name) return undefined;
@@ -211,8 +222,11 @@ export function resolveCalendarFeedToken(token: string): TokenRow | undefined {
   return row;
 }
 
-function feedEntriesForToken(token: TokenRow): FeedEntryRow[] {
-  const requestUser = findAuthenticatedUserBySubject(token.external_subject);
+async function feedEntriesForToken(
+  token: TokenRow,
+  persistence: PersistenceExecutor
+): Promise<FeedEntryRow[]> {
+  const requestUser = await findAuthenticatedUserBySubject(token.external_subject, persistence);
   if (!requestUser?.workspaceAccess || !requestUser.workspacePermissions?.includes("feeds:manage-own")) {
     return [];
   }
@@ -332,10 +346,10 @@ function utcDateTimeValue(value: string): string {
   return date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
 }
 
-export function buildPersonalCalendarFeed(input: {
+export async function buildPersonalCalendarFeed(input: {
   token: TokenRow;
   generatedAt?: string;
-}): string {
+}, persistence: PersistenceExecutor): Promise<string> {
   const generatedAt = input.generatedAt ?? nowIso();
   const scope = scopeFromRow(input.token);
   const title = scope === "legacy"
@@ -352,7 +366,7 @@ export function buildPersonalCalendarFeed(input: {
     `X-WR-CALNAME:${escapeText(title)}`,
     "X-WR-TIMEZONE:Europe/Berlin"
   ];
-  for (const entry of feedEntriesForToken(input.token)) {
+  for (const entry of await feedEntriesForToken(input.token, persistence)) {
     const location = feedLocation(entry);
     lines.push(
       "BEGIN:VEVENT",

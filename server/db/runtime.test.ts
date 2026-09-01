@@ -3,7 +3,6 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
-import { sql } from "kysely";
 import {
   classifyDatabaseError,
   createSqlitePersistenceRuntime
@@ -34,10 +33,10 @@ test("SQLite runtime owns migration, readiness, transaction, and close lifecycle
 
     await assert.rejects(
       runtime.transaction(async (transaction) => {
-        await sql`
+        await transaction.run(`
           INSERT INTO settings (key, value_json, created_at, updated_at)
           VALUES ('runtime-rollback', '{}', '2026-09-01T00:00:00.000Z', '2026-09-01T00:00:00.000Z')
-        `.execute(transaction);
+        `);
         throw new Error("rollback requested");
       }),
       /rollback requested/
@@ -46,6 +45,19 @@ test("SQLite runtime owns migration, readiness, transaction, and close lifecycle
       .prepare("SELECT 1 AS found FROM settings WHERE key = ?")
       .get("runtime-rollback");
     assert.equal(rolledBack, undefined);
+
+    await runtime.run(
+      "INSERT INTO settings (key, value_json, created_at, updated_at) VALUES (?, ?, ?, ?)",
+      ["runtime-query", "{}", "2026-09-01T00:00:00.000Z", "2026-09-01T00:00:00.000Z"]
+    );
+    assert.deepEqual(
+      await runtime.one<{ key: string }>("SELECT key FROM settings WHERE key = ?", ["runtime-query"]),
+      { key: "runtime-query" }
+    );
+    assert.deepEqual(
+      await runtime.all<{ key: string }>("SELECT key FROM settings WHERE key LIKE ?", ["runtime-%"]),
+      [{ key: "runtime-query" }]
+    );
   } finally {
     await runtime.close();
     assert.deepEqual(await runtime.status(), {

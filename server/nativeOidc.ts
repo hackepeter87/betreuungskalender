@@ -107,13 +107,13 @@ export interface NativeOidcServiceOptions {
 
 export class NativeOidcService {
   readonly #config: NativeOidcConfig;
-  readonly #loginStates: OidcLoginStateStore;
+  readonly #loginStates?: OidcLoginStateStore;
   readonly #library: OidcLibrary;
   #discovered?: Promise<oidc.Configuration>;
 
   constructor(options: NativeOidcServiceOptions) {
     this.#config = options.config;
-    this.#loginStates = options.loginStates ?? new OidcLoginStateStore();
+    this.#loginStates = options.loginStates;
     this.#library = options.library ?? openidClientLibrary;
   }
 
@@ -125,7 +125,7 @@ export class NativeOidcService {
     const nonce = this.#library.randomNonce();
     const redirectUri = this.#required("redirectUri", this.#config.redirectUri);
 
-    this.#loginStates.create(
+    await this.#requiredLoginStates().create(
       {
         state,
         nonce,
@@ -166,7 +166,7 @@ export class NativeOidcService {
       );
     }
 
-    const loginState = this.#loginStates.consume(state);
+    const loginState = await this.#requiredLoginStates().consume(state);
     if (!loginState) {
       throw new NativeOidcError(
         "native_oidc_invalid_state",
@@ -221,6 +221,17 @@ export class NativeOidcService {
       ...(email ? { email } : {}),
       ...(displayName ? { displayName } : {})
     };
+  }
+
+  #requiredLoginStates(): OidcLoginStateStore {
+    if (!this.#loginStates) {
+      throw new NativeOidcError(
+        "native_oidc_state_store_missing",
+        500,
+        "OIDC login state storage is not configured."
+      );
+    }
+    return this.#loginStates;
   }
 
   async #configuration(): Promise<oidc.Configuration> {

@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 import Database from "better-sqlite3";
 import { migrateDatabase } from "./db/migrationRunner.js";
+import { createSqlitePersistenceRuntime } from "./db/runtime.js";
 import { backupDatabase } from "./services/sqliteBackup.js";
 import { disableLocalDevelopmentIdentityAccess } from "./services/localDevelopmentIdentity.js";
 
@@ -315,7 +316,7 @@ test("workspace permission migration maps roles and preserves revoked membership
 });
 
 test("local development identity cleanup revokes runtime access but preserves history", async () => {
-  await withTemporaryDirectory("local-development-cleanup", (directory) => {
+  await withTemporaryDirectory("local-development-cleanup", async (directory) => {
     const oldMigrations = join(directory, "old-migrations");
     mkdirSync(oldMigrations);
     for (const file of readdirSync(migrationsDirectory)) {
@@ -365,7 +366,10 @@ test("local development identity cleanup revokes runtime access but preserves hi
       `).run(timestamp, timestamp, timestamp);
 
       migrateDatabase(database, migrationsDirectory);
-      disableLocalDevelopmentIdentityAccess(database, timestamp);
+      await disableLocalDevelopmentIdentityAccess(
+        createSqlitePersistenceRuntime(database),
+        timestamp
+      );
 
       assert.equal((database.prepare(
         "SELECT COUNT(*) AS count FROM app_users WHERE id = 'local-dev'"
@@ -395,7 +399,7 @@ test("local development identity cleanup revokes runtime access but preserves hi
 });
 
 test("local development identity cleanup preserves an explicit local owner", async () => {
-  await withTemporaryDirectory("local-development-owner", (directory) => {
+  await withTemporaryDirectory("local-development-owner", async (directory) => {
     const oldMigrations = join(directory, "old-migrations");
     mkdirSync(oldMigrations);
     for (const file of readdirSync(migrationsDirectory)) {
@@ -412,7 +416,10 @@ test("local development identity cleanup preserves an explicit local owner", asy
       `).run();
 
       migrateDatabase(database, migrationsDirectory);
-      disableLocalDevelopmentIdentityAccess(database, "2026-08-01T10:00:00.000Z");
+      await disableLocalDevelopmentIdentityAccess(
+        createSqlitePersistenceRuntime(database),
+        "2026-08-01T10:00:00.000Z"
+      );
 
       assert.equal((database.prepare(`
         SELECT deleted_at AS deletedAt FROM app_memberships

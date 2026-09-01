@@ -1,6 +1,5 @@
-import type Database from "better-sqlite3";
-import { db } from "../db/connection.js";
 import type { ApiSetupState } from "../../shared/api.js";
+import type { PersistenceExecutor } from "../db/runtime.js";
 
 export interface DetailedSetupState extends ApiSetupState {
   source: "explicit" | "existing-data" | "fresh";
@@ -13,21 +12,12 @@ export interface DetailedSetupState extends ApiSetupState {
   };
 }
 
-function countActive(database: Database.Database, table: string): number {
-  const row = database.prepare(`
-    SELECT COUNT(*) AS count
-    FROM ${table}
-    WHERE deleted_at IS NULL
-  `).get() as { count: number };
-  return row.count;
-}
-
-function setting(database: Database.Database, key: string): unknown {
-  const row = database.prepare(`
+async function setting(database: PersistenceExecutor, key: string): Promise<unknown> {
+  const row = await database.one<{ valueJson: string }>(`
     SELECT value_json AS valueJson
     FROM settings
     WHERE key = ? AND deleted_at IS NULL
-  `).get(key) as { valueJson: string } | undefined;
+  `, [key]);
   return row ? JSON.parse(row.valueJson) as unknown : undefined;
 }
 
@@ -35,12 +25,24 @@ function optionalText(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
-export function buildSetupState(database: Database.Database = db): DetailedSetupState {
-  const completedAt = optionalText(setting(database, "setup.completedAt"));
-  const completedBy = optionalText(setting(database, "setup.completedBy"));
-  const children = countActive(database, "children");
-  const careParties = countActive(database, "care_parties");
-  const appUsers = countActive(database, "app_users");
+export async function buildSetupState(
+  database: PersistenceExecutor
+): Promise<DetailedSetupState> {
+  const [completedAtValue, completedByValue, counts] = await Promise.all([
+    setting(database, "setup.completedAt"),
+    setting(database, "setup.completedBy"),
+    database.one<{ children: number; careParties: number; appUsers: number }>(`
+      SELECT
+        (SELECT COUNT(*) FROM children WHERE deleted_at IS NULL) AS children,
+        (SELECT COUNT(*) FROM care_parties WHERE deleted_at IS NULL) AS careParties,
+        (SELECT COUNT(*) FROM app_users WHERE deleted_at IS NULL) AS appUsers
+    `)
+  ]);
+  const completedAt = optionalText(completedAtValue);
+  const completedBy = optionalText(completedByValue);
+  const children = Number(counts?.children ?? 0);
+  const careParties = Number(counts?.careParties ?? 0);
+  const appUsers = Number(counts?.appUsers ?? 0);
   const hasExistingSetupData = children > 0 && careParties > 0;
   const complete = Boolean(completedAt) || hasExistingSetupData;
   const source = completedAt
@@ -63,8 +65,8 @@ export function buildSetupState(database: Database.Database = db): DetailedSetup
   };
 }
 
-export function publicSetupState(database: Database.Database = db): ApiSetupState {
-  const state = buildSetupState(database);
+export async function publicSetupState(database: PersistenceExecutor): Promise<ApiSetupState> {
+  const state = await buildSetupState(database);
   return {
     complete: state.complete,
     required: state.required

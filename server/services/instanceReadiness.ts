@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import type Database from "better-sqlite3";
 import { config } from "../config.js";
 import { db } from "../db/connection.js";
+import type { PersistenceExecutor } from "../db/runtime.js";
 import { availableMigrationVersions } from "../db/migrationRunner.js";
 import { buildSetupState } from "./setupState.js";
 import type { ApiInstanceReadiness } from "../../shared/api.js";
@@ -34,15 +35,19 @@ function stableInstanceId(migrations: Array<{ version: string; appliedAt: string
   return `inst_${createHash("sha256").update(seed).digest("hex").slice(0, 16)}`;
 }
 
-export function buildInstanceReadiness(
+export async function buildInstanceReadiness(
   database: Database.Database = db,
-  runtime: ReadinessConfig = config
-): ApiInstanceReadiness {
+  runtime: ReadinessConfig = config,
+  persistence?: PersistenceExecutor
+): Promise<ApiInstanceReadiness> {
   const migrations = appliedMigrations(database);
   const available = availableMigrationVersions();
   const latestApplied = migrations.at(-1)?.version;
   const latestAvailable = available.at(-1);
-  const setup = buildSetupState(database);
+  if (!persistence) {
+    throw new Error("Readiness persistence is not configured.");
+  }
+  const setup = await buildSetupState(persistence);
 
   return {
     instanceId: stableInstanceId(migrations),

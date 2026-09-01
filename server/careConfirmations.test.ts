@@ -207,9 +207,9 @@ after(async () => {
 test("creates one due confirmation request for an unconfirmed past planned entry", async () => {
   insertPastPlannedEntry();
 
-  const created = createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z"));
-  const duplicate = createDueCareConfirmationRequests(new Date("2026-07-03T09:00:00.000Z"));
-  const open = await listOpenCareConfirmations("local-dev");
+  const created = await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
+  const duplicate = await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T09:00:00.000Z"));
+  const open = await listOpenCareConfirmations("local-dev", persistence);
 
   assert.equal(created, 1);
   assert.equal(duplicate, 0);
@@ -246,10 +246,11 @@ test("batches multiple due confirmations into one push per user", async () => {
     SELECT ?, child_id, created_at, updated_at
     FROM care_entry_children WHERE care_entry_id = ?
   `).run("entry-confirmation-b", "entry-confirmation-a");
-  createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z"));
+  await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
 
   let deliveries = 0;
   const sent = await sendDueCareConfirmationPushes(
+    persistence,
     new Date("2026-07-03T08:05:00.000Z"),
     async () => {
       deliveries += 1;
@@ -271,7 +272,7 @@ test("batches multiple due confirmations into one push per user", async () => {
 
 test("suppresses existing confirmation requests while a planned conflict is open", async () => {
   insertPastPlannedEntry();
-  assert.equal(createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z")), 1);
+  assert.equal(await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z")), 1);
   db.prepare(`
     INSERT INTO care_entries (
       id, start_datetime, end_datetime, status, care_scope,
@@ -291,7 +292,7 @@ test("suppresses existing confirmation requests while a planned conflict is open
     FROM care_entry_children WHERE care_entry_id = 'entry-confirmation-a'
   `).run();
 
-  const open = await listOpenCareConfirmations("local-dev");
+  const open = await listOpenCareConfirmations("local-dev", persistence);
   const activeRequests = db.prepare(`
     SELECT COUNT(*) AS count FROM care_confirmation_requests WHERE deleted_at IS NULL
   `).get() as { count: number };
@@ -299,22 +300,22 @@ test("suppresses existing confirmation requests while a planned conflict is open
   assert.equal(activeRequests.count, 0);
 });
 
-test("answers a confirmation request and stores partial status with audit metadata", () => {
+test("answers a confirmation request and stores partial status with audit metadata", async () => {
   insertPastPlannedEntry();
-  createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z"));
+  await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
   const request = db.prepare(`
     SELECT id FROM care_confirmation_requests
     WHERE care_entry_id = ? AND user_id = ?
   `).get("entry-confirmation-a", "local-dev") as { id: string };
 
-  const answered = answerCareConfirmation(request.id, "local-dev", {
+  const answered = await answerCareConfirmation(request.id, "local-dev", {
     status: "partial",
     note: "Fiktive Teilbestätigung",
     actualChildIds: ["child-confirmation-a"],
     actualStartDateTime: "2026-07-02T17:00:00.000Z",
     actualEndDateTime: "2026-07-02T18:00:00.000Z",
     actualResponsiblePartyId: "party-confirmation-a"
-  });
+  }, persistence);
   const entry = db.prepare(`
     SELECT status, confirmation_note AS confirmationNote, confirmed_by AS confirmedBy,
       confirmed_at AS confirmedAt, actual_start_datetime AS actualStartDateTime,
@@ -368,9 +369,9 @@ test("answers a confirmation request and stores partial status with audit metada
   assert.equal(openCount.count, 0);
 });
 
-test("rejects confirmation when actual care would overlap an existing actual entry", () => {
+test("rejects confirmation when actual care would overlap an existing actual entry", async () => {
   insertPastPlannedEntry();
-  createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z"));
+  await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
   db.prepare(`
     INSERT INTO care_entries (
       id, start_datetime, end_datetime, status, care_scope,
@@ -394,8 +395,8 @@ test("rejects confirmation when actual care would overlap an existing actual ent
     WHERE care_entry_id = ? AND user_id = ?
   `).get("entry-confirmation-a", "local-dev") as { id: string };
 
-  assert.throws(
-    () => answerCareConfirmation(request.id, "local-dev", { status: "completed" }),
+  await assert.rejects(
+    answerCareConfirmation(request.id, "local-dev", { status: "completed" }, persistence),
     (error: unknown) => (error as { code?: string }).code === "care_entry_conflict"
   );
   const entry = db.prepare("SELECT status FROM care_entries WHERE id = ?")
@@ -407,27 +408,27 @@ test("rejects confirmation when actual care would overlap an existing actual ent
   assert.equal(confirmation.answeredAt, null);
 });
 
-test("partial confirmation rejects actual care parties outside the assigned shared context", () => {
+test("partial confirmation rejects actual care parties outside the assigned shared context", async () => {
   insertPastPlannedEntry();
   insertCareParty("party-confirmation-b", "Nicht zugeordnet");
   const user = parentUser();
   insertAppUser(user);
   assignCareParty(user.id, "party-confirmation-a");
-  createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z"));
+  await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
   const request = db.prepare(`
     SELECT id FROM care_confirmation_requests
     WHERE care_entry_id = ? AND user_id = ?
   `).get("entry-confirmation-a", user.id) as { id: string };
 
-  assert.throws(
-    () => answerCareConfirmation(request.id, user, {
+  await assert.rejects(
+    answerCareConfirmation(request.id, user, {
       status: "partial",
       note: "Fiktiver Fremdversuch",
       actualChildIds: ["child-confirmation-a"],
       actualStartDateTime: "2026-07-02T17:00:00.000Z",
       actualEndDateTime: "2026-07-02T18:00:00.000Z",
       actualResponsiblePartyId: "party-confirmation-b"
-    }),
+    }, persistence),
     /nicht freigegeben/
   );
 });
@@ -441,7 +442,7 @@ test("removed care-party assignments hide and block stale confirmations", async 
   insertAppUser(otherUser);
   assignCareParty(user.id, "party-confirmation-a");
   assignCareParty(otherUser.id, "party-confirmation-b");
-  createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z"));
+  await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
   const request = db.prepare(`
     SELECT id FROM care_confirmation_requests
     WHERE care_entry_id = ? AND user_id = ?
@@ -458,9 +459,9 @@ test("removed care-party assignments hide and block stale confirmations", async 
     "party-confirmation-a"
   );
 
-  assert.deepEqual(await listOpenCareConfirmations(user), []);
-  assert.equal(answerCareConfirmation(request.id, user, { status: "completed" }), undefined);
-  assert.equal(remindCareConfirmationLater(request.id, user), undefined);
+  assert.deepEqual(await listOpenCareConfirmations(user, persistence), []);
+  assert.equal(await answerCareConfirmation(request.id, user, { status: "completed" }, persistence), undefined);
+  assert.equal(await remindCareConfirmationLater(request.id, user, persistence), undefined);
   assert.deepEqual(db.prepare(`
     SELECT status, answered_at AS answeredAt
     FROM care_confirmation_requests WHERE id = ?

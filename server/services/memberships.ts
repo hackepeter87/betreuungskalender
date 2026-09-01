@@ -1,4 +1,3 @@
-import type Database from "better-sqlite3";
 import { randomUUID } from "node:crypto";
 import {
   legacyRoleForWorkspaceRole,
@@ -10,7 +9,7 @@ import {
   type WorkspacePermission,
   type WorkspaceRole
 } from "../auth.js";
-import { db } from "../db/connection.js";
+import type { PersistenceExecutor } from "../db/runtime.js";
 
 export interface MembershipResolution {
   user: RequestUser;
@@ -30,12 +29,12 @@ function isWorkspaceRole(value: string): value is WorkspaceRole {
   return value === "admin" || value === "editor" || value === "scheduler" || value === "viewer";
 }
 
-function ownerId(database: Database.Database): string | undefined {
-  const row = database.prepare(`
+async function ownerId(database: PersistenceExecutor): Promise<string | undefined> {
+  const row = await database.one<{ valueJson: string }>(`
     SELECT value_json AS valueJson
     FROM settings
     WHERE key = 'setup.ownerUserId' AND deleted_at IS NULL
-  `).get() as { valueJson: string } | undefined;
+  `);
   if (!row) return undefined;
   try {
     const value = JSON.parse(row.valueJson) as unknown;
@@ -45,73 +44,73 @@ function ownerId(database: Database.Database): string | undefined {
   }
 }
 
-function latestMembershipForUser(
+async function latestMembershipForUser(
   userId: string,
-  database: Database.Database
-): MembershipRow | undefined {
-  return database.prepare(`
+  database: PersistenceExecutor
+): Promise<MembershipRow | undefined> {
+  return database.one<MembershipRow>(`
     SELECT role, deleted_at
     FROM app_memberships
     WHERE user_id = ?
     ORDER BY updated_at DESC, id DESC
     LIMIT 1
-  `).get(userId) as MembershipRow | undefined;
+  `, [userId]);
 }
 
-export function membershipRoleForUser(
+export async function membershipRoleForUser(
   userId: string,
-  database: Database.Database = db
-): WorkspaceRole | undefined {
-  const row = latestMembershipForUser(userId, database);
+  database: PersistenceExecutor
+): Promise<WorkspaceRole | undefined> {
+  const row = await latestMembershipForUser(userId, database);
   return row && !row.deleted_at && isWorkspaceRole(row.role) ? row.role : undefined;
 }
 
-export function hasWorkspaceAccess(
+export async function hasWorkspaceAccess(
   userId: string,
-  database: Database.Database = db,
+  database: PersistenceExecutor,
   policy: MembershipResolutionPolicy = "strict"
-): boolean {
-  return workspacePermissionsForUser(userId, database, policy).length > 0;
+): Promise<boolean> {
+  return (await workspacePermissionsForUser(userId, database, policy)).length > 0;
 }
 
-export function workspacePermissionsForUser(
+export async function workspacePermissionsForUser(
   userId: string,
-  database: Database.Database = db,
+  database: PersistenceExecutor,
   policy: MembershipResolutionPolicy = "strict"
-): WorkspacePermission[] {
-  const membership = latestMembershipForUser(userId, database);
+): Promise<WorkspacePermission[]> {
+  const membership = await latestMembershipForUser(userId, database);
   if (membership?.deleted_at) return [];
-  const owner = ownerId(database);
+  const owner = await ownerId(database);
   if (membership && isWorkspaceRole(membership.role)) {
     return workspacePermissionsForRole(membership.role, owner === userId);
   }
   if (owner || policy === "strict") return [];
-  const user = database.prepare(`
+  const user = await database.one<{ role: AuthRole }>(`
     SELECT role
     FROM app_users
     WHERE id = ? AND deleted_at IS NULL
-  `).get(userId) as { role: AuthRole } | undefined;
+  `, [userId]);
   if (!user || !["admin", "parent", "readonly"].includes(user.role)) return [];
   const role = workspaceRoleForLegacyRole(user.role);
   return workspacePermissionsForRole(role, role === "admin");
 }
 
-export function userHasWorkspacePermission(
+export async function userHasWorkspacePermission(
   userId: string,
   permission: WorkspacePermission,
-  database: Database.Database = db,
+  database: PersistenceExecutor,
   policy: MembershipResolutionPolicy = "strict"
-): boolean {
-  return workspacePermissionsForUser(userId, database, policy).includes(permission);
+): Promise<boolean> {
+  return (await workspacePermissionsForUser(userId, database, policy)).includes(permission);
 }
 
-export function applyMembershipRole(
+export async function applyMembershipRole(
   user: RequestUser,
-  database: Database.Database = db,
+  database: PersistenceExecutor,
   policy: MembershipResolutionPolicy = "strict"
-): MembershipResolution {
-  const membership = latestMembershipForUser(user.id, database);
-  const owner = ownerId(database);
+): Promise<MembershipResolution> {
+  const membership = await latestMembershipForUser(user.id, database);
+  const owner = await ownerId(database);
   const isOwner = owner === user.id;
   if (membership?.deleted_at) {
     return {
@@ -161,69 +160,69 @@ export function applyMembershipRole(
   };
 }
 
-export function applyLegacyPreOwnerMembershipRole(
+export async function applyLegacyPreOwnerMembershipRole(
   user: RequestUser,
-  database: Database.Database = db
-): MembershipResolution {
+  database: PersistenceExecutor
+): Promise<MembershipResolution> {
   return applyMembershipRole(user, database, "legacy-pre-owner");
 }
 
-export function setMembershipRole(
+export async function setMembershipRole(
   userId: string,
   role: WorkspaceRole,
   actorId: string,
-  timestamp = new Date().toISOString(),
-  database: Database.Database = db
-): void {
-  const existing = database.prepare(`
+  database: PersistenceExecutor,
+  timestamp = new Date().toISOString()
+): Promise<void> {
+  const existing = await database.one<{ id: string }>(`
     SELECT id
     FROM app_memberships
     WHERE user_id = ? AND deleted_at IS NULL
     ORDER BY updated_at DESC, id DESC
     LIMIT 1
-  `).get(userId) as { id: string } | undefined;
+  `, [userId]);
 
   if (existing) {
-    database.prepare(`
+    await database.run(`
       UPDATE app_memberships
       SET role = ?,
           updated_by = ?,
           updated_at = ?
       WHERE id = ?
-    `).run(role, actorId, timestamp, existing.id);
+    `, [role, actorId, timestamp, existing.id]);
     return;
   }
 
-  database.prepare(`
+  await database.run(`
     INSERT INTO app_memberships (
       id, user_id, role, created_by, updated_by, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(randomUUID(), userId, role, actorId, actorId, timestamp, timestamp);
+  `, [randomUUID(), userId, role, actorId, actorId, timestamp, timestamp]);
 }
 
-export function clearMembershipRole(
+export async function clearMembershipRole(
   userId: string,
   actorId: string,
-  timestamp = new Date().toISOString(),
-  database: Database.Database = db
-): WorkspaceRole | undefined {
-  const existing = database.prepare(`
+  database: PersistenceExecutor,
+  timestamp = new Date().toISOString()
+): Promise<WorkspaceRole | undefined> {
+  const existing = await database.one<{ id: string; role: WorkspaceRole }>(`
     SELECT id, role
     FROM app_memberships
     WHERE user_id = ? AND deleted_at IS NULL
     ORDER BY updated_at DESC, id DESC
     LIMIT 1
-  `).get(userId) as { id: string; role: WorkspaceRole } | undefined;
+  `, [userId]);
 
   if (!existing) return undefined;
 
-  database.prepare(`
+  await database.run(`
     UPDATE app_memberships
     SET deleted_at = ?,
         updated_by = ?,
         updated_at = ?
     WHERE id = ?
-  `).run(timestamp, actorId, timestamp, existing.id);
+  `, [timestamp, actorId, timestamp, existing.id]);
 
   return existing.role;
 }

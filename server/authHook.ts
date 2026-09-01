@@ -7,7 +7,8 @@ import {
 } from "./auth.js";
 import type { config as appConfig } from "./config.js";
 import { cookieValue } from "./cookies.js";
-import { type OidcSessionRecord, type OidcSessionStore } from "./services/oidcSessions.js";
+import type { PersistenceExecutor } from "./db/runtime.js";
+import type { OidcSessionRecord } from "./services/oidcSessions.js";
 import { isTrustedProxyAddress } from "./trustedProxy.js";
 import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "./services/users.js";
 import {
@@ -36,15 +37,24 @@ type AuthConfig = Pick<
 >;
 
 interface NativeAuthOptions {
-  nativeSessions?: Pick<OidcSessionStore, "findByToken">;
-  findUserByExternalSubject?: (externalSubject: string) => RequestUser | undefined;
-  findRecoveryUserByToken?: (token: string | undefined) => RequestUser | undefined;
-  upsertAuthenticatedUser?: (user: RequestUser) => void;
+  persistence?: PersistenceExecutor;
+  nativeSessions?: {
+    findByToken(token: string | undefined): Awaitable<OidcSessionRecord | undefined>;
+  };
+  findUserByExternalSubject?: (
+    externalSubject: string
+  ) => Awaitable<RequestUser | undefined>;
+  findRecoveryUserByToken?: (
+    token: string | undefined
+  ) => Awaitable<RequestUser | undefined>;
+  upsertAuthenticatedUser?: (user: RequestUser) => Awaitable<void>;
   applyMembershipRole?: (
     user: RequestUser,
     policy?: MembershipResolutionPolicy
-  ) => MembershipResolution;
+  ) => Awaitable<MembershipResolution>;
 }
+
+type Awaitable<T> = T | Promise<T>;
 
 function httpError(code: string, statusCode: number, message: string): Error & { code: string; statusCode: number } {
   return Object.assign(new Error(message), { code, statusCode });
@@ -75,7 +85,7 @@ function assertWorkspacePermission(user: RequestUser, request: Parameters<preHan
 export function createApiAuthHook(
   config: AuthConfig,
   rateLimitFirst?: preHandlerAsyncHookHandler,
-  options: NativeAuthOptions = {}
+  options?: NativeAuthOptions
 ): preHandlerAsyncHookHandler {
   return async (request, reply) => {
     if (rateLimitFirst) await rateLimitFirst.call(reply.server, request, reply);
@@ -86,8 +96,15 @@ export function createApiAuthHook(
       request.url === "/api/session" ||
       request.url === "/api/setup/first-use"
     ) return;
+    const nativeAuth: Partial<NativeAuthOptions> = options ?? {};
+    const requiredPersistence = (): PersistenceExecutor => {
+      if (!nativeAuth.persistence) {
+        throw new Error("Authentication persistence is not configured.");
+      }
+      return nativeAuth.persistence;
+    };
     const recoveryUser = config.recoveryAdminEnabled
-      ? options.findRecoveryUserByToken?.(
+      ? await nativeAuth.findRecoveryUserByToken?.(
           cookieValue(request.headers.cookie, config.recoveryAdminSessionCookieName)
         )
       : undefined;
@@ -105,14 +122,15 @@ export function createApiAuthHook(
       return;
     }
     if (config.authMode === "native-oidc") {
-      const sessions = options.nativeSessions;
-      const session: OidcSessionRecord | undefined = sessions?.findByToken(
+      const sessions = nativeAuth.nativeSessions;
+      const session: OidcSessionRecord | undefined = await sessions?.findByToken(
         cookieValue(request.headers.cookie, config.sessionCookieName)
       );
       const user = session
-        ? (options.findUserByExternalSubject ?? findAuthenticatedUserBySubject)(
-            session.externalSubject
-          )
+        ? await (nativeAuth.findUserByExternalSubject ?? ((externalSubject) =>
+            findAuthenticatedUserBySubject(externalSubject, requiredPersistence())))(
+              session.externalSubject
+            )
         : undefined;
       if (!session || !user) {
         throw httpError(
@@ -159,10 +177,11 @@ export function createApiAuthHook(
           : "Authentifizierung erforderlich."
         );
     }
-    (options.upsertAuthenticatedUser ?? upsertAuthenticatedUser)(auth.user);
-    const membership = options.applyMembershipRole
-      ? options.applyMembershipRole(auth.user, "legacy-pre-owner")
-      : applyLegacyPreOwnerMembershipRole(auth.user);
+    await (nativeAuth.upsertAuthenticatedUser ?? ((user) =>
+      upsertAuthenticatedUser(user, requiredPersistence())))(auth.user);
+    const membership = nativeAuth.applyMembershipRole
+      ? await nativeAuth.applyMembershipRole(auth.user, "legacy-pre-owner")
+      : await applyLegacyPreOwnerMembershipRole(auth.user, requiredPersistence());
     if (auth.reason === "missing_role" && !membership.membershipRole) {
       throw httpError(
         "authorization_required",

@@ -6,6 +6,7 @@ import test from "node:test";
 import Database from "better-sqlite3";
 import Fastify from "fastify";
 import { migrateDatabase } from "./db/migrationRunner.js";
+import { createSqlitePersistenceRuntime } from "./db/runtime.js";
 import { recoveryAdminRoutes } from "./routes/recoveryAdmin.js";
 import {
   RecoveryAdminError,
@@ -60,7 +61,7 @@ function cookieValue(setCookie: string | undefined): string {
   return first;
 }
 
-test("recovery admin requires an initial secret when enabled without stored credential", () => {
+test("recovery admin requires an initial secret when enabled without stored credential", async () => {
   const { database, cleanup } = testDatabase();
   try {
     const store = new RecoveryAdminStore(
@@ -68,10 +69,10 @@ test("recovery admin requires an initial secret when enabled without stored cred
         initialPassword: undefined,
         initialPasswordFile: "/does/not/exist"
       }),
-      database
+      createSqlitePersistenceRuntime(database)
     );
-    assert.throws(
-      () => store.ensureConfigured(),
+    await assert.rejects(
+      store.ensureConfigured(),
       /RECOVERY_ADMIN_ENABLED=true requires an existing recovery credential/
     );
   } finally {
@@ -79,7 +80,7 @@ test("recovery admin requires an initial secret when enabled without stored cred
   }
 });
 
-test("recovery admin reads the initial password from a mounted secret file first", () => {
+test("recovery admin reads the initial password from a mounted secret file first", async () => {
   const { root, database, cleanup } = testDatabase();
   try {
     const secretFile = join(root, "recovery-password");
@@ -89,31 +90,34 @@ test("recovery admin reads the initial password from a mounted secret file first
         initialPasswordFile: secretFile,
         initialPassword: "Wrong fallback"
       }),
-      database
+      createSqlitePersistenceRuntime(database)
     );
 
-    const login = store.login("breakglass", "Secret file passphrase");
+    const login = await store.login("breakglass", "Secret file passphrase");
     assert.equal(login.session.passwordChangeRequired, true);
   } finally {
     cleanup();
   }
 });
 
-test("first recovery login forces password change before admin access", () => {
+test("first recovery login forces password change before admin access", async () => {
   const { database, cleanup } = testDatabase();
   try {
-    const store = new RecoveryAdminStore(recoveryConfig(), database);
-    store.ensureConfigured();
+    const store = new RecoveryAdminStore(
+      recoveryConfig(),
+      createSqlitePersistenceRuntime(database)
+    );
+    await store.ensureConfigured();
 
-    const login = store.login(
+    const login = await store.login(
       "breakglass",
       "Initial recovery passphrase",
       new Date("2026-07-01T00:00:00.000Z")
     );
     assert.equal(login.session.passwordChangeRequired, true);
-    assert.equal(store.findUserByToken(login.token), undefined);
+    assert.equal(await store.findUserByToken(login.token), undefined);
 
-    const changed = store.changePassword(
+    const changed = await store.changePassword(
       login.token,
       "Changed recovery passphrase",
       new Date("2026-07-01T00:01:00.000Z")
@@ -122,22 +126,22 @@ test("first recovery login forces password change before admin access", () => {
     assert.equal(changed.user.externalSubject, "recovery:breakglass");
     assert.equal(changed.user.role, "admin");
     assert.equal(
-      store.findUserByToken(login.token, new Date("2026-07-01T00:02:00.000Z"))?.role,
+      (await store.findUserByToken(login.token, new Date("2026-07-01T00:02:00.000Z")))?.role,
       "admin"
     );
 
-    assert.throws(
-      () => store.login("breakglass", "Initial recovery passphrase"),
+    await assert.rejects(
+      store.login("breakglass", "Initial recovery passphrase"),
       (error) =>
         error instanceof RecoveryAdminError &&
         error.code === "recovery_login_failed" &&
         error.statusCode === 401
     );
 
-    const nextLogin = store.login("breakglass", "Changed recovery passphrase");
+    const nextLogin = await store.login("breakglass", "Changed recovery passphrase");
     assert.equal(nextLogin.session.passwordChangeRequired, false);
     assert.equal(nextLogin.user?.role, "admin");
-    assert.equal(store.revokeByToken(nextLogin.token), true);
+    assert.equal(await store.revokeByToken(nextLogin.token), true);
 
     const credential = database.prepare(`
       SELECT password_hash, password_salt
@@ -177,7 +181,10 @@ test("recovery routes are disabled by default", async () => {
         recoveryAdminEnabled: false,
         recoveryAdminInitialPassword: undefined
       }),
-      store: new RecoveryAdminStore(recoveryConfig({ enabled: false }), database)
+      store: new RecoveryAdminStore(
+        recoveryConfig({ enabled: false }),
+        createSqlitePersistenceRuntime(database)
+      )
     });
 
     const response = await app.inject({ method: "GET", url: "/auth/recovery" });
@@ -194,7 +201,10 @@ test("recovery routes create short lived server-side sessions and require passwo
   try {
     await app.register(recoveryAdminRoutes, {
       config: routeConfig(),
-      store: new RecoveryAdminStore(recoveryConfig(), database)
+      store: new RecoveryAdminStore(
+        recoveryConfig(),
+        createSqlitePersistenceRuntime(database)
+      )
     });
 
     const login = await app.inject({

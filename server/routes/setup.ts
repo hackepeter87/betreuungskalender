@@ -10,6 +10,7 @@ import {
 } from "../services/setupAuthorization.js";
 import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "../services/users.js";
 import type { OidcSessionStore } from "../services/oidcSessions.js";
+import type { PersistenceRuntime } from "../db/runtime.js";
 import { setupFirstUseInputSchema } from "../validation/schemas.js";
 
 const writeLimit = {
@@ -18,15 +19,19 @@ const writeLimit = {
 
 interface SetupRouteOptions {
   nativeSessions: Pick<OidcSessionStore, "findByToken">;
+  persistence: PersistenceRuntime;
 }
 
-function setupUserFromNativeSession(
+async function setupUserFromNativeSession(
   request: FastifyRequest,
-  sessions: Pick<OidcSessionStore, "findByToken">
-): RequestUser | undefined {
-  const session = sessions.findByToken(cookieValue(request.headers.cookie, config.sessionCookieName));
+  sessions: Pick<OidcSessionStore, "findByToken">,
+  persistence: PersistenceRuntime
+): Promise<RequestUser | undefined> {
+  const session = await sessions.findByToken(
+    cookieValue(request.headers.cookie, config.sessionCookieName)
+  );
   if (!session) return undefined;
-  const user = findAuthenticatedUserBySubject(session.externalSubject);
+  const user = await findAuthenticatedUserBySubject(session.externalSubject, persistence);
   if (!user) return undefined;
   if (!isNativeOwnerSetupUser(user)) {
     throw Object.assign(new Error("Für diese Einrichtung ist eine Owner-Berechtigung erforderlich."), {
@@ -37,7 +42,10 @@ function setupUserFromNativeSession(
   return user;
 }
 
-function setupUserFromTrustedProxy(request: FastifyRequest): RequestUser | undefined {
+async function setupUserFromTrustedProxy(
+  request: FastifyRequest,
+  persistence: PersistenceRuntime
+): Promise<RequestUser | undefined> {
   if (!isTrustedProxyAddress(request.raw.socket.remoteAddress, config.trustedProxyRules)) {
     throw Object.assign(new Error("Die Proxy-Authentifizierung ist von dieser Netzwerkadresse nicht zugelassen."), {
       code: "untrusted_proxy",
@@ -63,7 +71,7 @@ function setupUserFromTrustedProxy(request: FastifyRequest): RequestUser | undef
       statusCode: 403
     });
   }
-  upsertAuthenticatedUser(auth.user);
+  await upsertAuthenticatedUser(auth.user, persistence);
   return auth.user;
 }
 
@@ -84,12 +92,15 @@ function setupUserFromLocalMode(request: FastifyRequest): RequestUser | undefine
   return auth.user;
 }
 
-function setupUser(
+async function setupUser(
   request: FastifyRequest,
-  sessions: Pick<OidcSessionStore, "findByToken">
-): RequestUser | undefined {
-  if (config.authMode === "native-oidc") return setupUserFromNativeSession(request, sessions);
-  if (config.trustProxyAuth) return setupUserFromTrustedProxy(request);
+  sessions: Pick<OidcSessionStore, "findByToken">,
+  persistence: PersistenceRuntime
+): Promise<RequestUser | undefined> {
+  if (config.authMode === "native-oidc") {
+    return setupUserFromNativeSession(request, sessions, persistence);
+  }
+  if (config.trustProxyAuth) return setupUserFromTrustedProxy(request, persistence);
   return setupUserFromLocalMode(request);
 }
 
@@ -130,14 +141,18 @@ export async function setupRoutes(
     }
 
     try {
-      const user = setupUser(request, options.nativeSessions);
+      const user = await setupUser(
+        request,
+        options.nativeSessions,
+        options.persistence
+      );
       if (!user) {
         return reply.code(401).send({
           error: "authentication_required",
           message: "Authentifizierung erforderlich."
         });
       }
-      return completeFirstUseSetup(user, parsed.data);
+      return await completeFirstUseSetup(user, parsed.data, options.persistence);
     } catch (error) {
       const normalized = normalizeSetupError(error);
       return reply.code(normalized.statusCode).send({
