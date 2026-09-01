@@ -7,12 +7,14 @@ import Database from "better-sqlite3";
 import { migrateDatabase } from "./db/migrationRunner.js";
 import {
   isContactRuleSyncPreviewChangedError,
-  expandContactRule,
+  expandContactRule as expandContactRuleOnServer,
   previewContactRuleSync,
   syncContactRule,
   upsertContactRule,
   upsertContactRuleFromPattern
 } from "./services/contactRules.js";
+import { expandContactRule as expandContactRuleInClient } from "../src/lib/contactRules.js";
+import { expandContactRule } from "../shared/contactRuleExpansion.js";
 import { contactRuleInputSchema } from "./validation/schemas.js";
 
 const migrationsDirectory = resolve(process.cwd(), "server/migrations");
@@ -70,6 +72,124 @@ function insertLegacyPattern(database: Database.Database): void {
     timestamp
   );
 }
+
+test("client and server expose the shared contact-rule expansion", () => {
+  assert.equal(expandContactRuleInClient, expandContactRule);
+  assert.equal(expandContactRuleOnServer, expandContactRule);
+});
+
+test("shared contact-rule expansion handles recurrence and range boundaries deterministically", () => {
+  const cases = [
+    {
+      name: "weekly recurrence across a leap day",
+      input: {
+        startDate: "2024-02-23",
+        active: true,
+        childIds: ["child-a"],
+        rangeStart: "2024-02-28",
+        rangeEnd: "2024-03-08",
+        recurrence: { kind: "weekly" as const, intervalWeeks: 1, weekdays: ["FR" as const] },
+        segments: [{
+          id: "weekend",
+          startDayOffset: 0,
+          startTime: "16:00",
+          endDayOffset: 2,
+          endTime: "18:00"
+        }]
+      },
+      expected: [
+        ["2024-03-01", "2024-03-01:weekend", "2024-03-03T18:00"],
+        ["2024-03-08", "2024-03-08:weekend", "2024-03-10T18:00"]
+      ]
+    },
+    {
+      name: "monthly weekday recurrence at a month boundary",
+      input: {
+        startDate: "2026-01-01",
+        active: true,
+        childIds: ["child-a"],
+        rangeStart: "2026-01-01",
+        rangeEnd: "2026-03-31",
+        recurrence: {
+          kind: "monthlyByWeekday" as const,
+          intervalMonths: 1,
+          ordinals: [-1 as const],
+          weekdays: ["TU" as const]
+        },
+        segments: [{
+          id: "day",
+          startDayOffset: 0,
+          startTime: "10:00",
+          endDayOffset: 0,
+          endTime: "18:00"
+        }]
+      },
+      expected: [
+        ["2026-01-27", "2026-01-27:day", "2026-01-27T18:00"],
+        ["2026-02-24", "2026-02-24:day", "2026-02-24T18:00"],
+        ["2026-03-31", "2026-03-31:day", "2026-03-31T18:00"]
+      ]
+    },
+    {
+      name: "multiple RRULE lines retain stable rule indexes",
+      input: {
+        startDate: "2026-07-01",
+        active: true,
+        childIds: ["child-a"],
+        rangeStart: "2026-07-01",
+        rangeEnd: "2026-07-31",
+        recurrence: {
+          kind: "rrule" as const,
+          rrules: ["FREQ=MONTHLY;BYMONTHDAY=15", "FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1"]
+        },
+        segments: [{
+          id: "day",
+          startDayOffset: 0,
+          startTime: "10:00",
+          endDayOffset: 0,
+          endTime: "18:00"
+        }]
+      },
+      expected: [
+        ["2026-07-15", "2026-07-15:r0:day", "2026-07-15T18:00"],
+        ["2026-07-31", "2026-07-31:r1:day", "2026-07-31T18:00"]
+      ]
+    }
+  ];
+
+  for (const fixture of cases) {
+    assert.deepEqual(
+      expandContactRule(fixture.input).map((entry) => [
+        entry.occurrenceDate,
+        entry.occurrenceKey,
+        entry.endDateTime
+      ]),
+      fixture.expected,
+      fixture.name
+    );
+  }
+});
+
+test("shared contact-rule expansion rejects invalid segment offsets", () => {
+  assert.throws(
+    () => expandContactRule({
+      startDate: "2026-07-01",
+      active: true,
+      childIds: ["child-a"],
+      rangeStart: "2026-07-01",
+      rangeEnd: "2026-07-10",
+      recurrence: { kind: "weekly", intervalWeeks: 1, weekdays: ["WE"] },
+      segments: [{
+        id: "invalid",
+        startDayOffset: 2,
+        startTime: "10:00",
+        endDayOffset: 1,
+        endTime: "18:00"
+      }]
+    }),
+    RangeError
+  );
+});
 
 test("expands weekly recurrence with multiple weekdays and local time segments", () => {
   const entries = expandContactRule({

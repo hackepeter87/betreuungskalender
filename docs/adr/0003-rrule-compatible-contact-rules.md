@@ -57,3 +57,16 @@ counts, and unsupported fields are rejected server-side.
   cancelled, deleted, or manually changed generated entries.
 - The database table does not need a new column because `contact_rules` already
   stores validated recurrence JSON in `recurrence_json`.
+
+## Shared expansion boundary
+
+Contact-rule occurrence expansion is a pure domain operation in
+`shared/contactRuleExpansion.ts`. The browser preview and server synchronization
+both use that implementation for weekly, monthly-by-weekday, and RRULE-based
+rules, including range clipping, segment expansion, occurrence keys, and stable
+sorting.
+
+Request validation and persistence remain server responsibilities. The shared
+boundary rejects invalid segment ranges before producing occurrences, while the
+server remains responsible for active-record checks, conflict handling, and
+idempotent writes.
