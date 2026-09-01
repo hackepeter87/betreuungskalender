@@ -2,6 +2,14 @@ import { defineConfig, devices } from "@playwright/test";
 
 const port = 3100;
 const baseURL = `http://127.0.0.1:${port}`;
+const visualViewports = [
+  { name: "visual-320", width: 320, height: 800 },
+  { name: "visual-390", width: 390, height: 844 },
+  { name: "visual-768", width: 768, height: 1024 },
+  { name: "visual-1280", width: 1280, height: 900 },
+  { name: "visual-1440", width: 1440, height: 900 },
+  { name: "visual-1920", width: 1920, height: 1080 }
+] as const;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -66,6 +74,21 @@ export default defineConfig({
         ...devices["iPad Pro 11"],
         browserName: "chromium"
       }
-    }
+    },
+    ...visualViewports.map(({ name, width, height }) => ({
+      name,
+      testMatch: /visual-regression\.spec\.ts/,
+      use: {
+        ...devices["Desktop Chrome"],
+        browserName: "chromium" as const,
+        colorScheme: "light" as const,
+        deviceScaleFactor: 1,
+        locale: "de-DE",
+        reducedMotion: "reduce" as const,
+        serviceWorkers: "block" as const,
+        timezoneId: "Europe/Berlin",
+        viewport: { width, height }
+      }
+    }))
   ]
 });
