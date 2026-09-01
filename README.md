@@ -11,7 +11,7 @@ travel, costs, holidays, and unavailable periods.
 
 ## Project status
 
-- Latest published release: [v1.24.3](docs/release-notes/v1.24.3.md)
+- Latest published release: [v1.25.0](docs/release-notes/v1.25.0.md)
 - Current `main`: SQLite/API domain persistence, first-use setup, application
   memberships and invitations, optional invitation email delivery, native OIDC
   authentication, trusted-proxy compatibility, RRULE-compatible contact rules
@@ -86,6 +86,13 @@ periods, settings, monthly closings, and audit records exclusively through the
 API in SQLite. `localStorage` is not used for current domain persistence. When
 the API is unavailable, the application displays a server error and blocks
 write actions.
+
+Shared TypeScript contracts define the settings and invitation response shapes
+used by both browser and server. Pure date, time-range, conflict, and recurring
+contact-rule calculations also live in shared modules, while persistence,
+authorization, synchronization, and conflict enforcement remain server-owned.
+Audit history is loaded in bounded pages only when requested and is not part of
+the normal application-start payload.
 
 Existing data from older browser-only versions is read solely as a legacy
 migration source. The [migration assistant](docs/migration.md) previews the

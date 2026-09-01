@@ -6,8 +6,23 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.25.0] - 2026-09-01
+
+### Added
+
+- Add cursor-based audit-history pages with stable ordering, bounded page
+  sizes, and a supporting SQLite index.
+- Add bounded display-name resolution for actor IDs already referenced by the
+  loaded domain data.
+
 ### Changed
 
+- Use one shared implementation for recurring contact-rule previews and
+  server-side synchronization.
+- Define one typed settings contract for browser and server and reject unknown,
+  invalid, or inactive writable values.
+- Load audit history only from its dedicated view while retaining the bounded
+  legacy endpoint for one compatibility version.
 - Return only the complete invitation URL from invitation-creation APIs after
   removing the expired compatibility field for the separate raw token.
 
