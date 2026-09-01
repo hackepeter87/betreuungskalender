@@ -35,16 +35,24 @@ New tokens can use these scopes:
 The feed includes the care-entry location as an iCalendar `LOCATION` value so
 subscribed calendars can show where the handover or care period is planned.
 The feed deliberately excludes notes, evidence references, trips, costs, audit
-data, internal actor history, and deleted or cancelled entries. Event titles
-use a compact form:
+data, internal actor history, and deleted or cancelled entries. Each event title
+uses the children and care party assigned to that individual care entry:
 
 ```text
-Kinder bei <Anzeigename>
+Kind bei Betreuer
+Kind1 und Kind2 bei Betreuer
+Kind1, Kind2 und Kind3 bei Betreuer
 ```
 
-For party-scoped feeds, `<Anzeigename>` is the care-party name. For the
-all-scope feed, the calendar name identifies the overall Betreuungskalender
-feed.
+This format is the same for legacy, overall, and party-scoped feeds. Different
+events in an overall feed can therefore name different care parties. Historical
+entries whose active care party can no longer be resolved use the neutral
+fallback `betreuender Person`. Account display names, email addresses, and
+identity-provider claims are never substituted for the entry care party.
+
+`X-WR-CALNAME` remains the separate calendar-level title. For party-scoped
+feeds it identifies the selected care party; for the all-scope feed it
+identifies the overall Betreuungskalender feed.
 
 Events use stable UIDs derived from the care-entry ID and include start, end,
 `LOCATION`, `DTSTAMP`, and `LAST-MODIFIED` values.

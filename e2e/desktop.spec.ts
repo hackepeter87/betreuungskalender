@@ -1358,12 +1358,14 @@ test("manages care parties and assigns them to entries and contact rules", async
   const partyFeedUrl = await manager.getByTestId("calendar-feed-url").inputValue();
   const partyFeed = await (await request.get(new URL(partyFeedUrl).pathname)).text();
   expect(partyFeed).toContain("X-WR-CALNAME:Kinder bei Großeltern Beispiel");
+  expect(partyFeed).toContain(`SUMMARY:${childName} bei ${partyName}`);
 
   await manager.getByTestId("calendar-feed-scope").selectOption("all");
   await manager.getByTestId("calendar-feed-rotate").click();
   const allFeedUrl = await manager.getByTestId("calendar-feed-url").inputValue();
   const allFeed = await (await request.get(new URL(allFeedUrl).pathname)).text();
   expect(allFeed).toContain("X-WR-CALNAME:Betreuungskalender Gesamt");
+  expect(allFeed).toContain(`SUMMARY:${childName} bei ${partyName}`);
 });
 
 test("persists the selected language and localizes the report surface", async ({
