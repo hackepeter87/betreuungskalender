@@ -1,11 +1,7 @@
-import Database from "better-sqlite3";
-import { mkdirSync } from "node:fs";
-import { dirname } from "node:path";
 import { config } from "../config.js";
+import { createSqlitePersistenceRuntime } from "./runtime.js";
 
-mkdirSync(dirname(config.databasePath), { recursive: true });
+export const persistence = createSqlitePersistenceRuntime(config.databasePath);
 
-export const db = new Database(config.databasePath);
-db.pragma("journal_mode = WAL");
-db.pragma("foreign_keys = ON");
-db.pragma("busy_timeout = 5000");
+/** @deprecated Migrate callers to the injected persistence runtime. */
+export const db = persistence.legacyDatabase;
