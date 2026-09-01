@@ -4,10 +4,6 @@
 
 Accepted.
 
-[ADR 0007](0007-database-persistence-drivers.md) defines the staged persistence
-driver contract. This SQLite deployment decision remains operative until an
-optional PostgreSQL deployment path has been released and validated.
-
 ## Context
 
 The application stores domain data in SQLite and writes backups and temporary

@@ -13,9 +13,8 @@ import {
 } from "./applicationRoutes.js";
 import { config } from "./config.js";
 import { cookieValue } from "./cookies.js";
-import { db, persistence } from "./db/connection.js";
+import { db } from "./db/connection.js";
 import { runMigrations } from "./db/migrate.js";
-import { classifyDatabaseError } from "./db/runtime.js";
 import { sanitizeRequestUrl } from "./logging.js";
 import { isTrustedProxyAddress } from "./trustedProxy.js";
 import { setupRoutes } from "./routes/setup.js";
@@ -30,7 +29,7 @@ import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "./servi
 import { runCareConfirmationSweep } from "./services/careConfirmations.js";
 import { disableLocalDevelopmentIdentityAccess } from "./services/localDevelopmentIdentity.js";
 
-await runMigrations();
+runMigrations();
 if (config.authMode !== "local") {
   disableLocalDevelopmentIdentityAccess(db);
 }
@@ -189,7 +188,7 @@ app.setErrorHandler((error, request, reply) => {
       message: "Zu viele Anfragen. Bitte später erneut versuchen."
     });
   }
-  if (classifyDatabaseError(normalized).kind === "constraint") {
+  if (code.startsWith("SQLITE_CONSTRAINT")) {
     return reply.code(400).send({
       error: "constraint_violation",
       message: "Die Eingabe verletzt eine Datenbankregel."
@@ -212,6 +211,15 @@ app.setErrorHandler((error, request, reply) => {
     message: statusCode < 500 ? normalized.message : "Interner Serverfehler."
   });
 });
+
+function databaseReachable(): boolean {
+  try {
+    const result = db.prepare("SELECT 1 AS ok").get() as { ok: number };
+    return result.ok === 1;
+  } catch {
+    return false;
+  }
+}
 
 const readLimit = {
   config: { rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
@@ -274,22 +282,26 @@ function requiresNativeOidcBrowserLogin(request: FastifyRequest): boolean {
 }
 
 app.get("/api/health", readLimit, async (_request, reply) => {
-  const database = await persistence.status();
-  return reply.code(database.reachable ? 200 : 503).send({
-    status: database.reachable ? "ok" : "error",
+  const reachable = databaseReachable();
+  return reply.code(reachable ? 200 : 503).send({
+    status: reachable ? "ok" : "error",
     version: config.version,
-    databaseReachable: database.reachable,
+    databaseReachable: reachable,
     timestamp: new Date().toISOString()
   });
 });
 
 app.get("/api/ready", readLimit, async (_request, reply) => {
-  const database = await persistence.status();
-  const ready = database.reachable && database.migrationsApplied;
-  return reply.code(ready ? 200 : 503).send({
-    status: ready ? "ready" : "not_ready",
-    databaseReachable: database.reachable,
-    migrationsApplied: database.migrationsApplied,
+  const reachable = databaseReachable();
+  const migrationCount = reachable
+    ? (db.prepare("SELECT COUNT(*) AS count FROM schema_migrations").get() as {
+        count: number;
+      }).count
+    : 0;
+  return reply.code(reachable && migrationCount > 0 ? 200 : 503).send({
+    status: reachable && migrationCount > 0 ? "ready" : "not_ready",
+    databaseReachable: reachable,
+    migrationsApplied: migrationCount > 0,
     timestamp: new Date().toISOString()
   });
 });
@@ -451,7 +463,7 @@ if (existsSync(frontendRoot)) {
 
 const shutdown = async () => {
   await app.close();
-  await persistence.close();
+  db.close();
 };
 
 process.on("SIGINT", shutdown);
