@@ -223,7 +223,7 @@ function boolFields(record: DataRecord, fields: string[]): DataRecord {
 }
 
 function exportedSettings(database: Database.Database): Record<string, unknown> {
-  return getClientSettings(database);
+  return { ...getClientSettings(database) };
 }
 
 export function exportDomainData(database: Database.Database = db): ImportData {

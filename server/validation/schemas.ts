@@ -1,6 +1,13 @@
 import { z } from "zod";
 import * as rrule from "rrule";
-import { carePartyKinds, careScopes, unavailableCategories } from "../../shared/api.js";
+import {
+  careLocations,
+  carePartyKinds,
+  careScopes,
+  handoverParties,
+  unavailableCategories
+} from "../../shared/api.js";
+import { isValidDateKey } from "../../shared/temporal.js";
 
 const rruleExports = rrule as typeof rrule & {
   default?: typeof rrule;
@@ -357,7 +364,16 @@ export const contactRuleInputSchema = z
     }
   );
 
-export const settingsInputSchema = z.record(z.string(), z.unknown());
+export const settingsInputSchema = z.object({
+  kilometerRate: z.number().finite().nonnegative().optional(),
+  defaultLocation: z.enum(careLocations).optional(),
+  defaultHandoverFrom: z.enum(handoverParties).optional(),
+  defaultHandoverTo: z.enum(handoverParties).optional(),
+  primaryCarePartyId: z.string().trim().min(1).max(200).optional(),
+  defaultResponsiblePartyId: z.string().trim().min(1).max(200).optional(),
+  rhythmStartDate: z.string().refine(isValidDateKey).optional(),
+  lastJsonBackupAt: z.iso.datetime({ offset: true }).optional()
+}).strict();
 
 export const careConfirmationAnswerSchema = z
   .object({

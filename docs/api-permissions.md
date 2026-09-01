@@ -63,6 +63,15 @@ token.
 | `POST /api/actor-labels/resolve` | `planning:view`; at most 200 referenced actor IDs |
 | `GET /api/reports/snapshot` | `reports:view` |
 
+`GET /api/settings` returns the closed `ApiAppSettings` contract only. It never
+includes setup metadata or unknown stored keys. `PUT /api/settings` accepts a
+partial `ApiWritableSettings` object and rejects unknown keys, invalid enum or
+date values, negative or non-finite mileage rates, and references to inactive
+care parties with `400`. The writable fields are the mileage rate, default
+location, handover defaults, primary and default care parties, rhythm start
+date, and last JSON-backup timestamp. Setup-owned `setup.*` values are not
+writable through this route.
+
 ## Membership and administration
 
 | Routes | Permission |
