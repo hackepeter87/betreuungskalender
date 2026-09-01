@@ -306,24 +306,6 @@ export function resolveRequestUser(
   };
 }
 
-export function resolveRequestIdentity(
-  headers: Record<string, string | string[] | undefined>,
-  options: { requireAuth: boolean; trustProxyAuth: boolean }
-): { authenticated: boolean; identity: string } {
-  const identity = options.trustProxyAuth
-    ? requestIdentity(headers)
-    : undefined;
-
-  if (options.requireAuth && !identity) {
-    return { authenticated: false, identity: "" };
-  }
-
-  return {
-    authenticated: true,
-    identity: identity ?? "local-dev"
-  };
-}
-
 export function displayNameForIdentity(identity: string): string {
   const normalized = identity
     .replace(/[\u0000-\u001f\u007f]/g, "")
