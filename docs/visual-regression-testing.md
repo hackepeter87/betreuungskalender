@@ -27,14 +27,17 @@ responsive navigation.
 
 ## Updating baselines
 
-Generate canonical baselines with the same Linux Playwright runtime used by CI.
-Use the Playwright image matching the version in `package-lock.json`, mount the
-repository read-write, and keep container dependencies in a separate volume:
+Generate canonical baselines with the Playwright runtime and `C.UTF-8` process
+locale used by CI. Use the Playwright image matching the version in
+`package-lock.json`, mount the repository read-write, and keep container
+dependencies in a separate volume:
 
 ```bash
 mkdir -p /tmp/betreuungskalender-visual-node_modules
 docker run --rm --user "$(id -u):$(id -g)" \
   -e HOME=/tmp \
+  -e LANG=C.UTF-8 \
+  -e LC_ALL=C.UTF-8 \
   -e PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
   -v "$PWD:/work" \
   -v /tmp/betreuungskalender-visual-node_modules:/work/node_modules \
