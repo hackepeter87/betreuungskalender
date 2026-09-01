@@ -12,6 +12,7 @@ import type {
 } from "../../shared/api.js";
 import { dateKeysForTimedRange } from "../../shared/temporal.js";
 import { exportDomainData } from "./dataTransfer.js";
+import { getClientSettings } from "./settings.js";
 
 type DataRecord = Record<string, unknown>;
 
@@ -86,7 +87,7 @@ export function createReportSnapshot(input: {
         entries: entries as unknown as ApiCareEntry[],
         holidayPeriods: holidayPeriods as unknown as ApiHolidayPeriod[],
         unavailablePeriods: unavailablePeriods as unknown as ApiUnavailablePeriod[],
-        settings: exported.settings,
+        settings: getClientSettings(input.database),
         auditLog: input.includeAuditHistory
           ? auditEntries(input.database, input.startDate, input.endDate)
           : [],

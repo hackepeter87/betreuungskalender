@@ -49,6 +49,40 @@ export type ApiCareDeviationType =
 export type ApiCareConfirmationStatus = "open" | "answered" | "snoozed";
 export type ApiNotificationEventType = "care_confirmation_due" | "care_confirmation_reminder";
 
+export const careLocations = [
+  "commuterApartment",
+  "mainResidence",
+  "mother",
+  "school",
+  "ogs",
+  "other"
+] as const;
+
+export type ApiCareLocation = (typeof careLocations)[number];
+
+export const handoverParties = [
+  "mother",
+  "father",
+  "school",
+  "ogs",
+  "thirdParty"
+] as const;
+
+export type ApiHandoverParty = (typeof handoverParties)[number];
+
+export interface ApiAppSettings {
+  kilometerRate: number;
+  defaultLocation: ApiCareLocation;
+  defaultHandoverFrom: ApiHandoverParty;
+  defaultHandoverTo: ApiHandoverParty;
+  primaryCarePartyId?: string;
+  defaultResponsiblePartyId?: string;
+  rhythmStartDate?: string;
+  lastJsonBackupAt?: string;
+}
+
+export type ApiWritableSettings = Partial<ApiAppSettings>;
+
 export const unavailableCategories = [
   "duty",
   "training_course",
@@ -520,7 +554,7 @@ export interface ApiReportSnapshot {
     entries: ApiCareEntry[];
     holidayPeriods: ApiHolidayPeriod[];
     unavailablePeriods: ApiUnavailablePeriod[];
-    settings: Record<string, unknown>;
+    settings: ApiAppSettings;
     auditLog: ApiAuditEntry[];
     monthClosures: ApiMonthlyClosing[];
   };

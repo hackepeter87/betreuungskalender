@@ -9,6 +9,7 @@ import {
   dryRunPortableTransfer,
   importPortableTransfer
 } from "./services/dataTransfer.js";
+import { getClientSettings } from "./services/settings.js";
 
 function database(): Database.Database {
   const result = new Database(":memory:");
@@ -32,6 +33,10 @@ test("portable transfer dry run validates through the import core without target
   const target = database();
   try {
     source.transaction(() => importData(createEdgeCaseDemoData(), "fixture-actor", source))();
+    source.prepare(`
+      INSERT INTO settings (key, value_json, created_by, updated_by, created_at, updated_at)
+      VALUES ('unknownHistoricalSetting', 'true', 'fixture-actor', 'fixture-actor', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run();
     target.prepare(`
       INSERT INTO settings (key, value_json, created_by, updated_by, created_at, updated_at)
       VALUES ('setup.ownerUserId', '"target-owner"', 'target-owner', 'target-owner', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
@@ -51,6 +56,9 @@ test("portable transfer dry run validates through the import core without target
     assert.deepEqual(target.serialize(), before);
     assert.equal(JSON.stringify(transfer).includes("external_subject"), false);
     assert.equal(JSON.stringify(transfer).includes("feed_url"), false);
+    assert.equal("unknownHistoricalSetting" in transfer.data.settings, false);
+    assert.equal(transfer.data.settings.rhythmStartDate, "2026-07-10");
+    assert.equal(transfer.data.lastJsonBackupAt, "2026-07-01T09:30:00.000Z");
   } finally {
     source.close();
     target.close();
@@ -95,6 +103,14 @@ test("portable import requires the exact dry-run fingerprint and preserves targe
     assert.equal((target.prepare("SELECT COUNT(*) AS count FROM children").get() as { count: number }).count, 3);
     assert.equal((target.prepare("SELECT value_json AS value FROM settings WHERE key = 'setup.ownerUserId'").get() as { value: string }).value, '"target-owner"');
     assert.equal((target.prepare("SELECT COUNT(*) AS count FROM data_transfer_actors").get() as { count: number }).count > 0, true);
+    assert.deepEqual(getClientSettings(target), {
+      kilometerRate: 0.3,
+      defaultLocation: "commuterApartment",
+      defaultHandoverFrom: "mother",
+      defaultHandoverTo: "mother",
+      rhythmStartDate: "2026-07-10",
+      lastJsonBackupAt: "2026-07-01T09:30:00.000Z"
+    });
   } finally {
     source.close();
     target.close();

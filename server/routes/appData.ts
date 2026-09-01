@@ -4,7 +4,7 @@ import { db } from "../db/connection.js";
 import { recordAudit } from "../services/audit.js";
 import { nowIso } from "../services/common.js";
 import { upsertContactRule, upsertContactRuleFromPattern } from "../services/contactRules.js";
-import { getDefaultResponsiblePartyId } from "../services/settings.js";
+import { getDefaultResponsiblePartyId, normalizeClientSettings } from "../services/settings.js";
 import {
   appDataImportSchema,
   carePartyInputSchema,
@@ -588,7 +588,12 @@ export function importData(
   clearDomainData(database);
   for (const child of data.children) insertChild(child, timestamp, userEmail, database);
   for (const party of data.careParties) insertCareParty(party, timestamp, userEmail, database);
-  const fallbackResponsiblePartyId = importedDefaultResponsiblePartyId(data, database);
+  const importedSettings = normalizeClientSettings({
+    ...data.settings,
+    lastJsonBackupAt: data.lastJsonBackupAt ?? data.settings.lastJsonBackupAt
+  }, database);
+  const fallbackResponsiblePartyId = importedSettings.defaultResponsiblePartyId
+    ?? importedDefaultResponsiblePartyId(data, database);
   for (const entry of data.entries) insertEntry(entry, timestamp, userEmail, fallbackResponsiblePartyId, database);
   for (const holiday of data.holidayPeriods) insertHoliday(holiday, timestamp, userEmail, database);
   for (const pattern of data.contactPatterns) insertPattern(pattern, timestamp, userEmail, fallbackResponsiblePartyId, database);
@@ -611,11 +616,8 @@ export function importData(
     INSERT INTO settings (key, value_json, created_by, updated_by, created_at, updated_at)
     VALUES (?, ?, ?, ?, ?, ?)
   `);
-  for (const [key, value] of Object.entries({
-    ...data.settings,
-    lastJsonBackupAt: data.lastJsonBackupAt
-  })) {
-    if (value !== undefined && !key.startsWith("setup.")) {
+  for (const [key, value] of Object.entries(importedSettings)) {
+    if (value !== undefined) {
       settingInsert.run(
         key,
         JSON.stringify(value),

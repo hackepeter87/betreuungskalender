@@ -3,7 +3,7 @@ import { config } from "../config.js";
 import { db } from "../db/connection.js";
 import { recordFieldChanges } from "../services/audit.js";
 import { nowIso } from "../services/common.js";
-import { getClientSettings, isClientSettingKey } from "../services/settings.js";
+import { getClientSettings, isActiveCarePartyId } from "../services/settings.js";
 import { settingsInputSchema } from "../validation/schemas.js";
 
 const readLimit = {
@@ -19,11 +19,14 @@ export async function settingsRoutes(app: FastifyInstance): Promise<void> {
   app.put("/api/settings", writeLimit, async (request, reply) => {
     const parsed = settingsInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
-    const protectedKey = Object.keys(parsed.data).find((key) => !isClientSettingKey(key));
-    if (protectedKey) {
+    const inactiveReference = [
+      parsed.data.primaryCarePartyId,
+      parsed.data.defaultResponsiblePartyId
+    ].find((value) => value !== undefined && !isActiveCarePartyId(value));
+    if (inactiveReference) {
       return reply.code(400).send({
         error: "validation_error",
-        message: "Diese Einstellung kann nicht ueber die allgemeine Einstellungs-API geaendert werden."
+        message: "Die ausgewaehlte betreuende Person ist nicht aktiv."
       });
     }
     const before = getClientSettings();

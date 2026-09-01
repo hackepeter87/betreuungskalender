@@ -1,8 +1,11 @@
 import type {
+  ApiAppSettings,
   ApiCareConflict,
   ApiCareDeviationType,
+  ApiCareLocation,
   ApiCareParty,
   ApiContactRule,
+  ApiHandoverParty,
   ApiUnavailableScope
 } from "../shared/api";
 
@@ -12,14 +15,8 @@ export type EntryStatus = "planned" | "completed" | "cancelled" | "partial";
 export type CareDeviationType = ApiCareDeviationType;
 export type UnavailableScope = ApiUnavailableScope;
 export type NotificationEventType = "care_confirmation_due" | "care_confirmation_reminder";
-export type CareLocation =
-  | "commuterApartment"
-  | "mainResidence"
-  | "mother"
-  | "school"
-  | "ogs"
-  | "other";
-export type HandoverParty = "mother" | "father" | "school" | "ogs" | "thirdParty";
+export type CareLocation = ApiCareLocation;
+export type HandoverParty = ApiHandoverParty;
 export type TripPurpose =
   | "pickup"
   | "return"
@@ -290,16 +287,7 @@ export interface ExternalCalendarBackupEvent {
   updatedAt: string;
 }
 
-export interface AppSettings {
-  installationLabel?: string;
-  kilometerRate: number;
-  defaultLocation: CareLocation;
-  defaultHandoverFrom: HandoverParty;
-  defaultHandoverTo: HandoverParty;
-  primaryCarePartyId?: string;
-  defaultResponsiblePartyId?: string;
-  rhythmStartDate?: string;
-}
+export type AppSettings = Omit<ApiAppSettings, "lastJsonBackupAt">;
 
 export type AuditObjectType =
   | "careEntry"

@@ -1,5 +1,6 @@
 import type {
   ApiActorLabel,
+  ApiAppSettings,
   ApiAuditEntry,
   ApiAuditPage,
   ApiAppUser,
@@ -39,6 +40,7 @@ import type {
   ApiPushSubscriptionInput,
   ApiWorkspaceRole,
   ApiTransferDryRunResult,
+  ApiWritableSettings,
   ApiReportSnapshot,
   CareScope
 } from "../../shared/api";
@@ -52,7 +54,6 @@ import type {
 import { createEmptyData } from "../data/defaults";
 import type {
   AppData,
-  AppSettings,
   AuditAction,
   AuditObjectType,
   CareEntry,
@@ -125,6 +126,7 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = 5_000): 
 
 export function mapReportSnapshotData(snapshot: ApiReportSnapshot): AppData {
   const empty = createEmptyData();
+  const { lastJsonBackupAt, ...settings } = snapshot.data.settings;
   return {
     ...empty,
     schemaVersion: snapshot.data.schemaVersion as AppData["schemaVersion"],
@@ -133,7 +135,8 @@ export function mapReportSnapshotData(snapshot: ApiReportSnapshot): AppData {
     entries: snapshot.data.entries.map(mapEntry),
     holidayPeriods: snapshot.data.holidayPeriods,
     unavailablePeriods: snapshot.data.unavailablePeriods.map(({ warnings: _warnings, ...period }) => period),
-    settings: { ...empty.settings, ...snapshot.data.settings } as AppSettings,
+    settings,
+    lastJsonBackupAt,
     auditLog: snapshot.data.auditLog.map(mapAudit),
     monthClosures: snapshot.data.monthClosures as MonthlyClosure[],
     updatedAt: snapshot.dataUpdatedAt
@@ -381,6 +384,8 @@ export async function loadAppData(options: {
   includeSettings?: boolean;
 } = {}): Promise<AppData> {
   const includeSettings = options.includeSettings ?? true;
+  const empty = createEmptyData();
+  const emptySettingsForApi: ApiAppSettings = { ...empty.settings };
   const [
     children,
     careParties,
@@ -403,12 +408,11 @@ export async function loadAppData(options: {
     request<ApiContactPattern[]>("/api/contact-patterns"),
     request<ApiContactRule[]>("/api/contact-rules"),
     includeSettings
-      ? request<Record<string, unknown>>("/api/settings")
-      : Promise.resolve({} as Record<string, unknown>),
+      ? request<ApiAppSettings>("/api/settings")
+      : Promise.resolve({ ...emptySettingsForApi }),
     request<ApiMonthlyClosing[]>("/api/month-closings"),
     request<ApiExternalCalendarSource[]>("/api/external-calendars")
   ]);
-  const empty = createEmptyData();
   const { lastJsonBackupAt, ...settings } = rawSettings;
   const mappedEntries = entries.map(mapEntry);
   const mappedUnavailable: UnavailablePeriod[] = unavailablePeriods.map(
@@ -427,7 +431,7 @@ export async function loadAppData(options: {
     externalCalendarSources,
     contactPatterns,
     contactRules,
-    settings: { ...empty.settings, ...settings } as AppSettings,
+    settings,
     lastJsonBackupAt:
       typeof lastJsonBackupAt === "string" ? lastJsonBackupAt : undefined,
     auditLog: [],
@@ -751,8 +755,8 @@ export const api = {
       method: "DELETE"
     });
   },
-  updateSettings(settings: Partial<AppSettings> & { lastJsonBackupAt?: string }) {
-    return request<Record<string, unknown>>("/api/settings", {
+  updateSettings(settings: ApiWritableSettings) {
+    return request<ApiAppSettings>("/api/settings", {
       method: "PUT",
       body: JSON.stringify(settings)
     });

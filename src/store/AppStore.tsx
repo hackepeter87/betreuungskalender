@@ -18,13 +18,17 @@ import {
   loadSession,
   SERVER_UNAVAILABLE_MESSAGE
 } from "../lib/api";
-import type { ApiCareConfirmationAnswer, ApiContactRuleSyncPreview, ApiSession } from "../../shared/api";
+import type {
+  ApiCareConfirmationAnswer,
+  ApiContactRuleSyncPreview,
+  ApiSession,
+  ApiWritableSettings
+} from "../../shared/api";
 import { generatePatternEntries } from "../lib/contact";
 import { actorIdsForData, type ActorLabels } from "../lib/actors";
 import { buildMonthlyClosureSummary, monthKeysForRange } from "../lib/monthClosure";
 import type {
   AppData,
-  AppSettings,
   CareConfirmationRequest,
   CareEntry,
   CareParty,
@@ -120,7 +124,7 @@ interface AppStoreValue {
     endDate: string
   ) => Promise<number>;
   replaceData: (data: AppData) => Promise<boolean>;
-  updateSettings: (settings: Partial<AppSettings>) => Promise<boolean>;
+  updateSettings: (settings: ApiWritableSettings) => Promise<boolean>;
   closeMonth: (monthKey: string) => Promise<MonthlyClosure | null>;
   recordBackupExport: (timestamp: string) => Promise<boolean>;
   loadDemo: () => Promise<boolean>;
@@ -741,7 +745,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   );
 
   const updateSettings = useCallback(
-    async (settings: Partial<AppSettings>) =>
+    async (settings: ApiWritableSettings) =>
       performWrite(async () => {
         await api.updateSettings(settings);
         return true;

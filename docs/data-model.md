@@ -134,6 +134,22 @@ For one compatibility release the previous singular `child` input remains
 accepted; clients must not send both forms. The current UI sends only
 `children` and supports completing setup without a child record.
 
+## Application settings contract
+
+The general settings API exposes only the known application settings:
+`kilometerRate`, `defaultLocation`, `defaultHandoverFrom`,
+`defaultHandoverTo`, `primaryCarePartyId`, `defaultResponsiblePartyId`,
+`rhythmStartDate`, and `lastJsonBackupAt`. Setup metadata remains stored under
+the separate `setup.*` namespace and is never part of the general writable
+contract.
+
+Writes reject unknown fields and invalid values. Care-party references must
+point to active records. Reads normalize required values to safe defaults and
+omit invalid optional historical values, so a malformed legacy row cannot
+break forms or analytics. Backup and portable-transfer imports keep valid known
+settings while ignoring unknown or invalid historical settings. No existing
+domain records are changed by this read-time normalization.
+
 ## Care parties
 
 `care_parties` stores the domain-level responsible people for care planning.
