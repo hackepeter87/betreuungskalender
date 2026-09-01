@@ -280,6 +280,8 @@ test("keeps shared pages and navigation visually stable", async ({ page }) => {
       await expect(page.getByTestId("instance-readiness")).toBeVisible();
     }
     if (state.page === "report") {
+      await page.getByTestId("page-report").getByRole("button", { name: "Jahr", exact: true }).click();
+      await expect(page.getByTestId("page-report").locator('input[type="number"]')).toHaveValue("2026");
       await expect(page.getByText("BK-20260902-VISUAL01")).toBeVisible();
     }
     await expectViewportSnapshot(page, state.page);
