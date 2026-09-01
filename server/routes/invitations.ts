@@ -1,4 +1,4 @@
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyPluginAsync, FastifyReply } from "fastify";
 import { config } from "../config.js";
 import {
   createInvitation,
@@ -12,9 +12,9 @@ import {
 import {
   InvitationEmailError,
   invitationEmailAvailable,
-  invitationUrl,
   sendInvitationEmail
 } from "../services/invitationEmail.js";
+import { toApiCreatedInvitation } from "../services/invitationResponses.js";
 import { getStoredSettings } from "../services/settings.js";
 import { invitationInputSchema } from "../validation/schemas.js";
 
@@ -57,7 +57,18 @@ function preventInvitationCache(reply: FastifyReply): FastifyReply {
     .header("expires", "0");
 }
 
-export async function invitationRoutes(app: FastifyInstance): Promise<void> {
+interface InvitationRouteDependencies {
+  sendInvitationEmail: typeof sendInvitationEmail;
+}
+
+const defaultDependencies: InvitationRouteDependencies = {
+  sendInvitationEmail
+};
+
+async function registerInvitationRoutes(
+  app: FastifyInstance,
+  dependencies: InvitationRouteDependencies
+): Promise<void> {
   app.get("/api/invitations/capabilities", readLimit, async (request, reply) => {
     try {
       assertCanAdministerMembers(request.user);
@@ -106,16 +117,15 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
       ...parsed.data,
       actorId: request.userEmail
     });
-    const publicInvitationUrl = invitationUrl(created.token, config.invitationPublicBaseUrl);
     if (!parsed.data.sendEmail) {
-      return invitationReply.code(201).send({
-        ...created,
-        invitationUrl: publicInvitationUrl,
-        emailDelivery: { status: "not_requested" }
-      });
+      return invitationReply.code(201).send(toApiCreatedInvitation(
+        created,
+        config.invitationPublicBaseUrl,
+        { status: "not_requested" }
+      ));
     }
     try {
-      await sendInvitationEmail(
+      await dependencies.sendInvitationEmail(
         {
           to: parsed.data.emailHint,
           token: created.token,
@@ -127,20 +137,20 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
           smtpFromName: invitationSenderName()
         }
       );
-      return invitationReply.code(201).send({
-        ...created,
-        invitationUrl: publicInvitationUrl,
-        emailDelivery: { status: "sent" }
-      });
+      return invitationReply.code(201).send(toApiCreatedInvitation(
+        created,
+        config.invitationPublicBaseUrl,
+        { status: "sent" }
+      ));
     } catch (error) {
-      return invitationReply.code(201).send({
-        ...created,
-        invitationUrl: publicInvitationUrl,
-        emailDelivery: {
+      return invitationReply.code(201).send(toApiCreatedInvitation(
+        created,
+        config.invitationPublicBaseUrl,
+        {
           status: "failed",
           message: normalizeInvitationEmailError(error)
         }
-      });
+      ));
     }
   });
 
@@ -164,3 +174,11 @@ export async function invitationRoutes(app: FastifyInstance): Promise<void> {
     return invitation;
   });
 }
+
+export function createInvitationRoutes(
+  dependencies: InvitationRouteDependencies = defaultDependencies
+): FastifyPluginAsync {
+  return async (app) => registerInvitationRoutes(app, dependencies);
+}
+
+export const invitationRoutes = createInvitationRoutes();

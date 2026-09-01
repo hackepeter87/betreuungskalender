@@ -6,6 +6,11 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+### Changed
+
+- Return only the complete invitation URL from invitation-creation APIs after
+  removing the expired compatibility field for the separate raw token.
+
 ## [1.24.3] - 2026-09-01
 
 ### Changed

@@ -395,8 +395,6 @@ export interface ApiInvitation {
 export interface ApiCreatedInvitation {
   invitation: ApiInvitation;
   invitationUrl: string;
-  /** @deprecated Use invitationUrl. Kept for one compatibility release. */
-  token: string;
   emailDelivery?: {
     status: "not_requested" | "sent" | "failed";
     message?: string;
