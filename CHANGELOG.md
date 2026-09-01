@@ -6,6 +6,21 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.24.3] - 2026-09-01
+
+### Changed
+
+- Name personal calendar events after the affected children and responsible
+  care party while keeping the calendar name separate.
+- Use concise, readable child lists for events involving one or more children.
+
+### Fixed
+
+- Keep generated iCalendar lines within the UTF-8 byte limit, including titles
+  with non-ASCII characters.
+- Use neutral event-title fallbacks when historical child or care-party records
+  are no longer active.
+
 ## [1.24.2] - 2026-08-31
 
 ### Fixed
