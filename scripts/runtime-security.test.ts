@@ -1364,8 +1364,66 @@ test("runtime serves revocable personal iCalendar feeds without broader token ac
   });
   assert.equal(secondChild.status, 201);
   const secondChildBody = await secondChild.json() as { id: string };
+  const thirdChild = await fetch(`${baseUrl}/api/children`, {
+    method: "POST",
+    headers: { ...jsonHeaders, ...alphaHeaders },
+    body: JSON.stringify({
+      name: "Third Feed Child",
+      birthMonth: 11,
+      birthYear: 2021,
+      color: "#d97706"
+    })
+  });
+  assert.equal(thirdChild.status, 201);
+  const thirdChildBody = await thirdChild.json() as { id: string };
+  const longName = "Langes Übungs-Kind, mit Emoji 💛 und einem absichtlich ausführlichen Kalendernamen";
+  const longNameChild = await fetch(`${baseUrl}/api/children`, {
+    method: "POST",
+    headers: { ...jsonHeaders, ...alphaHeaders },
+    body: JSON.stringify({
+      name: longName,
+      birthMonth: 2,
+      birthYear: 2019,
+      color: "#2563eb"
+    })
+  });
+  assert.equal(longNameChild.status, 201);
+  const longNameChildBody = await longNameChild.json() as { id: string };
+  const historicalChild = await fetch(`${baseUrl}/api/children`, {
+    method: "POST",
+    headers: { ...jsonHeaders, ...alphaHeaders },
+    body: JSON.stringify({
+      name: "Historisches Feed-Kind",
+      birthMonth: 6,
+      birthYear: 2017,
+      color: "#c2416c"
+    })
+  });
+  assert.equal(historicalChild.status, 201);
+  const historicalChildBody = await historicalChild.json() as { id: string };
 
-  const entry = (start: string, end: string, status = "planned", childIds = [childBody.id]) => ({
+  const secondaryParty = await fetch(`${baseUrl}/api/care-parties`, {
+    method: "POST",
+    headers: { ...jsonHeaders, ...alphaHeaders },
+    body: JSON.stringify({ name: "Großeltern Betreuung", kind: "grandparent" })
+  });
+  assert.equal(secondaryParty.status, 201);
+  const secondaryPartyBody = await secondaryParty.json() as { id: string };
+  const historicalParty = await fetch(`${baseUrl}/api/care-parties`, {
+    method: "POST",
+    headers: { ...jsonHeaders, ...alphaHeaders },
+    body: JSON.stringify({ name: "Frühere Betreuung", kind: "other" })
+  });
+  assert.equal(historicalParty.status, 201);
+  const historicalPartyBody = await historicalParty.json() as { id: string };
+
+  const entry = (
+    start: string,
+    end: string,
+    status = "planned",
+    childIds = [childBody.id],
+    responsiblePartyId?: string
+  ) => ({
     startDateTime: start,
     endDateTime: end,
     childIds,
@@ -1384,6 +1442,7 @@ test("runtime serves revocable personal iCalendar feeds without broader token ac
     hasEvidence: true,
     trips: [],
     costs: [],
+    ...(responsiblePartyId ? { responsiblePartyId } : {}),
     ...(status === "cancelled" ? { cancellationReason: "cancelled secret" } : {})
   });
 
@@ -1412,6 +1471,56 @@ test("runtime serves revocable personal iCalendar feeds without broader token ac
     headers: { ...jsonHeaders, ...alphaHeaders },
     body: JSON.stringify(entry("2026-08-21T16:00:00.000Z", "2026-08-23T18:00:00.000Z", "cancelled"))
   })).status, 201);
+  assert.equal((await fetch(`${baseUrl}/api/care-entries`, {
+    method: "POST",
+    headers: { ...jsonHeaders, ...alphaHeaders },
+    body: JSON.stringify(entry(
+      "2026-08-24T16:00:00.000Z",
+      "2026-08-24T20:00:00.000Z",
+      "planned",
+      [childBody.id, secondChildBody.id, thirdChildBody.id],
+      secondaryPartyBody.id
+    ))
+  })).status, 201);
+  assert.equal((await fetch(`${baseUrl}/api/care-entries`, {
+    method: "POST",
+    headers: { ...jsonHeaders, ...alphaHeaders },
+    body: JSON.stringify(entry(
+      "2026-08-25T16:00:00.000Z",
+      "2026-08-25T20:00:00.000Z",
+      "planned",
+      [longNameChildBody.id],
+      secondaryPartyBody.id
+    ))
+  })).status, 201);
+  assert.equal((await fetch(`${baseUrl}/api/care-entries`, {
+    method: "POST",
+    headers: { ...jsonHeaders, ...alphaHeaders },
+    body: JSON.stringify(entry(
+      "2026-08-26T16:00:00.000Z",
+      "2026-08-26T20:00:00.000Z",
+      "planned",
+      [childBody.id],
+      historicalPartyBody.id
+    ))
+  })).status, 201);
+  assert.equal((await fetch(`${baseUrl}/api/care-entries`, {
+    method: "POST",
+    headers: { ...jsonHeaders, ...alphaHeaders },
+    body: JSON.stringify(entry(
+      "2026-08-27T16:00:00.000Z",
+      "2026-08-27T20:00:00.000Z",
+      "planned",
+      [historicalChildBody.id]
+    ))
+  })).status, 201);
+
+  const fixtureDatabase = new Database(join(root, "app.sqlite"));
+  fixtureDatabase.prepare("UPDATE care_parties SET deleted_at = ? WHERE id = ?")
+    .run("2026-08-27T00:00:00.000Z", historicalPartyBody.id);
+  fixtureDatabase.prepare("UPDATE children SET deleted_at = ? WHERE id = ?")
+    .run("2026-08-28T00:00:00.000Z", historicalChildBody.id);
+  fixtureDatabase.close();
 
   const feedResponse = await fetch(`${baseUrl}/api/calendar-feed`, {
     method: "POST",
@@ -1435,15 +1544,56 @@ test("runtime serves revocable personal iCalendar feeds without broader token ac
   assert.equal(calendarResponse.status, 200);
   assert.match(calendarResponse.headers.get("content-type") ?? "", /text\/calendar/);
   const calendarText = await calendarResponse.text();
-  new ICAL.Component(ICAL.parse(calendarText));
-  assert.match(calendarText, /SUMMARY:Feed Test Child · Kinder bei Alpha Parent/);
-  assert.match(calendarText, /SUMMARY:Feed Test Child und Second Feed Child · Kinder bei Alpha/);
+  const calendar = new ICAL.Component(ICAL.parse(calendarText));
+  const summaries = calendar.getAllSubcomponents("vevent")
+    .map((component) => String(component.getFirstPropertyValue("summary")));
+  assert(summaries.includes("Feed Test Child bei Primary care"));
+  assert(summaries.includes("Feed Test Child und Second Feed Child bei Primary care"));
+  assert(summaries.includes("Feed Test Child, Second Feed Child und Third Feed Child bei Großeltern Betreuung"));
+  assert(summaries.includes(`${longName} bei Großeltern Betreuung`));
+  assert(summaries.includes("Feed Test Child bei betreuender Person"));
+  assert(summaries.includes("Kinder bei Primary care"));
+  assert(summaries.every((summary) => !/Alpha Parent|Beta Parent|@example\.invalid|subject-/.test(summary)));
+  for (const line of calendarText.split("\r\n")) {
+    assert(Buffer.byteLength(line, "utf8") <= 75, `ICS line exceeds 75 octets: ${line}`);
+  }
   assert.match(calendarText, /LOCATION:Pendlerwohnung/);
   assert.match(calendarText, /DTSTART:20260807T160000/);
   assert.doesNotMatch(calendarText, /20260814T160000/);
   assert.doesNotMatch(calendarText, /20260821T160000/);
   assert.doesNotMatch(calendarText, /secret|evidence|Beta Parent/i);
   assert.doesNotMatch(logs, new RegExp(token.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+
+  const allFeedResponse = await fetch(`${baseUrl}/api/calendar-feed`, {
+    method: "POST",
+    headers: { ...jsonHeaders, ...alphaHeaders },
+    body: JSON.stringify({ scope: "all" })
+  });
+  assert.equal(allFeedResponse.status, 201);
+  const allFeedStatus = await allFeedResponse.json() as { feedUrl: string };
+  const allFeedText = await (await fetch(new URL(allFeedStatus.feedUrl))).text();
+  const allCalendar = new ICAL.Component(ICAL.parse(allFeedText));
+  const allSummaries = allCalendar.getAllSubcomponents("vevent")
+    .map((component) => String(component.getFirstPropertyValue("summary")));
+  assert(allSummaries.includes("Feed Test Child bei Primary care"));
+  assert(allSummaries.includes("Feed Test Child, Second Feed Child und Third Feed Child bei Großeltern Betreuung"));
+  assert.match(allFeedText, /DTSTART:20260814T160000/);
+
+  const partyFeedResponse = await fetch(`${baseUrl}/api/calendar-feed`, {
+    method: "POST",
+    headers: { ...jsonHeaders, ...alphaHeaders },
+    body: JSON.stringify({ scope: `party:${secondaryPartyBody.id}` })
+  });
+  assert.equal(partyFeedResponse.status, 201);
+  const partyFeedStatus = await partyFeedResponse.json() as { feedUrl: string };
+  const partyFeedText = await (await fetch(new URL(partyFeedStatus.feedUrl))).text();
+  const partyCalendar = new ICAL.Component(ICAL.parse(partyFeedText));
+  const partySummaries = partyCalendar.getAllSubcomponents("vevent")
+    .map((component) => String(component.getFirstPropertyValue("summary")));
+  assert.deepEqual(partySummaries.sort(), [
+    "Feed Test Child, Second Feed Child und Third Feed Child bei Großeltern Betreuung",
+    `${longName} bei Großeltern Betreuung`
+  ].sort());
 
   const afterUse = await fetch(`${baseUrl}/api/calendar-feed`, {
     headers: alphaHeaders

@@ -38,7 +38,8 @@ interface FeedEntryRow {
   status: "planned" | "completed" | "partial";
   location: string | null;
   custom_location: string | null;
-  child_names: string;
+  child_names_json: string;
+  responsible_party_name: string | null;
   updated_at: string;
 }
 
@@ -47,7 +48,7 @@ const FEED_ENTRY_SELECT = `
     e.id, e.start_datetime, e.end_datetime, e.status, e.location,
     e.custom_location, e.updated_at,
     COALESCE((
-      SELECT GROUP_CONCAT(child_name, ' und ')
+      SELECT json_group_array(child_name)
       FROM (
         SELECT c.name AS child_name
         FROM care_entry_children ec
@@ -55,8 +56,12 @@ const FEED_ENTRY_SELECT = `
         WHERE ec.care_entry_id = e.id AND ec.deleted_at IS NULL
         ORDER BY c.name, c.id
       )
-    ), '') AS child_names
+    ), '[]') AS child_names_json,
+    responsible_party.name AS responsible_party_name
   FROM care_entries e
+  LEFT JOIN care_parties responsible_party
+    ON responsible_party.id = e.responsible_party_id
+   AND responsible_party.deleted_at IS NULL
 `;
 
 const CARE_LOCATION_LABELS: Record<string, string> = {
@@ -265,15 +270,49 @@ function feedLocation(entry: FeedEntryRow): string | undefined {
   return CARE_LOCATION_LABELS[location] ?? location;
 }
 
+function childNames(entry: FeedEntryRow): string[] {
+  try {
+    const parsed = JSON.parse(entry.child_names_json) as unknown;
+    return Array.isArray(parsed)
+      ? parsed.filter((value): value is string => typeof value === "string" && value.length > 0)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+function germanList(values: string[]): string {
+  if (values.length === 0) return "Kinder";
+  if (values.length === 1) return values[0] ?? "Kinder";
+  if (values.length === 2) return `${values[0]} und ${values[1]}`;
+  return `${values.slice(0, -1).join(", ")} und ${values.at(-1)}`;
+}
+
+function eventTitle(entry: FeedEntryRow): string {
+  const careParty = entry.responsible_party_name?.trim() || "betreuender Person";
+  return `${germanList(childNames(entry))} bei ${careParty}`;
+}
+
+function utf8Prefix(value: string, maximumBytes: number): [string, string] {
+  let bytes = 0;
+  let end = 0;
+  for (const character of value) {
+    const characterBytes = Buffer.byteLength(character, "utf8");
+    if (bytes + characterBytes > maximumBytes) break;
+    bytes += characterBytes;
+    end += character.length;
+  }
+  return [value.slice(0, end), value.slice(end)];
+}
+
 function foldLine(line: string): string {
-  if (line.length <= 75) return line;
+  if (Buffer.byteLength(line, "utf8") <= 75) return line;
   const parts: string[] = [];
   let remaining = line;
-  parts.push(remaining.slice(0, 75));
-  remaining = remaining.slice(75);
   while (remaining.length > 0) {
-    parts.push(` ${remaining.slice(0, 74)}`);
-    remaining = remaining.slice(74);
+    const [part, rest] = utf8Prefix(remaining, parts.length === 0 ? 75 : 74);
+    parts.push(parts.length === 0 ? part : ` ${part}`);
+    remaining = rest;
   }
   return parts.join("\r\n");
 }
@@ -315,16 +354,13 @@ export function buildPersonalCalendarFeed(input: {
   ];
   for (const entry of feedEntriesForToken(input.token)) {
     const location = feedLocation(entry);
-    const eventTitle = entry.child_names
-      ? `${entry.child_names} · ${title}`
-      : title;
     lines.push(
       "BEGIN:VEVENT",
       `UID:${escapeText(`${entry.id}@betreuungskalender`)}`,
       `DTSTAMP:${utcDateTimeValue(generatedAt)}`,
       `DTSTART:${localDateTimeValue(entry.start_datetime)}`,
       `DTEND:${localDateTimeValue(entry.end_datetime)}`,
-      `SUMMARY:${escapeText(eventTitle)}`,
+      `SUMMARY:${escapeText(eventTitle(entry))}`,
       ...(location ? [`LOCATION:${escapeText(location)}`] : []),
       `LAST-MODIFIED:${utcDateTimeValue(entry.updated_at)}`,
       `CATEGORIES:${entry.status === "planned" ? "Geplant" : entry.status === "partial" ? "Teilweise" : "Durchgeführt"}`,
