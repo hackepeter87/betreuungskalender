@@ -1,5 +1,6 @@
-import { persistence } from "./connection.js";
+import { db } from "./connection.js";
+import { migrateDatabase } from "./migrationRunner.js";
 
-export async function runMigrations(): Promise<void> {
-  await persistence.migrate();
+export function runMigrations(): void {
+  migrateDatabase(db);
 }

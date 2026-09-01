@@ -12,7 +12,7 @@ process.env.WEB_PUSH_PUBLIC_KEY = "";
 process.env.WEB_PUSH_PRIVATE_KEY = "";
 
 const { runMigrations } = await import("./db/migrate.js");
-const { db, persistence } = await import("./db/connection.js");
+const { db } = await import("./db/connection.js");
 const {
   answerCareConfirmation,
   createDueCareConfirmationRequests,
@@ -24,7 +24,7 @@ const {
   updateNotificationPreferences
 } = await import("./services/careConfirmations.js");
 
-await runMigrations();
+runMigrations();
 
 function resetDatabase(): void {
   db.transaction(() => {
@@ -199,8 +199,8 @@ function assignCareParty(userId: string, carePartyId: string): void {
 
 beforeEach(resetDatabase);
 
-after(async () => {
-  await persistence.close();
+after(() => {
+  db.close();
   rmSync(temporaryDirectory, { recursive: true, force: true });
 });
 

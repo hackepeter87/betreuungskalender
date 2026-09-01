@@ -9,7 +9,7 @@ process.env.DATABASE_PATH = join(temporaryDirectory, "test.sqlite");
 process.env.BACKUP_DIR = join(temporaryDirectory, "backups");
 
 const { runMigrations } = await import("./db/migrate.js");
-const { db, persistence } = await import("./db/connection.js");
+const { db } = await import("./db/connection.js");
 const {
   analyzeLegacyData,
   executeLegacyMigration,
@@ -24,7 +24,7 @@ const {
 } = await import("./routes/appData.js");
 const { appDataImportSchema } = await import("./validation/schemas.js");
 
-await runMigrations();
+runMigrations();
 
 function fixture(overrides: Record<string, unknown> = {}) {
   const timestamp = "2026-01-01T10:00:00.000Z";
@@ -131,8 +131,8 @@ function insertDefaultCareParty(id = "party-primary"): void {
 
 beforeEach(resetDatabase);
 
-after(async () => {
-  await persistence.close();
+after(() => {
+  db.close();
   rmSync(temporaryDirectory, { recursive: true, force: true });
 });
 
