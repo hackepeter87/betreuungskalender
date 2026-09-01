@@ -317,6 +317,8 @@ Invitation links contain the one-time token. Treat sent mail like any other
 bearer-link delivery channel. If delivery fails, the owner sees a generic
 failure message and can copy the link manually; SMTP hostnames, usernames,
 passwords, and raw provider errors are not returned to the browser.
+Invitation-creation responses expose only the complete link and do not return
+the underlying token as a separate API field.
 
 ## CORS and same-origin operation
 

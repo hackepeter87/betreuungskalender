@@ -84,9 +84,10 @@ active grants access, deleted revokes it, and missing grants no workspace
 access.
 
 `app_invitations` stores only hashes of one-time invitation tokens. The raw
-token is returned once at creation time and is never persisted. Invitations
-carry the target app role, an optional email hint, expiry, acceptance and
-revocation timestamps, and the accepted app user ID once claimed.
+token is used only inside the server to construct the complete invitation URL
+and is never persisted or returned as a separate API field. Invitations carry
+the target app role, an optional email hint, expiry, acceptance and revocation
+timestamps, and the accepted app user ID once claimed.
 
 Member administration uses `settings.setup.ownerUserId`. The explicit owner can
 list members, manage invitation records, and update workspace roles. Existing

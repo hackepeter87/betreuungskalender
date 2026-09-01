@@ -83,6 +83,11 @@ writable through this route.
 | `GET /api/migration/legacy-summary`, all migration POST routes | `admin:destructive` |
 | `PUT/DELETE /api/app-data`, `POST /api/demo-data/edge-cases` | `admin:destructive` |
 
+Invitation-creation responses contain the complete one-time `invitationUrl`
+and invitation metadata. They do not expose the underlying bearer token as a
+separate response field. Manual invitations, optional email delivery, and
+historical-actor invitations use the same complete URL.
+
 ## Role mapping
 
 | Permission group | Owner | Admin | Editor | Scheduler | Viewer |

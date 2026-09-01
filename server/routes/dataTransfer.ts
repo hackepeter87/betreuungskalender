@@ -5,7 +5,7 @@ import { db } from "../db/connection.js";
 import { setMembershipRole } from "../services/memberships.js";
 import { installationOwnerId } from "../services/memberManagement.js";
 import { createInvitation } from "../services/invitations.js";
-import { invitationUrl } from "../services/invitationEmail.js";
+import { toApiCreatedInvitation } from "../services/invitationResponses.js";
 import {
   createPortableTransfer,
   dryRunPortableTransfer,
@@ -170,10 +170,9 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
       });
       db.prepare("UPDATE data_transfer_actors SET invitation_id = ?, updated_by = ?, updated_at = ? WHERE id = ?")
         .run(created.invitation.id, request.userEmail, new Date().toISOString(), actor.id);
-      return noStore(reply).code(201).send({
-        ...created,
-        invitationUrl: invitationUrl(created.token, config.invitationPublicBaseUrl)
-      });
+      return noStore(reply)
+        .code(201)
+        .send(toApiCreatedInvitation(created, config.invitationPublicBaseUrl));
     } catch (error) {
       return noStore(reply).code(400).send(errorReply(error));
     }
