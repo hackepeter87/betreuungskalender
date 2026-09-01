@@ -16,6 +16,48 @@ test.beforeEach(async ({ request }) => {
   await resetApp(request);
 });
 
+test("loads the change log only on demand and paginates it", async ({ page, request }) => {
+  const createdResponse = await request.post("/api/children", {
+    data: {
+      name: "Audit Test 0",
+      birthMonth: 4,
+      birthYear: 2018,
+      color: "#087f7b"
+    }
+  });
+  expect(createdResponse.ok()).toBeTruthy();
+  const created = await createdResponse.json() as { id: string };
+  for (let index = 1; index <= 55; index += 1) {
+    const response = await request.put(`/api/children/${created.id}`, {
+      data: {
+        name: `Audit Test ${index}`,
+        birthMonth: 4,
+        birthYear: 2018,
+        color: "#087f7b"
+      }
+    });
+    expect(response.ok()).toBeTruthy();
+  }
+
+  const auditRequests: string[] = [];
+  page.on("request", (browserRequest) => {
+    const pathname = new URL(browserRequest.url()).pathname;
+    if (pathname.startsWith("/api/audit-log")) auditRequests.push(pathname);
+  });
+  await openApp(page);
+  expect(auditRequests).toEqual([]);
+
+  await navigate(page, "audit");
+  await expect(page.getByTestId("page-audit")).toBeVisible();
+  await expect(page.locator(".audit-table tbody tr")).toHaveCount(50);
+  expect(auditRequests.length).toBeGreaterThan(0);
+  expect(new Set(auditRequests)).toEqual(new Set(["/api/audit-log/page"]));
+
+  await page.getByTestId("audit-load-more").click();
+  await expect(page.getByTestId("audit-load-more")).toBeHidden();
+  expect(await page.locator(".audit-table tbody tr").count()).toBeGreaterThan(50);
+});
+
 test("keeps application branding and sidebar footer controls aligned", async ({ page }) => {
   await openApp(page);
 

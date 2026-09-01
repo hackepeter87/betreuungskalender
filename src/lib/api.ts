@@ -1,5 +1,7 @@
 import type {
+  ApiActorLabel,
   ApiAuditEntry,
+  ApiAuditPage,
   ApiAppUser,
   ApiCalendarFeedStatus,
   ApiCalendarFeedScope,
@@ -351,7 +353,7 @@ function displayValue(value?: string): string {
   }
 }
 
-function mapAudit(entry: ApiAuditEntry): AppData["auditLog"][number] {
+export function mapAudit(entry: ApiAuditEntry): AppData["auditLog"][number] {
   return {
     id: String(entry.id),
     timestamp: entry.timestamp,
@@ -377,10 +379,8 @@ function newestTimestamp(values: Array<string | undefined>): string {
 
 export async function loadAppData(options: {
   includeSettings?: boolean;
-  includeAudit?: boolean;
 } = {}): Promise<AppData> {
   const includeSettings = options.includeSettings ?? true;
-  const includeAudit = options.includeAudit ?? true;
   const [
     children,
     careParties,
@@ -391,9 +391,8 @@ export async function loadAppData(options: {
     contactPatterns,
     contactRules,
     rawSettings,
-    auditLog,
-    monthClosures
-    ,externalCalendarSources
+    monthClosures,
+    externalCalendarSources
   ] = await Promise.all([
     request<ApiChild[]>("/api/children"),
     request<ApiCareParty[]>("/api/care-parties"),
@@ -406,11 +405,8 @@ export async function loadAppData(options: {
     includeSettings
       ? request<Record<string, unknown>>("/api/settings")
       : Promise.resolve({} as Record<string, unknown>),
-    includeAudit
-      ? request<ApiAuditEntry[]>("/api/audit-log?limit=50000")
-      : Promise.resolve([]),
-    request<ApiMonthlyClosing[]>("/api/month-closings")
-    ,request<ApiExternalCalendarSource[]>("/api/external-calendars")
+    request<ApiMonthlyClosing[]>("/api/month-closings"),
+    request<ApiExternalCalendarSource[]>("/api/external-calendars")
   ]);
   const empty = createEmptyData();
   const { lastJsonBackupAt, ...settings } = rawSettings;
@@ -434,7 +430,7 @@ export async function loadAppData(options: {
     settings: { ...empty.settings, ...settings } as AppSettings,
     lastJsonBackupAt:
       typeof lastJsonBackupAt === "string" ? lastJsonBackupAt : undefined,
-    auditLog: auditLog.map(mapAudit),
+    auditLog: [],
     monthClosures: mappedClosures,
     updatedAt: newestTimestamp([
       ...children.flatMap((item) => [item.createdAt, item.updatedAt]),
@@ -444,7 +440,6 @@ export async function loadAppData(options: {
       ...mappedUnavailable.flatMap((item) => [item.createdAt, item.updatedAt]),
       ...contactPatterns.flatMap((item) => [item.createdAt, item.updatedAt]),
       ...contactRules.flatMap((item) => [item.createdAt, item.updatedAt]),
-      ...auditLog.map((item) => item.timestamp),
       ...mappedClosures.flatMap((item) => [
         item.closedAt,
         item.changedAfterCloseAt
@@ -511,6 +506,36 @@ export async function loadRestrictedAppData(): Promise<AppData> {
 }
 
 export const api = {
+  async listAuditPage(options: {
+    objectType?: AuditObjectType;
+    cursor?: string;
+    limit?: number;
+    signal?: AbortSignal;
+  } = {}) {
+    const query = new URLSearchParams({
+      limit: String(options.limit ?? 50)
+    });
+    if (options.objectType) {
+      const entityType = Object.entries(objectTypeMap).find(
+        ([, objectType]) => objectType === options.objectType
+      )?.[0];
+      if (entityType) query.set("entityType", entityType);
+    }
+    if (options.cursor) query.set("cursor", options.cursor);
+    const page = await request<ApiAuditPage>(`/api/audit-log/page?${query}`, {
+      signal: options.signal
+    });
+    return {
+      items: page.items.map(mapAudit),
+      nextCursor: page.nextCursor
+    };
+  },
+  resolveActorLabels(ids: string[]) {
+    return request<ApiActorLabel[]>("/api/actor-labels/resolve", {
+      method: "POST",
+      body: JSON.stringify({ ids })
+    });
+  },
   previewCareConflicts(input: CareEntryWriteInput, entryId?: string) {
     const query = entryId ? `?entryId=${encodeURIComponent(entryId)}` : "";
     return request<ApiCareConflictPreview>(`/api/care-conflicts/preview${query}`, {

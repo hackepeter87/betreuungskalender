@@ -23,7 +23,7 @@ export function EntriesPage({
   onNewEntry: () => void;
   onEditEntry: (entry: CareEntry) => void;
 }) {
-  const { data, canWrite, session } = useAppStore();
+  const { data, actorLabels, canWrite, session } = useAppStore();
   const canCreateAppointments = session.permissions?.includes("appointments:create") ?? true;
   const { locale, intlLocale } = useI18n();
   const [status, setStatus] = useState<EntryStatus | "all">("all");
@@ -122,7 +122,7 @@ export function EntriesPage({
               children={data.children}
               conflicts={data.careConflicts}
               canWrite={canWrite}
-              updatedByLabel={actorDisplayName(data, entry.updatedBy)}
+              updatedByLabel={actorDisplayName(actorLabels, entry.updatedBy)}
               onClick={() => onEditEntry(entry)}
             />
           ))}

@@ -204,14 +204,18 @@ test("trusted OIDC users create distinct actor metadata and audit entries", asyn
     updatedBy: "user_fd650153075906bd17636173"
   }]);
 
-  const auditEntries = await jsonRequest<ApiAuditEntry[]>(
-    baseUrl,
-    `/api/audit-log?entityType=child&entityId=${encodeURIComponent(created.id)}&limit=10`,
-    {
-      method: "GET",
-      headers: adminHeaders
-    }
+  const legacyAuditResponse = await fetch(
+    `${baseUrl}/api/audit-log?entityType=child&entityId=${encodeURIComponent(created.id)}&limit=10`,
+    { method: "GET", headers: adminHeaders }
   );
+  assert.equal(legacyAuditResponse.status, 200);
+  assert.equal(legacyAuditResponse.headers.get("cache-control"), "no-store");
+  assert.equal(legacyAuditResponse.headers.get("deprecation"), "true");
+  assert.equal(
+    legacyAuditResponse.headers.get("link"),
+    "</api/audit-log/page>; rel=\"successor-version\""
+  );
+  const auditEntries = await legacyAuditResponse.json() as ApiAuditEntry[];
   assert.deepEqual(
     auditEntries.map((entry) => ({
       action: entry.action,
@@ -240,6 +244,60 @@ test("trusted OIDC users create distinct actor metadata and audit entries", asyn
       }
     ]
   );
+
+  const firstAuditPageResponse = await fetch(
+    `${baseUrl}/api/audit-log/page?entityType=child&entityId=${encodeURIComponent(created.id)}&limit=2`,
+    { method: "GET", headers: adminHeaders }
+  );
+  assert.equal(firstAuditPageResponse.status, 200);
+  assert.equal(firstAuditPageResponse.headers.get("cache-control"), "no-store");
+  const firstAuditPage = await firstAuditPageResponse.json() as {
+    items: ApiAuditEntry[];
+    nextCursor?: string;
+  };
+  assert.equal(firstAuditPage.items.length, 2);
+  assert.ok(firstAuditPage.nextCursor);
+
+  const secondAuditPage = await jsonRequest<{
+    items: ApiAuditEntry[];
+    nextCursor?: string;
+  }>(
+    baseUrl,
+    `/api/audit-log/page?entityType=child&entityId=${encodeURIComponent(created.id)}&limit=2&cursor=${encodeURIComponent(firstAuditPage.nextCursor)}`,
+    { method: "GET", headers: adminHeaders }
+  );
+  assert.equal(secondAuditPage.items.length, 1);
+  assert.equal(secondAuditPage.nextCursor, undefined);
+  assert.deepEqual(
+    new Set([...firstAuditPage.items, ...secondAuditPage.items].map((entry) => entry.id)).size,
+    3
+  );
+  await expectStatus(baseUrl, "/api/audit-log/page?cursor=not-a-valid-cursor", 400, {
+    method: "GET",
+    headers: adminHeaders
+  });
+
+  const actorLabels = await jsonRequest<Array<{ id: string; displayName: string }>>(
+    baseUrl,
+    "/api/actor-labels/resolve",
+    {
+      method: "POST",
+      headers: adminHeaders,
+      body: JSON.stringify({
+        ids: [created.createdBy, updated.updatedBy, "user_not_referenced_by_visible_data"]
+      })
+    }
+  );
+  assert.deepEqual(actorLabels, [
+    { id: created.createdBy, displayName: "Alpha Parent" },
+    { id: updated.updatedBy, displayName: "Beta Parent" }
+  ]);
+
+  await expectStatus(baseUrl, "/api/actor-labels/resolve", 400, {
+    method: "POST",
+    headers: adminHeaders,
+    body: JSON.stringify({ ids: Array.from({ length: 201 }, (_, index) => `actor-${index}`) })
+  });
 });
 
 test("shared care-party assignments restrict unavailable period care context", async (t) => {

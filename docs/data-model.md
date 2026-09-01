@@ -98,7 +98,15 @@ field name, old/new serialized values, and optional metadata. Audit API
 responses join the current `app_users.display_name` for readability while
 keeping the stable internal user ID as the historical actor reference. It
 improves traceability but is not an immutable external timestamp or
-cryptographic proof.
+cryptographic proof. The authenticated audit view reads bounded pages ordered
+by timestamp and ID; audit history is no longer part of the application's
+general startup payload. Report snapshots continue to read their optional
+history inside the report transaction.
+
+Domain views resolve display names separately for at most 200 actor IDs already
+referenced by the loaded domain records. That response contains only the stable
+ID and display name. It does not expose email addresses, identity-provider
+claims, or unrelated application users.
 
 ## Actor metadata
 
@@ -411,3 +419,6 @@ Migration `030_portable_data_transfer` adds transfer runs, historical actor
 snapshots, proposed care-party mappings, optional target-member mappings, and
 the invitation link used for an explicitly mapped historical actor. It does not
 change existing domain records or authentication identities.
+
+Migration `032_audit_pagination_index` adds the active-row timestamp and ID
+index used by stable cursor pagination. It does not alter or remove audit data.

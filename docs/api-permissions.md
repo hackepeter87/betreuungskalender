@@ -58,7 +58,9 @@ token.
 | `GET /api/external-calendar-events/export` | `exports:run` |
 | `GET/POST/DELETE /api/calendar-feed` | `feeds:manage-own` |
 | `GET /calendar/:token` | Scoped bearer token; never an API principal |
-| `GET /api/audit-log` | `audit:view` |
+| `GET /api/audit-log/page` | `audit:view` |
+| `GET /api/audit-log` | `audit:view`; deprecated compatibility response, limited to 500 rows |
+| `POST /api/actor-labels/resolve` | `planning:view`; at most 200 referenced actor IDs |
 | `GET /api/reports/snapshot` | `reports:view` |
 
 ## Membership and administration

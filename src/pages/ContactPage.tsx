@@ -217,7 +217,8 @@ export function ContactPage({
     previewHistoricalContactRuleSync,
     syncHistoricalContactRule,
     canWrite,
-    isSaving
+    isSaving,
+    actorLabels
   } = useAppStore();
   const { locale, intlLocale } = useI18n();
   const existingRule = data.contactRules[0];
@@ -981,7 +982,7 @@ export function ContactPage({
                   {isRuleEntry ? <small>{exceptionLabel}</small> : null}
                   <small>
                     {copy(locale, "common", "updatedBy", {
-                      actor: actorDisplayName(data, entry.updatedBy),
+                      actor: actorDisplayName(actorLabels, entry.updatedBy),
                       date: formatDateTime(entry.updatedAt, intlLocale)
                     })}
                   </small>

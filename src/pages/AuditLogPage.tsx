@@ -1,11 +1,11 @@
-import { useDeferredValue, useMemo, useState } from "react";
+import { useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { Icon } from "../components/Icon";
 import { FieldHelpButton, FieldHelpLabel } from "../components/FieldHelp";
 import { formatDateTime } from "../lib/date";
-import { useAppStore } from "../store/AppStore";
+import { api } from "../lib/api";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
-import type { AuditAction, AuditObjectType } from "../types";
+import type { AuditAction, AuditLogEntry, AuditObjectType } from "../types";
 
 const objectLabels: Record<AuditObjectType, string> = {
   careEntry: "Betreuungseintrag",
@@ -31,15 +31,71 @@ const actionLabels: Record<AuditAction, string> = {
 };
 
 export function AuditLogPage() {
-  const { data } = useAppStore();
   const { locale, intlLocale } = useI18n();
   const [objectType, setObjectType] = useState<AuditObjectType | "all">("all");
   const [query, setQuery] = useState("");
+  const [entries, setEntries] = useState<AuditLogEntry[]>([]);
+  const [nextCursor, setNextCursor] = useState<string>();
+  const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [reloadRevision, setReloadRevision] = useState(0);
+  const pageGeneration = useRef(0);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const generation = ++pageGeneration.current;
+    setEntries([]);
+    setNextCursor(undefined);
+    setLoadError(false);
+    setIsLoading(true);
+    setIsLoadingMore(false);
+    void api.listAuditPage({
+      objectType: objectType === "all" ? undefined : objectType,
+      signal: controller.signal
+    }).then((page) => {
+      if (pageGeneration.current !== generation) return;
+      setEntries(page.items);
+      setNextCursor(page.nextCursor);
+    }).catch((error: unknown) => {
+      if (
+        pageGeneration.current === generation &&
+        !(error instanceof DOMException && error.name === "AbortError")
+      ) {
+        setLoadError(true);
+      }
+    }).finally(() => {
+      if (pageGeneration.current === generation && !controller.signal.aborted) {
+        setIsLoading(false);
+      }
+    });
+    return () => controller.abort();
+  }, [objectType, reloadRevision]);
+
+  const loadMore = async () => {
+    if (!nextCursor || isLoadingMore) return;
+    const generation = pageGeneration.current;
+    setIsLoadingMore(true);
+    setLoadError(false);
+    try {
+      const page = await api.listAuditPage({
+        objectType: objectType === "all" ? undefined : objectType,
+        cursor: nextCursor
+      });
+      if (pageGeneration.current !== generation) return;
+      setEntries((current) => [...current, ...page.items]);
+      setNextCursor(page.nextCursor);
+    } catch {
+      if (pageGeneration.current === generation) setLoadError(true);
+    } finally {
+      if (pageGeneration.current === generation) setIsLoadingMore(false);
+    }
+  };
+
   const deferredQuery = useDeferredValue(query.trim().toLocaleLowerCase(intlLocale));
-  const entries = useMemo(
+  const visibleEntries = useMemo(
     () =>
-      data.auditLog
-        .filter((entry) => objectType === "all" || entry.objectType === objectType)
+      entries
         .filter((entry) => {
           if (!deferredQuery) return true;
           return `${entry.objectLabel} ${entry.field} ${entry.oldValue} ${entry.newValue}`
@@ -48,11 +104,11 @@ export function AuditLogPage() {
         })
         .slice()
         .sort((a, b) => b.timestamp.localeCompare(a.timestamp)),
-    [data.auditLog, deferredQuery, intlLocale, objectType]
+    [deferredQuery, entries, intlLocale]
   );
 
   return (
-    <div className="page">
+    <div className="page" data-testid="page-audit">
       <div className="page-header">
         <div>
           <p className="page-header__context">{copy(locale, "audit", "context")}</p>
@@ -95,7 +151,7 @@ export function AuditLogPage() {
               </tr>
             </thead>
             <tbody>
-              {entries.map((entry) => (
+              {visibleEntries.map((entry) => (
                 <tr key={entry.id}>
                   <td data-label={copy(locale, "audit", "timestamp")}>{formatDateTime(entry.timestamp, intlLocale)}</td>
                   <td data-label={copy(locale, "audit", "actor")}><strong>{entry.userDisplayName ?? entry.userId}</strong><small>{entry.userId}</small></td>
@@ -109,7 +165,40 @@ export function AuditLogPage() {
             </tbody>
           </table>
         </div>
-        {entries.length === 0 ? <p className="empty-copy empty-copy--padded">{copy(locale, "audit", "empty")}</p> : null}
+        {isLoading ? (
+          <p className="empty-copy empty-copy--padded" role="status" aria-live="polite">
+            {copy(locale, "audit", "loading")}
+          </p>
+        ) : null}
+        {loadError ? (
+          <div className="notice notice--warning" role="alert">
+            <Icon name="alert" />
+            <p>{copy(locale, "audit", "loadError")}</p>
+            <button
+              className="button button--secondary"
+              type="button"
+              onClick={() => setReloadRevision((value) => value + 1)}
+            >
+              {copy(locale, "audit", "retry")}
+            </button>
+          </div>
+        ) : null}
+        {!isLoading && !loadError && visibleEntries.length === 0 ? (
+          <p className="empty-copy empty-copy--padded">{copy(locale, "audit", "empty")}</p>
+        ) : null}
+        {nextCursor && !isLoading && !loadError ? (
+          <div className="form-actions">
+            <button
+              className="button button--secondary"
+              data-testid="audit-load-more"
+              type="button"
+              disabled={isLoadingMore}
+              onClick={() => void loadMore()}
+            >
+              {copy(locale, "audit", isLoadingMore ? "loadingMore" : "loadMore")}
+            </button>
+          </div>
+        ) : null}
       </section>
     </div>
   );

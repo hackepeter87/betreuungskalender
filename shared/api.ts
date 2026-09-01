@@ -497,6 +497,16 @@ export interface ApiAuditEntry {
   effectiveDate?: string;
 }
 
+export interface ApiAuditPage {
+  items: ApiAuditEntry[];
+  nextCursor?: string;
+}
+
+export interface ApiActorLabel {
+  id: string;
+  displayName: string;
+}
+
 export interface ApiReportSnapshot {
   reportId: string;
   generatedAt: string;

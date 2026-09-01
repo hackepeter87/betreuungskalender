@@ -40,7 +40,8 @@ const expectedMigrations = [
   "028_workspace_permissions",
   "029_local_development_identity_cleanup",
   "030_portable_data_transfer",
-  "031_historical_contact_rule_sync"
+  "031_historical_contact_rule_sync",
+  "032_audit_pagination_index"
 ];
 
 async function withTemporaryDirectory(
