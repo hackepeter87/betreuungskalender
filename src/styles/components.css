@@ -516,6 +516,14 @@ button.metric-card {
   text-align: center;
 }
 
+.deferred-page-state {
+  min-height: min(26rem, 55vh);
+}
+
+.deferred-dialog-state {
+  min-height: 14rem;
+}
+
 .empty-state > span {
   display: flex;
   width: 52px;

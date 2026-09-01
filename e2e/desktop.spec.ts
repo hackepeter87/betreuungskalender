@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { readFile } from "node:fs/promises";
 import {
   createChild,
   createEntry,
@@ -14,6 +15,81 @@ import {
 
 test.beforeEach(async ({ request }) => {
   await resetApp(request);
+});
+
+async function deferredAsset(source: string): Promise<string> {
+  const manifest = JSON.parse(await readFile("dist/.vite/manifest.json", "utf8"));
+  const file = manifest[source]?.file;
+  if (!file) throw new Error(`Missing deferred asset for ${source}`);
+  return `/${file}`;
+}
+
+test("shows an accessible loading state for a deferred page", async ({
+  browser
+}) => {
+  const context = await browser.newContext({
+    baseURL: "http://127.0.0.1:3100",
+    serviceWorkers: "block",
+    viewport: { width: 1440, height: 900 }
+  });
+  const page = await context.newPage();
+  const reportAsset = await deferredAsset("src/pages/ReportPage.tsx");
+  await page.route(`**${reportAsset}`, async (route) => {
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, 250));
+    await route.continue();
+  });
+
+  try {
+    await openApp(page);
+    await navigate(page, "report", { waitForPage: false });
+    await expect(page.getByTestId("deferred-page-loading-report")).toBeVisible();
+    await expect(page.getByTestId("page-report")).toBeVisible();
+    await expect(page.getByTestId("page-dashboard")).toHaveCount(0);
+  } finally {
+    await context.close();
+  }
+});
+
+test("shows a generic chunk failure and reloads the application", async ({ browser }) => {
+  const context = await browser.newContext({
+    baseURL: "http://127.0.0.1:3100",
+    serviceWorkers: "block",
+    viewport: { width: 1440, height: 900 }
+  });
+  const page = await context.newPage();
+  const reportAsset = await deferredAsset("src/pages/ReportPage.tsx");
+  const routePattern = `**${reportAsset}`;
+  await page.route(routePattern, (route) => route.abort("failed"));
+
+  try {
+    await openApp(page);
+    await navigate(page, "report", { waitForPage: false });
+    const failure = page.getByTestId("deferred-page-error-report");
+    await expect(failure).toBeVisible();
+
+    await page.unroute(routePattern);
+    await failure.getByRole("button", { name: "App neu laden" }).click();
+    await expect(page.getByTestId("app-shell")).toBeVisible();
+    await expect(page.getByTestId("page-dashboard")).toBeVisible();
+  } finally {
+    await context.close();
+  }
+});
+
+test("reopens an already loaded deferred page while the browser is offline", async ({
+  context,
+  page
+}) => {
+  await openApp(page);
+  await navigate(page, "report");
+  await expect(page.getByTestId("page-report")).toBeVisible();
+  await page.evaluate(() => navigator.serviceWorker.ready);
+
+  await navigate(page, "dashboard");
+  await context.setOffline(true);
+  await navigate(page, "report");
+
+  await expect(page.getByTestId("page-report")).toBeVisible();
 });
 
 test("loads the change log only on demand and paginates it", async ({ page, request }) => {
@@ -258,6 +334,22 @@ test("covers the core documentation and export flows", async ({ page }) => {
     .toBeVisible();
   await expect(page.locator('[data-testid="report-entry-cost"][data-value="12.4"]'))
     .toBeVisible();
+
+  await page.evaluate(() => {
+    (window as Window & { __reportPrintCalls?: number }).__reportPrintCalls = 0;
+    window.print = () => {
+      (window as Window & { __reportPrintCalls?: number }).__reportPrintCalls = 1;
+    };
+  });
+  await page.getByRole("button", { name: "Drucken" }).click();
+  await expect.poll(() => page.evaluate(() => (
+    window as Window & { __reportPrintCalls?: number }
+  ).__reportPrintCalls)).toBe(1);
+
+  const pdfDownloadPromise = page.waitForEvent("download");
+  await page.getByRole("button", { name: "PDF herunterladen" }).click();
+  const pdfDownload = await pdfDownloadPromise;
+  expect(pdfDownload.suggestedFilename()).toMatch(/^betreuungsbericht-.*\.pdf$/);
 
   await navigate(page, "backup");
   await expect(page.getByTestId("page-backup")).toBeVisible();

@@ -3,9 +3,11 @@ import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
 
-async function loadServiceWorker() {
+async function loadServiceWorker(options = {}) {
   const listeners = new Map();
   const networkRequests = [];
+  const cacheWrites = [];
+  const cachedResponses = new Map(Object.entries(options.cachedResponses ?? {}));
   let cacheAccesses = 0;
   const source = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
   const self = {
@@ -21,15 +23,25 @@ async function loadServiceWorker() {
     URL,
     fetch(request) {
       networkRequests.push(request);
-      return Promise.resolve({ ok: true });
+      if (options.failNetwork) return Promise.reject(new Error("network unavailable"));
+      return Promise.resolve({
+        ok: true,
+        clone() {
+          return this;
+        }
+      });
     },
     caches: {
       async open() {
         cacheAccesses += 1;
         return {
           addAll: async () => {},
-          match: async () => undefined,
-          put: async () => {},
+          match: async (request) => cachedResponses.get(request.url ?? request),
+          put: async (request, response) => {
+            const key = request.url ?? request;
+            cacheWrites.push(key);
+            cachedResponses.set(key, response);
+          },
           keys: async () => []
         };
       },
@@ -37,9 +49,9 @@ async function loadServiceWorker() {
         cacheAccesses += 1;
         return [];
       },
-      async match() {
+      async match(request) {
         cacheAccesses += 1;
-        return undefined;
+        return cachedResponses.get(request.url ?? request);
       },
       async delete() {
         cacheAccesses += 1;
@@ -52,6 +64,7 @@ async function loadServiceWorker() {
   return {
     fetchHandler: listeners.get("fetch"),
     networkRequests,
+    cacheWrites,
     cacheAccesses: () => cacheAccesses
   };
 }
@@ -93,6 +106,47 @@ test("service worker does not intercept API write requests", async () => {
   assert.equal(intercepted, false);
   assert.deepEqual(worker.networkRequests, []);
   assert.equal(worker.cacheAccesses(), 0);
+});
+
+test("service worker caches a deferred frontend chunk after its first load", async () => {
+  const worker = await loadServiceWorker();
+  const request = {
+    method: "GET",
+    url: "http://127.0.0.1:3100/assets/ReportPage-fictional.js"
+  };
+  let response;
+
+  worker.fetchHandler({
+    request,
+    respondWith(value) {
+      response = value;
+    }
+  });
+
+  await response;
+  await new Promise((resolvePromise) => setImmediate(resolvePromise));
+  assert.deepEqual(worker.networkRequests, [request]);
+  assert.deepEqual(worker.cacheWrites, [request.url]);
+});
+
+test("service worker serves a previously loaded deferred chunk while offline", async () => {
+  const url = "http://127.0.0.1:3100/assets/ReportPage-fictional.js";
+  const cachedResponse = { ok: true, source: "cache" };
+  const worker = await loadServiceWorker({
+    cachedResponses: { [url]: cachedResponse },
+    failNetwork: true
+  });
+  let response;
+
+  worker.fetchHandler({
+    request: { method: "GET", url },
+    respondWith(value) {
+      response = value;
+    }
+  });
+
+  assert.equal(await response, cachedResponse);
+  assert.deepEqual(worker.networkRequests, []);
 });
 
 test("PWA metadata uses the full product name and installable icons", async () => {

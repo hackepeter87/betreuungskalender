@@ -150,7 +150,11 @@ export async function expectNoDocumentHorizontalOverflow(page: Page) {
   expect(result.bodyScrollWidth).toBeLessThanOrEqual(result.clientWidth + 1);
 }
 
-export async function navigate(page: Page, destination: AppPage) {
+export async function navigate(
+  page: Page,
+  destination: AppPage,
+  options: { waitForPage?: boolean } = {}
+) {
   const mobileNavigation = page.getByTestId("mobile-navigation");
   if (await mobileNavigation.isVisible()) {
     const directButton = page.getByTestId(`mobile-nav-${destination}`);
@@ -158,20 +162,23 @@ export async function navigate(page: Page, destination: AppPage) {
       // Fixed bottom navigation is visually on top; Playwright may still scroll
       // the page content under it during actionability checks on mobile.
       await directButton.click({ force: true });
-      return;
+    } else {
+      await page.getByTestId("mobile-nav-more").click();
+      await page.getByTestId(
+        destination === "settings"
+          ? "mobile-more-settings"
+          : `mobile-more-${destination}`
+      ).click();
     }
-    await page.getByTestId("mobile-nav-more").click();
+  } else {
     await page.getByTestId(
-      destination === "settings"
-        ? "mobile-more-settings"
-        : `mobile-more-${destination}`
+      destination === "settings" ? "nav-settings" : `nav-${destination}`
     ).click();
-    return;
   }
 
-  await page.getByTestId(
-    destination === "settings" ? "nav-settings" : `nav-${destination}`
-  ).click();
+  if (options.waitForPage !== false) {
+    await expect(page.locator("main.main > .page")).toBeVisible();
+  }
 }
 
 export async function createChild(page: Page, name: string) {

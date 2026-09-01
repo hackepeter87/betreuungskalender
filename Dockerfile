@@ -12,7 +12,7 @@ COPY public ./public
 COPY server ./server
 COPY shared ./shared
 COPY src ./src
-COPY scripts/copy-migrations.js ./scripts/copy-migrations.js
+COPY scripts/copy-migrations.js scripts/check-frontend-bundle.js ./scripts/
 RUN npm run build
 
 FROM build AS production-deps

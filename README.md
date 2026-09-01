@@ -381,6 +381,8 @@ recovery, and direct Node.js fallback guidance:
   unavailable, the application switches to an explicit read-only mode:
   existing data can be viewed and exported, while create, update, delete,
   import, and monthly closing actions remain blocked.
+- Secondary pages are cached after their first successful load. Pages that
+  have not been opened yet still require a network connection.
 - API requests are always network-only and are never served from the service
   worker cache.
 
