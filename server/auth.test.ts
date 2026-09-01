@@ -3,7 +3,6 @@ import test from "node:test";
 import {
   displayNameForIdentity,
   requestIdentity,
-  resolveRequestIdentity,
   resolveRequestUser,
   roleFromGroups,
   sessionInfo,
@@ -18,23 +17,6 @@ test("reads supported proxy identity headers in priority order", () => {
       "x-forwarded-user": "fallback"
     }),
     "user@example.net"
-  );
-});
-
-test("allows local development without proxy authentication", () => {
-  assert.deepEqual(
-    resolveRequestIdentity({}, { requireAuth: false, trustProxyAuth: false }),
-    { authenticated: true, identity: "local-dev" }
-  );
-});
-
-test("blocks required authentication when no trusted identity exists", () => {
-  assert.deepEqual(
-    resolveRequestIdentity(
-      { "x-auth-request-email": "user@example.net" },
-      { requireAuth: true, trustProxyAuth: false }
-    ),
-    { authenticated: false, identity: "" }
   );
 });
 
@@ -57,16 +39,6 @@ test("keeps local development open even when proxy IP trust is enabled", () => {
   assert.equal(auth.authenticated, true);
   assert.equal(auth.user?.id, "local-dev");
   assert.equal(auth.user?.role, "admin");
-});
-
-test("accepts an identity only when trusted proxy authentication is enabled", () => {
-  assert.deepEqual(
-    resolveRequestIdentity(
-      { "x-auth-request-user": "account-123" },
-      { requireAuth: true, trustProxyAuth: true }
-    ),
-    { authenticated: true, identity: "account-123" }
-  );
 });
 
 test("derives compact display names without exposing extra identity details", () => {

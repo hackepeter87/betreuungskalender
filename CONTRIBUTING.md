@@ -72,6 +72,18 @@ npm run build
 - Treat audit data, notes, evidence references, and proxy identity headers as
   sensitive.
 
+## Temporary analysis output
+
+Keep generated review notes, profiler output, screenshots, and temporary
+databases outside the repository checkout. Use a disposable location such as
+`$TMPDIR/betreuungskalender-review/` and remove it after the review is complete.
+
+The repository-local `/artifacts/` path is ignored by Git and ProjectAtlas for
+compatibility with existing tooling, but it is not a storage location. Never
+place real instance data there merely because it is ignored. Temporary review
+output must not be committed, attached to public issues, or included in release
+artifacts.
+
 ## Data model and security changes
 
 - Add a numbered migration for every persistent schema change.

@@ -6,7 +6,8 @@ dist-server/
 *.tsbuildinfo
 .idea/
 .vscode/
-.projectatlas/
+.projectatlas/*
+!.projectatlas/config.toml
 .env
 .env.*
 !.env.example
@@ -20,6 +21,7 @@ app.env.*
 /secrets/
 /logs/
 /tmp/
+/artifacts/
 oauth2-proxy.cfg
 *.sqlite
 *.sqlite-*
