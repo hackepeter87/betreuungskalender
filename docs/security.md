@@ -354,3 +354,7 @@ callbacks clear any existing app session cookie.
 The operator remains responsible for server hardening, TLS, authentication,
 firewall rules, physical security, encrypted storage, backup protection,
 retention, incident response, and compliance with applicable privacy rules.
+Use the [operator data-lifecycle guide](operator-data-lifecycle.md) to document
+deployment-specific retention, erasure handling, and controller/processor
+roles. The guide records current soft-delete and backup limitations and does
+not replace professional legal review.

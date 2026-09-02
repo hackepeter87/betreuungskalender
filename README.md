@@ -411,6 +411,12 @@ sensitive family data. The operator is responsible for:
 - Backup encryption, retention, restore tests, and deletion
 - Restricting access to the application host and generated files
 
+Operators must define purpose-based retention and erasure procedures for the
+actual installation. The application's soft-delete actions and the default
+backup pruning period do not constitute a complete erasure workflow. Use the
+[operator data-lifecycle guide](docs/operator-data-lifecycle.md) as a review
+framework.
+
 See [docs/security.md](docs/security.md) and [SECURITY.md](SECURITY.md).
 
 ## Legal and evidentiary limits
