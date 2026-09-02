@@ -48,8 +48,8 @@ async function app() {
   return instance;
 }
 
-beforeEach(() => {
-  clearDomainData(db);
+beforeEach(async () => {
+  await clearDomainData(persistence.query);
 });
 
 after(() => {
@@ -57,7 +57,7 @@ after(() => {
   rmSync(temporaryDirectory, { recursive: true, force: true });
 });
 
-test("client settings discard invalid historical values and internal keys", () => {
+test("client settings discard invalid historical values and internal keys", async () => {
   insertCareParty("party-active");
   insertCareParty("party-deleted", true);
   insertSetting("kilometerRate", "-1");
@@ -71,7 +71,7 @@ test("client settings discard invalid historical values and internal keys", () =
   insertSetting("unknownFeature", "true");
   insertSetting("setup.installationLabel", '"Private installation"');
 
-  assert.deepEqual(getClientSettings(), {
+  assert.deepEqual(await getClientSettings(persistence.query), {
     kilometerRate: 0.3,
     defaultLocation: "commuterApartment",
     defaultHandoverFrom: "school",
@@ -103,7 +103,7 @@ test("settings endpoint accepts the complete writable contract", async () => {
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(response.json(), expected);
-  assert.deepEqual(getClientSettings(), expected);
+  assert.deepEqual(await getClientSettings(persistence.query), expected);
   await instance.close();
 });
 
@@ -133,7 +133,7 @@ test("settings endpoint rejects unknown keys, invalid values, and inactive refer
     });
     assert.equal(response.statusCode, 400, JSON.stringify(payload));
   }
-  assert.deepEqual(getClientSettings(), {
+  assert.deepEqual(await getClientSettings(persistence.query), {
     kilometerRate: 0.3,
     defaultLocation: "commuterApartment",
     defaultHandoverFrom: "mother",
@@ -147,12 +147,15 @@ test("settings schema rejects non-finite numeric values", () => {
   assert.equal(settingsInputSchema.safeParse({ kilometerRate: Number.POSITIVE_INFINITY }).success, false);
 });
 
-test("legacy backups keep valid settings from the nested settings object", () => {
+test("legacy backups keep valid settings from the nested settings object", async () => {
   const data = createEdgeCaseDemoData();
   data.lastJsonBackupAt = undefined;
   data.settings.lastJsonBackupAt = "2026-08-31T18:00:00.000Z";
 
-  db.transaction(() => importData(data, "settings-test", db))();
+  await persistence.transaction((database) => importData(data, "settings-test", database));
 
-  assert.equal(getClientSettings().lastJsonBackupAt, "2026-08-31T18:00:00.000Z");
+  assert.equal(
+    (await getClientSettings(persistence.query)).lastJsonBackupAt,
+    "2026-08-31T18:00:00.000Z"
+  );
 });

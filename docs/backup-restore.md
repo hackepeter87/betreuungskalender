@@ -10,6 +10,9 @@ UI preferences and is not an operational data store.
 
 The backup script uses the `better-sqlite3` backup API. It does not copy the
 live database file byte-for-byte while the application is running.
+This is an intentionally SQLite-native maintenance operation. Application
+routes, reports, feeds, imports, and readiness checks use the asynchronous
+persistence runtime and do not open a second direct SQLite access path.
 
 ```bash
 DATABASE_PATH=/var/lib/betreuungskalender/app.sqlite \
@@ -85,8 +88,9 @@ Every import follows this sequence:
 1. Initialize the target installation and establish its owner normally.
 2. Select the transfer JSON file in **Export & Import**.
 3. Run **Import prüfen**. The server validates the checksum, relationships,
-   limits, and current schema in a temporary SQLite database without changing
-   the target database. The result compares aggregate category counts in the
+   limits, and current schema through the shared import core in a temporary
+   SQLite runtime without changing the target database. The result compares
+   aggregate category counts in the
    current installation with the package and the expected state after import.
    A short-lived confirmation binds the later import to this exact tested
    package; after a server restart or expiry, run the test again.

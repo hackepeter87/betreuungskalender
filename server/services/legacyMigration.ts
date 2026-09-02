@@ -7,7 +7,7 @@ import type {
   LegacyMigrationReport,
   LegacyMigrationMode
 } from "../../shared/migration.js";
-import { db } from "../db/connection.js";
+import type { DatabaseExecutor, PersistenceRuntime } from "../db/runtime.js";
 import {
   clearDomainData,
   importData,
@@ -17,7 +17,7 @@ import {
   insertPattern,
   insertUnavailable
 } from "../routes/appData.js";
-import { recordAudit, markClosedMonthsChanged } from "./audit.js";
+import { markDomainClosedMonthsChanged, recordDomainAudit } from "./domainPersistence.js";
 import { createSqliteBackup } from "./backup.js";
 import { makeId, nowIso } from "./common.js";
 import { getDefaultResponsiblePartyId } from "./settings.js";
@@ -76,24 +76,55 @@ function countData(data: MigrationData): LegacyDataCounts {
   };
 }
 
-function countTable(table: string): number {
-  return (db.prepare(`SELECT COUNT(*) AS count FROM ${table} WHERE deleted_at IS NULL`).get() as {
-    count: number;
-  }).count;
+type CountedTable =
+  | "children"
+  | "care_entries"
+  | "holiday_periods"
+  | "contact_patterns"
+  | "trips"
+  | "costs"
+  | "unavailable_periods"
+  | "settings"
+  | "monthly_closings"
+  | "audit_log";
+
+async function countTable(database: DatabaseExecutor, table: CountedTable): Promise<number> {
+  const row = await database.selectFrom(table)
+    .select(({ fn }) => fn.countAll<number>().as("count"))
+    .where("deleted_at", "is", null)
+    .executeTakeFirst();
+  return Number(row?.count ?? 0);
 }
 
-export function getLegacyDatabaseSummary(): LegacyDatabaseSummary {
+export async function getLegacyDatabaseSummary(
+  database: DatabaseExecutor
+): Promise<LegacyDatabaseSummary> {
+  const [
+    children, entries, holidays, contactPatterns, trips, costs,
+    unavailablePeriods, settings, monthClosures, auditEntries
+  ] = await Promise.all([
+    countTable(database, "children"),
+    countTable(database, "care_entries"),
+    countTable(database, "holiday_periods"),
+    countTable(database, "contact_patterns"),
+    countTable(database, "trips"),
+    countTable(database, "costs"),
+    countTable(database, "unavailable_periods"),
+    countTable(database, "settings"),
+    countTable(database, "monthly_closings"),
+    countTable(database, "audit_log")
+  ]);
   const summary = {
-    children: countTable("children"),
-    entries: countTable("care_entries"),
-    holidays: countTable("holiday_periods"),
-    contactPatterns: countTable("contact_patterns"),
-    trips: countTable("trips"),
-    costs: countTable("costs"),
-    unavailablePeriods: countTable("unavailable_periods"),
-    settings: countTable("settings"),
-    monthClosures: countTable("monthly_closings"),
-    auditEntries: countTable("audit_log")
+    children,
+    entries,
+    holidays,
+    contactPatterns,
+    trips,
+    costs,
+    unavailablePeriods,
+    settings,
+    monthClosures,
+    auditEntries
   };
   return {
     ...summary,
@@ -155,41 +186,54 @@ function monthKeys(start: string, end: string): string[] {
   return result;
 }
 
-function existingEntries(): ExistingEntry[] {
-  const rows = db.prepare(`
-    SELECT id, start_datetime AS startDateTime, end_datetime AS endDateTime,
-      status, care_scope AS careScope, COALESCE(location, '') AS location
-    FROM care_entries WHERE deleted_at IS NULL
-  `).all() as Omit<ExistingEntry, "childIds">[];
-  const childStatement = db.prepare(`
-    SELECT child_id AS childId FROM care_entry_children
-    WHERE care_entry_id = ? AND deleted_at IS NULL ORDER BY child_id
-  `);
+async function existingEntries(database: DatabaseExecutor): Promise<ExistingEntry[]> {
+  const [rows, childRows] = await Promise.all([
+    database.selectFrom("care_entries")
+      .select([
+        "id", "start_datetime as startDateTime", "end_datetime as endDateTime",
+        "status", "care_scope as careScope", "location"
+      ])
+      .where("deleted_at", "is", null)
+      .execute(),
+    database.selectFrom("care_entry_children")
+      .select(["care_entry_id", "child_id"])
+      .where("deleted_at", "is", null)
+      .orderBy("child_id")
+      .execute()
+  ]);
+  const childIdsByEntry = new Map<string, string[]>();
+  for (const child of childRows) {
+    childIdsByEntry.set(child.care_entry_id, [
+      ...(childIdsByEntry.get(child.care_entry_id) ?? []),
+      child.child_id
+    ]);
+  }
   return rows.map((row) => ({
     ...row,
-    childIds: (childStatement.all(row.id) as Array<{ childId: string }>).map(
-      (item) => item.childId
-    )
+    location: row.location ?? "",
+    childIds: childIdsByEntry.get(row.id) ?? []
   }));
 }
 
-export function analyzeLegacyData(
+export async function analyzeLegacyData(
   data: MigrationData,
+  executor: DatabaseExecutor,
   invalidRecords = 0,
   sourceWarnings: string[] = []
-): LegacyMigrationPreview {
-  const database = getLegacyDatabaseSummary();
+): Promise<LegacyMigrationPreview> {
+  const database = await getLegacyDatabaseSummary(executor);
   const duplicateDetails: LegacyMigrationIssue[] = [];
   const conflictDetails: LegacyMigrationIssue[] = [];
   const closedMonths = new Set(
-    (db.prepare(`
-      SELECT month_key AS monthKey FROM monthly_closings WHERE deleted_at IS NULL
-    `).all() as Array<{ monthKey: string }>).map((item) => item.monthKey)
+    (await executor.selectFrom("monthly_closings")
+      .select("month_key as monthKey")
+      .where("deleted_at", "is", null)
+      .execute()).map((item) => item.monthKey)
   );
-  const existingChildren = db.prepare(`
-    SELECT id, name, birth_month AS birthMonth, birth_year AS birthYear
-    FROM children WHERE deleted_at IS NULL
-  `).all() as DataRecord[];
+  const existingChildren = await executor.selectFrom("children")
+    .select(["id", "name", "birth_month as birthMonth", "birth_year as birthYear"])
+    .where("deleted_at", "is", null)
+    .execute() as DataRecord[];
   const childIdMap = new Map<string, string>();
   for (const child of data.children) {
     const match = existingChildren.find(
@@ -198,7 +242,7 @@ export function analyzeLegacyData(
     if (match) childIdMap.set(text(child, "id"), text(match, "id"));
   }
 
-  const existing = existingEntries();
+  const existing = await existingEntries(executor);
   for (const entry of data.entries.filter((item) => !item.deletedAt)) {
     const legacyChildren = strings(entry, "childIds").map(
       (id) => childIdMap.get(id) ?? `legacy:${id}`
@@ -219,10 +263,11 @@ export function analyzeLegacyData(
         reasons: ["Zeitraum, Kinder, Status, Betreuungsumfang und Ort stimmen überein."],
         closedMonths: []
       });
-      const existingTrips = db.prepare(`
-        SELECT purpose, km FROM trips
-        WHERE care_entry_id = ? AND deleted_at IS NULL
-      `).all(duplicate.id) as Array<{ purpose: string; km: number }>;
+      const existingTrips = await executor.selectFrom("trips")
+        .select(["purpose", "km"])
+        .where("care_entry_id", "=", duplicate.id)
+        .where("deleted_at", "is", null)
+        .execute();
       for (const trip of records(entry, "trips").filter((item) => !item.deletedAt)) {
         if (existingTrips.some(
           (item) =>
@@ -238,10 +283,11 @@ export function analyzeLegacyData(
           });
         }
       }
-      const existingCosts = db.prepare(`
-        SELECT category, amount FROM costs
-        WHERE care_entry_id = ? AND deleted_at IS NULL
-      `).all(duplicate.id) as Array<{ category: string; amount: number }>;
+      const existingCosts = await executor.selectFrom("costs")
+        .select(["category", "amount"])
+        .where("care_entry_id", "=", duplicate.id)
+        .where("deleted_at", "is", null)
+        .execute();
       for (const cost of records(entry, "costs").filter((item) => !item.deletedAt)) {
         if (existingCosts.some(
           (item) =>
@@ -302,19 +348,27 @@ export function analyzeLegacyData(
     }
   }
 
-  const existingHolidays = db.prepare(`
-    SELECT id, start_date AS startDate, end_date AS endDate, assigned_to AS assignedTo
-    FROM holiday_periods WHERE deleted_at IS NULL
-  `).all() as Array<{
+  const existingHolidays = await executor.selectFrom("holiday_periods")
+    .select(["id", "start_date as startDate", "end_date as endDate", "assigned_to as assignedTo"])
+    .where("deleted_at", "is", null)
+    .execute() as Array<{
     id: string;
     startDate: string;
     endDate: string;
     assignedTo: string;
   }>;
-  const holidayChildren = db.prepare(`
-    SELECT child_id AS childId FROM holiday_period_children
-    WHERE holiday_period_id = ? AND deleted_at IS NULL ORDER BY child_id
-  `);
+  const holidayChildRows = await executor.selectFrom("holiday_period_children")
+    .select(["holiday_period_id", "child_id"])
+    .where("deleted_at", "is", null)
+    .orderBy("child_id")
+    .execute();
+  const holidayChildren = new Map<string, string[]>();
+  for (const child of holidayChildRows) {
+    holidayChildren.set(child.holiday_period_id, [
+      ...(holidayChildren.get(child.holiday_period_id) ?? []),
+      child.child_id
+    ]);
+  }
   for (const holiday of data.holidayPeriods.filter((item) => !item.deletedAt)) {
     const legacyChildren = strings(holiday, "childIds").map(
       (id) => childIdMap.get(id) ?? `legacy:${id}`
@@ -325,9 +379,7 @@ export function analyzeLegacyData(
       candidate.assignedTo === text(holiday, "assignedTo") &&
       sameSet(
         legacyChildren,
-        (holidayChildren.all(candidate.id) as Array<{ childId: string }>).map(
-          (item) => item.childId
-        )
+        holidayChildren.get(candidate.id) ?? []
       )
     );
     if (duplicate) {
@@ -360,8 +412,26 @@ export function analyzeLegacyData(
   };
 }
 
-function uniqueId(table: string, preferred: string, prefix: string): string {
-  const exists = db.prepare(`SELECT 1 FROM ${table} WHERE id = ?`).get(preferred);
+type IdentifiedTable =
+  | "children"
+  | "contact_patterns"
+  | "trips"
+  | "costs"
+  | "care_entries"
+  | "holiday_periods"
+  | "unavailable_periods"
+  | "monthly_closings";
+
+async function uniqueId(
+  database: DatabaseExecutor,
+  table: IdentifiedTable,
+  preferred: string,
+  prefix: string
+): Promise<string> {
+  const exists = await database.selectFrom(table)
+    .select("id")
+    .where("id", "=", preferred)
+    .executeTakeFirst();
   return preferred && !exists ? preferred : makeId(prefix);
 }
 
@@ -379,35 +449,32 @@ function emptyCounts(): LegacyDataCounts {
   };
 }
 
-function storeReport(
+async function storeReport(
+  database: DatabaseExecutor,
   report: LegacyMigrationReport,
   fingerprint: string,
   userEmail: string
-): void {
-  db.prepare(`
-    INSERT INTO legacy_migration_runs (
-      id, source_fingerprint, mode, status, report_json, backup_filename,
-      created_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    report.id,
-    fingerprint,
-    report.mode,
-    report.status,
-    JSON.stringify(report),
-    report.backupFile ?? null,
-    userEmail,
-    report.startedAt,
-    report.finishedAt
-  );
+): Promise<void> {
+  await database.insertInto("legacy_migration_runs").values({
+    id: report.id,
+    source_fingerprint: fingerprint,
+    mode: report.mode,
+    status: report.status,
+    report_json: JSON.stringify(report),
+    backup_filename: report.backupFile ?? null,
+    created_by: userEmail,
+    created_at: report.startedAt,
+    updated_at: report.finishedAt
+  }).execute();
 }
 
-function recordMigrationAudit(
+async function recordMigrationAudit(
+  database: DatabaseExecutor,
   userEmail: string,
   action: string,
   metadata: Record<string, unknown>
-): void {
-  recordAudit({
+): Promise<void> {
+  await recordDomainAudit(database, {
     userEmail,
     entityType: "legacy_migration",
     entityId: String(metadata.reportId ?? metadata.fingerprint ?? "legacy"),
@@ -417,20 +484,22 @@ function recordMigrationAudit(
   });
 }
 
-export function recordLegacyMigrationEvent(
+export async function recordLegacyMigrationEvent(
   userEmail: string,
   action: "legacy_migration_detected" | "legacy_migration_skip",
-  metadata: Record<string, unknown>
-): void {
-  recordMigrationAudit(userEmail, action, metadata);
+  metadata: Record<string, unknown>,
+  database: DatabaseExecutor
+): Promise<void> {
+  await recordMigrationAudit(database, userEmail, action, metadata);
 }
 
-function additiveImport(
+async function additiveImport(
   data: MigrationData,
   preview: LegacyMigrationPreview,
   duplicatePolicy: LegacyDuplicatePolicy,
-  userEmail: string
-): LegacyDataCounts {
+  userEmail: string,
+  database: DatabaseExecutor
+): Promise<LegacyDataCounts> {
   const imported = emptyCounts();
   const timestamp = nowIso();
   const duplicateEntryIds = new Set(preview.duplicateDetails.map((item) => item.legacyId));
@@ -439,10 +508,10 @@ function additiveImport(
       .filter((item) => item.type === "holiday")
       .map((item) => item.legacyId)
   );
-  const existingChildren = db.prepare(`
-    SELECT id, name, birth_month AS birthMonth, birth_year AS birthYear
-    FROM children WHERE deleted_at IS NULL
-  `).all() as DataRecord[];
+  const existingChildren = await database.selectFrom("children")
+    .select(["id", "name", "birth_month as birthMonth", "birth_year as birthYear"])
+    .where("deleted_at", "is", null)
+    .execute() as DataRecord[];
   const childMap = new Map<string, string>();
   for (const child of data.children) {
     const oldId = text(child, "id");
@@ -453,21 +522,21 @@ function additiveImport(
       childMap.set(oldId, text(match, "id"));
       continue;
     }
-    const id = uniqueId("children", oldId, "child");
-    insertChild({ ...child, id }, timestamp, userEmail);
+    const id = await uniqueId(database, "children", oldId, "child");
+    await insertChild({ ...child, id }, timestamp, userEmail, database);
     childMap.set(oldId, id);
     imported.children += 1;
   }
-  const fallbackResponsiblePartyId = getDefaultResponsiblePartyId();
+  const fallbackResponsiblePartyId = await getDefaultResponsiblePartyId(database);
 
   const patternMap = new Map<string, string>();
   for (const pattern of data.contactPatterns.filter((item) => !item.deletedAt)) {
-    const id = uniqueId("contact_patterns", text(pattern, "id"), "pattern");
-    insertPattern({
+    const id = await uniqueId(database, "contact_patterns", text(pattern, "id"), "pattern");
+    await insertPattern({
       ...pattern,
       id,
       childIds: strings(pattern, "childIds").map((childId) => childMap.get(childId) ?? childId)
-    }, timestamp, userEmail, fallbackResponsiblePartyId);
+    }, timestamp, userEmail, fallbackResponsiblePartyId, database);
     patternMap.set(text(pattern, "id"), id);
     imported.contactPatterns += 1;
   }
@@ -476,14 +545,16 @@ function additiveImport(
     if (duplicatePolicy === "skip" && duplicateEntryIds.has(text(entry, "id"))) continue;
     const trips = records(entry, "trips").filter((item) => !item.deletedAt).map((trip) => ({
       ...trip,
-      id: uniqueId("trips", text(trip, "id"), "trip")
+      id: text(trip, "id")
     }));
     const costs = records(entry, "costs").filter((item) => !item.deletedAt).map((cost) => ({
       ...cost,
-      id: uniqueId("costs", text(cost, "id"), "cost")
+      id: text(cost, "id")
     }));
-    const id = uniqueId("care_entries", text(entry, "id"), "entry");
-    insertEntry({
+    for (const trip of trips) trip.id = await uniqueId(database, "trips", text(trip, "id"), "trip");
+    for (const cost of costs) cost.id = await uniqueId(database, "costs", text(cost, "id"), "cost");
+    const id = await uniqueId(database, "care_entries", text(entry, "id"), "entry");
+    await insertEntry({
       ...entry,
       id,
       generatedByPatternId: patternMap.get(text(entry, "generatedByPatternId")) ??
@@ -491,11 +562,12 @@ function additiveImport(
       childIds: strings(entry, "childIds").map((childId) => childMap.get(childId) ?? childId),
       trips,
       costs
-    }, timestamp, userEmail, fallbackResponsiblePartyId);
+    }, timestamp, userEmail, fallbackResponsiblePartyId, database);
     imported.entries += 1;
     imported.trips += trips.length;
     imported.costs += costs.length;
-    markClosedMonthsChanged(
+    await markDomainClosedMonthsChanged(
+      database,
       userEmail,
       "legacy_migration",
       id,
@@ -509,70 +581,79 @@ function additiveImport(
     if (duplicatePolicy === "skip" && duplicateHolidayIds.has(text(holiday, "id"))) {
       continue;
     }
-    insertHoliday({
+    await insertHoliday({
       ...holiday,
-      id: uniqueId("holiday_periods", text(holiday, "id"), "holiday"),
+      id: await uniqueId(database, "holiday_periods", text(holiday, "id"), "holiday"),
       childIds: strings(holiday, "childIds").map((childId) => childMap.get(childId) ?? childId)
-    }, timestamp, userEmail);
+    }, timestamp, userEmail, database);
     imported.holidays += 1;
   }
   for (const period of data.unavailablePeriods.filter((item) => !item.deletedAt)) {
-    insertUnavailable({
+    await insertUnavailable({
       ...period,
-      id: uniqueId("unavailable_periods", text(period, "id"), "unavailable")
-    }, timestamp, userEmail);
+      id: await uniqueId(database, "unavailable_periods", text(period, "id"), "unavailable")
+    }, timestamp, userEmail, database);
     imported.unavailablePeriods += 1;
   }
 
-  const insertSetting = db.prepare(`
-    INSERT INTO settings (key, value_json, created_by, updated_by, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
   for (const [key, value] of Object.entries(data.settings)) {
-    if (!db.prepare("SELECT 1 FROM settings WHERE key = ? AND deleted_at IS NULL").get(key)) {
-      insertSetting.run(key, JSON.stringify(value), userEmail, userEmail, timestamp, timestamp);
+    const existing = await database.selectFrom("settings")
+      .select("key")
+      .where("key", "=", key)
+      .where("deleted_at", "is", null)
+      .executeTakeFirst();
+    if (!existing) {
+      await database.insertInto("settings").values({
+        key,
+        value_json: JSON.stringify(value),
+        created_by: userEmail,
+        updated_by: userEmail,
+        created_at: timestamp,
+        updated_at: timestamp,
+        deleted_at: null
+      }).execute();
       imported.settings += 1;
     }
   }
-  const insertClosing = db.prepare(`
-    INSERT INTO monthly_closings (
-      id, month_key, summary_json, closed_by, updated_by, changed_after_close_at,
-      created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
   for (const closure of data.monthClosures) {
     const monthKey = text(closure, "monthKey");
-    if (!monthKey || db.prepare(
-      "SELECT 1 FROM monthly_closings WHERE month_key = ? AND deleted_at IS NULL"
-    ).get(monthKey)) continue;
+    if (!monthKey) continue;
+    const existing = await database.selectFrom("monthly_closings")
+      .select("id")
+      .where("month_key", "=", monthKey)
+      .where("deleted_at", "is", null)
+      .executeTakeFirst();
+    if (existing) continue;
     const closedAt = text(closure, "closedAt", timestamp);
-    insertClosing.run(
-      uniqueId("monthly_closings", `closing_${monthKey}`, "closing"),
-      monthKey,
-      JSON.stringify({
+    await database.insertInto("monthly_closings").values({
+      id: await uniqueId(database, "monthly_closings", `closing_${monthKey}`, "closing"),
+      month_key: monthKey,
+      summary_json: JSON.stringify({
         dataUpdatedAt: text(closure, "dataUpdatedAt", data.updatedAt),
         summary: closure.summary ?? {}
       }),
-      userEmail,
-      userEmail,
-      typeof closure.changedAfterCloseAt === "string" ? closure.changedAfterCloseAt : null,
-      closedAt,
-      timestamp
-    );
+      closed_by: userEmail,
+      updated_by: userEmail,
+      changed_after_close_at: typeof closure.changedAfterCloseAt === "string" ? closure.changedAfterCloseAt : null,
+      created_at: closedAt,
+      updated_at: timestamp,
+      deleted_at: null
+    }).execute();
     imported.monthClosures += 1;
   }
   return imported;
 }
 
-export function previewLegacyMigration(
+export async function previewLegacyMigration(
   data: MigrationData,
   userEmail: string,
   fingerprint: string,
+  database: DatabaseExecutor,
   invalidRecords = 0,
   warnings: string[] = []
-): LegacyMigrationPreview {
-  const preview = analyzeLegacyData(data, invalidRecords, warnings);
-  recordMigrationAudit(userEmail, "legacy_migration_preview", {
+): Promise<LegacyMigrationPreview> {
+  const preview = await analyzeLegacyData(data, database, invalidRecords, warnings);
+  await recordMigrationAudit(database, userEmail, "legacy_migration_preview", {
     fingerprint,
     counts: preview.counts,
     duplicates: preview.potentialDuplicates,
@@ -591,11 +672,12 @@ export async function executeLegacyMigration(input: {
   warnings?: string[];
   userEmail: string;
   backupCreator?: BackupCreator;
-}): Promise<LegacyMigrationReport> {
+}, runtime: PersistenceRuntime): Promise<LegacyMigrationReport> {
   const startedAt = nowIso();
   const reportId = makeId("migration");
-  const preview = analyzeLegacyData(
+  const preview = await analyzeLegacyData(
     input.data,
+    runtime.query,
     input.invalidRecords ?? 0,
     input.warnings ?? []
   );
@@ -604,18 +686,19 @@ export async function executeLegacyMigration(input: {
     if (input.mode === "replace") {
       backupFile = await (input.backupCreator ?? createSqliteBackup)();
     }
-    let imported = emptyCounts();
-    db.transaction(() => {
+    return await runtime.transaction(async (database) => {
+      let imported = emptyCounts();
       if (input.mode === "replace") {
-        clearDomainData();
-        importData({ ...input.data, auditLog: [] }, input.userEmail);
+        await clearDomainData(database);
+        await importData({ ...input.data, auditLog: [] }, input.userEmail, database);
         imported = preview.counts;
       } else {
-        imported = additiveImport(
+        imported = await additiveImport(
           input.data,
           preview,
           input.duplicatePolicy,
-          input.userEmail
+          input.userEmail,
+          database
         );
       }
       const finishedAt = nowIso();
@@ -638,8 +721,9 @@ export async function executeLegacyMigration(input: {
         errors: [],
         backupFile
       };
-      storeReport(report, input.fingerprint, input.userEmail);
-      recordMigrationAudit(
+      await storeReport(database, report, input.fingerprint, input.userEmail);
+      await recordMigrationAudit(
+        database,
         input.userEmail,
         input.mode === "replace"
           ? "legacy_migration_replace"
@@ -654,14 +738,11 @@ export async function executeLegacyMigration(input: {
           backupCreated: Boolean(backupFile)
         }
       );
-    })();
-    return JSON.parse(
-      (db.prepare("SELECT report_json AS report FROM legacy_migration_runs WHERE id = ?")
-        .get(reportId) as { report: string }).report
-    ) as LegacyMigrationReport;
+      return report;
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    recordMigrationAudit(input.userEmail, "legacy_migration_failed", {
+    await recordMigrationAudit(runtime.query, input.userEmail, "legacy_migration_failed", {
       reportId,
       mode: input.mode,
       counts: preview.counts,
@@ -673,11 +754,15 @@ export async function executeLegacyMigration(input: {
   }
 }
 
-export function listLegacyMigrationReports(): LegacyMigrationReport[] {
-  return (db.prepare(`
-    SELECT report_json AS report FROM legacy_migration_runs
-    ORDER BY created_at DESC LIMIT 20
-  `).all() as Array<{ report: string }>).map(
+export async function listLegacyMigrationReports(
+  database: DatabaseExecutor
+): Promise<LegacyMigrationReport[]> {
+  const rows = await database.selectFrom("legacy_migration_runs")
+    .select("report_json as report")
+    .orderBy("created_at", "desc")
+    .limit(20)
+    .execute();
+  return rows.map(
     (row) => JSON.parse(row.report) as LegacyMigrationReport
   );
 }

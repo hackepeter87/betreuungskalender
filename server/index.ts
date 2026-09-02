@@ -13,7 +13,7 @@ import {
 } from "./applicationRoutes.js";
 import { config } from "./config.js";
 import { cookieValue } from "./cookies.js";
-import { db, persistence } from "./db/connection.js";
+import { persistence } from "./db/connection.js";
 import { runMigrations } from "./db/migrate.js";
 import { classifyDatabaseError } from "./db/runtime.js";
 import { sanitizeRequestUrl } from "./logging.js";

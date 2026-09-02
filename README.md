@@ -95,6 +95,11 @@ authorization, synchronization, and conflict enforcement remain server-owned.
 Audit history is loaded in bounded pages only when requested and is not part of
 the normal application-start payload.
 
+Server persistence is accessed through one asynchronous, typed runtime and
+explicit transaction contexts. SQLite remains the only enabled driver;
+`better-sqlite3` is confined to the SQLite adapter, migrations, and native
+backup or restore operations.
+
 Existing data from older browser-only versions is read solely as a legacy
 migration source. The [migration assistant](docs/migration.md) previews the
 data, identifies potential duplicates and conflicts, and imports it

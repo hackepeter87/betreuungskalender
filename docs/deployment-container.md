@@ -30,8 +30,9 @@ add debugging tools to the application image.
 
 GitHub Actions builds the image and starts a disposable container on relevant
 pull requests and pushes. Validation succeeds only after the container's
-`/api/health` endpoint confirms that SQLite is reachable. CI does not push the
-image to a registry and does not require deployment secrets.
+`/api/health` endpoint confirms through the persistence runtime that SQLite is
+reachable. Readiness additionally requires completed migrations. CI does not
+push the image to a registry and does not require deployment secrets.
 
 Published GitHub releases from `v1.2.0` onward may also include a GHCR image
 digest asset. The archive-based update path remains supported because it

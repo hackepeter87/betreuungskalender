@@ -1,4 +1,4 @@
-import { db } from "../db/connection.js";
+import type { DatabaseExecutor } from "../db/runtime.js";
 
 export interface CarePartyRow {
   id: string;
@@ -22,18 +22,24 @@ export function mapCareParty(row: CarePartyRow) {
   };
 }
 
-export function getCareParty(id: string) {
-  const row = db.prepare(`
-    SELECT id, name, kind, created_by, updated_by, created_at, updated_at
-    FROM care_parties
-    WHERE id = ? AND deleted_at IS NULL
-  `).get(id) as CarePartyRow | undefined;
+export async function getCareParty(
+  id: string,
+  database: DatabaseExecutor
+) {
+  const row = await database.selectFrom("care_parties")
+    .select(["id", "name", "kind", "created_by", "updated_by", "created_at", "updated_at"])
+    .where("id", "=", id)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst() as CarePartyRow | undefined;
   return row ? mapCareParty(row) : undefined;
 }
 
-export function assertActiveCareParty(id: string | undefined): void {
+export async function assertActiveCareParty(
+  id: string | undefined,
+  database: DatabaseExecutor
+): Promise<void> {
   if (!id) return;
-  if (!getCareParty(id)) {
+  if (!(await getCareParty(id, database))) {
     throw new Error("Die ausgewählte betreuende Person existiert nicht.");
   }
 }

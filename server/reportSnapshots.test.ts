@@ -1,22 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import Database from "better-sqlite3";
-import { migrateDatabase } from "./db/migrationRunner.js";
+import Fastify from "fastify";
+import { createSqlitePersistenceRuntime } from "./db/runtime.js";
 import { importData } from "./routes/appData.js";
+import { reportRoutes } from "./routes/reports.js";
 import { createEdgeCaseDemoData } from "./services/demoFixtures.js";
 import { createReportSnapshot } from "./services/reportSnapshots.js";
 
-function database(): Database.Database {
-  const result = new Database(":memory:");
-  result.pragma("foreign_keys = ON");
-  migrateDatabase(result);
+async function database() {
+  const result = createSqlitePersistenceRuntime(":memory:");
+  await result.migrate();
   return result;
 }
 
-test("report snapshots use one read transaction and leave the database unchanged", () => {
-  const db = database();
+test("report snapshots use one read transaction and leave the database unchanged", async () => {
+  const runtime = await database();
+  const db = runtime.sqliteDatabase;
   try {
-    db.transaction(() => importData(createEdgeCaseDemoData(), "fixture-actor", db))();
+    await runtime.transaction((database) => importData(createEdgeCaseDemoData(), "fixture-actor", database));
     db.prepare(`
       INSERT INTO audit_log (
         timestamp, user_email, entity_type, entity_id, action,
@@ -33,8 +34,8 @@ test("report snapshots use one read transaction and leave the database unchanged
     );
     const before = db.serialize();
 
-    const snapshot = createReportSnapshot({
-      database: db,
+    const snapshot = await createReportSnapshot({
+      persistence: runtime,
       startDate: "2026-07-01",
       endDate: "2026-07-31",
       includeAuditHistory: true
@@ -54,16 +55,16 @@ test("report snapshots use one read transaction and leave the database unchanged
     );
     assert.deepEqual(db.serialize(), before);
   } finally {
-    db.close();
+    await runtime.close();
   }
 });
 
-test("report snapshots omit history and use half-open entry end times", () => {
-  const db = database();
+test("report snapshots omit history and use half-open entry end times", async () => {
+  const runtime = await database();
   try {
-    db.transaction(() => importData(createEdgeCaseDemoData(), "fixture-actor", db))();
-    const snapshot = createReportSnapshot({
-      database: db,
+    await runtime.transaction((database) => importData(createEdgeCaseDemoData(), "fixture-actor", database));
+    const snapshot = await createReportSnapshot({
+      persistence: runtime,
       startDate: "2026-08-01",
       endDate: "2026-08-01",
       includeAuditHistory: false
@@ -73,6 +74,24 @@ test("report snapshots omit history and use half-open entry end times", () => {
     assert.equal(snapshot.data.holidayPeriods.length, 1);
     assert.deepEqual(snapshot.data.auditLog, []);
   } finally {
-    db.close();
+    await runtime.close();
+  }
+});
+
+test("report snapshot responses are not cached", async () => {
+  const runtime = await database();
+  const app = Fastify();
+  app.decorate("persistence", runtime);
+  await reportRoutes(app);
+  try {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/reports/snapshot?startDate=2026-08-01&endDate=2026-08-31"
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.headers["cache-control"], "no-store");
+  } finally {
+    await app.close();
+    await runtime.close();
   }
 });

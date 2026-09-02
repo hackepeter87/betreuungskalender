@@ -1,60 +1,50 @@
-import type Database from "better-sqlite3";
 import type { ApiAppSettings } from "../../shared/api.js";
-import { db } from "../db/connection.js";
+import type { DatabaseExecutor } from "../db/runtime.js";
+import {
+  getPersistedClientSettings,
+  getPersistedDefaultResponsiblePartyId,
+  getPersistedSettingValues
+} from "./domainPersistence.js";
 import { normalizeSettingsValues, settingsDefaults } from "./settingsContract.js";
 
 export { settingsDefaults } from "./settingsContract.js";
 
-export function isActiveCarePartyId(
+export async function isActiveCarePartyId(
   value: string,
-  database: Database.Database = db
-): boolean {
-  return Boolean(database.prepare(`
-    SELECT 1 FROM care_parties WHERE id = ? AND deleted_at IS NULL
-  `).get(value));
+  database: DatabaseExecutor
+): Promise<boolean> {
+  return Boolean(await database.selectFrom("care_parties")
+    .select("id")
+    .where("id", "=", value)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst());
 }
 
-export function getStoredSettings(database: Database.Database = db): Record<string, unknown> {
-  const rows = database.prepare(`
-    SELECT key, value_json AS valueJson
-    FROM settings
-    WHERE deleted_at IS NULL
-  `).all() as Array<{ key: string; valueJson: string }>;
-  const stored: Record<string, unknown> = {};
-  for (const row of rows) {
-    try {
-      stored[row.key] = JSON.parse(row.valueJson) as unknown;
-    } catch {
-      // Invalid historical values are ignored by all consumers.
-    }
-  }
-  return { ...settingsDefaults, ...stored };
+export async function getStoredSettings(
+  database: DatabaseExecutor
+): Promise<Record<string, unknown>> {
+  return getPersistedSettingValues(database);
 }
 
-export function normalizeClientSettings(
+export async function normalizeClientSettings(
   values: Record<string, unknown>,
-  database: Database.Database = db
-): ApiAppSettings {
-  const activeRows = database.prepare("SELECT id FROM care_parties WHERE deleted_at IS NULL").all() as Array<{ id: string }>;
+  database: DatabaseExecutor
+): Promise<ApiAppSettings> {
+  const activeRows = await database.selectFrom("care_parties")
+    .select("id")
+    .where("deleted_at", "is", null)
+    .execute();
   return normalizeSettingsValues(values, new Set(activeRows.map((row) => row.id)));
 }
 
-export function getClientSettings(database: Database.Database = db): ApiAppSettings {
-  return normalizeClientSettings(getStoredSettings(database), database);
+export async function getClientSettings(
+  database: DatabaseExecutor
+): Promise<ApiAppSettings> {
+  return getPersistedClientSettings(database);
 }
 
-export function getDefaultResponsiblePartyId(database: Database.Database = db): string | undefined {
-  const configured = getStoredSettings(database).defaultResponsiblePartyId;
-  if (typeof configured === "string" && configured.trim()) {
-    const active = database.prepare("SELECT 1 FROM care_parties WHERE id = ? AND deleted_at IS NULL").get(configured);
-    if (active) return configured;
-  }
-  const row = database.prepare(`
-    SELECT id
-    FROM care_parties
-    WHERE deleted_at IS NULL
-    ORDER BY CASE WHEN id = 'party_primary' THEN 0 ELSE 1 END, created_at, id
-    LIMIT 1
-  `).get() as { id: string } | undefined;
-  return row?.id;
+export async function getDefaultResponsiblePartyId(
+  database: DatabaseExecutor
+): Promise<string | undefined> {
+  return getPersistedDefaultResponsiblePartyId(database);
 }

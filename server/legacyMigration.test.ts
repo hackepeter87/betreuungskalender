@@ -9,7 +9,7 @@ process.env.DATABASE_PATH = join(temporaryDirectory, "test.sqlite");
 process.env.BACKUP_DIR = join(temporaryDirectory, "backups");
 
 const { runMigrations } = await import("./db/migrate.js");
-const { db } = await import("./db/connection.js");
+const { db, persistence } = await import("./db/connection.js");
 const {
   analyzeLegacyData,
   executeLegacyMigration,
@@ -87,17 +87,23 @@ function fixture(overrides: Record<string, unknown> = {}) {
   });
 }
 
-function resetDatabase(): void {
-  db.transaction(() => {
-    clearDomainData();
-    db.prepare("DELETE FROM legacy_migration_runs").run();
-  })();
+async function resetDatabase(): Promise<void> {
+  await persistence.transaction(async (database) => {
+    await clearDomainData(database);
+    await database.deleteFrom("legacy_migration_runs").execute();
+  });
 }
 
-function insertExisting(status = "completed"): void {
+async function insertExisting(status = "completed"): Promise<void> {
   const data = fixture();
-  insertChild(data.children[0]!, data.updatedAt, "test@example.invalid");
-  insertEntry({ ...data.entries[0]!, status }, data.updatedAt, "test@example.invalid");
+  await insertChild(data.children[0]!, data.updatedAt, "test@example.invalid", persistence.query);
+  await insertEntry(
+    { ...data.entries[0]!, status },
+    data.updatedAt,
+    "test@example.invalid",
+    undefined,
+    persistence.query
+  );
 }
 
 function insertDefaultCareParty(id = "party-primary"): void {
@@ -136,16 +142,17 @@ after(() => {
   rmSync(temporaryDirectory, { recursive: true, force: true });
 });
 
-test("eine leere SQLite-Datenbank wird als fachlich leer erkannt", () => {
-  assert.equal(getLegacyDatabaseSummary().isEmpty, true);
+test("eine leere SQLite-Datenbank wird als fachlich leer erkannt", async () => {
+  assert.equal((await getLegacyDatabaseSummary(persistence.query)).isEmpty, true);
 });
 
 test("leere SQLite-Datenbank zeigt korrekte Vorschau und übernimmt Daten", async () => {
   const data = fixture();
-  const preview = previewLegacyMigration(
+  const preview = await previewLegacyMigration(
     data,
     "test@example.invalid",
-    "fixture-empty"
+    "fixture-empty",
+    persistence.query
   );
   assert.equal(preview.database.isEmpty, true);
   assert.equal(preview.counts.entries, 1);
@@ -156,9 +163,9 @@ test("leere SQLite-Datenbank zeigt korrekte Vorschau und übernimmt Daten", asyn
     duplicatePolicy: "skip",
     fingerprint: "fixture-empty",
     userEmail: "test@example.invalid"
-  });
+  }, persistence);
   assert.equal(report.imported.entries, 1);
-  assert.equal(getLegacyDatabaseSummary().entries, 1);
+  assert.equal((await getLegacyDatabaseSummary(persistence.query)).entries, 1);
 });
 
 test("importierte Einträge und alte Umgangsmuster nutzen die Hauptbetreuung als Fallback", async () => {
@@ -184,7 +191,7 @@ test("importierte Einträge und alte Umgangsmuster nutzen die Hauptbetreuung als
     duplicatePolicy: "skip",
     fingerprint: "fixture-default-party",
     userEmail: "test@example.invalid"
-  });
+  }, persistence);
 
   assert.deepEqual(db.prepare(`
     SELECT responsible_party_id AS responsiblePartyId
@@ -202,9 +209,9 @@ test("importierte Einträge und alte Umgangsmuster nutzen die Hauptbetreuung als
   });
 });
 
-test("bestehende SQLite-Daten werden nicht automatisch überschrieben", () => {
-  insertExisting("planned");
-  const preview = analyzeLegacyData(fixture());
+test("bestehende SQLite-Daten werden nicht automatisch überschrieben", async () => {
+  await insertExisting("planned");
+  const preview = await analyzeLegacyData(fixture(), persistence.query);
   assert.equal(preview.database.isEmpty, false);
   assert.equal(preview.conflicts, 1);
   const status = db.prepare(
@@ -214,9 +221,9 @@ test("bestehende SQLite-Daten werden nicht automatisch überschrieben", () => {
 });
 
 test("potenzielle Duplikate werden erkannt und standardmäßig übersprungen", async () => {
-  insertExisting();
+  await insertExisting();
   const data = fixture();
-  const preview = analyzeLegacyData(data);
+  const preview = await analyzeLegacyData(data, persistence.query);
   assert.equal(preview.potentialDuplicates, 3);
   const report = await executeLegacyMigration({
     data,
@@ -224,19 +231,19 @@ test("potenzielle Duplikate werden erkannt und standardmäßig übersprungen", a
     duplicatePolicy: "skip",
     fingerprint: "fixture-duplicate",
     userEmail: "test@example.invalid"
-  });
+  }, persistence);
   assert.equal(report.skippedDuplicates, 3);
-  assert.equal(getLegacyDatabaseSummary().entries, 1);
+  assert.equal((await getLegacyDatabaseSummary(persistence.query)).entries, 1);
 });
 
-test("abweichender Status wird als Konflikt ausgewiesen", () => {
-  insertExisting("planned");
-  const preview = analyzeLegacyData(fixture());
+test("abweichender Status wird als Konflikt ausgewiesen", async () => {
+  await insertExisting("planned");
+  const preview = await analyzeLegacyData(fixture(), persistence.query);
   assert.equal(preview.conflicts, 1);
   assert.match(preview.conflictDetails[0]!.reasons.join(" "), /Status/);
 });
 
-test("Import in abgeschlossenen Monat wird besonders markiert", () => {
+test("Import in abgeschlossenen Monat wird besonders markiert", async () => {
   db.prepare(`
     INSERT INTO monthly_closings (
       id, month_key, summary_json, closed_by, created_at, updated_at
@@ -249,13 +256,13 @@ test("Import in abgeschlossenen Monat wird besonders markiert", () => {
     "2026-02-01T00:00:00.000Z",
     "2026-02-01T00:00:00.000Z"
   );
-  const preview = analyzeLegacyData(fixture());
+  const preview = await analyzeLegacyData(fixture(), persistence.query);
   assert.equal(preview.conflicts, 1);
   assert.deepEqual(preview.conflictDetails[0]!.closedMonths, ["2026-01"]);
 });
 
 test("Ersetzen erstellt zuerst ein Backup und bricht bei Backupfehler ab", async () => {
-  insertExisting("planned");
+  await insertExisting("planned");
   let backupCalled = false;
   await assert.rejects(
     executeLegacyMigration({
@@ -268,11 +275,11 @@ test("Ersetzen erstellt zuerst ein Backup und bricht bei Backupfehler ab", async
         backupCalled = true;
         throw new Error("fiktiver Backupfehler");
       }
-    }),
+    }, persistence),
     /fiktiver Backupfehler/
   );
   assert.equal(backupCalled, true);
-  assert.equal(getLegacyDatabaseSummary().entries, 1);
+  assert.equal((await getLegacyDatabaseSummary(persistence.query)).entries, 1);
   const status = db.prepare(
     "SELECT status FROM care_entries WHERE id = 'legacy-entry-1'"
   ).get() as { status: string };
@@ -303,10 +310,10 @@ test("ungültige Legacy-Struktur führt zu keinem Teilimport und Rollback", asyn
       duplicatePolicy: "skip",
       fingerprint: "fixture-invalid",
       userEmail: "test@example.invalid"
-    })
+    }, persistence)
   );
-  assert.equal(getLegacyDatabaseSummary().children, 0);
-  assert.equal(getLegacyDatabaseSummary().entries, 0);
+  assert.equal((await getLegacyDatabaseSummary(persistence.query)).children, 0);
+  assert.equal((await getLegacyDatabaseSummary(persistence.query)).entries, 0);
 });
 
 test("Backend-Ausfall verwendet die eindeutige Schreibsperrenmeldung", () => {
@@ -317,16 +324,23 @@ test("Backend-Ausfall verwendet die eindeutige Schreibsperrenmeldung", () => {
 
 test("Erkennung, Vorschau, Import, Überspringen und Fehler werden auditiert", async () => {
   const data = fixture();
-  recordLegacyMigrationEvent(
+  await recordLegacyMigrationEvent(
     "test@example.invalid",
     "legacy_migration_detected",
-    { fingerprint: "fixture-audit", counts: { entries: 1 } }
+    { fingerprint: "fixture-audit", counts: { entries: 1 } },
+    persistence.query
   );
-  previewLegacyMigration(data, "test@example.invalid", "fixture-audit");
-  recordLegacyMigrationEvent(
+  await previewLegacyMigration(
+    data,
+    "test@example.invalid",
+    "fixture-audit",
+    persistence.query
+  );
+  await recordLegacyMigrationEvent(
     "test@example.invalid",
     "legacy_migration_skip",
-    { fingerprint: "fixture-audit", reason: "later" }
+    { fingerprint: "fixture-audit", reason: "later" },
+    persistence.query
   );
   await executeLegacyMigration({
     data,
@@ -334,7 +348,7 @@ test("Erkennung, Vorschau, Import, Überspringen und Fehler werden auditiert", a
     duplicatePolicy: "skip",
     fingerprint: "fixture-audit",
     userEmail: "test@example.invalid"
-  });
+  }, persistence);
   await assert.rejects(
     executeLegacyMigration({
       data,
@@ -345,7 +359,7 @@ test("Erkennung, Vorschau, Import, Überspringen und Fehler werden auditiert", a
       backupCreator: async () => {
         throw new Error("fiktiver Fehler");
       }
-    })
+    }, persistence)
   );
   const fields = (db.prepare(`
     SELECT field_name AS field FROM audit_log

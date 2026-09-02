@@ -1,9 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import type { ApiMonthlyClosing } from "../../shared/api.js";
 import { config } from "../config.js";
-import { db } from "../db/connection.js";
-import { recordAudit } from "../services/audit.js";
 import { makeId, nowIso } from "../services/common.js";
+import { recordDomainAudit } from "../services/domainPersistence.js";
 import { monthlyClosingInputSchema } from "../validation/schemas.js";
 
 const readLimit = {
@@ -38,23 +37,25 @@ function mapClosing(row: ClosingRow): ApiMonthlyClosing {
   };
 }
 
-function getClosing(monthKey: string): ApiMonthlyClosing | undefined {
-  const row = db.prepare(`
-    SELECT month_key, summary_json, closed_by, updated_by, changed_after_close_at, created_at
-    FROM monthly_closings
-    WHERE month_key = ? AND deleted_at IS NULL
-  `).get(monthKey) as ClosingRow | undefined;
+async function getClosing(
+  app: FastifyInstance,
+  monthKey: string
+): Promise<ApiMonthlyClosing | undefined> {
+  const row = await app.persistence.query.selectFrom("monthly_closings")
+    .select(["month_key", "summary_json", "closed_by", "updated_by", "changed_after_close_at", "created_at"])
+    .where("month_key", "=", monthKey)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst() as ClosingRow | undefined;
   return row ? mapClosing(row) : undefined;
 }
 
 export async function monthClosingRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/month-closings", readLimit, async () => {
-    const rows = db.prepare(`
-      SELECT month_key, summary_json, closed_by, updated_by, changed_after_close_at, created_at
-      FROM monthly_closings
-      WHERE deleted_at IS NULL
-      ORDER BY month_key
-    `).all() as ClosingRow[];
+    const rows = await app.persistence.query.selectFrom("monthly_closings")
+      .select(["month_key", "summary_json", "closed_by", "updated_by", "changed_after_close_at", "created_at"])
+      .where("deleted_at", "is", null)
+      .orderBy("month_key")
+      .execute() as ClosingRow[];
     return rows.map(mapClosing);
   });
 
@@ -66,36 +67,40 @@ export async function monthClosingRoutes(app: FastifyInstance): Promise<void> {
         issues: parsed.error.issues
       });
     }
-    const existing = getClosing(parsed.data.monthKey);
+    const existing = await getClosing(app, parsed.data.monthKey);
     if (existing) return existing;
 
     const timestamp = nowIso();
     const id = makeId("closing");
-    db.transaction(() => {
-      db.prepare(`
-        INSERT INTO monthly_closings (
-          id, month_key, summary_json, closed_by, updated_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(
+    const created = await app.persistence.transaction(async (database) => {
+      await database.insertInto("monthly_closings").values({
         id,
-        parsed.data.monthKey,
-        JSON.stringify({
+        month_key: parsed.data.monthKey,
+        summary_json: JSON.stringify({
           dataUpdatedAt: parsed.data.dataUpdatedAt,
           summary: parsed.data.summary
         }),
-        request.userEmail,
-        request.userEmail,
-        timestamp,
-        timestamp
-      );
-      recordAudit({
+        closed_by: request.userEmail,
+        updated_by: request.userEmail,
+        changed_after_close_at: null,
+        created_at: timestamp,
+        updated_at: timestamp,
+        deleted_at: null
+      }).execute();
+      const closing = await database.selectFrom("monthly_closings")
+        .select(["month_key", "summary_json", "closed_by", "updated_by", "changed_after_close_at", "created_at"])
+        .where("id", "=", id)
+        .executeTakeFirstOrThrow() as ClosingRow;
+      const mapped = mapClosing(closing);
+      await recordDomainAudit(database, {
         userEmail: request.userEmail,
         entityType: "month_closure",
         entityId: id,
         action: "created",
-        newValue: getClosing(parsed.data.monthKey)
+        newValue: mapped
       });
-    })();
-    return reply.code(201).send(getClosing(parsed.data.monthKey));
+      return mapped;
+    });
+    return reply.code(201).send(created);
   });
 }

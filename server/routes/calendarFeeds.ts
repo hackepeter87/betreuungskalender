@@ -42,7 +42,7 @@ function tokenFromParam(value: string): string {
 export async function calendarFeedRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: { scope?: string } }>("/api/calendar-feed", readLimit, async (request) => {
     const scope = parseCalendarFeedScope(request.query.scope).scope;
-    return calendarFeedStatus(request.userEmail, scope);
+    return calendarFeedStatus(request.userEmail, scope, app.persistence.query);
   });
 
   app.post("/api/calendar-feed", writeLimit, async (request, reply) => {
@@ -50,7 +50,7 @@ export async function calendarFeedRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     try {
       const scope = parseCalendarFeedScope(parsed.data.scope).scope;
-      const { token, status } = await rotateCalendarFeedToken(request.userEmail, scope);
+      const { token, status } = await rotateCalendarFeedToken(request.userEmail, scope, app.persistence);
       return reply.code(201).send({
         ...status,
         feedUrl: feedUrl(request, token)
@@ -65,19 +65,25 @@ export async function calendarFeedRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete<{ Querystring: { scope?: string } }>("/api/calendar-feed", writeLimit, async (request, reply) => {
     const scope = request.query.scope ? parseCalendarFeedScope(request.query.scope).scope : undefined;
-    revokeCalendarFeedTokens(request.userEmail, scope);
+    await revokeCalendarFeedTokens(request.userEmail, app.persistence.query, scope);
     return reply.code(204).send();
   });
 
   app.get<{ Params: { token: string } }>("/calendar/:token", feedLimit, async (request, reply) => {
-    const token = await resolveCalendarFeedToken(tokenFromParam(request.params.token));
+    const token = await resolveCalendarFeedToken(
+      tokenFromParam(request.params.token),
+      app.persistence.query
+    );
     if (!token) {
       return reply.code(404).send({
         error: "not_found",
         message: "Kalenderfeed nicht gefunden."
       });
     }
-    const calendar = await buildPersonalCalendarFeed({ token });
+    const calendar = await buildPersonalCalendarFeed({
+      token,
+      database: app.persistence.query
+    });
     return reply
       .header("content-type", "text/calendar; charset=utf-8")
       .header("cache-control", "no-store")
