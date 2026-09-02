@@ -44,6 +44,26 @@ output directories and must not be committed.
 The deterministic cross-page screenshot suite and its privacy rules are
 documented in [Visual regression testing](visual-regression-testing.md).
 
+## SQLite migration and parity gate
+
+The standard unit-test command includes `server/sqliteParity.test.ts`. It
+checks the SHA-256 manifest for every migration released through v1.26.1 and
+opens a temporary synthetic database at that migration level with the current
+persistence runtime. The test verifies data preservation, representative CRUD,
+foreign-key enforcement, transaction rollback, integrity and migration
+idempotency.
+
+Run only this gate with:
+
+```bash
+npx tsx --test server/sqliteParity.test.ts
+```
+
+The fixture uses obviously fictional records and is deleted after the test.
+Do not commit generated SQLite files or replace the fixture with exported
+installation data. A new migration may be appended without changing existing
+checksums; changing, removing or renaming a released migration fails the gate.
+
 ## Demo edge-case dataset
 
 Demo and staging environments can opt in to synthetic edge-case data with:
