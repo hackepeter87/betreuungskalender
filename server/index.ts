@@ -20,6 +20,7 @@ import { isTrustedProxyAddress } from "./trustedProxy.js";
 import { setupRoutes } from "./routes/setup.js";
 import { nativeOidcRoutes } from "./routes/nativeOidc.js";
 import { recoveryAdminRoutes } from "./routes/recoveryAdmin.js";
+import { legalRoutes } from "./routes/legal.js";
 import { installRateLimitPolicy } from "./rateLimitPolicy.js";
 import { OidcSessionStore } from "./services/oidcSessions.js";
 import { RecoveryAdminStore } from "./services/recoveryAdmin.js";
@@ -239,6 +240,7 @@ const nativeOidcOnboardingPaths = new Set([
   "/invite",
   "/invite/continue"
 ]);
+const publicLegalPaths = new Set(["/impressum", "/datenschutz"]);
 
 function isNativeOidcOnboardingRequest(request: FastifyRequest): boolean {
   return (
@@ -277,6 +279,7 @@ function requiresNativeOidcBrowserLogin(request: FastifyRequest): boolean {
     config.requireAuth &&
     isSpaFallbackRequest(request) &&
     !isNativeOidcOnboardingRequest(request) &&
+    !publicLegalPaths.has(requestPath(request)) &&
     !hasNativeOidcBrowserSession(request)
   );
 }
@@ -422,6 +425,7 @@ app.get("/api/session", readLimit, async (request) => {
 await app.register(recoveryAdminRoutes, { config, store: recoveryAdmin });
 await app.register(nativeOidcRoutes, { config, sessions: nativeOidcSessions });
 await app.register(setupRoutes, { nativeSessions: nativeOidcSessions });
+await app.register(legalRoutes, { legalContentDir: config.legalContentDir });
 await registerProtectedApplicationRoutes(app);
 
 const confirmationSweep = setInterval(() => {

@@ -197,6 +197,11 @@ test("recovery routes create short lived server-side sessions and require passwo
       store: new RecoveryAdminStore(recoveryConfig(), database)
     });
 
+    const loginPage = await app.inject({ method: "GET", url: "/auth/recovery" });
+    assert.equal(loginPage.statusCode, 200);
+    assert.match(loginPage.payload, /href="\/impressum"/);
+    assert.match(loginPage.payload, /href="\/datenschutz"/);
+
     const login = await app.inject({
       method: "POST",
       url: "/auth/recovery/login",

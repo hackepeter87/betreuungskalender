@@ -76,6 +76,7 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `DEMO_DATASETS_ENABLED` | Enable admin-only synthetic demo dataset loaders | `true` on demo only | Optional for demo/staging | `false` | Never enable on production; loading a dataset replaces domain data |
 | `DATA_TRANSFER_MAX_BYTES` | Maximum JSON request size for portable transfer preview, dry run, and import | `26214400` | Optional | `26214400` (25 MiB) | Bounds memory use; align reverse-proxy or ingress request limits without increasing this value unnecessarily |
 | `BACKUP_RETENTION_DAYS` | Remove generated SQLite backups older than this | `14` | Optional | `14` | Set `0` to disable automatic age pruning |
+| `LEGAL_CONTENT_DIR` | Read-only directory containing operator-provided `impressum.txt` and `datenschutz.txt` | `/run/config/legal` | Optional | Same | Missing or invalid files make the corresponding public page return a neutral `404`; never commit deployment-specific legal text |
 | `HEALTHCHECK_URL` | URL used by `npm run healthcheck` | `http://127.0.0.1:3000/api/health` | Optional | Same | Use an internal URL; no credentials are required |
 
 `DATABASE_PATH` and `BACKUP_DIR` are operator-editable for direct Node.js or

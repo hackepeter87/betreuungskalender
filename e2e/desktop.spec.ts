@@ -266,6 +266,17 @@ test("offers PWA installation only after the browser reports availability", asyn
   await expect(page.getByTestId("pwa-install-prompt")).toHaveCount(0);
 });
 
+test("exposes operator legal information from the desktop footer", async ({ page }) => {
+  await openApp(page);
+  const legalLinks = page.getByRole("navigation", { name: "Rechtliche Informationen" });
+  await expect(legalLinks.getByRole("link", { name: "Impressum" })).toBeVisible();
+  await legalLinks.getByRole("link", { name: "Datenschutz" }).click();
+  await expect(page.locator("[data-legal-page]")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Datenschutzerklärung" })).toBeVisible();
+  await expect(page.getByText("fiktive Testangaben")).toBeVisible();
+  await expectNoDocumentHorizontalOverflow(page);
+});
+
 test("covers the core documentation and export flows", async ({ page }) => {
   const childName = "Alex Beispiel";
   await openApp(page);

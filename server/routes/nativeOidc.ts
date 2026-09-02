@@ -22,6 +22,7 @@ import {
   InvitationError,
   prepareInvitationLogin
 } from "../services/invitations.js";
+import { publicLegalLinksHtml } from "./legal.js";
 
 type NativeOidcRouteConfig = Pick<
   typeof appConfig,
@@ -137,6 +138,8 @@ function onboardingPage(input: {
     p { margin: 0; color: #5b677d; line-height: 1.6; }
     a { margin-top: 28px; min-height: 48px; display: inline-flex; align-items: center; justify-content: center; width: 100%; padding: 12px 18px; border-radius: 6px; background: #07877f; color: #fff; font-weight: 700; text-decoration: none; }
     .hint { margin-top: 20px; font-size: .9rem; }
+    .legal-links { display: flex; justify-content: center; gap: 18px; margin-top: 24px; }
+    .legal-links a { margin: 0; min-height: 0; width: auto; padding: 0; background: transparent; color: #087f7a; font-size: .85rem; }
   </style>
 </head>
 <body>
@@ -146,6 +149,7 @@ function onboardingPage(input: {
     <p>${escapeHtml(description)}</p>
     ${continueUrl ? `<a href="${escapeHtml(continueUrl)}">Weiter zur Anmeldung</a>` : ""}
     <p class="hint">${input.error ? "Bitte fordere bei Bedarf einen neuen Link an." : "Der Link ist persönlich und nur einmal verwendbar."}</p>
+    ${publicLegalLinksHtml()}
   </main>
 </body>
 </html>`;
@@ -168,6 +172,8 @@ function accessDeniedPage(): string {
     p { margin: 0; color: #5b677d; line-height: 1.6; }
     a { margin-top: 28px; min-height: 48px; display: inline-flex; align-items: center; justify-content: center; width: 100%; padding: 12px 18px; border-radius: 6px; background: #07877f; color: #fff; font-weight: 700; text-decoration: none; }
     .hint { margin-top: 20px; font-size: .9rem; }
+    .legal-links { display: flex; justify-content: center; gap: 18px; margin-top: 24px; }
+    .legal-links a { margin: 0; min-height: 0; width: auto; padding: 0; background: transparent; color: #087f7a; font-size: .85rem; }
   </style>
 </head>
 <body>
@@ -177,6 +183,7 @@ function accessDeniedPage(): string {
     <p>Die Anmeldung war erfolgreich, aber für diese Installation besteht keine aktive Mitgliedschaft.</p>
     <a href="/auth/logout">Abmelden</a>
     <p class="hint">Verwende einen gültigen Einladungslink oder wende dich an die verantwortliche Person.</p>
+    ${publicLegalLinksHtml()}
   </main>
 </body>
 </html>`;

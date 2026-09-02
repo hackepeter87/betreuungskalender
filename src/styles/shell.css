@@ -198,6 +198,30 @@
   padding-top: 12px;
 }
 
+.app-legal-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 14px;
+  padding: 0 10px;
+  font-size: 0.75rem;
+}
+
+.app-legal-links a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.app-legal-links a:hover,
+.app-legal-links a:focus-visible {
+  color: var(--teal);
+  text-decoration: underline;
+}
+
+.app-legal-links--compact {
+  justify-content: center;
+  padding: 16px 4px 4px;
+}
+
 .sidebar--collapsed .sidebar__footer {
   gap: 4px;
   padding-top: 8px;

@@ -135,6 +135,7 @@ export const config = {
   port: numberEnv(process.env.PORT, 3000),
   databasePath: resolve(process.cwd(), process.env.DATABASE_PATH ?? "./data/app.sqlite"),
   backupDir: resolve(process.cwd(), process.env.BACKUP_DIR ?? "./backups"),
+  legalContentDir: resolve(process.cwd(), process.env.LEGAL_CONTENT_DIR ?? "/run/config/legal"),
   requireAuth: booleanEnv(process.env.REQUIRE_AUTH),
   trustProxyAuth: authMode === "trusted-proxy",
   trustedProxyCidrs,

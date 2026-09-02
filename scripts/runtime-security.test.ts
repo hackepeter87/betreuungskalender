@@ -923,6 +923,11 @@ test("production runtime preserves token-bound native OIDC onboarding routes", a
   const expiredInvitationToken = "fictional-runtime-expired-invitation";
   const revokedInvitationToken = "fictional-runtime-revoked-invitation";
   const acceptedInvitationToken = "fictional-runtime-accepted-invitation";
+  const legalContentDir = join(root, "legal");
+  const legalContentMarker = "Fictional legal runtime marker";
+  await mkdir(legalContentDir, { recursive: true });
+  await writeFile(join(legalContentDir, "impressum.txt"), legalContentMarker, "utf8");
+  await writeFile(join(legalContentDir, "datenschutz.txt"), "Fictional privacy runtime text", "utf8");
   await writeFile(ownerTokenFile, ownerToken, { mode: 0o600 });
 
   const seededDatabase = new Database(databasePath);
@@ -984,6 +989,7 @@ test("production runtime preserves token-bound native OIDC onboarding routes", a
         PORT: String(port),
         DATABASE_PATH: databasePath,
         BACKUP_DIR: join(root, "backups"),
+        LEGAL_CONTENT_DIR: legalContentDir,
         AUTH_MODE: "native-oidc",
         REQUIRE_AUTH: "true",
         TRUST_PROXY_AUTH: "false",
@@ -1018,6 +1024,22 @@ test("production runtime preserves token-bound native OIDC onboarding routes", a
     `${baseUrl}${path}`,
     { headers, redirect: "manual" }
   );
+  const legalNotice = await manualGet("/impressum");
+  assert.equal(legalNotice.status, 200);
+  assert.equal(legalNotice.headers.get("cache-control"), "no-store, max-age=0");
+  assert.equal(legalNotice.headers.get("set-cookie"), null);
+  assert.equal(legalNotice.headers.get("x-content-type-options"), "nosniff");
+  assert.equal(legalNotice.headers.get("x-frame-options"), "DENY");
+  assert.match(await legalNotice.text(), /Fictional legal runtime marker/);
+
+  const legalHead = await fetch(`${baseUrl}/datenschutz`, { method: "HEAD", redirect: "manual" });
+  assert.equal(legalHead.status, 200);
+  assert.equal(await legalHead.text(), "");
+  assert.equal(legalHead.headers.get("cache-control"), "no-store, max-age=0");
+
+  const unknownLegalPath = await manualGet("/impressum/extra");
+  assert.equal(unknownLegalPath.status, 302);
+  assert.equal(unknownLegalPath.headers.get("location"), "/auth/login");
   const stateCount = () => {
     const database = new Database(databasePath, { readonly: true });
     try {
@@ -1259,7 +1281,8 @@ test("production runtime preserves token-bound native OIDC onboarding routes", a
     ownerCallback.state,
     ownerCallback.nonce,
     invitationCallback.state,
-    invitationCallback.nonce
+    invitationCallback.nonce,
+    legalContentMarker
   ]) {
     assert.doesNotMatch(logs, new RegExp(secret.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
