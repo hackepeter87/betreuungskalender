@@ -6,6 +6,22 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.27.0] - 2026-09-02
+
+### Added
+
+- Add a backend-neutral persistence-driver contract with explicit transaction,
+  migration, health, and lifecycle boundaries.
+- Add released-migration checksums and SQLite upgrade-parity tests that verify
+  data preservation, foreign keys, rollback, integrity, and idempotency.
+
+### Changed
+
+- Route identity, workspace, calendar, reporting, transfer, and operational
+  persistence through the asynchronous SQLite runtime.
+- Update Fastify and transitive URI-validation dependencies to patched
+  releases.
+
 ## [1.26.1] - 2026-09-02
 
 ### Added
