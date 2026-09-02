@@ -6,6 +6,31 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.26.0] - 2026-09-02
+
+### Added
+
+- Add deterministic cross-page visual regression baselines at six supported
+  viewport widths with semantic overflow, overlay, focus, and keyboard checks.
+- Document stylesheet ownership, deferred frontend loading, visual baseline
+  review, and temporary analysis-output handling.
+
+### Changed
+
+- Replace the accumulated stylesheet with explicit token, base, shell,
+  component, page, responsive, utility, and print layers.
+- Load secondary application pages and report dependencies only when they are
+  opened while keeping the dashboard and first-use setup in the eager bundle.
+- Bundle the application font locally for consistent rendering without an
+  external font request.
+- Keep generated review files and temporary databases outside repository
+  navigation and remove obsolete compatibility helpers.
+
+### Fixed
+
+- Restore focus and Escape handling for the responsive More menu.
+- Keep CSV export controls within the tablet-width settings grid.
+
 ## [1.25.0] - 2026-09-01
 
 ### Added
