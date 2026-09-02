@@ -41,6 +41,10 @@ want stable machine configuration and updates by pulling promoted GHCR tags.
 Operators must still keep the same persistence, backup, runtime verification,
 and auth-boundary checks.
 
+Operator-provided `impressum.txt` and `datenschutz.txt` can be mounted read-only
+without rebuilding the image. See [operator legal information](legal-information.md)
+for Docker, Compose, Podman, and identity-provider link guidance.
+
 ## Local checkout Docker Compose
 
 ```bash

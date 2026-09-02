@@ -1,0 +1,12 @@
+config:
+  LEGAL_CONTENT_DIR: /run/config/legal
+
+extraVolumes:
+  - name: legal-content
+    configMap:
+      name: betreuungskalender-operator-legal
+
+extraVolumeMounts:
+  - name: legal-content
+    mountPath: /run/config/legal
+    readOnly: true

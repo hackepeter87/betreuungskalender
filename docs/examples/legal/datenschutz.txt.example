@@ -1,0 +1,143 @@
+BETREIBERVORLAGE - NICHT VERÖFFENTLICHUNGSFERTIG
+
+Vor einer Veröffentlichung als datenschutz.txt alle Platzhalter
+[BETREIBER: ...] ersetzen, Hinweise und ungenutzte optionale Abschnitte
+entfernen und den Text für die konkrete Installation rechtlich prüfen lassen.
+Keine Rechtsgrundlagen, Empfänger, Fristen oder Garantien veröffentlichen, die
+nicht der tatsächlichen Installation entsprechen.
+
+1. Verantwortlicher
+
+[BETREIBER: Name und Rechtsform des Verantwortlichen]
+[BETREIBER: ladungsfähige Anschrift]
+[BETREIBER: Datenschutz-Kontaktadresse und weitere Kontaktdaten]
+
+Datenschutzbeauftragte Person - entfernen, wenn nicht bestellt oder erforderlich
+[BETREIBER: Name oder Funktion und direkte Kontaktdaten]
+
+2. Geltungsbereich, betroffene Personen und Datenquellen
+
+Diese Informationen gelten für die Betreuungskalender-Installation unter
+[BETREIBER: öffentliche Adresse oder genauer Geltungsbereich].
+
+Die Installation kann Daten zu Arbeitsbereichsnutzern, Kindern, betreuenden
+Personen, eingeladenen Personen und in Kalender- oder Dokumentationseinträgen
+genannten Personen verarbeiten. Daten können von der betroffenen Person, einem
+anderen berechtigten Nutzer, einem Identitätsanbieter oder einem ausdrücklich
+konfigurierten externen Kalender stammen.
+
+[BETREIBER: indirekt erhobene Datenkategorien und die nach Art. 14 DSGVO
+erforderlichen Quellenangaben beschreiben. Ausnahmen nur nach Prüfung nennen.]
+
+3. Zwecke, Datenkategorien, Rechtsgrundlagen und Aufbewahrung
+
+Zugriff und Betrieb
+- Zweck: [BETREIBER: Bereitstellung, Authentifizierung, Berechtigung, Sicherheit,
+  Fehleranalyse]
+- Daten: [BETREIBER: technische Anfragedaten, Sicherheitsereignisse,
+  Mitgliedschaft und Rolle]
+- Rechtsgrundlage: [BETREIBER: einschlägige DSGVO-Rechtsgrundlage]
+- Empfänger/Auftragsverarbeiter: [BETREIBER: Hosting, Support, Proxy, weitere]
+- Aufbewahrung: [BETREIBER: Kriterien und Fristen für Logs und Konten]
+
+Identitätsverarbeitung - nur tatsächlich genutzte Anmeldemodi behalten
+- Lokaler Modus: [BETREIBER: lokale Zugriffsregelung beschreiben]
+- Native OIDC: [BETREIBER: Identitätsanbieter und übermittelte Kennung,
+  Anzeigename-, E-Mail- und Gruppen-/Rollenattribute]
+- Trusted Proxy: [BETREIBER: Authentifizierungsproxy und Identitätsattribute]
+- Rechtsgrundlage/Aufbewahrung: [BETREIBER: Grundlage, Mitgliedschaftsende,
+  Richtlinie des Identitätsanbieters]
+
+Familien- und Betreuungsdokumentation
+- Zweck: [BETREIBER: dokumentierter Zweck]
+- Daten: [BETREIBER: Kinder und Geburtsmonat/-jahr, betreuende Personen,
+  Betreuungen, Regeln, Zeiten, Orte, Status, Notizen, Fahrten, Kosten, Ferien,
+  Nichtverfügbarkeiten, Monatsabschlüsse und genutzte Belegreferenzen]
+- Rechtsgrundlage: [BETREIBER: Grundlage je relevanter Datenkategorie]
+- Aufbewahrung: [BETREIBER: Kriterien, Fristen, Prüfdaten und Abschlussaktion]
+
+Nachvollziehbarkeit, Berichte, Sicherungen und Übertragungen
+- Zweck: [BETREIBER: Auditierbarkeit, Bericht, Wiederherstellung, Migration]
+- Daten: [BETREIBER: Änderungen und Akteursbezeichnungen, Berichte, SQLite-
+  Sicherungen, Exporte und portable Übertragungspakete]
+- Rechtsgrundlage: [BETREIBER: einschlägige Grundlage]
+- Aufbewahrung: [BETREIBER: getrennte Fristen für Live-Daten, Audit-Historie,
+  Berichte, Exporte, Transferdateien, lokale und externe Sicherungen]
+
+Soft Delete und die Standardfrist lokaler Sicherungen bilden allein kein
+vollständiges Löschkonzept.
+
+4. Optionale Integrationen - jeden ungenutzten Abschnitt entfernen
+
+Einladungsversand (SMTP)
+[BETREIBER: Anbieter, Daten, Zweck, Rechtsgrundlage, Empfänger, Aufbewahrung]
+
+Push-Mitteilungen
+[BETREIBER: Browser-Push-Anbieter, Endpunkt/Geräteschlüssel, Zweck,
+Rechtsgrundlage, Frist und Garantien bei Drittlandtransfer]
+Mitteilungsinhalte sind technisch allgemein gehalten; Konfiguration prüfen.
+
+Externe Kalender
+[BETREIBER: Anbieter, Kalenderdaten, Zweck, Grundlage, Aktualisierung,
+Empfänger, Aufbewahrung und Löschung]
+
+Persönliche Kalenderfeeds
+[BETREIBER: erklären, dass eine Bearer-URL ausgewählte Kalenderinhalte für jeden
+Empfänger zugänglich machen kann; Zweck, Widerruf und Frist angeben]
+
+Heruntergeladene Berichte, Exporte und Transferdateien
+[BETREIBER: geschützte Ablage, Empfänger, Übertragung und Löschung]
+
+5. Cookies und Browser-Speicher
+
+Abhängig vom Anmeldemodus nutzt die Anwendung ein opakes HttpOnly-Session-
+Cookie für eine angemeldete Sitzung. Wird der optionale Recovery-Admin aktiviert
+und genutzt, verwendet er ein getrenntes, kurzlebiges opakes Cookie. Diese Werte
+enthalten keine Identitätsclaims oder Fachdaten.
+
+Lokaler Browser-Speicher hält Darstellungspräferenzen wie Sprache, Hilfe- und
+Navigationszustand. Optionaler Service-Worker-Cache wird erst nach bestätigter
+PWA-Installation, Standalone-Nutzung oder ausdrücklicher Push-Aktivierung aktiv.
+Push speichert zusätzlich browsergesteuerte Abonnementdaten. Die Anwendung
+enthält kein Analyse- oder Werbetracking.
+
+[BETREIBER: tatsächliche Speicherkategorien, Zwecke, Dauern und Löschoptionen
+auflisten. Jeden Einsatz nach § 25 TDDDG bewerten. Die Ausnahme für unbedingt
+Erforderliches nur anwenden, wenn deren Voraussetzungen vorliegen.]
+
+6. Empfänger, Auftragsverarbeiter und Drittlandtransfers
+
+[BETREIBER: Empfänger/Auftragsverarbeiter, Funktion, Vereinbarungen nach Art. 28
+DSGVO sowie gemeinsame Verantwortliche oder eigenständige Empfänger aufführen.]
+
+[BETREIBER: Übermittlungen außerhalb des EWR und Angemessenheitsbeschluss oder
+andere Garantien nennen oder nach Prüfung angeben, dass keine stattfinden.]
+
+7. Speicherbegrenzung und Löschung
+
+[BETREIBER: Aufbewahrungsmatrix, Prüfauslöser, Erhaltungspflichten,
+Lösch-/Anonymisierungsverfahren, Backup-Ablauf und Wiederherstellungsabgleich
+zusammenfassen. Keine selektive Backup-Löschung versprechen, wenn sie fehlt.]
+
+8. Rechte und Beschwerden
+
+Unter den jeweiligen Voraussetzungen können Rechte auf Auskunft, Berichtigung,
+Löschung, Einschränkung, Datenübertragbarkeit und Widerspruch sowie der Widerruf
+einer Einwilligung ohne Rückwirkung auf frühere Verarbeitung bestehen.
+
+Anfragen: [BETREIBER: geprüfter Kontaktweg und Identitätsprüfung]
+Aufsichtsbehörde: [BETREIBER: zuständige Behörde und Kontakt/Link]
+[BETREIBER: einschlägige Widerspruchsrechte und rechtmäßige Grenzen erläutern.]
+
+9. Bereitstellungspflicht und automatisierte Entscheidungen
+
+[BETREIBER: vertragliche/gesetzliche Bereitstellungspflichten und Folgen einer
+Nichtbereitstellung erläutern.]
+
+Die Anwendung trifft keine automatisierten Entscheidungen mit rechtlicher oder
+ähnlich erheblicher Wirkung und bewertet eingegebene Inhalte nicht rechtlich.
+
+10. Stand
+
+Gültig ab: [BETREIBER: Datum]
+Letzte rechtliche Prüfung: [BETREIBER: Datum und verantwortliche Person]
