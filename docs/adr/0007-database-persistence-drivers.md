@@ -51,7 +51,9 @@ one process, so the existing single-replica boundary continues to apply.
   converted in reviewed slices. The bridge must be removed before the v1.27.0
   parity gate.
 - Existing SQLite migrations in `server/migrations/` remain immutable. Release
-  validation records and checks their ordered SHA-256 fingerprints.
+  validation checks the ordered SHA-256 fingerprints recorded in
+  `server/migrations/released-checksums.json`. New numbered migrations may be
+  appended, but a released file may not be changed, removed or renamed.
 - v1.27.0 does not change the application schema and therefore adds no database
   migration.
 - Startup runs migrations before readiness. Health and readiness expose only
@@ -122,8 +124,11 @@ The common persistence suite covers:
 
 SQLite compatibility additionally requires generating a database at the last
 released migration level with fictional data, opening it with v1.27.0 and
-comparing domain snapshots. Because v1.27.0 changes no schema, an isolated copy
-must also remain readable by v1.26.1 after the compatibility run.
+comparing domain snapshots. The parity test then exercises representative
+reads, writes, foreign-key enforcement, commit, rollback, integrity checks and
+idempotent migration execution through the current runtime. Because v1.27.0
+changes no schema, an isolated copy must also remain readable by v1.26.1 after
+the compatibility run.
 
 ## Consequences
 

@@ -434,7 +434,10 @@ state, retaining only the current run needed for historical actor mapping.
 SQL files in `server/migrations/` are applied in lexical order and recorded in
 `schema_migrations`. Build copies them into `dist-server/server/migrations`.
 Never edit an already released migration; add a new numbered migration and
-update this document.
+update this document. `server/migrations/released-checksums.json` records the
+ordered SHA-256 values for migrations released through v1.26.1. The SQLite
+parity test rejects any change, removal or rename in that released sequence;
+future migrations are appended after it.
 
 Migration `029_local_development_identity_cleanup` marks the introduction of a
 mode-aware startup cleanup. Outside local mode, runtime access is removed from
