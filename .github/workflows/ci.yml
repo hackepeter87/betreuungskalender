@@ -51,7 +51,7 @@ jobs:
       TEST_POSTGRES_PORT: 5432
       TEST_POSTGRES_DATABASE: betreuungskalender_test
       TEST_POSTGRES_USER: postgres
-      TEST_POSTGRES_PASSWORD_FILE: ${{ runner.temp }}/postgres-password
+      TEST_POSTGRES_PASSWORD_FILE: /tmp/betreuungskalender-postgres-password
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
