@@ -180,6 +180,17 @@ test("explains the iOS home-screen installation without blocking the app", async
   await expect(page.getByTestId("pwa-install-prompt")).toHaveCount(0);
 });
 
+test("exposes operator legal information from the mobile menu", async ({ page }) => {
+  await openApp(page);
+  await page.getByTestId("mobile-nav-more").click();
+  const legalLinks = page.getByRole("navigation", { name: "Rechtliche Informationen" });
+  await expect(legalLinks.getByRole("link", { name: "Impressum" })).toBeVisible();
+  await legalLinks.getByRole("link", { name: "Impressum" }).click();
+  await expect(page.locator("[data-legal-page]")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Impressum" })).toBeVisible();
+  await expectNoDocumentHorizontalOverflow(page);
+});
+
 test("uses mobile navigation and the agenda for entry creation", async ({
   page
 }) => {

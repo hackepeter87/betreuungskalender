@@ -40,6 +40,7 @@ export default defineConfig({
       PORT: String(port),
       DATABASE_PATH: "./test-results/e2e.sqlite",
       BACKUP_DIR: "./test-results/backups",
+      LEGAL_CONTENT_DIR: "./e2e/fixtures/legal",
       NODE_ENV: "test",
       LOG_LEVEL: "warn",
       ALLOWED_ORIGIN: baseURL,

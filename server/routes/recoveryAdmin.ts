@@ -9,6 +9,7 @@ import {
   RecoveryAdminError,
   RecoveryAdminStore
 } from "../services/recoveryAdmin.js";
+import { publicLegalLinksHtml } from "./legal.js";
 
 type RecoveryRouteConfig = Pick<
   typeof appConfig,
@@ -73,6 +74,7 @@ function loginPage(username: string, message = ""): string {
       <label>Passwort <input name="password" type="password" autocomplete="current-password" required></label>
       <button type="submit">Anmelden</button>
     </form>
+    ${publicLegalLinksHtml()}
   </main>
 </body>
 </html>`;
@@ -95,6 +97,7 @@ function changePasswordPage(message = ""): string {
       <label>Neues Passwort <input name="newPassword" type="password" autocomplete="new-password" minlength="12" required></label>
       <button type="submit">Passwort speichern</button>
     </form>
+    ${publicLegalLinksHtml()}
   </main>
 </body>
 </html>`;

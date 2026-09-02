@@ -72,6 +72,16 @@ export function canAccessPage(session: ApiSession, page: PageId): boolean {
 
 const sidebarCollapsedStorageKey = "betreuungskalender.sidebarCollapsed";
 
+function LegalLinks({ compact = false }: { compact?: boolean }) {
+  const { t } = useI18n();
+  return (
+    <nav className={`app-legal-links${compact ? " app-legal-links--compact" : ""}`} aria-label={t("legal.links")}>
+      <a href="/impressum">{t("legal.notice")}</a>
+      <a href="/datenschutz">{t("legal.privacy")}</a>
+    </nav>
+  );
+}
+
 function AuthSessionCard({
   session,
   mobile = false,
@@ -229,6 +239,12 @@ function MobileAuthMenu({
                 </a>
               )
             ) : null}
+            <a className="auth-menu__action" role="menuitem" href="/impressum">
+              {t("legal.notice")}
+            </a>
+            <a className="auth-menu__action" role="menuitem" href="/datenschutz">
+              {t("legal.privacy")}
+            </a>
           </div>
         ) : null}
       </div>
@@ -502,6 +518,7 @@ export function AppShell({
               t={t}
             />
           )}
+          {!sidebarCollapsed ? <LegalLinks /> : null}
         </div>
       </aside>
 
@@ -663,6 +680,7 @@ export function AppShell({
                 <span>{t("nav.settings")}</span>
               </button> : null}
             </div>
+            <LegalLinks compact />
           </section>
         </div>
       ) : null}

@@ -497,6 +497,8 @@ test("native OIDC routes redirect login and keep callback responses token-free",
     assert.match(setup.headers["content-type"] ?? "", /text\/html/);
     assert.match(setup.payload, /Installation einrichten/);
     assert.match(setup.payload, /\/setup\/continue\?token=fictional-owner-token/);
+    assert.match(setup.payload, /href="\/impressum"/);
+    assert.match(setup.payload, /href="\/datenschutz"/);
     assert.equal(setup.payload.includes("idp.example.test"), false);
 
     const setupContinue = await app.inject({
@@ -518,6 +520,7 @@ test("native OIDC routes redirect login and keep callback responses token-free",
     assert.equal(invitation.statusCode, 200);
     assert.match(invitation.payload, /Einladung annehmen/);
     assert.match(invitation.payload, /\/invite\/continue\?token=fictional-invitation-token/);
+    assert.match(invitation.payload, /href="\/datenschutz"/);
 
     const invitationContinue = await app.inject({
       method: "GET",
@@ -705,6 +708,7 @@ test("native OIDC callback rejects normal login without workspace membership", a
     assert.equal(callback.headers["cache-control"], "no-store, max-age=0");
     assert.match(String(callback.headers["set-cookie"]), /Max-Age=0/);
     assert.match(callback.payload, /Kein Zugriff auf diese Installation/);
+    assert.match(callback.payload, /href="\/impressum"/);
     assert.doesNotMatch(callback.payload, /subject-123|parents|editor|admin/);
     assert.equal(sessions.findByToken(staleSession.token), undefined);
     assert.equal(upsertCalls, 0);

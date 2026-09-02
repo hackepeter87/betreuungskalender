@@ -1,0 +1,5 @@
+Impressum der Beispielinstallation
+
+Verantwortlich: Beispiel Betreiber
+Anschrift: Musterweg 1, 12345 Beispielstadt
+Kontakt: kontakt@example.invalid
