@@ -65,6 +65,10 @@ discovery source; it is not synchronized or treated as current persistence.
 Business tables use `deleted_at`. API list and detail queries return active rows
 only. DELETE operations mark records instead of removing them. Junction rows,
 trips, and costs follow the same principle. Audit records retain the change.
+Soft deletion supports traceability but is not a selective erasure or
+anonymization workflow. Operators must not treat it as automatic fulfillment
+of every erasure request; see
+[operator data lifecycle and privacy roles](operator-data-lifecycle.md).
 
 ## Audit log
 
@@ -103,6 +107,12 @@ cryptographic proof. The authenticated audit view reads bounded pages ordered
 by timestamp and ID; audit history is no longer part of the application's
 general startup payload. Report snapshots continue to read their optional
 history inside the report transaction.
+
+Audit history remains in the same operational database and can contain
+historical identifiers or values needed for traceability. The current
+application does not selectively anonymize those records. Retention and any
+approved erasure treatment therefore require an operator decision rather than
+an ordinary record-delete action.
 
 Domain views resolve display names separately for at most 200 actor IDs already
 referenced by the loaded domain records. That response contains only the stable
