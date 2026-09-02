@@ -77,7 +77,7 @@ export async function listAppUsers(
   const rows = await database.selectFrom("app_users")
     .select(["id", "external_subject", "email", "display_name", "role", "last_seen_at"])
     .where("deleted_at", "is", null)
-    .orderBy(sql`display_name COLLATE NOCASE`)
+    .orderBy(sql`lower(display_name)`)
     .orderBy("id")
     .execute();
   return rows

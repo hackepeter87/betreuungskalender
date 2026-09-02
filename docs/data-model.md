@@ -20,12 +20,14 @@ model.
 
 ## Persistence surfaces
 
-The Fastify API and SQLite tables below are the single source of truth for
-current domain data. The React UI uses the API for domain reads and writes.
-Browser local storage is limited to UI preferences and an optional legacy-data
-discovery source; it is not synchronized or treated as current persistence.
+The Fastify API and the selected operational database are the single source of
+truth for current domain data. SQLite is the default; PostgreSQL is an explicit
+optional backend. Both implement the same logical tables and application value
+contract. The React UI uses the API for domain reads and writes. Browser local
+storage is limited to UI preferences and an optional legacy-data discovery
+source; it is not synchronized or treated as current persistence.
 
-## SQLite tables
+## Operational tables
 
 | Table | Purpose |
 | --- | --- |
@@ -431,13 +433,17 @@ state, retaining only the current run needed for historical actor mapping.
 
 ## Migrations
 
-SQL files in `server/migrations/` are applied in lexical order and recorded in
-`schema_migrations`. Build copies them into `dist-server/server/migrations`.
-Never edit an already released migration; add a new numbered migration and
+SQLite SQL files in `server/migrations/` and PostgreSQL SQL files in
+`server/migrations/postgres/` are applied in lexical order and recorded in
+`schema_migrations`. Both sets use the same version identifiers. Build copies
+them into `dist-server/server/migrations`. Never edit an already released
+migration; add the matching next migration for every supported driver and
 update this document. `server/migrations/released-checksums.json` records the
-ordered SHA-256 values for migrations released through v1.26.1. The SQLite
-parity test rejects any change, removal or rename in that released sequence;
-future migrations are appended after it.
+ordered SHA-256 values for SQLite migrations released through v1.26.1. The
+SQLite parity test rejects any change, removal or rename in that released
+sequence; future migrations are appended after it. PostgreSQL support starts
+from its current-schema baseline and records the preceding identifiers as
+compatibility markers.
 
 Migration `029_local_development_identity_cleanup` marks the introduction of a
 mode-aware startup cleanup. Outside local mode, runtime access is removed from

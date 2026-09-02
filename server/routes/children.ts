@@ -61,7 +61,7 @@ export async function childrenRoutes(app: FastifyInstance): Promise<void> {
     app.persistence.query.selectFrom("children")
       .select(["id", "name", "color"])
       .where("deleted_at", "is", null)
-      .orderBy(sql`name COLLATE NOCASE`)
+      .orderBy(sql`lower(name)`)
       .execute()
   );
 
@@ -69,7 +69,7 @@ export async function childrenRoutes(app: FastifyInstance): Promise<void> {
     const rows = await app.persistence.query.selectFrom("children")
       .select(["id", "name", "birth_month", "birth_year", "color", "created_by", "updated_by", "created_at", "updated_at"])
       .where("deleted_at", "is", null)
-      .orderBy(sql`name COLLATE NOCASE`)
+      .orderBy(sql`lower(name)`)
       .execute() as ChildRow[];
     return rows.map(mapChild);
   });

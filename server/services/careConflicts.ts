@@ -123,22 +123,6 @@ export async function listCareConflictEntries(
   if (options.excludeId) {
     query = query.where("id", "!=", options.excludeId);
   }
-  if (options.startBefore) {
-    query = query.where(sql<boolean>`julianday(
-      CASE WHEN status = 'partial'
-        THEN COALESCE(actual_start_datetime, start_datetime)
-        ELSE start_datetime
-      END
-    ) < julianday(${options.startBefore})`);
-  }
-  if (options.endAfter) {
-    query = query.where(sql<boolean>`julianday(
-      CASE WHEN status = 'partial'
-        THEN COALESCE(actual_end_datetime, end_datetime)
-        ELSE end_datetime
-      END
-    ) > julianday(${options.endAfter})`);
-  }
   const childIds = [...new Set(options.childIds ?? [])];
   if (childIds.length) {
     query = query.where(({ and, eb, exists, not, or, selectFrom }) => {
@@ -165,8 +149,66 @@ export async function listCareConflictEntries(
       ]);
     });
   }
-  const rows = await query.orderBy("start_datetime").orderBy("id").limit(maxEntries + 1).execute() as EntryRow[];
-  if (rows.length > maxEntries) throw new CareConflictWorkLimitError();
+  const startBefore = options.startBefore ? Date.parse(options.startBefore) : undefined;
+  const endAfter = options.endAfter ? Date.parse(options.endAfter) : undefined;
+  const matchesTimeRange = (row: EntryRow): boolean => {
+    const start = Date.parse(
+      row.status === "partial"
+        ? row.actual_start_datetime ?? row.start_datetime
+        : row.start_datetime
+    );
+    const end = Date.parse(
+      row.status === "partial"
+        ? row.actual_end_datetime ?? row.end_datetime
+        : row.end_datetime
+    );
+    return (startBefore === undefined || start < startBefore) &&
+      (endAfter === undefined || end > endAfter);
+  };
+  const rows: EntryRow[] = [];
+  const scanLimit = Math.max(maxEntries, MAX_CARE_CONFLICT_ENTRIES);
+  const batchSize = Math.min(400, scanLimit);
+  let scannedRows = 0;
+  let exhausted = false;
+  let cursor: Pick<EntryRow, "id" | "start_datetime"> | undefined;
+  while (scannedRows < scanLimit) {
+    let pageQuery = query;
+    if (cursor) {
+      const currentCursor = cursor;
+      pageQuery = pageQuery.where(({ and, eb, or }) => or([
+        eb("start_datetime", ">", currentCursor.start_datetime),
+        and([
+          eb("start_datetime", "=", currentCursor.start_datetime),
+          eb("id", ">", currentCursor.id)
+        ])
+      ]));
+    }
+    const pageLimit = Math.min(batchSize, scanLimit - scannedRows);
+    const page = await pageQuery.orderBy("start_datetime").orderBy("id")
+      .limit(pageLimit).execute() as EntryRow[];
+    scannedRows += page.length;
+    for (const row of page) {
+      if (!matchesTimeRange(row)) continue;
+      rows.push(row);
+      if (rows.length > maxEntries) throw new CareConflictWorkLimitError();
+    }
+    cursor = page.at(-1) ?? cursor;
+    if (page.length < pageLimit) {
+      exhausted = true;
+      break;
+    }
+  }
+  if (!exhausted && scannedRows === scanLimit && cursor) {
+    const lastCursor = cursor;
+    const more = await query.where(({ and, eb, or }) => or([
+      eb("start_datetime", ">", lastCursor.start_datetime),
+      and([
+        eb("start_datetime", "=", lastCursor.start_datetime),
+        eb("id", ">", lastCursor.id)
+      ])
+    ])).select("id").limit(1).executeTakeFirst();
+    if (more) throw new CareConflictWorkLimitError();
+  }
   const entryIds = rows.map((row) => row.id);
   const [plannedChildren, actualChildren] = await Promise.all([
     loadChildIds(database, "care_entry_children", entryIds, maxChildLinks),

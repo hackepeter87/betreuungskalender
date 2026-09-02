@@ -295,7 +295,7 @@ async function getScheduleEntry(database: DatabaseExecutor, id: string): Promise
     .select(["children.id", "children.name", "children.color"])
     .where("links.care_entry_id", "=", id)
     .where("links.deleted_at", "is", null)
-    .orderBy(sql`children.name COLLATE NOCASE`)
+    .orderBy(sql`lower(children.name)`)
     .execute() as ApiScheduleEntry["children"];
   const hasConflict = (await scheduleConflictEntryIds(database)).has(id);
   const location = scheduleLocation(row.location);
@@ -873,7 +873,7 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
           .select(["children.id", "children.name", "children.color"])
           .where("links.care_entry_id", "=", row.id)
           .where("links.deleted_at", "is", null)
-          .orderBy(sql`children.name COLLATE NOCASE`)
+          .orderBy(sql`lower(children.name)`)
           .execute() as ApiScheduleEntry["children"];
         return ({
         id: row.id,

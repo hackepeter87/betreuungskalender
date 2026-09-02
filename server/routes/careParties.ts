@@ -46,14 +46,14 @@ export async function carePartyRoutes(app: FastifyInstance): Promise<void> {
     if (request.user?.workspaceRole === "scheduler") {
       query = query.where("id", "in", assigned);
     }
-    return query.orderBy(sql`name COLLATE NOCASE`).execute();
+    return query.orderBy(sql`lower(name)`).execute();
   });
 
   app.get("/api/care-parties", readLimit, async () => {
     const rows = await app.persistence.query.selectFrom("care_parties")
       .select(["id", "name", "kind", "created_by", "updated_by", "created_at", "updated_at"])
       .where("deleted_at", "is", null)
-      .orderBy(sql`name COLLATE NOCASE`)
+      .orderBy(sql`lower(name)`)
       .execute();
     return rows.map((row) => ({
       id: row.id,

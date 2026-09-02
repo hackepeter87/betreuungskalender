@@ -20,7 +20,15 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `OAUTH2_PROXY_IMAGE` | oauth2-proxy image used by `deploy/compose.oidc.yml` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.3` | Optional for OIDC Compose | Same | Pin and review oauth2-proxy updates like other runtime dependencies |
 | `HOST_BIND_ADDRESS` | Host address published by release Compose | `127.0.0.1` | Recommended for `deploy/compose.yml` | `127.0.0.1` | Use loopback only when the reverse proxy is on the same host |
 | `HOST_PORT` | Host port published by release Compose | `3000` | Recommended for `deploy/compose.yml` | `3000` | Expose only through the intended firewall/proxy |
-| `DATABASE_PATH` | SQLite database file | `/var/lib/betreuungskalender/app.sqlite` | Recommended | `./data/app.sqlite` | Contains sensitive API data; protect permissions and disk |
+| `DATABASE_DRIVER` | Persistence backend | `sqlite` | Optional | `sqlite` | PostgreSQL is selected only by the explicit value `postgres` |
+| `DATABASE_PATH` | SQLite database file | `/var/lib/betreuungskalender/app.sqlite` | Recommended with SQLite | `./data/app.sqlite` | Contains sensitive API data; protect permissions and disk |
+| `POSTGRES_HOST` | PostgreSQL server host | `database.example.invalid` | Required with PostgreSQL | None | Do not include credentials or a connection URL |
+| `POSTGRES_PORT` | PostgreSQL server port | `5432` | Optional with PostgreSQL | `5432` | Must be an integer from 1 through 65535 |
+| `POSTGRES_DATABASE` | PostgreSQL database owned by the application role | `betreuungskalender` | Required with PostgreSQL | None | Use a dedicated database for one installation |
+| `POSTGRES_USER` | PostgreSQL application role | `betreuungskalender` | Required with PostgreSQL | None | Requires schema ownership, not superuser privileges |
+| `POSTGRES_PASSWORD_FILE` | Mounted file containing the PostgreSQL password | `/run/secrets/postgres-password` | Required with PostgreSQL | None | The password itself must not be placed in the environment |
+| `POSTGRES_TLS_MODE` | PostgreSQL transport verification | `verify-full` | Optional with PostgreSQL | `verify-full` | Use `disable` only on an independently protected local/private transport |
+| `POSTGRES_CA_FILE` | Mounted trusted CA certificate for PostgreSQL | `/run/secrets/postgres-ca.pem` | Required with `verify-full` | None | Keep certificate material out of images and ConfigMaps |
 | `BACKUP_DIR` | Destination for SQLite backups | `/var/backups/betreuungskalender` | Recommended | `./backups` | Contains sensitive copies; use mode `0700` |
 | `AUTH_MODE` | Authentication implementation mode | `trusted-proxy` | Optional | Derived from `TRUST_PROXY_AUTH` | Selects the only authentication implementation the API will accept |
 | `REQUIRE_AUTH` | Require a trusted identity for API routes | `true` | Recommended in production | `false` | Must be `true` for protected reverse-proxy operation |
@@ -79,11 +87,26 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `LEGAL_CONTENT_DIR` | Read-only directory containing operator-provided `impressum.txt` and `datenschutz.txt` | `/run/config/legal` | Optional | Same | Missing or invalid files make the corresponding public page return a neutral `404`; use the [operator legal-information guide](legal-information.md) and never commit completed deployment text |
 | `HEALTHCHECK_URL` | URL used by `npm run healthcheck` | `http://127.0.0.1:3000/api/health` | Optional | Same | Use an internal URL; no credentials are required |
 
-`DATABASE_PATH` and `BACKUP_DIR` are operator-editable for direct Node.js or
-systemd deployments. The release `deploy/compose.yml` intentionally fixes those
-paths inside the container as `/data/app.sqlite` and `/backups`; configure the
-host-side persistence with the `./data:/data` and `./backups:/backups` bind
-mounts instead.
+`DATABASE_DRIVER=sqlite` is the zero-configuration default. In that mode,
+PostgreSQL-specific values are rejected so stale credentials cannot silently
+affect a SQLite installation. `DATABASE_PATH` and `BACKUP_DIR` are
+operator-editable for direct Node.js or systemd deployments. The release
+`deploy/compose.yml` intentionally fixes those paths inside the container as
+`/data/app.sqlite` and `/backups`; configure the host-side persistence with the
+`./data:/data` and `./backups:/backups` bind mounts instead.
+
+`DATABASE_DRIVER=postgres` requires host, database, role and a mounted password
+file. Verified TLS additionally requires a mounted CA file. The application
+does not accept a password-bearing connection URL. The PostgreSQL role needs to
+own its application schema and create tables, indexes and the migration lock;
+it does not need superuser privileges. PostgreSQL 16 through 18 are supported.
+Every backend remains limited to one application replica until a separate
+scaling decision covers shared rate limiting and scheduled work.
+
+SQLite's native backup action applies only to SQLite. PostgreSQL installations
+need an independently tested logical database backup and restore procedure;
+the portable transfer package is intended for controlled domain-data transfer,
+not as a replacement for an operational database backup.
 
 `deploy/compose.oidc.yml` uses the same fixed container paths. In that mode,
 `HOST_BIND_ADDRESS` and `HOST_PORT` publish oauth2-proxy only; the app service

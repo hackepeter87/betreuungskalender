@@ -1,0 +1,1 @@
+-- Version-alignment marker for the released SQLite migration sequence.

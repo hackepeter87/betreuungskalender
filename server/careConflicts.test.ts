@@ -134,6 +134,9 @@ test("actual conflict validation only considers matching children and times", as
       const id = `unrelated-${index}`;
       insertEntry.run(id, "2026-07-04T16:00:00.000Z", "2026-07-04T18:00:00.000Z");
       insertChild.run(id, "child-b");
+      const oldId = `old-matching-child-${index}`;
+      insertEntry.run(oldId, "2025-07-04T16:00:00.000Z", "2025-07-04T18:00:00.000Z");
+      insertChild.run(oldId, "child-a");
     }
   })();
 

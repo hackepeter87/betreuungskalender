@@ -2,7 +2,8 @@
 
 ## Status
 
-Accepted for staged implementation.
+Accepted. Implemented for SQLite in v1.27.0 and for the optional PostgreSQL
+runtime in v1.28.0.
 
 ## Context
 
@@ -59,16 +60,22 @@ one process, so the existing single-replica boundary continues to apply.
 - Startup runs migrations before readiness. Health and readiness expose only
   abstract availability and migration state.
 
-### Future driver and migration contract
+### PostgreSQL contract for v1.28.0
 
-- PostgreSQL is added only after the complete SQLite implementation passes the
-  common persistence contract. Selecting it will always be explicit.
+- PostgreSQL is selected explicitly with `DATABASE_DRIVER=postgres`; SQLite
+  remains the default when no driver is configured.
 - PostgreSQL receives a separate dialect-specific migration set with the same
-  version identifiers. Future schema changes must provide migrations for every
-  supported driver in the same pull request.
+  version identifiers. Because PostgreSQL support begins at the current schema,
+  the first migration is the complete PostgreSQL baseline and the earlier
+  identifiers are recorded as compatibility markers. Future schema changes
+  must provide migrations for every supported driver in the same pull request.
 - PostgreSQL migration execution must be transactional and serialized. The
   application role owns only its installation database and does not require
   superuser access.
+- PostgreSQL 16 through 18 are supported. The persistence contract runs against
+  versions 16 and 18 in CI.
+- Credentials and trusted CA material are read from mounted files. Verified TLS
+  is the default; disabling TLS requires an explicit setting.
 - Driver changes use portable export, mandatory dry run and atomic import.
   Direct file conversion, dual writes and automatic identity mapping are not
   supported.
@@ -91,7 +98,7 @@ one process, so the existing single-replica boundary continues to apply.
 1. v1.27.0 introduces the persistence boundary and converts the complete server
    while retaining SQLite-only runtime behavior.
 2. v1.28.0 adds PostgreSQL migrations, the PostgreSQL adapter, cross-driver
-   contract tests and opt-in deployment paths.
+   contract tests and separately reviewed opt-in deployment paths.
 3. Horizontal scaling requires a separate architecture decision.
 
 ### v1.27.0 implementation status
@@ -110,6 +117,19 @@ one process, so the existing single-replica boundary continues to apply.
 - The SQLite parity package remains a separate acceptance gate before the
   v1.27.0 release package can be completed.
 - SQLite remains the only selectable driver throughout v1.27.0.
+
+### v1.28.0 adapter status
+
+- Configuration selects SQLite by default and fails closed on missing or
+  contradictory PostgreSQL settings.
+- The PostgreSQL runtime owns its pool, transactions, readiness, integrity
+  checks and idempotent shutdown.
+- PostgreSQL migrations run in one transaction while a session advisory lock
+  serializes concurrent application starters.
+- Driver errors map to the same abstract constraint, unavailable and generic
+  categories without exposing connection or credential values.
+- Shared runtime queries use portable expressions; adapter-specific SQL remains
+  confined to migration and integrity code.
 
 ## Verification contract
 
