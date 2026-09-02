@@ -6,13 +6,20 @@ image="betreuungskalender:smoke-${suffix}"
 container="betreuungskalender-smoke-${suffix}"
 volume="betreuungskalender-smoke-data-${suffix}"
 dockerfile="${DOCKERFILE:-Dockerfile}"
+legal_dir="$(mktemp -d)"
 
 cleanup() {
   docker rm --force "$container" >/dev/null 2>&1 || true
   docker volume rm "$volume" >/dev/null 2>&1 || true
   docker image rm --force "$image" >/dev/null 2>&1 || true
+  rm -rf "$legal_dir"
 }
 trap cleanup EXIT
+
+cp docs/examples/legal/impressum.txt.example "$legal_dir/impressum.txt"
+cp docs/examples/legal/datenschutz.txt.example "$legal_dir/datenschutz.txt"
+chmod 0755 "$legal_dir"
+chmod 0644 "$legal_dir/impressum.txt" "$legal_dir/datenschutz.txt"
 
 wait_for_health() {
   for attempt in $(seq 1 30); do
@@ -29,6 +36,7 @@ docker build --file "$dockerfile" --tag "$image" .
 docker volume create "$volume" >/dev/null
 docker run --detach --name "$container" \
   --volume "$volume:/data" \
+  --volume "$legal_dir:/run/config/legal:ro" \
   --env AUTH_MODE=local \
   --env REQUIRE_AUTH=false \
   --env TRUST_PROXY_AUTH=false \
@@ -36,6 +44,22 @@ docker run --detach --name "$container" \
   "$image" >/dev/null
 
 wait_for_health
+
+docker exec "$container" /nodejs/bin/node --input-type=module -e '
+  for (const path of ["/impressum", "/datenschutz"]) {
+    const response = await fetch(`http://127.0.0.1:3000${path}`);
+    if (!response.ok) throw new Error(`Legal page failed: ${path} ${response.status}`);
+    if (!response.headers.get("cache-control")?.includes("no-store")) throw new Error(`Legal page can be cached: ${path}`);
+    if (!(await response.text()).includes("BETREIBERVORLAGE - NICHT VERÖFFENTLICHUNGSFERTIG")) throw new Error(`Mounted legal content missing: ${path}`);
+  }
+  const { writeFile } = await import("node:fs/promises");
+  try {
+    await writeFile("/run/config/legal/impressum.txt", "changed");
+    throw new Error("Legal content mount is writable");
+  } catch (error) {
+    if (!error || !["EROFS", "EACCES", "EPERM"].includes(error.code)) throw error;
+  }
+'
 
 docker exec "$container" /nodejs/bin/node --input-type=module -e '
   const response = await fetch("http://127.0.0.1:3000/api/children", {

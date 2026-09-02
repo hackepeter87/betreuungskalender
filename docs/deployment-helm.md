@@ -14,6 +14,11 @@ release is an independent installation with its own SQLite claim.
 
 Do not commit private values, Secret manifests, database files or backups.
 
+Operator-provided legal information can be mounted from a ConfigMap through the
+existing extra-volume interfaces. See
+[operator legal information](legal-information.md) for the reviewed read-only
+mount shape; do not put unrelated secrets in the legal-content ConfigMap.
+
 ## Prepare credentials
 
 Create credentials with your normal Kubernetes access controls. The chart only
