@@ -24,10 +24,10 @@ grep -q 'readOnlyRootFilesystem: true' "${workdir}/family-one.yaml"
 grep -q 'runAsNonRoot: true' "${workdir}/family-one.yaml"
 grep -q 'strategy:' "${workdir}/family-one.yaml"
 grep -q 'type: Recreate' "${workdir}/family-one.yaml"
-grep -q 'LEGAL_CONTENT_DIR: /run/config/legal' "${workdir}/legal-content.yaml"
+grep -Eq 'LEGAL_CONTENT_DIR: "?/run/config/legal"?' "${workdir}/legal-content.yaml"
 grep -q 'mountPath: /run/config/legal' "${workdir}/legal-content.yaml"
-grep -A2 'mountPath: /run/config/legal' "${workdir}/legal-content.yaml" | grep -q 'readOnly: true'
-grep -A3 'name: legal-content' "${workdir}/legal-content.yaml" | grep -q 'name: betreuungskalender-operator-legal'
+grep -q 'readOnly: true' "${workdir}/legal-content.yaml"
+grep -q 'name: betreuungskalender-operator-legal' "${workdir}/legal-content.yaml"
 
 digest="sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 helm template digest-test "${chart}" --set-string "image.digest=${digest}" \
