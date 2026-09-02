@@ -1,7 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { config } from "../config.js";
-import { db } from "../db/connection.js";
 import { setMembershipRole } from "../services/memberships.js";
 import { createInvitation } from "../services/invitations.js";
 import { toApiCreatedInvitation } from "../services/invitationResponses.js";
@@ -53,12 +52,12 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/data-transfer/export", sensitive, async (_request, reply) => {
     return noStore(reply)
       .header("content-disposition", `attachment; filename="betreuungskalender-transfer-${new Date().toISOString().slice(0, 10)}.json"`)
-      .send(createPortableTransfer());
+      .send(await createPortableTransfer(app.persistence));
   });
 
   app.post("/api/data-transfer/preview", sensitive, async (request, reply) => {
     try {
-      const result = dryRunPortableTransfer(request.body);
+      const result = await dryRunPortableTransfer(request.body, app.persistence);
       return noStore(reply).send({
         fingerprint: result.fingerprint,
         formatVersion: result.formatVersion,
@@ -73,7 +72,7 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
 
   app.post("/api/data-transfer/dry-run", sensitive, async (request, reply) => {
     try {
-      return noStore(reply).send(dryRunPortableTransfer(request.body));
+      return noStore(reply).send(await dryRunPortableTransfer(request.body, app.persistence));
     } catch (error) {
       return noStore(reply).code(400).send(errorReply(error));
     }
@@ -90,20 +89,22 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
       return noStore(reply).code(400).send({ error: "validation_error", message: "Import request is incomplete." });
     }
     try {
-      const result = importPortableTransfer({
+      const result = await importPortableTransfer({
         package: body.package,
         fingerprint: body.fingerprint,
         dryRunReceipt: body.dryRunReceipt,
         confirmWarnings: body.confirmWarnings === true,
         actorId: request.userEmail
-      });
+      }, app.persistence);
       return noStore(reply).send(result);
     } catch (error) {
       return noStore(reply).code(400).send(errorReply(error));
     }
   });
 
-  app.get("/api/data-transfer/actors", sensitive, async (_request, reply) => noStore(reply).send(listTransferActors()));
+  app.get("/api/data-transfer/actors", sensitive, async (_request, reply) =>
+    noStore(reply).send(await listTransferActors(app.persistence.query))
+  );
 
   app.put<{ Params: { id: string } }>("/api/data-transfer/actors/:id/mapping", sensitive, async (request, reply) => {
     const body = request.body as { userId?: unknown; role?: unknown; carePartyIds?: unknown };
@@ -179,7 +180,10 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
     if (!role || typeof body?.expiresAt !== "string") {
       return noStore(reply).code(400).send({ error: "validation_error", message: "Invitation request is incomplete." });
     }
-    const actor = db.prepare("SELECT id, email_hint AS email FROM data_transfer_actors WHERE id = ?").get(request.params.id) as { id: string; email: string | null } | undefined;
+    const actor = await app.persistence.query.selectFrom("data_transfer_actors")
+      .select(["id", "email_hint as email"])
+      .where("id", "=", request.params.id)
+      .executeTakeFirst();
     if (!actor) return noStore(reply).code(404).send({ error: "not_found", message: "Imported actor was not found." });
     try {
       const created = await createInvitation({
@@ -189,8 +193,14 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
         emailHint: typeof body.emailHint === "string" ? body.emailHint : actor.email ?? undefined,
         dataTransferActorId: actor.id
       }, app.persistence.query);
-      db.prepare("UPDATE data_transfer_actors SET invitation_id = ?, updated_by = ?, updated_at = ? WHERE id = ?")
-        .run(created.invitation.id, request.userEmail, new Date().toISOString(), actor.id);
+      await app.persistence.query.updateTable("data_transfer_actors")
+        .set({
+          invitation_id: created.invitation.id,
+          updated_by: request.userEmail,
+          updated_at: new Date().toISOString()
+        })
+        .where("id", "=", actor.id)
+        .execute();
       return noStore(reply)
         .code(201)
         .send(toApiCreatedInvitation(created, config.invitationPublicBaseUrl));

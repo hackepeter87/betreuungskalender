@@ -45,8 +45,8 @@ function normalizeInvitationEmailError(error: unknown): string {
   return "Einladungs-E-Mail konnte nicht gesendet werden.";
 }
 
-function invitationSenderName(): string | undefined {
-  const value = getStoredSettings()["setup.installationLabel"];
+async function invitationSenderName(app: FastifyInstance): Promise<string | undefined> {
+  const value = (await getStoredSettings(app.persistence.query))["setup.installationLabel"];
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
@@ -134,7 +134,7 @@ async function registerInvitationRoutes(
         },
         {
           ...config,
-          smtpFromName: invitationSenderName()
+          smtpFromName: await invitationSenderName(app)
         }
       );
       return invitationReply.code(201).send(toApiCreatedInvitation(

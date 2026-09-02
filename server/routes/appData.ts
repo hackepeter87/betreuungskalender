@@ -1,10 +1,12 @@
 import type { FastifyInstance } from "fastify";
-import type Database from "better-sqlite3";
-import { db } from "../db/connection.js";
-import { recordAudit } from "../services/audit.js";
+import type { DatabaseExecutor } from "../db/runtime.js";
 import { nowIso } from "../services/common.js";
 import { legacyRecurrenceForPattern, legacySegmentsForPattern } from "../services/contactRules.js";
-import { getDefaultResponsiblePartyId, normalizeClientSettings } from "../services/settings.js";
+import {
+  getPersistedDefaultResponsiblePartyId,
+  recordDomainAudit
+} from "../services/domainPersistence.js";
+import { normalizeClientSettings } from "../services/settings.js";
 import {
   appDataImportSchema,
   carePartyInputSchema,
@@ -59,18 +61,20 @@ function stringArray(record: DataRecord, key: string): string[] {
     : [];
 }
 
-function importedDefaultResponsiblePartyId(
+async function importedDefaultResponsiblePartyId(
   data: { settings?: Record<string, unknown> },
-  database: Database.Database
-): string | undefined {
+  database: DatabaseExecutor
+): Promise<string | undefined> {
   const configured = data.settings?.defaultResponsiblePartyId;
   if (typeof configured === "string" && configured.trim()) {
-    const active = database.prepare(`
-      SELECT 1 FROM care_parties WHERE id = ? AND deleted_at IS NULL
-    `).get(configured);
+    const active = await database.selectFrom("care_parties")
+      .select("id")
+      .where("id", "=", configured)
+      .where("deleted_at", "is", null)
+      .executeTakeFirst();
     if (active) return configured;
   }
-  return getDefaultResponsiblePartyId(database);
+  return getPersistedDefaultResponsiblePartyId(database);
 }
 
 const careDeviationTypes = new Set([
@@ -91,8 +95,8 @@ function optionalDeviationType(record: DataRecord): string | null {
   return value;
 }
 
-export function clearDomainData(database: Database.Database = db): void {
-  for (const table of [
+export async function clearDomainData(database: DatabaseExecutor): Promise<void> {
+  const tables = [
     "care_entry_actual_children",
     "care_entry_children",
     "care_confirmation_requests",
@@ -117,13 +121,21 @@ export function clearDomainData(database: Database.Database = db): void {
     "monthly_closings",
     "children",
     "audit_log"
-  ]) {
-    database.prepare(`DELETE FROM ${table}`).run();
+  ] as const;
+  for (const table of tables) {
+    await database.deleteFrom(table).execute();
   }
-  database.prepare("DELETE FROM settings WHERE key <> 'setup.ownerUserId'").run();
+  await database.deleteFrom("settings")
+    .where("key", "!=", "setup.ownerUserId")
+    .execute();
 }
 
-export function insertChild(record: DataRecord, timestamp: string, userEmail: string, database: Database.Database = db): void {
+export async function insertChild(
+  record: DataRecord,
+  timestamp: string,
+  userEmail: string,
+  database: DatabaseExecutor
+): Promise<void> {
   const input = childInputSchema.parse({
     name: record.name,
     birthMonth: record.birthMonth,
@@ -132,25 +144,26 @@ export function insertChild(record: DataRecord, timestamp: string, userEmail: st
   });
   const id = text(record, "id");
   if (!id) throw new Error("Kind ohne ID kann nicht importiert werden.");
-  database.prepare(`
-    INSERT INTO children (
-      id, name, birth_month, birth_year, color, created_by, updated_by,
-      created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  await database.insertInto("children").values({
     id,
-    input.name,
-    input.birthMonth,
-    input.birthYear,
-    input.color,
-    text(record, "createdBy", userEmail),
-    text(record, "updatedBy", userEmail),
-    text(record, "createdAt", timestamp),
-    text(record, "updatedAt", timestamp)
-  );
+    name: input.name,
+    birth_month: input.birthMonth,
+    birth_year: input.birthYear,
+    color: input.color,
+    created_by: text(record, "createdBy", userEmail),
+    updated_by: text(record, "updatedBy", userEmail),
+    created_at: text(record, "createdAt", timestamp),
+    updated_at: text(record, "updatedAt", timestamp),
+    deleted_at: null
+  }).execute();
 }
 
-export function insertCareParty(record: DataRecord, timestamp: string, userEmail: string, database: Database.Database = db): void {
+export async function insertCareParty(
+  record: DataRecord,
+  timestamp: string,
+  userEmail: string,
+  database: DatabaseExecutor
+): Promise<void> {
   if (record.deletedAt) return;
   const input = carePartyInputSchema.parse({
     name: record.name,
@@ -158,19 +171,16 @@ export function insertCareParty(record: DataRecord, timestamp: string, userEmail
   });
   const id = text(record, "id");
   if (!id) throw new Error("Betreuende Person ohne ID kann nicht importiert werden.");
-  database.prepare(`
-    INSERT INTO care_parties (
-      id, name, kind, created_by, updated_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  await database.insertInto("care_parties").values({
     id,
-    input.name,
-    input.kind,
-    text(record, "createdBy", userEmail),
-    text(record, "updatedBy", userEmail),
-    text(record, "createdAt", timestamp),
-    text(record, "updatedAt", timestamp)
-  );
+    name: input.name,
+    kind: input.kind,
+    created_by: text(record, "createdBy", userEmail),
+    updated_by: text(record, "updatedBy", userEmail),
+    created_at: text(record, "createdAt", timestamp),
+    updated_at: text(record, "updatedAt", timestamp),
+    deleted_at: null
+  }).execute();
 }
 
 function deriveCareScope(record: DataRecord): string {
@@ -186,13 +196,13 @@ function deriveCareScope(record: DataRecord): string {
   return "hourly";
 }
 
-export function insertEntry(
+export async function insertEntry(
   record: DataRecord,
   timestamp: string,
   userEmail: string,
-  fallbackResponsiblePartyId?: string,
-  database: Database.Database = db
-): void {
+  fallbackResponsiblePartyId: string | undefined,
+  database: DatabaseExecutor
+): Promise<void> {
   if (record.deletedAt) return;
   const input = careEntryInputSchema.parse({
     startDateTime: record.startDateTime,
@@ -205,7 +215,7 @@ export function insertEntry(
     contactRuleOccurrenceKey: optionalText(record, "contactRuleOccurrenceKey") ?? undefined,
     responsiblePartyId: optionalText(record, "responsiblePartyId") ?? fallbackResponsiblePartyId,
     contactRuleSyncState: optionalText(record, "contactRuleSyncState") ?? undefined,
-      status: record.status,
+    status: record.status,
     careScope: deriveCareScope(record),
     cancellationReason: optionalText(record, "cancellationReason") ?? undefined,
     overnight: booleanValue(record, "overnight"),
@@ -279,120 +289,111 @@ export function insertEntry(
   if (plannedStartDateTime && plannedEndDateTime && Date.parse(plannedEndDateTime) <= Date.parse(plannedStartDateTime)) {
     throw new Error("Ursprüngliches Soll-Ende eines abweichenden Betreuungseintrags muss nach dem Beginn liegen.");
   }
-  database.prepare(`
-    INSERT INTO care_entries (
-      id, generated_by_pattern_id, rule_occurrence_date,
-      contact_rule_id, contact_rule_segment_id, contact_rule_occurrence_key,
-      responsible_party_id, contact_rule_sync_state,
-      start_datetime, end_datetime, planned_start_datetime, planned_end_datetime,
-      status, deviation_type, deviation_note, care_scope, cancellation_reason,
-      confirmation_note, confirmed_at, confirmed_by,
-      actual_start_datetime, actual_end_datetime, actual_responsible_party_id,
-      overnight, school_handover, holiday, weekend, additional_care, location,
-      custom_location, handover_from, handover_to, notes, evidence_reference,
-      has_evidence, duration_minutes, is_contact_time, created_by, updated_by,
-      created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  await database.insertInto("care_entries").values({
     id,
-    input.generatedByPatternId ?? null,
-    input.ruleOccurrenceDate ?? null,
-    input.contactRuleId ?? null,
-    input.contactRuleSegmentId ?? null,
-    input.contactRuleOccurrenceKey ?? null,
-    input.responsiblePartyId ?? null,
-    input.contactRuleSyncState ?? null,
-    input.startDateTime,
-    input.endDateTime,
-    plannedStartDateTime,
-    plannedEndDateTime,
-    input.status,
-    deviationType,
-    optionalText(record, "deviationNote"),
-    input.careScope,
-    input.status === "cancelled" ? input.cancellationReason ?? null : null,
-    optionalText(record, "confirmationNote"),
-    optionalText(record, "confirmedAt"),
-    optionalText(record, "confirmedBy"),
-    actualStartDateTime,
-    actualEndDateTime,
-    actualResponsiblePartyId,
-    Number(input.overnight),
-    Number(input.schoolHandover),
-    Number(input.holiday),
-    Number(input.weekend),
-    Number(input.additionalCare),
-    input.location ?? null,
-    input.customLocation ?? null,
-    input.handoverFrom ?? null,
-    input.handoverTo ?? null,
-    input.notes ?? null,
-    input.evidenceReference ?? null,
-    Number(input.hasEvidence),
-    durationMinutes,
-    Number(durationMinutes < 120),
-    text(record, "createdBy", userEmail),
-    text(record, "updatedBy", userEmail),
-    createdAt,
-    updatedAt
-  );
-  const junction = database.prepare(`
-    INSERT INTO care_entry_children (
-      care_entry_id, child_id, created_at, updated_at
-    ) VALUES (?, ?, ?, ?)
-  `);
-  for (const childId of input.childIds) junction.run(id, childId, createdAt, updatedAt);
-  const actualJunction = database.prepare(`
-    INSERT INTO care_entry_actual_children (
-      care_entry_id, child_id, created_at, updated_at
-    ) VALUES (?, ?, ?, ?)
-  `);
-  for (const childId of actualChildIds) actualJunction.run(id, childId, createdAt, updatedAt);
-  const tripInsert = database.prepare(`
-    INSERT INTO trips (
-      id, care_entry_id, purpose, km, own_car, reimbursed,
-      reimbursement_amount, notes, created_by, updated_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  for (const trip of input.trips) {
-    tripInsert.run(
-      trip.id,
-      id,
-      trip.purpose,
-      trip.km,
-      Number(trip.ownCar),
-      Number(trip.reimbursed),
-      trip.reimbursementAmount ?? null,
-      trip.notes ?? null,
-      text(trip, "createdBy", userEmail),
-      text(trip, "updatedBy", userEmail),
-      createdAt,
-      updatedAt
-    );
+    generated_by_pattern_id: input.generatedByPatternId ?? null,
+    rule_occurrence_date: input.ruleOccurrenceDate ?? null,
+    contact_rule_id: input.contactRuleId ?? null,
+    contact_rule_segment_id: input.contactRuleSegmentId ?? null,
+    contact_rule_occurrence_key: input.contactRuleOccurrenceKey ?? null,
+    responsible_party_id: input.responsiblePartyId ?? null,
+    contact_rule_sync_state: input.contactRuleSyncState ?? null,
+    start_datetime: input.startDateTime,
+    end_datetime: input.endDateTime,
+    planned_start_datetime: plannedStartDateTime,
+    planned_end_datetime: plannedEndDateTime,
+    status: input.status,
+    deviation_type: deviationType,
+    deviation_note: optionalText(record, "deviationNote"),
+    care_scope: input.careScope,
+    cancellation_reason: input.status === "cancelled" ? input.cancellationReason ?? null : null,
+    confirmation_note: optionalText(record, "confirmationNote"),
+    confirmed_at: optionalText(record, "confirmedAt"),
+    confirmed_by: optionalText(record, "confirmedBy"),
+    actual_start_datetime: actualStartDateTime,
+    actual_end_datetime: actualEndDateTime,
+    actual_responsible_party_id: actualResponsiblePartyId,
+    overnight: Number(input.overnight),
+    school_handover: Number(input.schoolHandover),
+    holiday: Number(input.holiday),
+    weekend: Number(input.weekend),
+    additional_care: Number(input.additionalCare),
+    location: input.location ?? null,
+    custom_location: input.customLocation ?? null,
+    handover_from: input.handoverFrom ?? null,
+    handover_to: input.handoverTo ?? null,
+    notes: input.notes ?? null,
+    evidence_reference: input.evidenceReference ?? null,
+    has_evidence: Number(input.hasEvidence),
+    duration_minutes: durationMinutes,
+    is_contact_time: Number(durationMinutes < 120),
+    created_by: text(record, "createdBy", userEmail),
+    updated_by: text(record, "updatedBy", userEmail),
+    created_at: createdAt,
+    updated_at: updatedAt,
+    deleted_at: null,
+    confirmation_suppressed: 0
+  }).execute();
+  if (input.childIds.length) {
+    await database.insertInto("care_entry_children").values(input.childIds.map((childId) => ({
+      care_entry_id: id,
+      child_id: childId,
+      created_at: createdAt,
+      updated_at: updatedAt,
+      deleted_at: null
+    }))).execute();
   }
-  const costInsert = database.prepare(`
-    INSERT INTO costs (
-      id, care_entry_id, category, amount, paid_by, notes,
-      created_by, updated_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
+  if (actualChildIds.length) {
+    await database.insertInto("care_entry_actual_children").values(actualChildIds.map((childId) => ({
+      care_entry_id: id,
+      child_id: childId,
+      created_at: createdAt,
+      updated_at: updatedAt,
+      deleted_at: null
+    }))).execute();
+  }
+  for (const trip of input.trips) {
+    if (!trip.id) throw new Error("Fahrt ohne ID kann nicht importiert werden.");
+    await database.insertInto("trips").values({
+      id: trip.id,
+      care_entry_id: id,
+      purpose: trip.purpose,
+      km: trip.km,
+      own_car: Number(trip.ownCar),
+      reimbursed: Number(trip.reimbursed),
+      reimbursement_amount: trip.reimbursementAmount ?? null,
+      notes: trip.notes ?? null,
+      created_by: userEmail,
+      updated_by: userEmail,
+      created_at: createdAt,
+      updated_at: updatedAt,
+      deleted_at: null
+    }).execute();
+  }
   for (const cost of input.costs) {
-    costInsert.run(
-      cost.id,
-      id,
-      cost.category,
-      cost.amount,
-      cost.paidBy,
-      cost.notes ?? null,
-      text(cost, "createdBy", userEmail),
-      text(cost, "updatedBy", userEmail),
-      createdAt,
-      updatedAt
-    );
+    if (!cost.id) throw new Error("Kostenposition ohne ID kann nicht importiert werden.");
+    await database.insertInto("costs").values({
+      id: cost.id,
+      care_entry_id: id,
+      category: cost.category,
+      amount: cost.amount,
+      paid_by: cost.paidBy,
+      notes: cost.notes ?? null,
+      created_by: userEmail,
+      updated_by: userEmail,
+      created_at: createdAt,
+      updated_at: updatedAt,
+      deleted_at: null
+    }).execute();
   }
 }
 
-export function insertHoliday(record: DataRecord, timestamp: string, userEmail: string, database: Database.Database = db): void {
+export async function insertHoliday(
+  record: DataRecord,
+  timestamp: string,
+  userEmail: string,
+  database: DatabaseExecutor
+): Promise<void> {
   if (record.deletedAt) return;
   const input = holidayInputSchema.parse({
     name: record.name,
@@ -404,41 +405,39 @@ export function insertHoliday(record: DataRecord, timestamp: string, userEmail: 
   });
   const id = text(record, "id");
   if (!id) throw new Error("Ferienzeitraum ohne ID kann nicht importiert werden.");
-  database.prepare(`
-    INSERT INTO holiday_periods (
-      id, name, start_date, end_date, assigned_to, notes,
-      source_external_calendar_source_id, source_external_calendar_event_id,
-      created_by, updated_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  await database.insertInto("holiday_periods").values({
     id,
-    input.name,
-    input.startDate,
-    input.endDate,
-    input.assignedTo,
-    input.notes ?? null,
-    optionalText(record, "sourceExternalCalendarSourceId"),
-    optionalText(record, "sourceExternalCalendarEventId"),
-    text(record, "createdBy", userEmail),
-    text(record, "updatedBy", userEmail),
-    text(record, "createdAt", timestamp),
-    text(record, "updatedAt", timestamp)
-  );
-  const junction = database.prepare(`
-    INSERT INTO holiday_period_children (
-      holiday_period_id, child_id, created_at, updated_at
-    ) VALUES (?, ?, ?, ?)
-  `);
-  for (const childId of input.childIds) junction.run(id, childId, timestamp, timestamp);
+    name: input.name,
+    start_date: input.startDate,
+    end_date: input.endDate,
+    assigned_to: input.assignedTo,
+    notes: input.notes ?? null,
+    source_external_calendar_source_id: optionalText(record, "sourceExternalCalendarSourceId"),
+    source_external_calendar_event_id: optionalText(record, "sourceExternalCalendarEventId"),
+    created_by: text(record, "createdBy", userEmail),
+    updated_by: text(record, "updatedBy", userEmail),
+    created_at: text(record, "createdAt", timestamp),
+    updated_at: text(record, "updatedAt", timestamp),
+    deleted_at: null
+  }).execute();
+  if (input.childIds.length) {
+    await database.insertInto("holiday_period_children").values(input.childIds.map((childId) => ({
+      holiday_period_id: id,
+      child_id: childId,
+      created_at: timestamp,
+      updated_at: timestamp,
+      deleted_at: null
+    }))).execute();
+  }
 }
 
-export function insertPattern(
+export async function insertPattern(
   record: DataRecord,
   timestamp: string,
   userEmail: string,
-  fallbackResponsiblePartyId?: string,
-  database: Database.Database = db
-): void {
+  fallbackResponsiblePartyId: string | undefined,
+  database: DatabaseExecutor
+): Promise<void> {
   const input = contactPatternInputSchema.parse({
     name: record.name,
     startDate: record.startDate,
@@ -450,31 +449,30 @@ export function insertPattern(
   });
   const id = text(record, "id");
   if (!id) throw new Error("Umgangsregel ohne ID kann nicht importiert werden.");
-  database.prepare(`
-    INSERT INTO contact_patterns (
-      id, name, start_date, frequency, friday_start_time, sunday_end_time,
-      active, created_by, updated_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  await database.insertInto("contact_patterns").values({
     id,
-    input.name,
-    input.startDate,
-    input.frequency,
-    input.fridayStartTime,
-    input.sundayEndTime,
-    Number(input.active),
-    text(record, "createdBy", userEmail),
-    text(record, "updatedBy", userEmail),
-    text(record, "createdAt", timestamp),
-    text(record, "updatedAt", timestamp)
-  );
-  const junction = database.prepare(`
-    INSERT INTO contact_pattern_children (
-      contact_pattern_id, child_id, created_at, updated_at
-    ) VALUES (?, ?, ?, ?)
-  `);
-  for (const childId of input.childIds) junction.run(id, childId, timestamp, timestamp);
-  insertImportedContactRule({
+    name: input.name,
+    start_date: input.startDate,
+    frequency: input.frequency,
+    friday_start_time: input.fridayStartTime,
+    sunday_end_time: input.sundayEndTime,
+    active: Number(input.active),
+    created_by: text(record, "createdBy", userEmail),
+    updated_by: text(record, "updatedBy", userEmail),
+    created_at: text(record, "createdAt", timestamp),
+    updated_at: text(record, "updatedAt", timestamp),
+    deleted_at: null
+  }).execute();
+  if (input.childIds.length) {
+    await database.insertInto("contact_pattern_children").values(input.childIds.map((childId) => ({
+      contact_pattern_id: id,
+      child_id: childId,
+      created_at: timestamp,
+      updated_at: timestamp,
+      deleted_at: null
+    }))).execute();
+  }
+  await insertImportedContactRule({
     id,
     name: input.name,
     startDate: input.startDate,
@@ -511,65 +509,63 @@ interface ImportedContactRule {
   updatedBy: string;
   createdAt: string;
   updatedAt: string;
-  database: Database.Database;
+  database: DatabaseExecutor;
 }
 
-// Removed with the synchronous app-data import path in #449.
-function insertImportedContactRule(input: ImportedContactRule): void {
-  input.database.prepare(`
-    INSERT INTO contact_rules (
-      id, name, start_date, end_date, timezone, recurrence_json, segments_json,
-      sync_horizon_months, responsible_party_id, active, source_contact_pattern_id,
-      created_by, updated_by, created_at, updated_at, deleted_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
-    ON CONFLICT(id) DO UPDATE SET
-      name = excluded.name,
-      start_date = excluded.start_date,
-      end_date = excluded.end_date,
-      timezone = excluded.timezone,
-      recurrence_json = excluded.recurrence_json,
-      segments_json = excluded.segments_json,
-      sync_horizon_months = excluded.sync_horizon_months,
-      responsible_party_id = excluded.responsible_party_id,
-      active = excluded.active,
-      source_contact_pattern_id = excluded.source_contact_pattern_id,
-      updated_by = excluded.updated_by,
-      updated_at = excluded.updated_at,
-      deleted_at = NULL
-  `).run(
-    input.id,
-    input.name,
-    input.startDate,
-    input.endDate ?? null,
-    input.timezone,
-    JSON.stringify(input.recurrence),
-    JSON.stringify(input.segments),
-    input.syncHorizonMonths,
-    input.responsiblePartyId ?? null,
-    Number(input.active),
-    input.sourceContactPatternId ?? null,
-    input.createdBy,
-    input.updatedBy,
-    input.createdAt,
-    input.updatedAt
-  );
-  input.database.prepare("DELETE FROM contact_rule_children WHERE contact_rule_id = ?").run(input.id);
-  const childInsert = input.database.prepare(`
-    INSERT INTO contact_rule_children (contact_rule_id, child_id, created_at, updated_at)
-    VALUES (?, ?, ?, ?)
-  `);
-  for (const childId of input.childIds) {
-    childInsert.run(input.id, childId, input.updatedAt, input.updatedAt);
+async function insertImportedContactRule(input: ImportedContactRule): Promise<void> {
+  await input.database.insertInto("contact_rules").values({
+    id: input.id,
+    name: input.name,
+    start_date: input.startDate,
+    end_date: input.endDate ?? null,
+    timezone: input.timezone,
+    recurrence_json: JSON.stringify(input.recurrence),
+    segments_json: JSON.stringify(input.segments),
+    sync_horizon_months: input.syncHorizonMonths,
+    responsible_party_id: input.responsiblePartyId ?? null,
+    active: Number(input.active),
+    source_contact_pattern_id: input.sourceContactPatternId ?? null,
+    created_by: input.createdBy,
+    updated_by: input.updatedBy,
+    created_at: input.createdAt,
+    updated_at: input.updatedAt,
+    deleted_at: null
+  }).onConflict((conflict) => conflict.column("id").doUpdateSet({
+    name: input.name,
+    start_date: input.startDate,
+    end_date: input.endDate ?? null,
+    timezone: input.timezone,
+    recurrence_json: JSON.stringify(input.recurrence),
+    segments_json: JSON.stringify(input.segments),
+    sync_horizon_months: input.syncHorizonMonths,
+    responsible_party_id: input.responsiblePartyId ?? null,
+    active: Number(input.active),
+    source_contact_pattern_id: input.sourceContactPatternId ?? null,
+    updated_by: input.updatedBy,
+    updated_at: input.updatedAt,
+    deleted_at: null
+  })).execute();
+  await input.database.deleteFrom("contact_rule_children")
+    .where("contact_rule_id", "=", input.id)
+    .execute();
+  if (input.childIds.length) {
+    await input.database.insertInto("contact_rule_children").values(input.childIds.map((childId) => ({
+      contact_rule_id: input.id,
+      child_id: childId,
+      created_at: input.updatedAt,
+      updated_at: input.updatedAt,
+      deleted_at: null
+    }))).execute();
   }
 }
 
-export function insertContactRule(
+export async function insertContactRule(
   record: DataRecord,
   timestamp: string,
   userEmail: string,
-  fallbackResponsiblePartyId?: string,
-  database: Database.Database = db
-): void {
+  fallbackResponsiblePartyId: string | undefined,
+  database: DatabaseExecutor
+): Promise<void> {
   const input = contactRuleInputSchema.parse({
     name: record.name,
     startDate: record.startDate,
@@ -584,7 +580,7 @@ export function insertContactRule(
   });
   const id = text(record, "id");
   if (!id) throw new Error("Umgangsregel ohne ID kann nicht importiert werden.");
-  insertImportedContactRule({
+  await insertImportedContactRule({
     id,
     ...input,
     sourceContactPatternId: optionalText(record, "sourceContactPatternId") ?? undefined,
@@ -596,7 +592,12 @@ export function insertContactRule(
   });
 }
 
-export function insertUnavailable(record: DataRecord, timestamp: string, userEmail: string, database: Database.Database = db): void {
+export async function insertUnavailable(
+  record: DataRecord,
+  timestamp: string,
+  userEmail: string,
+  database: DatabaseExecutor
+): Promise<void> {
   if (record.deletedAt) return;
   const input = unavailablePeriodInputSchema.parse({
     startDateTime: record.startDateTime,
@@ -615,114 +616,127 @@ export function insertUnavailable(record: DataRecord, timestamp: string, userEma
   });
   const id = text(record, "id");
   if (!id) throw new Error("Nichtverfügbarkeit ohne ID kann nicht importiert werden.");
-  database.prepare(`
-    INSERT INTO unavailable_periods (
-      id, start_datetime, end_datetime, scope, responsible_party_id, category, duty_related,
-      affects_contact, affects_holidays, location, notes, has_evidence,
-      evidence_reference, created_by, updated_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  await database.insertInto("unavailable_periods").values({
     id,
-    input.startDateTime,
-    input.endDateTime,
-    input.scope,
-    input.responsiblePartyId ?? null,
-    input.category,
-    Number(input.dutyRelated),
-    Number(input.affectsContact),
-    Number(input.affectsHolidays),
-    input.location ?? null,
-    input.notes ?? null,
-    Number(input.hasEvidence),
-    input.evidenceReference ?? null,
-    text(record, "createdBy", userEmail),
-    text(record, "updatedBy", userEmail),
-    text(record, "createdAt", timestamp),
-    text(record, "updatedAt", timestamp)
-  );
-  const childInsert = database.prepare(`
-    INSERT INTO unavailable_period_children (
-      unavailable_period_id, child_id, created_at, updated_at
-    ) VALUES (?, ?, ?, ?)
-  `);
-  for (const childId of input.childIds) {
-    childInsert.run(id, childId, timestamp, timestamp);
+    start_datetime: input.startDateTime,
+    end_datetime: input.endDateTime,
+    scope: input.scope,
+    responsible_party_id: input.responsiblePartyId ?? null,
+    category: input.category,
+    duty_related: Number(input.dutyRelated),
+    affects_contact: Number(input.affectsContact),
+    affects_holidays: Number(input.affectsHolidays),
+    location: input.location ?? null,
+    notes: input.notes ?? null,
+    has_evidence: Number(input.hasEvidence),
+    evidence_reference: input.evidenceReference ?? null,
+    created_by: text(record, "createdBy", userEmail),
+    updated_by: text(record, "updatedBy", userEmail),
+    created_at: text(record, "createdAt", timestamp),
+    updated_at: text(record, "updatedAt", timestamp),
+    deleted_at: null
+  }).execute();
+  if (input.childIds.length) {
+    await database.insertInto("unavailable_period_children").values(input.childIds.map((childId) => ({
+      unavailable_period_id: id,
+      child_id: childId,
+      created_at: timestamp,
+      updated_at: timestamp,
+      deleted_at: null
+    }))).execute();
   }
 }
 
-export function importData(
+export async function importData(
   data: ReturnType<typeof appDataImportSchema.parse>,
   userEmail: string,
-  database: Database.Database = db
-): void {
+  database: DatabaseExecutor
+): Promise<void> {
   const timestamp = nowIso();
-  clearDomainData(database);
-  for (const child of data.children) insertChild(child, timestamp, userEmail, database);
-  for (const party of data.careParties) insertCareParty(party, timestamp, userEmail, database);
-  const importedSettings = normalizeClientSettings({
+  await clearDomainData(database);
+  for (const child of data.children) await insertChild(child, timestamp, userEmail, database);
+  for (const party of data.careParties) await insertCareParty(party, timestamp, userEmail, database);
+  const importedSettings = await normalizeClientSettings({
     ...data.settings,
     lastJsonBackupAt: data.lastJsonBackupAt ?? data.settings.lastJsonBackupAt
   }, database);
   const fallbackResponsiblePartyId = importedSettings.defaultResponsiblePartyId
-    ?? importedDefaultResponsiblePartyId(data, database);
-  for (const entry of data.entries) insertEntry(entry, timestamp, userEmail, fallbackResponsiblePartyId, database);
-  for (const holiday of data.holidayPeriods) insertHoliday(holiday, timestamp, userEmail, database);
-  for (const pattern of data.contactPatterns) insertPattern(pattern, timestamp, userEmail, fallbackResponsiblePartyId, database);
-  for (const rule of data.contactRules) insertContactRule(rule, timestamp, userEmail, fallbackResponsiblePartyId, database);
-  for (const period of data.unavailablePeriods) insertUnavailable(period, timestamp, userEmail, database);
-  const sourceInsert = database.prepare(`INSERT INTO external_calendar_sources (id, name, color, visible, source_type, last_imported_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+    ?? await importedDefaultResponsiblePartyId(data, database);
+  for (const entry of data.entries) await insertEntry(entry, timestamp, userEmail, fallbackResponsiblePartyId, database);
+  for (const holiday of data.holidayPeriods) await insertHoliday(holiday, timestamp, userEmail, database);
+  for (const pattern of data.contactPatterns) await insertPattern(pattern, timestamp, userEmail, fallbackResponsiblePartyId, database);
+  for (const rule of data.contactRules) await insertContactRule(rule, timestamp, userEmail, fallbackResponsiblePartyId, database);
+  for (const period of data.unavailablePeriods) await insertUnavailable(period, timestamp, userEmail, database);
   for (const source of data.externalCalendarSources) {
     const id = text(source, "id");
     if (!id) throw new Error("External calendar source without ID.");
-    sourceInsert.run(id, text(source, "name"), text(source, "color"), Number(booleanValue(source, "visible", true)), externalCalendarSourceType(source), text(source, "lastImportedAt", timestamp), text(source, "createdAt", timestamp), text(source, "updatedAt", timestamp));
+    await database.insertInto("external_calendar_sources").values({
+      id,
+      name: text(source, "name"),
+      color: text(source, "color"),
+      visible: Number(booleanValue(source, "visible", true)),
+      source_type: externalCalendarSourceType(source),
+      source_kind: "file",
+      feed_url: null,
+      last_imported_at: text(source, "lastImportedAt", timestamp),
+      last_refresh_at: null,
+      last_refresh_error: null,
+      created_at: text(source, "createdAt", timestamp),
+      updated_at: text(source, "updatedAt", timestamp)
+    }).execute();
   }
-  const eventInsert = database.prepare(`INSERT INTO external_calendar_events (id, source_id, ical_uid, recurrence_id, title, description, start_datetime, end_datetime, all_day, location, raw_hash, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
   for (const event of data.externalCalendarEvents) {
     const id = text(event, "id");
     if (!id || !text(event, "sourceId")) throw new Error("External calendar event is incomplete.");
-    eventInsert.run(id, text(event, "sourceId"), text(event, "icalUid"), text(event, "recurrenceId"), text(event, "title"), optionalText(event, "description"), text(event, "startDateTime"), text(event, "endDateTime"), Number(booleanValue(event, "allDay")), optionalText(event, "location"), text(event, "rawHash"), text(event, "createdAt", timestamp), text(event, "updatedAt", timestamp));
+    await database.insertInto("external_calendar_events").values({
+      id,
+      source_id: text(event, "sourceId"),
+      ical_uid: text(event, "icalUid"),
+      recurrence_id: text(event, "recurrenceId"),
+      title: text(event, "title"),
+      description: optionalText(event, "description"),
+      start_datetime: text(event, "startDateTime"),
+      end_datetime: text(event, "endDateTime"),
+      all_day: Number(booleanValue(event, "allDay")),
+      location: optionalText(event, "location"),
+      raw_hash: text(event, "rawHash"),
+      created_at: text(event, "createdAt", timestamp),
+      updated_at: text(event, "updatedAt", timestamp)
+    }).execute();
   }
 
-  const settingInsert = database.prepare(`
-    INSERT INTO settings (key, value_json, created_by, updated_by, created_at, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?)
-  `);
   for (const [key, value] of Object.entries(importedSettings)) {
     if (value !== undefined) {
-      settingInsert.run(
+      await database.insertInto("settings").values({
         key,
-        JSON.stringify(value),
-        userEmail,
-        userEmail,
-        timestamp,
-        timestamp
-      );
+        value_json: JSON.stringify(value),
+        created_by: userEmail,
+        updated_by: userEmail,
+        created_at: timestamp,
+        updated_at: timestamp,
+        deleted_at: null
+      }).execute();
     }
   }
 
-  const closingInsert = database.prepare(`
-    INSERT INTO monthly_closings (
-      id, month_key, summary_json, closed_by, updated_by, changed_after_close_at,
-      created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-  `);
   for (const closure of data.monthClosures) {
     const monthKey = text(closure, "monthKey");
     if (!monthKey) continue;
     const closedAt = text(closure, "closedAt", timestamp);
-    closingInsert.run(
-      `closing_${monthKey}`,
-      monthKey,
-      JSON.stringify({
+    await database.insertInto("monthly_closings").values({
+      id: `closing_${monthKey}`,
+      month_key: monthKey,
+      summary_json: JSON.stringify({
         dataUpdatedAt: text(closure, "dataUpdatedAt", data.updatedAt),
         summary: closure.summary ?? {}
       }),
-      text(closure, "closedBy", userEmail),
-      text(closure, "updatedBy", userEmail),
-      optionalText(closure, "changedAfterCloseAt"),
-      closedAt,
-      timestamp
-    );
+      closed_by: text(closure, "closedBy", userEmail),
+      updated_by: text(closure, "updatedBy", userEmail),
+      changed_after_close_at: optionalText(closure, "changedAfterCloseAt"),
+      created_at: closedAt,
+      updated_at: timestamp,
+      deleted_at: null
+    }).execute();
   }
 
   const typeMap: Record<string, string> = {
@@ -740,7 +754,7 @@ export function importData(
   for (const audit of data.auditLog) {
     const action = text(audit, "action");
     if (!["created", "updated", "deleted"].includes(action)) continue;
-    recordAudit({
+    await recordDomainAudit(database, {
       userEmail: text(audit, "userId", userEmail),
       entityType: typeMap[text(audit, "objectType")] ?? text(audit, "objectType", "unknown"),
       entityId: text(audit, "objectId", "unknown"),
@@ -749,18 +763,16 @@ export function importData(
       oldValue: optionalText(audit, "oldValue") ?? undefined,
       newValue: optionalText(audit, "newValue") ?? undefined,
       metadata: { importedLabel: text(audit, "objectLabel") },
-      timestamp: text(audit, "timestamp", timestamp),
-      database
+      timestamp: text(audit, "timestamp", timestamp)
     });
   }
-  recordAudit({
+  await recordDomainAudit(database, {
     userEmail,
     entityType: "app_data",
     entityId: "global",
     action: "updated",
     newValue: "JSON-Wiederherstellung abgeschlossen",
-    timestamp,
-    database
+    timestamp
   });
 }
 
@@ -775,7 +787,7 @@ export async function appDataRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     try {
-      db.transaction(() => importData(parsed.data, request.userEmail, db))();
+      await app.persistence.transaction((database) => importData(parsed.data, request.userEmail, database));
     } catch (error) {
       return reply.code(400).send({
         error: "import_failed",
@@ -786,7 +798,7 @@ export async function appDataRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.delete("/api/app-data", destructive, async (_request, reply) => {
-    db.transaction(() => clearDomainData(db))();
+    await app.persistence.transaction((database) => clearDomainData(database));
     return reply.code(204).send();
   });
 }

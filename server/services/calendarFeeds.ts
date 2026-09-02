@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { ApiCalendarFeedScope } from "../../shared/api.js";
-import { db, persistence } from "../db/connection.js";
+import type { DatabaseExecutor, PersistenceRuntime } from "../db/runtime.js";
 import { nowIso } from "./common.js";
 import { assignedCarePartyIds, canUseCareParty, sharedCarePartyModeEnabled } from "./carePartyAccess.js";
 import { getCareParty } from "./careParties.js";
@@ -43,27 +43,6 @@ interface FeedEntryRow {
   updated_at: string;
 }
 
-const FEED_ENTRY_SELECT = `
-  SELECT
-    e.id, e.start_datetime, e.end_datetime, e.status, e.location,
-    e.custom_location, e.updated_at,
-    COALESCE((
-      SELECT json_group_array(child_name)
-      FROM (
-        SELECT c.name AS child_name
-        FROM care_entry_children ec
-        JOIN children c ON c.id = ec.child_id AND c.deleted_at IS NULL
-        WHERE ec.care_entry_id = e.id AND ec.deleted_at IS NULL
-        ORDER BY c.name, c.id
-      )
-    ), '[]') AS child_names_json,
-    responsible_party.name AS responsible_party_name
-  FROM care_entries e
-  LEFT JOIN care_parties responsible_party
-    ON responsible_party.id = e.responsible_party_id
-   AND responsible_party.deleted_at IS NULL
-`;
-
 const CARE_LOCATION_LABELS: Record<string, string> = {
   commuterApartment: "Pendlerwohnung",
   mainResidence: "Hauptwohnsitz",
@@ -96,31 +75,39 @@ function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-function activeTokenForUser(userId: string, scope: ApiCalendarFeedScope): TokenRow | undefined {
-  const parsed = parseCalendarFeedScope(scope);
-  return db.prepare(`
-    SELECT
-      t.id, t.user_id, u.external_subject, u.display_name, u.role,
-      t.scope_type, t.scope_party_id, p.name AS scope_party_name,
-      t.created_at, t.last_used_at
-    FROM calendar_feed_tokens t
-    JOIN app_users u ON u.id = t.user_id
-    LEFT JOIN care_parties p ON p.id = t.scope_party_id AND p.deleted_at IS NULL
-    WHERE t.user_id = ?
-      AND t.scope_type = ?
-      AND COALESCE(t.scope_party_id, '') = ?
-      AND t.revoked_at IS NULL
-    ORDER BY t.created_at DESC
-    LIMIT 1
-  `).get(userId, parsed.type, parsed.partyId ?? "") as TokenRow | undefined;
-}
-
-export function calendarFeedStatus(
+async function activeTokenForUser(
   userId: string,
   scope: ApiCalendarFeedScope,
+  database: DatabaseExecutor
+): Promise<TokenRow | undefined> {
+  const parsed = parseCalendarFeedScope(scope);
+  let query = database.selectFrom("calendar_feed_tokens as t")
+    .innerJoin("app_users as u", "u.id", "t.user_id")
+    .leftJoin("care_parties as p", (join) => join
+      .onRef("p.id", "=", "t.scope_party_id")
+      .on("p.deleted_at", "is", null))
+    .select([
+      "t.id", "t.user_id", "u.external_subject", "u.display_name", "u.role",
+      "t.scope_type", "t.scope_party_id", "p.name as scope_party_name",
+      "t.created_at", "t.last_used_at"
+    ])
+    .where("t.user_id", "=", userId)
+    .where("t.scope_type", "=", parsed.type)
+    .where("t.revoked_at", "is", null)
+    .orderBy("t.created_at", "desc");
+  query = parsed.partyId
+    ? query.where("t.scope_party_id", "=", parsed.partyId)
+    : query.where("t.scope_party_id", "is", null);
+  return query.executeTakeFirst() as Promise<TokenRow | undefined>;
+}
+
+export async function calendarFeedStatus(
+  userId: string,
+  scope: ApiCalendarFeedScope,
+  database: DatabaseExecutor,
   feedUrl?: string
-): CalendarFeedStatus {
-  const token = activeTokenForUser(userId, scope);
+): Promise<CalendarFeedStatus> {
+  const token = await activeTokenForUser(userId, scope, database);
   if (!token) return { active: false, scope };
   return {
     active: true,
@@ -131,138 +118,185 @@ export function calendarFeedStatus(
   };
 }
 
-async function assertScopeAllowed(userId: string, scope: ApiCalendarFeedScope): Promise<void> {
+async function assertScopeAllowed(
+  userId: string,
+  scope: ApiCalendarFeedScope,
+  database: DatabaseExecutor
+): Promise<void> {
   const parsed = parseCalendarFeedScope(scope);
   if (parsed.type !== "party") return;
-  if (!parsed.partyId || !getCareParty(parsed.partyId)) {
+  if (!parsed.partyId || !(await getCareParty(parsed.partyId, database))) {
     throw new Error("Die ausgewählte betreuende Person existiert nicht.");
   }
-  const user = db.prepare(`
-    SELECT external_subject AS externalSubject
-    FROM app_users
-    WHERE id = ? AND deleted_at IS NULL
-  `).get(userId) as { externalSubject: string } | undefined;
+  const user = await database.selectFrom("app_users")
+    .select("external_subject as externalSubject")
+    .where("id", "=", userId)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst();
   const requestUser = user
-    ? await findAuthenticatedUserBySubject(user.externalSubject, persistence.query)
+    ? await findAuthenticatedUserBySubject(user.externalSubject, database)
     : undefined;
-  if (requestUser && !canUseCareParty(requestUser, parsed.partyId)) {
+  if (requestUser && !(await canUseCareParty(requestUser, parsed.partyId, database))) {
     throw new Error("Diese betreuende Person ist für deinen Benutzer nicht freigegeben.");
   }
 }
 
 export async function rotateCalendarFeedToken(
   userId: string,
-  scope: ApiCalendarFeedScope
+  scope: ApiCalendarFeedScope,
+  runtime: PersistenceRuntime
 ): Promise<{ token: string; status: CalendarFeedStatus }> {
   const parsed = parseCalendarFeedScope(scope);
-  await assertScopeAllowed(userId, scope);
+  await assertScopeAllowed(userId, scope, runtime.query);
   const token = randomBytes(TOKEN_BYTES).toString("base64url");
   const timestamp = nowIso();
-  db.transaction(() => {
-    db.prepare(`
-      UPDATE calendar_feed_tokens
-      SET revoked_at = ?
-      WHERE user_id = ?
-        AND scope_type = ?
-        AND COALESCE(scope_party_id, '') = ?
-        AND revoked_at IS NULL
-    `).run(timestamp, userId, parsed.type, parsed.partyId ?? "");
-    db.prepare(`
-      INSERT INTO calendar_feed_tokens (
-        id, user_id, token_hash, scope_type, scope_party_id, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?)
-    `).run(randomUUID(), userId, hashToken(token), parsed.type, parsed.partyId ?? null, timestamp);
-  })();
-  return { token, status: calendarFeedStatus(userId, scope) };
+  await runtime.transaction(async (database) => {
+    let revoke = database.updateTable("calendar_feed_tokens")
+      .set({ revoked_at: timestamp })
+      .where("user_id", "=", userId)
+      .where("scope_type", "=", parsed.type)
+      .where("revoked_at", "is", null);
+    revoke = parsed.partyId
+      ? revoke.where("scope_party_id", "=", parsed.partyId)
+      : revoke.where("scope_party_id", "is", null);
+    await revoke.execute();
+    await database.insertInto("calendar_feed_tokens").values({
+      id: randomUUID(),
+      user_id: userId,
+      token_hash: hashToken(token),
+      scope_type: parsed.type,
+      scope_party_id: parsed.partyId ?? null,
+      created_at: timestamp,
+      last_used_at: null,
+      revoked_at: null
+    }).execute();
+  });
+  return { token, status: await calendarFeedStatus(userId, scope, runtime.query) };
 }
 
-export function revokeCalendarFeedTokens(userId: string, scope?: ApiCalendarFeedScope): void {
+export async function revokeCalendarFeedTokens(
+  userId: string,
+  database: DatabaseExecutor,
+  scope?: ApiCalendarFeedScope
+): Promise<void> {
   const parsed = scope ? parseCalendarFeedScope(scope) : undefined;
-  db.prepare(`
-    UPDATE calendar_feed_tokens
-    SET revoked_at = ?
-    WHERE user_id = ?
-      AND revoked_at IS NULL
-      ${parsed ? "AND scope_type = ? AND COALESCE(scope_party_id, '') = ?" : ""}
-  `).run(nowIso(), userId, ...(parsed ? [parsed.type, parsed.partyId ?? ""] : []));
+  let update = database.updateTable("calendar_feed_tokens")
+    .set({ revoked_at: nowIso() })
+    .where("user_id", "=", userId)
+    .where("revoked_at", "is", null);
+  if (parsed) {
+    update = update.where("scope_type", "=", parsed.type);
+    update = parsed.partyId
+      ? update.where("scope_party_id", "=", parsed.partyId)
+      : update.where("scope_party_id", "is", null);
+  }
+  await update.execute();
 }
 
-export async function resolveCalendarFeedToken(token: string): Promise<TokenRow | undefined> {
+export async function resolveCalendarFeedToken(
+  token: string,
+  database: DatabaseExecutor
+): Promise<TokenRow | undefined> {
   const normalized = token.trim();
   if (!/^[A-Za-z0-9_-]{32,128}$/.test(normalized)) return undefined;
-  const row = db.prepare(`
-    SELECT
-      t.id, t.user_id, u.external_subject, u.display_name, u.role,
-      t.scope_type, t.scope_party_id, p.name AS scope_party_name,
-      t.created_at, t.last_used_at
-    FROM calendar_feed_tokens t
-    JOIN app_users u ON u.id = t.user_id
-    LEFT JOIN care_parties p ON p.id = t.scope_party_id AND p.deleted_at IS NULL
-    WHERE t.token_hash = ? AND t.revoked_at IS NULL AND u.deleted_at IS NULL
-  `).get(hashToken(normalized)) as TokenRow | undefined;
+  const row = await database.selectFrom("calendar_feed_tokens as t")
+    .innerJoin("app_users as u", "u.id", "t.user_id")
+    .leftJoin("care_parties as p", (join) => join
+      .onRef("p.id", "=", "t.scope_party_id")
+      .on("p.deleted_at", "is", null))
+    .select([
+      "t.id", "t.user_id", "u.external_subject", "u.display_name", "u.role",
+      "t.scope_type", "t.scope_party_id", "p.name as scope_party_name",
+      "t.created_at", "t.last_used_at"
+    ])
+    .where("t.token_hash", "=", hashToken(normalized))
+    .where("t.revoked_at", "is", null)
+    .where("u.deleted_at", "is", null)
+    .executeTakeFirst() as TokenRow | undefined;
   if (!row) return undefined;
   if (!(await userHasWorkspacePermission(
     row.user_id,
     "feeds:manage-own",
-    persistence.query
+    database
   ))) return undefined;
   const requestUser = await findAuthenticatedUserBySubject(
     row.external_subject,
-    persistence.query
+    database
   );
   if (!requestUser?.workspaceAccess) return undefined;
   if (row.scope_type === "party") {
     if (!row.scope_party_id || !row.scope_party_name) return undefined;
-    if (!canUseCareParty(requestUser, row.scope_party_id)) return undefined;
+    if (!(await canUseCareParty(requestUser, row.scope_party_id, database))) return undefined;
   }
-  db.prepare("UPDATE calendar_feed_tokens SET last_used_at = ? WHERE id = ?")
-    .run(nowIso(), row.id);
+  await database.updateTable("calendar_feed_tokens")
+    .set({ last_used_at: nowIso() })
+    .where("id", "=", row.id)
+    .execute();
   return row;
 }
 
-async function feedEntriesForToken(token: TokenRow): Promise<FeedEntryRow[]> {
+async function feedEntriesForToken(
+  token: TokenRow,
+  database: DatabaseExecutor
+): Promise<FeedEntryRow[]> {
   const requestUser = await findAuthenticatedUserBySubject(
     token.external_subject,
-    persistence.query
+    database
   );
   if (!requestUser?.workspaceAccess || !requestUser.workspacePermissions?.includes("feeds:manage-own")) {
     return [];
   }
-  const sharedMode = sharedCarePartyModeEnabled();
+  const sharedMode = await sharedCarePartyModeEnabled(database);
   const unrestricted = !sharedMode || requestUser.isOwner || requestUser.workspaceRole === "admin";
-  const assignedIds = unrestricted ? [] : assignedCarePartyIds(token.user_id);
+  const assignedIds = unrestricted ? [] : await assignedCarePartyIds(token.user_id, database);
   const scope = scopeFromRow(token);
+  let query = database.selectFrom("care_entries as e")
+    .leftJoin("care_parties as responsible_party", (join) => join
+      .onRef("responsible_party.id", "=", "e.responsible_party_id")
+      .on("responsible_party.deleted_at", "is", null))
+    .select([
+      "e.id", "e.start_datetime", "e.end_datetime", "e.status", "e.location",
+      "e.custom_location", "e.updated_at",
+      "responsible_party.name as responsible_party_name"
+    ])
+    .where("e.deleted_at", "is", null)
+    .where("e.status", "in", ["planned", "completed", "partial"])
+    .orderBy("e.start_datetime")
+    .orderBy("e.id");
   if (scope === "legacy") {
-    return db.prepare(`${FEED_ENTRY_SELECT}
-      WHERE e.deleted_at IS NULL
-        AND e.status IN ('planned', 'completed', 'partial')
-        AND e.created_by = ?
-      ORDER BY e.start_datetime, e.id
-    `).all(token.user_id) as FeedEntryRow[];
+    query = query.where("e.created_by", "=", token.user_id);
+  } else if (scope.startsWith("party:")) {
+    if (!token.scope_party_id) return [];
+    query = query.where("e.responsible_party_id", "=", token.scope_party_id);
+  } else if (!unrestricted && assignedIds.length > 0) {
+    query = query.where("e.responsible_party_id", "in", assignedIds);
+  } else if (!unrestricted) {
+    return [];
   }
-  if (scope.startsWith("party:")) {
-    return db.prepare(`${FEED_ENTRY_SELECT}
-      WHERE e.deleted_at IS NULL
-        AND e.status IN ('planned', 'completed', 'partial')
-        AND e.responsible_party_id = ?
-      ORDER BY e.start_datetime, e.id
-    `).all(token.scope_party_id) as FeedEntryRow[];
+  const entries = await query.execute();
+  if (!entries.length) return [];
+  const childRows = await database.selectFrom("care_entry_children as ec")
+    .innerJoin("children as c", (join) => join
+      .onRef("c.id", "=", "ec.child_id")
+      .on("c.deleted_at", "is", null))
+    .select(["ec.care_entry_id", "c.id as child_id", "c.name"])
+    .where("ec.care_entry_id", "in", entries.map((entry) => entry.id))
+    .where("ec.deleted_at", "is", null)
+    .orderBy("c.name")
+    .orderBy("c.id")
+    .execute();
+  const childrenByEntry = new Map<string, string[]>();
+  for (const child of childRows) {
+    childrenByEntry.set(child.care_entry_id, [
+      ...(childrenByEntry.get(child.care_entry_id) ?? []),
+      child.name
+    ]);
   }
-  if (!unrestricted && assignedIds.length > 0) {
-    const placeholders = assignedIds.map(() => "?").join(", ");
-    return db.prepare(`${FEED_ENTRY_SELECT}
-      WHERE e.deleted_at IS NULL
-        AND e.status IN ('planned', 'completed', 'partial')
-        AND e.responsible_party_id IN (${placeholders})
-      ORDER BY e.start_datetime, e.id
-    `).all(...assignedIds) as FeedEntryRow[];
-  }
-  if (!unrestricted) return [];
-  return db.prepare(`${FEED_ENTRY_SELECT}
-    WHERE e.deleted_at IS NULL
-      AND e.status IN ('planned', 'completed', 'partial')
-    ORDER BY e.start_datetime, e.id
-  `).all() as FeedEntryRow[];
+  return entries.map((entry) => ({
+    ...entry,
+    status: entry.status as FeedEntryRow["status"],
+    child_names_json: JSON.stringify(childrenByEntry.get(entry.id) ?? [])
+  }));
 }
 
 function escapeText(value: string): string {
@@ -347,6 +381,7 @@ function utcDateTimeValue(value: string): string {
 export async function buildPersonalCalendarFeed(input: {
   token: TokenRow;
   generatedAt?: string;
+  database: DatabaseExecutor;
 }): Promise<string> {
   const generatedAt = input.generatedAt ?? nowIso();
   const scope = scopeFromRow(input.token);
@@ -364,7 +399,7 @@ export async function buildPersonalCalendarFeed(input: {
     `X-WR-CALNAME:${escapeText(title)}`,
     "X-WR-TIMEZONE:Europe/Berlin"
   ];
-  for (const entry of await feedEntriesForToken(input.token)) {
+  for (const entry of await feedEntriesForToken(input.token, input.database)) {
     const location = feedLocation(entry);
     lines.push(
       "BEGIN:VEVENT",

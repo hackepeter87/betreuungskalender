@@ -34,8 +34,8 @@ const importSchema = previewSchema.extend({
 
 export async function migrationRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/migration/legacy-summary", sensitiveLimit, async () => ({
-    database: getLegacyDatabaseSummary(),
-    reports: listLegacyMigrationReports()
+    database: await getLegacyDatabaseSummary(app.persistence.query),
+    reports: await listLegacyMigrationReports(app.persistence.query)
   }));
 
   app.post("/api/migration/legacy-detected", sensitiveLimit, async (request, reply) => {
@@ -43,10 +43,11 @@ export async function migrationRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) {
       return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     }
-    recordLegacyMigrationEvent(
+    await recordLegacyMigrationEvent(
       request.userEmail,
       "legacy_migration_detected",
-      parsed.data
+      parsed.data,
+      app.persistence.query
     );
     return reply.code(204).send();
   });
@@ -56,10 +57,11 @@ export async function migrationRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) {
       return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     }
-    recordLegacyMigrationEvent(
+    await recordLegacyMigrationEvent(
       request.userEmail,
       "legacy_migration_skip",
-      parsed.data
+      parsed.data,
+      app.persistence.query
     );
     return reply.code(204).send();
   });
@@ -73,6 +75,7 @@ export async function migrationRoutes(app: FastifyInstance): Promise<void> {
       parsed.data.data,
       request.userEmail,
       parsed.data.fingerprint,
+      app.persistence.query,
       parsed.data.invalidRecords,
       parsed.data.warnings
     );
@@ -87,7 +90,7 @@ export async function migrationRoutes(app: FastifyInstance): Promise<void> {
       return await executeLegacyMigration({
         ...parsed.data,
         userEmail: request.userEmail
-      });
+      }, app.persistence);
     } catch (error) {
       return reply.code(400).send({
         error: "migration_failed",

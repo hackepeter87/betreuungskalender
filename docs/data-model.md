@@ -413,8 +413,10 @@ care-party mappings. `app_invitations.data_transfer_actor_id` can connect an
 invitation to one snapshot so accepting it applies only the explicitly selected
 role and care-party assignments.
 
-A dry run imports the same normalized data into a temporary current-schema
-SQLite database and runs foreign-key, integrity, and domain-reference checks.
+A dry run imports the same normalized data through the same asynchronous import
+core used by a real import. It uses a temporary current-schema SQLite runtime;
+the SQLite adapter runs the native foreign-key and integrity checks while
+domain-reference validation remains backend-neutral.
 It does not write a transfer run, actor mapping, settings, audit entry, or file
 to the target installation. It also derives an aggregate comparison between the
 current domain data, incoming package data, and expected post-import state.

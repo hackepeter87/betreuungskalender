@@ -518,14 +518,14 @@ export interface ApiAuditEntry {
   id: number;
   timestamp: string;
   userEmail: string;
-  userDisplayName?: string;
+  userDisplayName?: string | null;
   entityType: string;
   entityId: string;
   action: "created" | "updated" | "deleted" | "post_close_change";
-  fieldName?: string;
-  oldValue?: string;
-  newValue?: string;
-  metadataJson?: string;
+  fieldName?: string | null;
+  oldValue?: string | null;
+  newValue?: string | null;
+  metadataJson?: string | null;
   effectiveDate?: string;
 }
 

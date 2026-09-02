@@ -6,11 +6,12 @@ Accepted for staged implementation.
 
 ## Context
 
-The server currently shares one synchronous `better-sqlite3` connection.
-Routes and services prepare SQL directly, migrations contain SQLite-specific
-SQL, and backup and readiness behavior assume a local database file. Replacing
-only that connection would hide incompatible transaction, migration and error
-semantics instead of creating a dependable driver boundary.
+Before this staged migration, the server shared one synchronous
+`better-sqlite3` connection across routes and services. Migrations, native
+backup operations, and integrity checks still require explicit SQLite-specific
+behavior. The application runtime now separates those adapter responsibilities
+from typed operational and domain queries instead of hiding incompatible
+transaction, migration, and error semantics behind a connection replacement.
 
 SQLite must remain the zero-configuration default. A later optional PostgreSQL
 driver must use the same domain rules and HTTP API without implying that several
@@ -97,10 +98,15 @@ one process, so the existing single-replica boundary continues to apply.
 - Domain persistence for children, care parties, care entries, confirmations,
   contact rules, holidays, unavailable periods, external calendars, trips,
   costs and settings uses an explicitly injected runtime or transaction.
-- Full application-data import retains a temporary synchronous compatibility
-  path so its existing all-or-nothing transaction is preserved. Operational,
-  reporting, backup and transfer paths are converted in the next reviewed
-  delivery slice before the SQLite parity gate.
+- Reporting, audit history, monthly closings, personal calendar feeds, full
+  application-data import, legacy migration, demo loading, and portable
+  transfer use the same asynchronous runtime or an explicitly supplied
+  transaction. The temporary synchronous contact-rule import path has been
+  removed.
+- Health and readiness query the runtime's abstract status. SQLite integrity
+  checks and online backup remain explicit adapter-native operations.
+- The SQLite parity package remains a separate acceptance gate before the
+  v1.27.0 release package can be completed.
 - SQLite remains the only selectable driver throughout v1.27.0.
 
 ## Verification contract

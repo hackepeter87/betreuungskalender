@@ -2,7 +2,6 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { isValidDateKey } from "../../shared/temporal.js";
 import { config } from "../config.js";
-import { db } from "../db/connection.js";
 import { createReportSnapshot } from "../services/reportSnapshots.js";
 
 const querySchema = z.object({
@@ -25,7 +24,7 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
     }
     reply.header("Cache-Control", "no-store");
     return createReportSnapshot({
-      database: db,
+      persistence: app.persistence,
       startDate: parsed.data.startDate,
       endDate: parsed.data.endDate,
       includeAuditHistory

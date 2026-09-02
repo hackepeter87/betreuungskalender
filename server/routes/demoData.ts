@@ -16,14 +16,14 @@ export async function demoDataRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const data = createEdgeCaseDemoData();
-    const dryRun = dryRunPortableTransfer(data);
-    importPortableTransfer({
+    const dryRun = await dryRunPortableTransfer(data, app.persistence);
+    await importPortableTransfer({
       package: data,
       fingerprint: dryRun.fingerprint,
       dryRunReceipt: dryRun.dryRunReceipt!,
       confirmWarnings: true,
       actorId: request.userEmail
-    });
+    }, app.persistence);
     return reply.send(edgeCaseDemoSummary(data));
   });
 }

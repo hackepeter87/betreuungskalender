@@ -1,8 +1,11 @@
-import Database from "better-sqlite3";
+import { sql } from "kysely";
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
 import { config } from "../config.js";
-import { db } from "../db/connection.js";
-import { migrateDatabase } from "../db/migrationRunner.js";
+import {
+  createSqlitePersistenceRuntime,
+  type DatabaseExecutor,
+  type PersistenceRuntime
+} from "../db/runtime.js";
 import { appDataImportSchema } from "../validation/schemas.js";
 import { importData } from "../routes/appData.js";
 import type { WorkspaceRole } from "../auth.js";
@@ -187,23 +190,49 @@ function camelRecord(row: DataRecord): DataRecord {
   return Object.fromEntries(Object.entries(row).map(([key, value]) => [toCamel(key), value]));
 }
 
-function activeRows(database: Database.Database, table: string): DataRecord[] {
-  return (database.prepare(`SELECT * FROM ${table} WHERE deleted_at IS NULL`).all() as DataRecord[])
-    .map(camelRecord);
+type ActiveDomainTable =
+  | "children"
+  | "care_parties"
+  | "care_entries"
+  | "trips"
+  | "costs"
+  | "holiday_periods"
+  | "unavailable_periods"
+  | "contact_patterns"
+  | "contact_rules";
+
+async function activeRows(
+  database: DatabaseExecutor,
+  table: ActiveDomainTable
+): Promise<DataRecord[]> {
+  const rows = await database.selectFrom(table)
+    .selectAll()
+    .where("deleted_at", "is", null)
+    .execute();
+  return (rows as DataRecord[]).map(camelRecord);
 }
 
-function junctionMap(
-  database: Database.Database,
-  table: string,
-  parentColumn: string
-): Map<string, string[]> {
+type ChildJunction =
+  | { table: "care_entry_children"; parentColumn: "care_entry_id" }
+  | { table: "care_entry_actual_children"; parentColumn: "care_entry_id" }
+  | { table: "holiday_period_children"; parentColumn: "holiday_period_id" }
+  | { table: "contact_pattern_children"; parentColumn: "contact_pattern_id" }
+  | { table: "contact_rule_children"; parentColumn: "contact_rule_id" }
+  | { table: "unavailable_period_children"; parentColumn: "unavailable_period_id" };
+
+async function junctionMap(
+  database: DatabaseExecutor,
+  junction: ChildJunction
+): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>();
-  const rows = database.prepare(`
-    SELECT ${parentColumn} AS parentId, child_id AS childId
-    FROM ${table}
-    WHERE deleted_at IS NULL
-    ORDER BY child_id
-  `).all() as Array<{ parentId: string; childId: string }>;
+  const rows = await database.selectFrom(junction.table)
+    .select([
+      sql.ref(junction.parentColumn).as("parentId"),
+      "child_id as childId"
+    ])
+    .where("deleted_at", "is", null)
+    .orderBy("child_id")
+    .execute() as Array<{ parentId: string; childId: string }>;
   for (const row of rows) result.set(row.parentId, [...(result.get(row.parentId) ?? []), row.childId]);
   return result;
 }
@@ -222,33 +251,44 @@ function boolFields(record: DataRecord, fields: string[]): DataRecord {
   return record;
 }
 
-function exportedSettings(database: Database.Database): Record<string, unknown> {
-  return { ...getClientSettings(database) };
+async function exportedSettings(database: DatabaseExecutor): Promise<Record<string, unknown>> {
+  return { ...await getClientSettings(database) };
 }
 
-export function exportDomainData(database: Database.Database = db): ImportData {
-  const entryChildren = junctionMap(database, "care_entry_children", "care_entry_id");
-  const actualChildren = junctionMap(database, "care_entry_actual_children", "care_entry_id");
-  const holidayChildren = junctionMap(database, "holiday_period_children", "holiday_period_id");
-  const patternChildren = junctionMap(database, "contact_pattern_children", "contact_pattern_id");
-  const ruleChildren = junctionMap(database, "contact_rule_children", "contact_rule_id");
-  const unavailableChildren = junctionMap(database, "unavailable_period_children", "unavailable_period_id");
+export async function exportDomainData(
+  database: DatabaseExecutor
+): Promise<ImportData> {
+  const [
+    entryChildren,
+    actualChildren,
+    holidayChildren,
+    patternChildren,
+    ruleChildren,
+    unavailableChildren
+  ] = await Promise.all([
+    junctionMap(database, { table: "care_entry_children", parentColumn: "care_entry_id" }),
+    junctionMap(database, { table: "care_entry_actual_children", parentColumn: "care_entry_id" }),
+    junctionMap(database, { table: "holiday_period_children", parentColumn: "holiday_period_id" }),
+    junctionMap(database, { table: "contact_pattern_children", parentColumn: "contact_pattern_id" }),
+    junctionMap(database, { table: "contact_rule_children", parentColumn: "contact_rule_id" }),
+    junctionMap(database, { table: "unavailable_period_children", parentColumn: "unavailable_period_id" })
+  ]);
 
   const tripsByEntry = new Map<string, DataRecord[]>();
-  for (const trip of activeRows(database, "trips")) {
+  for (const trip of await activeRows(database, "trips")) {
     const entryId = String(trip.careEntryId ?? "");
     delete trip.careEntryId;
     boolFields(trip, ["ownCar", "reimbursed"]);
     tripsByEntry.set(entryId, [...(tripsByEntry.get(entryId) ?? []), trip]);
   }
   const costsByEntry = new Map<string, DataRecord[]>();
-  for (const cost of activeRows(database, "costs")) {
+  for (const cost of await activeRows(database, "costs")) {
     const entryId = String(cost.careEntryId ?? "");
     delete cost.careEntryId;
     costsByEntry.set(entryId, [...(costsByEntry.get(entryId) ?? []), cost]);
   }
 
-  const entries = activeRows(database, "care_entries").map((entry) => {
+  const entries = (await activeRows(database, "care_entries")).map((entry) => {
     const id = String(entry.id);
     return {
       ...boolFields(entry, [
@@ -261,73 +301,116 @@ export function exportDomainData(database: Database.Database = db): ImportData {
     };
   });
 
-  const settings = exportedSettings(database);
-  const updatedAt = database.prepare(`
-    SELECT MAX(value) AS value FROM (
-      SELECT MAX(updated_at) AS value FROM children
-      UNION ALL SELECT MAX(updated_at) FROM care_entries
-      UNION ALL SELECT MAX(updated_at) FROM settings
-    )
-  `).get() as { value: string | null };
+  const settings = await exportedSettings(database);
+  const [childrenUpdated, entriesUpdated, settingsUpdated] = await Promise.all([
+    database.selectFrom("children").select(({ fn }) => fn.max<string>("updated_at").as("value")).executeTakeFirst(),
+    database.selectFrom("care_entries").select(({ fn }) => fn.max<string>("updated_at").as("value")).executeTakeFirst(),
+    database.selectFrom("settings").select(({ fn }) => fn.max<string>("updated_at").as("value")).executeTakeFirst()
+  ]);
+  const updatedAt = [childrenUpdated?.value, entriesUpdated?.value, settingsUpdated?.value]
+    .filter((value): value is string => typeof value === "string")
+    .sort()
+    .at(-1);
+  const [
+    children,
+    careParties,
+    holidayPeriods,
+    unavailablePeriods,
+    externalCalendarSources,
+    externalCalendarEvents,
+    contactPatterns,
+    contactRules,
+    auditRows,
+    closingRows
+  ] = await Promise.all([
+    activeRows(database, "children"),
+    activeRows(database, "care_parties"),
+    activeRows(database, "holiday_periods"),
+    activeRows(database, "unavailable_periods"),
+    database.selectFrom("external_calendar_sources")
+      .select([
+        "id", "name", "color", "visible", "source_type", "source_kind",
+        "last_imported_at", "last_refresh_at", "last_refresh_error", "created_at", "updated_at"
+      ])
+      .orderBy("created_at")
+      .orderBy("id")
+      .execute(),
+    database.selectFrom("external_calendar_events")
+      .select([
+        "id", "source_id", "ical_uid", "recurrence_id", "title", "description",
+        "start_datetime", "end_datetime", "all_day", "location", "raw_hash", "created_at", "updated_at"
+      ])
+      .orderBy("start_datetime")
+      .orderBy("id")
+      .execute(),
+    activeRows(database, "contact_patterns"),
+    activeRows(database, "contact_rules"),
+    database.selectFrom("audit_log as audit")
+      .leftJoin("app_users as users", "users.id", "audit.user_email")
+      .leftJoin("data_transfer_actors as actors", "actors.id", "audit.user_email")
+      .select([
+        "audit.id", "audit.timestamp", "audit.user_email as userId",
+        (expression) => expression.fn.coalesce("users.display_name", "actors.display_name").as("userDisplayName"),
+        "audit.entity_type as objectType", "audit.entity_id as objectId",
+        "audit.field_name as fieldName", "audit.old_value as oldValue",
+        "audit.new_value as newValue", "audit.action"
+      ])
+      .where("audit.deleted_at", "is", null)
+      .orderBy("audit.timestamp")
+      .orderBy("audit.id")
+      .execute(),
+    database.selectFrom("monthly_closings")
+      .select([
+        "month_key", "created_at as closed_at", "closed_by", "summary_json",
+        "changed_after_close_at", "updated_by", "updated_at"
+      ])
+      .where("deleted_at", "is", null)
+      .orderBy("month_key")
+      .execute()
+  ]);
 
   return appDataImportSchema.parse({
     schemaVersion: 6,
-    children: activeRows(database, "children"),
-    careParties: activeRows(database, "care_parties"),
+    children,
+    careParties,
     entries,
-    holidayPeriods: activeRows(database, "holiday_periods").map((item) => ({
+    holidayPeriods: holidayPeriods.map((item) => ({
       ...item,
       childIds: holidayChildren.get(String(item.id)) ?? []
     })),
-    unavailablePeriods: activeRows(database, "unavailable_periods").map((item) => ({
+    unavailablePeriods: unavailablePeriods.map((item) => ({
       ...boolFields(item, ["dutyRelated", "affectsContact", "affectsHolidays", "hasEvidence"]),
       childIds: unavailableChildren.get(String(item.id)) ?? []
     })),
-    externalCalendarSources: (database.prepare(`
-      SELECT id, name, color, visible, source_type, source_kind,
-        last_imported_at, last_refresh_at, last_refresh_error, created_at, updated_at
-      FROM external_calendar_sources
-      ORDER BY created_at, id
-    `).all() as DataRecord[]).map((row) => boolFields(camelRecord(row), ["visible"])),
-    externalCalendarEvents: (database.prepare(`
-      SELECT id, source_id, ical_uid, recurrence_id, title, description,
-        start_datetime, end_datetime, all_day, location, raw_hash, created_at, updated_at
-      FROM external_calendar_events
-      ORDER BY start_datetime, id
-    `).all() as DataRecord[]).map((row) => boolFields(camelRecord(row), ["allDay"])),
-    contactPatterns: activeRows(database, "contact_patterns").map((item) => ({
+    externalCalendarSources: (externalCalendarSources as DataRecord[])
+      .map((row) => boolFields(camelRecord(row), ["visible"])),
+    externalCalendarEvents: (externalCalendarEvents as DataRecord[])
+      .map((row) => boolFields(camelRecord(row), ["allDay"])),
+    contactPatterns: contactPatterns.map((item) => ({
       ...boolFields(item, ["active"]),
       childIds: patternChildren.get(String(item.id)) ?? []
     })),
-    contactRules: activeRows(database, "contact_rules").map((item) => ({
+    contactRules: contactRules.map((item) => ({
       ...boolFields(item, ["active"]),
       recurrence: parseJson(item.recurrenceJson, {}),
       segments: parseJson(item.segmentsJson, []),
       childIds: ruleChildren.get(String(item.id)) ?? []
     })),
-    auditLog: (database.prepare(`
-      SELECT audit.id, audit.timestamp, audit.user_email AS userId,
-        COALESCE(users.display_name, actors.display_name) AS userDisplayName,
-        audit.entity_type AS objectType, audit.entity_id AS objectId,
-        audit.entity_type || ' ' || audit.entity_id AS objectLabel,
-        COALESCE(audit.field_name, audit.action) AS field,
-        COALESCE(audit.old_value, '') AS oldValue,
-        COALESCE(audit.new_value, '') AS newValue,
-        audit.action
-      FROM audit_log audit
-      LEFT JOIN app_users users ON users.id = audit.user_email
-      LEFT JOIN data_transfer_actors actors ON actors.id = audit.user_email
-      WHERE audit.deleted_at IS NULL
-      ORDER BY audit.timestamp, audit.id
-    `).all() as DataRecord[]).map(camelRecord),
-    monthClosures: (database.prepare(`
-      SELECT month_key, created_at AS closed_at, closed_by,
-        summary_json, changed_after_close_at, updated_by, updated_at
-      FROM monthly_closings
-      WHERE deleted_at IS NULL
-      ORDER BY month_key
-    `).all() as DataRecord[]).map((row) => {
-      const item = camelRecord(row);
+    auditLog: auditRows.map((row) => ({
+      id: row.id,
+      timestamp: row.timestamp,
+      userId: row.userId,
+      userDisplayName: row.userDisplayName ?? undefined,
+      objectType: row.objectType,
+      objectId: row.objectId,
+      objectLabel: `${row.objectType} ${row.objectId}`,
+      field: row.fieldName ?? row.action,
+      oldValue: row.oldValue ?? "",
+      newValue: row.newValue ?? "",
+      action: row.action
+    })),
+    monthClosures: closingRows.map((row) => {
+      const item = camelRecord(row as DataRecord);
       const summary = parseJson(item.summaryJson, {}) as DataRecord;
       return {
         monthKey: item.monthKey,
@@ -341,7 +424,7 @@ export function exportDomainData(database: Database.Database = db): ImportData {
     }),
     lastJsonBackupAt: settings.lastJsonBackupAt,
     settings,
-    updatedAt: updatedAt.value ?? new Date().toISOString()
+    updatedAt: updatedAt ?? new Date().toISOString()
   });
 }
 
@@ -375,50 +458,58 @@ function referencedActorIds(data: ImportData): Set<string> {
   return ids;
 }
 
-function exportActors(data: ImportData, database: Database.Database): PortableActor[] {
+async function exportActors(
+  data: ImportData,
+  database: DatabaseExecutor
+): Promise<PortableActor[]> {
   const actors: PortableActor[] = [];
-  const user = database.prepare(`
-    SELECT users.display_name AS displayName, users.email,
-      memberships.role AS role
-    FROM app_users users
-    LEFT JOIN app_memberships memberships
-      ON memberships.user_id = users.id AND memberships.deleted_at IS NULL
-    WHERE users.id = ?
-  `);
-  const assignments = database.prepare(`
-    SELECT care_party_id AS carePartyId
-    FROM app_user_care_party_assignments
-    WHERE user_id = ? AND deleted_at IS NULL
-    ORDER BY care_party_id
-  `);
   for (const sourceRef of referencedActorIds(data)) {
-    const row = user.get(sourceRef) as {
-      displayName: string;
-      email: string | null;
-      role: WorkspaceRole | null;
-    } | undefined;
+    const [row, assignments] = await Promise.all([
+      database.selectFrom("app_users as users")
+        .leftJoin("app_memberships as memberships", (join) => join
+          .onRef("memberships.user_id", "=", "users.id")
+          .on("memberships.deleted_at", "is", null))
+        .select([
+          "users.display_name as displayName",
+          "users.email",
+          "memberships.role"
+        ])
+        .where("users.id", "=", sourceRef)
+        .executeTakeFirst(),
+      database.selectFrom("app_user_care_party_assignments")
+        .select("care_party_id as carePartyId")
+        .where("user_id", "=", sourceRef)
+        .where("deleted_at", "is", null)
+        .orderBy("care_party_id")
+        .execute()
+    ]);
+    const role = row?.role as WorkspaceRole | null | undefined;
     actors.push({
       sourceRef,
       displayName: row?.displayName ?? sourceRef,
       ...(row?.email ? { email: row.email } : {}),
-      ...(row?.role ? { suggestedRole: row.role } : {}),
-      carePartyIds: (assignments.all(sourceRef) as Array<{ carePartyId: string }>).map((item) => item.carePartyId)
+      ...(role ? { suggestedRole: role } : {}),
+      carePartyIds: assignments.map((item) => item.carePartyId)
     });
   }
   return actors.sort((left, right) => left.sourceRef.localeCompare(right.sourceRef));
 }
 
-export function createPortableTransfer(database: Database.Database = db): PortableTransferEnvelope {
-  const withoutChecksum = {
-    application: "betreuungskalender" as const,
-    formatVersion: FORMAT_VERSION as 1,
-    sourceVersion: config.version,
-    exportedAt: new Date().toISOString(),
-    data: exportDomainData(database),
-    actors: [] as PortableActor[]
-  };
-  withoutChecksum.actors = exportActors(withoutChecksum.data, database);
-  return { ...withoutChecksum, checksum: sha256(envelopePayload(withoutChecksum)) };
+export async function createPortableTransfer(
+  runtime: PersistenceRuntime
+): Promise<PortableTransferEnvelope> {
+  return runtime.transaction(async (database) => {
+    const withoutChecksum = {
+      application: "betreuungskalender" as const,
+      formatVersion: FORMAT_VERSION as 1,
+      sourceVersion: config.version,
+      exportedAt: new Date().toISOString(),
+      data: await exportDomainData(database),
+      actors: [] as PortableActor[]
+    };
+    withoutChecksum.actors = await exportActors(withoutChecksum.data, database);
+    return { ...withoutChecksum, checksum: sha256(envelopePayload(withoutChecksum)) };
+  });
 }
 
 function countRecords(data: ImportData): TransferCounts {
@@ -579,13 +670,14 @@ function remapActorReferences(data: ImportData, actors: PortableActor[], fingerp
   return appDataImportSchema.parse(visit(data));
 }
 
-export function dryRunPortableTransfer(
+export async function dryRunPortableTransfer(
   input: unknown,
-  targetDatabase: Database.Database = db
-): TransferDryRunResult {
+  targetRuntime: PersistenceRuntime
+): Promise<TransferDryRunResult> {
   const normalized = normalizeTransfer(input);
   const counts = countRecords(normalized.data);
-  const currentCounts = countRecords(exportDomainData(targetDatabase));
+  const currentData = await targetRuntime.transaction((database) => exportDomainData(database));
+  const currentCounts = countRecords(currentData);
   const comparison = transferComparison(counts, currentCounts);
   const checks = baseChecks(normalized);
   if (Object.values(counts).reduce((sum, count) => sum + count, 0) > MAX_RECORDS) {
@@ -612,21 +704,19 @@ export function dryRunPortableTransfer(
     };
   }
 
-  const temporary = new Database(":memory:");
+  const temporary = createSqlitePersistenceRuntime(":memory:");
   try {
-    temporary.pragma("foreign_keys = ON");
-    migrateDatabase(temporary);
+    await temporary.migrate();
     const data = remapActorReferences(normalized.data, normalized.actors, normalized.fingerprint);
-    temporary.transaction(() => importData(data, "transfer-validation", temporary))();
-    const foreignKeys = temporary.pragma("foreign_key_check") as unknown[];
-    const integrity = temporary.pragma("integrity_check") as Array<{ integrity_check: string }>;
-    checks.find((check) => check.code === "sqlite_foreign_keys")!.status = foreignKeys.length ? "failed" : "passed";
-    checks.find((check) => check.code === "sqlite_integrity")!.status = integrity.some((row) => row.integrity_check !== "ok") ? "failed" : "passed";
-    if (foreignKeys.length || integrity.some((row) => row.integrity_check !== "ok")) {
+    await temporary.transaction((database) => importData(data, "transfer-validation", database));
+    const integrity = await temporary.integrity();
+    checks.find((check) => check.code === "sqlite_foreign_keys")!.status = integrity.foreignKeyViolations ? "failed" : "passed";
+    checks.find((check) => check.code === "sqlite_integrity")!.status = integrity.valid ? "passed" : "failed";
+    if (!integrity.valid) {
       throw new Error("Transfer package failed database integrity validation.");
     }
   } finally {
-    temporary.close();
+    await temporary.close();
   }
 
   const result = normalized.warnings.length ? "warnings" : "ready";
@@ -663,46 +753,55 @@ function skippedRuntimeData(): string[] {
   ];
 }
 
-function insertImportedActors(
-  database: Database.Database,
+async function insertImportedActors(
+  database: DatabaseExecutor,
   runId: string,
   fingerprint: string,
   actors: PortableActor[],
   actorId: string,
   timestamp: string
-): void {
-  const actorInsert = database.prepare(`
-    INSERT INTO data_transfer_actors (
-      id, transfer_run_id, source_ref, display_name, email_hint, suggested_role,
-      created_by, updated_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `);
-  const carePartyInsert = database.prepare(`
-    INSERT INTO data_transfer_actor_care_parties (
-      actor_id, source_care_party_id, target_care_party_id, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?)
-  `);
+): Promise<void> {
   for (const actor of actors) {
     const id = mappedActorId(fingerprint, actor.sourceRef);
-    actorInsert.run(
-      id, runId, actor.sourceRef, actor.displayName, actor.email ?? null,
-      actor.suggestedRole ?? null, actorId, actorId, timestamp, timestamp
-    );
+    await database.insertInto("data_transfer_actors").values({
+      id,
+      transfer_run_id: runId,
+      source_ref: actor.sourceRef,
+      display_name: actor.displayName,
+      email_hint: actor.email ?? null,
+      suggested_role: actor.suggestedRole ?? null,
+      mapped_user_id: null,
+      invitation_id: null,
+      created_by: actorId,
+      updated_by: actorId,
+      created_at: timestamp,
+      updated_at: timestamp
+    }).execute();
     for (const carePartyId of actor.carePartyIds) {
-      const exists = database.prepare("SELECT 1 FROM care_parties WHERE id = ? AND deleted_at IS NULL").get(carePartyId);
-      carePartyInsert.run(id, carePartyId, exists ? carePartyId : null, timestamp, timestamp);
+      const exists = await database.selectFrom("care_parties")
+        .select("id")
+        .where("id", "=", carePartyId)
+        .where("deleted_at", "is", null)
+        .executeTakeFirst();
+      await database.insertInto("data_transfer_actor_care_parties").values({
+        actor_id: id,
+        source_care_party_id: carePartyId,
+        target_care_party_id: exists ? carePartyId : null,
+        created_at: timestamp,
+        updated_at: timestamp
+      }).execute();
     }
   }
 }
 
-export function importPortableTransfer(input: {
+export async function importPortableTransfer(input: {
   package: unknown;
   fingerprint: string;
   dryRunReceipt: string;
   confirmWarnings: boolean;
   actorId: string;
-}, database: Database.Database = db): TransferDryRunResult {
-  const result = dryRunPortableTransfer(input.package, database);
+}, runtime: PersistenceRuntime): Promise<TransferDryRunResult> {
+  const result = await dryRunPortableTransfer(input.package, runtime);
   if (result.result === "blocked") throw new Error("Transfer package is blocked.");
   if (result.fingerprint !== input.fingerprint) throw new Error("Transfer package differs from the tested package.");
   if (!verifyDryRunReceipt(input.dryRunReceipt, result.fingerprint, result.result)) {
@@ -715,41 +814,62 @@ export function importPortableTransfer(input: {
   const timestamp = new Date().toISOString();
   const runId = randomUUID();
   const data = remapActorReferences(normalized.data, normalized.actors, normalized.fingerprint);
-  database.transaction(() => {
-    database.prepare("UPDATE app_invitations SET data_transfer_actor_id = NULL WHERE data_transfer_actor_id IS NOT NULL").run();
-    database.prepare("DELETE FROM data_transfer_actor_care_parties").run();
-    database.prepare("DELETE FROM data_transfer_actors").run();
-    database.prepare("DELETE FROM data_transfer_runs").run();
-    importData(data, input.actorId, database);
-    database.prepare(`
-      INSERT INTO data_transfer_runs (
-        id, package_fingerprint, format_version, source_version, result,
-        counts_json, warnings_json, created_by, created_at, imported_at
-      ) VALUES (?, ?, ?, ?, 'imported', ?, ?, ?, ?, ?)
-    `).run(
-      runId, result.fingerprint, result.formatVersion, result.sourceVersion,
-      JSON.stringify(result.counts), JSON.stringify(result.warnings), input.actorId, timestamp, timestamp
-    );
-    insertImportedActors(database, runId, result.fingerprint, normalized.actors, input.actorId, timestamp);
-  })();
+  await runtime.transaction(async (database) => {
+    await database.updateTable("app_invitations")
+      .set({ data_transfer_actor_id: null })
+      .where("data_transfer_actor_id", "is not", null)
+      .execute();
+    await database.deleteFrom("data_transfer_actor_care_parties").execute();
+    await database.deleteFrom("data_transfer_actors").execute();
+    await database.deleteFrom("data_transfer_runs").execute();
+    await importData(data, input.actorId, database);
+    await database.insertInto("data_transfer_runs").values({
+      id: runId,
+      package_fingerprint: result.fingerprint,
+      format_version: result.formatVersion,
+      source_version: result.sourceVersion,
+      result: "imported",
+      counts_json: JSON.stringify(result.counts),
+      warnings_json: JSON.stringify(result.warnings),
+      created_by: input.actorId,
+      created_at: timestamp,
+      imported_at: timestamp
+    }).execute();
+    await insertImportedActors(database, runId, result.fingerprint, normalized.actors, input.actorId, timestamp);
+  });
   return result;
 }
 
-export function listTransferActors(database: Database.Database = db): Array<DataRecord> {
-  return database.prepare(`
-    SELECT actors.id, actors.display_name AS displayName, actors.email_hint AS email,
-      actors.suggested_role AS suggestedRole, actors.mapped_user_id AS mappedUserId,
-      actors.invitation_id AS invitationId, runs.package_fingerprint AS packageFingerprint,
-      COALESCE(json_group_array(assignments.target_care_party_id)
-        FILTER (WHERE assignments.target_care_party_id IS NOT NULL), '[]') AS carePartyIdsJson
-    FROM data_transfer_actors actors
-    JOIN data_transfer_runs runs ON runs.id = actors.transfer_run_id
-    LEFT JOIN data_transfer_actor_care_parties assignments ON assignments.actor_id = actors.id
-    GROUP BY actors.id
-    ORDER BY actors.display_name, actors.id
-  `).all().map((row) => {
-    const item = row as DataRecord;
-    const { carePartyIdsJson, ...actor } = item;
-    return { ...actor, carePartyIds: parseJson(carePartyIdsJson, []) };
-  });
+export async function listTransferActors(
+  database: DatabaseExecutor
+): Promise<Array<DataRecord>> {
+  const [actors, assignments] = await Promise.all([
+    database.selectFrom("data_transfer_actors as actors")
+      .innerJoin("data_transfer_runs as runs", "runs.id", "actors.transfer_run_id")
+      .select([
+        "actors.id", "actors.display_name as displayName", "actors.email_hint as email",
+        "actors.suggested_role as suggestedRole", "actors.mapped_user_id as mappedUserId",
+        "actors.invitation_id as invitationId", "runs.package_fingerprint as packageFingerprint"
+      ])
+      .orderBy("actors.display_name")
+      .orderBy("actors.id")
+      .execute(),
+    database.selectFrom("data_transfer_actor_care_parties")
+      .select(["actor_id", "target_care_party_id"])
+      .where("target_care_party_id", "is not", null)
+      .orderBy("target_care_party_id")
+      .execute()
+  ]);
+  const carePartiesByActor = new Map<string, string[]>();
+  for (const assignment of assignments) {
+    if (!assignment.target_care_party_id) continue;
+    carePartiesByActor.set(assignment.actor_id, [
+      ...(carePartiesByActor.get(assignment.actor_id) ?? []),
+      assignment.target_care_party_id
+    ]);
+  }
+  return actors.map((actor) => ({
+    ...actor,
+    carePartyIds: carePartiesByActor.get(actor.id) ?? []
+  }));
 }

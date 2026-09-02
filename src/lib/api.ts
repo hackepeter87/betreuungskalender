@@ -346,7 +346,7 @@ const actionMap: Record<string, AuditAction> = {
   post_close_change: "postCloseChange"
 };
 
-function displayValue(value?: string): string {
+function displayValue(value?: string | null): string {
   if (!value) return "–";
   try {
     const parsed = JSON.parse(value) as unknown;
@@ -361,7 +361,7 @@ export function mapAudit(entry: ApiAuditEntry): AppData["auditLog"][number] {
     id: String(entry.id),
     timestamp: entry.timestamp,
     userId: entry.userEmail,
-    userDisplayName: entry.userDisplayName,
+    userDisplayName: entry.userDisplayName ?? undefined,
     objectType: objectTypeMap[entry.entityType] ?? "appData",
     objectId: entry.entityId,
     objectLabel: `${entry.entityType} ${entry.entityId}`,

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import Database from "better-sqlite3";
-import { migrateDatabase } from "./db/migrationRunner.js";
+import Fastify from "fastify";
+import { createSqlitePersistenceRuntime } from "./db/runtime.js";
 import { importData } from "./routes/appData.js";
+import { dataTransferRoutes } from "./routes/dataTransfer.js";
 import { createEdgeCaseDemoData } from "./services/demoFixtures.js";
 import {
   createPortableTransfer,
@@ -11,39 +12,28 @@ import {
 } from "./services/dataTransfer.js";
 import { getClientSettings } from "./services/settings.js";
 
-function database(): Database.Database {
-  const result = new Database(":memory:");
-  result.pragma("foreign_keys = ON");
-  migrateDatabase(result);
+async function database() {
+  const result = createSqlitePersistenceRuntime(":memory:");
+  await result.migrate();
   return result;
 }
 
-function tableCounts(db: Database.Database): Record<string, number> {
-  return Object.fromEntries([
-    "children", "care_parties", "care_entries", "audit_log", "settings",
-    "data_transfer_runs", "data_transfer_actors"
-  ].map((table) => [
-    table,
-    (db.prepare(`SELECT COUNT(*) AS count FROM ${table}`).get() as { count: number }).count
-  ]));
-}
-
-test("portable transfer dry run validates through the import core without target writes", () => {
-  const source = database();
-  const target = database();
+test("portable transfer dry run validates through the import core without target writes", async () => {
+  const source = await database();
+  const target = await database();
   try {
-    source.transaction(() => importData(createEdgeCaseDemoData(), "fixture-actor", source))();
-    source.prepare(`
+    await source.transaction((database) => importData(createEdgeCaseDemoData(), "fixture-actor", database));
+    source.sqliteDatabase.prepare(`
       INSERT INTO settings (key, value_json, created_by, updated_by, created_at, updated_at)
       VALUES ('unknownHistoricalSetting', 'true', 'fixture-actor', 'fixture-actor', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `).run();
-    target.prepare(`
+    target.sqliteDatabase.prepare(`
       INSERT INTO settings (key, value_json, created_by, updated_by, created_at, updated_at)
       VALUES ('setup.ownerUserId', '"target-owner"', 'target-owner', 'target-owner', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `).run();
-    const transfer = createPortableTransfer(source);
-    const before = target.serialize();
-    const dryRun = dryRunPortableTransfer(transfer, target);
+    const transfer = await createPortableTransfer(source);
+    const before = target.sqliteDatabase.serialize();
+    const dryRun = await dryRunPortableTransfer(transfer, target);
 
     assert.equal(dryRun.result, "ready");
     assert.equal(dryRun.counts.children, 3);
@@ -53,38 +43,46 @@ test("portable transfer dry run validates through the import core without target
     assert.equal(dryRun.checks.every((check) => check.status === "passed"), true);
     assert.equal(dryRun.summary.incomingRecords > 0, true);
     assert.equal(dryRun.actors.length > 0, true);
-    assert.deepEqual(target.serialize(), before);
+    assert.deepEqual(target.sqliteDatabase.serialize(), before);
     assert.equal(JSON.stringify(transfer).includes("external_subject"), false);
     assert.equal(JSON.stringify(transfer).includes("feed_url"), false);
     assert.equal("unknownHistoricalSetting" in transfer.data.settings, false);
     assert.equal(transfer.data.settings.rhythmStartDate, "2026-07-10");
     assert.equal(transfer.data.lastJsonBackupAt, "2026-07-01T09:30:00.000Z");
   } finally {
-    source.close();
-    target.close();
+    await source.close();
+    await target.close();
   }
 });
 
-test("portable transfer rejects excessive nesting and oversized text before import", () => {
+test("portable transfer rejects excessive nesting and oversized text before import", async () => {
+  const target = await database();
   let nested: unknown = "value";
   for (let index = 0; index < 30; index += 1) nested = { nested };
-  assert.throws(() => dryRunPortableTransfer(nested), /deeply nested/);
-  assert.throws(() => dryRunPortableTransfer({ value: "x".repeat(250_001) }), /oversized text/);
+  try {
+    await assert.rejects(dryRunPortableTransfer(nested, target), /deeply nested/);
+    await assert.rejects(
+      dryRunPortableTransfer({ value: "x".repeat(250_001) }, target),
+      /oversized text/
+    );
+  } finally {
+    await target.close();
+  }
 });
 
-test("portable import requires the exact dry-run fingerprint and preserves target owner", () => {
-  const source = database();
-  const target = database();
+test("portable import requires the exact dry-run fingerprint and preserves target owner", async () => {
+  const source = await database();
+  const target = await database();
   try {
-    source.transaction(() => importData(createEdgeCaseDemoData(), "fixture-actor", source))();
-    const transfer = createPortableTransfer(source);
-    const dryRun = dryRunPortableTransfer(transfer, target);
-    target.prepare(`
+    await source.transaction((database) => importData(createEdgeCaseDemoData(), "fixture-actor", database));
+    const transfer = await createPortableTransfer(source);
+    const dryRun = await dryRunPortableTransfer(transfer, target);
+    target.sqliteDatabase.prepare(`
       INSERT INTO settings (key, value_json, created_by, updated_by, created_at, updated_at)
       VALUES ('setup.ownerUserId', '"target-owner"', 'target-owner', 'target-owner', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `).run();
 
-    assert.throws(() => importPortableTransfer({
+    await assert.rejects(importPortableTransfer({
       package: transfer,
       fingerprint: "0".repeat(64),
       dryRunReceipt: dryRun.dryRunReceipt!,
@@ -92,7 +90,7 @@ test("portable import requires the exact dry-run fingerprint and preserves targe
       actorId: "target-owner"
     }, target), /differs from the tested package/);
 
-    importPortableTransfer({
+    await importPortableTransfer({
       package: transfer,
       fingerprint: dryRun.fingerprint,
       dryRunReceipt: dryRun.dryRunReceipt!,
@@ -100,10 +98,10 @@ test("portable import requires the exact dry-run fingerprint and preserves targe
       actorId: "target-owner"
     }, target);
 
-    assert.equal((target.prepare("SELECT COUNT(*) AS count FROM children").get() as { count: number }).count, 3);
-    assert.equal((target.prepare("SELECT value_json AS value FROM settings WHERE key = 'setup.ownerUserId'").get() as { value: string }).value, '"target-owner"');
-    assert.equal((target.prepare("SELECT COUNT(*) AS count FROM data_transfer_actors").get() as { count: number }).count > 0, true);
-    assert.deepEqual(getClientSettings(target), {
+    assert.equal((target.sqliteDatabase.prepare("SELECT COUNT(*) AS count FROM children").get() as { count: number }).count, 3);
+    assert.equal((target.sqliteDatabase.prepare("SELECT value_json AS value FROM settings WHERE key = 'setup.ownerUserId'").get() as { value: string }).value, '"target-owner"');
+    assert.equal((target.sqliteDatabase.prepare("SELECT COUNT(*) AS count FROM data_transfer_actors").get() as { count: number }).count > 0, true);
+    assert.deepEqual(await getClientSettings(target.query), {
       kilometerRate: 0.3,
       defaultLocation: "commuterApartment",
       defaultHandoverFrom: "mother",
@@ -112,19 +110,19 @@ test("portable import requires the exact dry-run fingerprint and preserves targe
       lastJsonBackupAt: "2026-07-01T09:30:00.000Z"
     });
   } finally {
-    source.close();
-    target.close();
+    await source.close();
+    await target.close();
   }
 });
 
-test("portable import requires a receipt from the successful dry run", () => {
-  const source = database();
-  const target = database();
+test("portable import requires a receipt from the successful dry run", async () => {
+  const source = await database();
+  const target = await database();
   try {
-    source.transaction(() => importData(createEdgeCaseDemoData(), "fixture-actor", source))();
-    const transfer = createPortableTransfer(source);
-    const dryRun = dryRunPortableTransfer(transfer, target);
-    assert.throws(() => importPortableTransfer({
+    await source.transaction((database) => importData(createEdgeCaseDemoData(), "fixture-actor", database));
+    const transfer = await createPortableTransfer(source);
+    const dryRun = await dryRunPortableTransfer(transfer, target);
+    await assert.rejects(importPortableTransfer({
       package: transfer,
       fingerprint: dryRun.fingerprint,
       dryRunReceipt: "invalid",
@@ -132,30 +130,30 @@ test("portable import requires a receipt from the successful dry run", () => {
       actorId: "target-owner"
     }, target), /current successful dry run/);
   } finally {
-    source.close();
-    target.close();
+    await source.close();
+    await target.close();
   }
 });
 
-test("tampering with a portable package invalidates its checksum", () => {
-  const source = database();
+test("tampering with a portable package invalidates its checksum", async () => {
+  const source = await database();
   try {
-    source.transaction(() => importData(createEdgeCaseDemoData(), "fixture-actor", source))();
-    const transfer = createPortableTransfer(source);
+    await source.transaction((database) => importData(createEdgeCaseDemoData(), "fixture-actor", database));
+    const transfer = await createPortableTransfer(source);
     transfer.data.children[0]!.name = "Changed after export";
-    assert.throws(() => dryRunPortableTransfer(transfer, source), /checksum is invalid/);
+    await assert.rejects(dryRunPortableTransfer(transfer, source), /checksum is invalid/);
   } finally {
-    source.close();
+    await source.close();
   }
 });
 
-test("legacy transfer warnings require explicit confirmation", () => {
-  const target = database();
+test("legacy transfer warnings require explicit confirmation", async () => {
+  const target = await database();
   try {
     const data = createEdgeCaseDemoData();
-    const dryRun = dryRunPortableTransfer(data, target);
+    const dryRun = await dryRunPortableTransfer(data, target);
     assert.equal(dryRun.result, "warnings");
-    assert.throws(() => importPortableTransfer({
+    await assert.rejects(importPortableTransfer({
       package: data,
       fingerprint: dryRun.fingerprint,
       dryRunReceipt: dryRun.dryRunReceipt!,
@@ -163,42 +161,68 @@ test("legacy transfer warnings require explicit confirmation", () => {
       actorId: "target-owner"
     }, target), /must be confirmed/);
   } finally {
-    target.close();
+    await target.close();
   }
 });
 
-test("dry run blocks missing domain references", () => {
-  const target = database();
+test("dry run blocks missing domain references", async () => {
+  const target = await database();
   const data = createEdgeCaseDemoData();
   try {
     data.entries[0]!.childIds = ["missing-child"];
-    const dryRun = dryRunPortableTransfer(data, target);
+    const dryRun = await dryRunPortableTransfer(data, target);
     assert.equal(dryRun.result, "blocked");
     assert.deepEqual(dryRun.missingReferences, ["entry:child"]);
     assert.equal(dryRun.checks.find((check) => check.code === "references")?.status, "failed");
     assert.equal(dryRun.dryRunReceipt, undefined);
   } finally {
-    target.close();
+    await target.close();
   }
 });
 
-test("dry run compares the package with current target records without writing", () => {
-  const source = database();
-  const target = database();
+test("dry run compares the package with current target records without writing", async () => {
+  const source = await database();
+  const target = await database();
   try {
-    source.transaction(() => importData(createEdgeCaseDemoData(), "fixture-actor", source))();
-    target.prepare(`
+    await source.transaction((database) => importData(createEdgeCaseDemoData(), "fixture-actor", database));
+    target.sqliteDatabase.prepare(`
       INSERT INTO children (id, name, birth_month, birth_year, color, created_at, updated_at)
       VALUES ('target-child', 'Target child', 1, 2018, '#0f8b8d', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `).run();
-    const before = target.serialize();
-    const dryRun = dryRunPortableTransfer(createPortableTransfer(source), target);
+    const before = target.sqliteDatabase.serialize();
+    const dryRun = await dryRunPortableTransfer(await createPortableTransfer(source), target);
     const children = dryRun.comparison.find((item) => item.category === "children");
     assert.deepEqual(children, { category: "children", current: 1, incoming: 3, afterImport: 3 });
     assert.equal(dryRun.summary.currentRecords > 0, true);
-    assert.deepEqual(target.serialize(), before);
+    assert.deepEqual(target.sqliteDatabase.serialize(), before);
   } finally {
-    source.close();
-    target.close();
+    await source.close();
+    await target.close();
+  }
+});
+
+test("portable transfer export and dry-run responses are not cached", async () => {
+  const runtime = await database();
+  const app = Fastify();
+  app.decorate("persistence", runtime);
+  app.addHook("onRequest", async (request) => {
+    request.userEmail = "transfer-test";
+  });
+  await dataTransferRoutes(app);
+  try {
+    const exported = await app.inject({ method: "GET", url: "/api/data-transfer/export" });
+    assert.equal(exported.statusCode, 200);
+    assert.match(exported.headers["cache-control"] ?? "", /no-store/);
+
+    const dryRun = await app.inject({
+      method: "POST",
+      url: "/api/data-transfer/dry-run",
+      payload: exported.json()
+    });
+    assert.equal(dryRun.statusCode, 200);
+    assert.match(dryRun.headers["cache-control"] ?? "", /no-store/);
+  } finally {
+    await app.close();
+    await runtime.close();
   }
 });

@@ -19,6 +19,11 @@ export interface PersistenceStatus {
   migrationCount: number;
 }
 
+export interface PersistenceIntegrity {
+  valid: boolean;
+  foreignKeyViolations: number;
+}
+
 export type DatabaseErrorKind = "constraint" | "unavailable" | "unknown";
 
 export interface ClassifiedDatabaseError {
@@ -31,6 +36,7 @@ export interface PersistenceRuntime {
   readonly query: Kysely<DatabaseSchema>;
   migrate(): Promise<void>;
   status(): Promise<PersistenceStatus>;
+  integrity(): Promise<PersistenceIntegrity>;
   transaction<T>(work: (transaction: PersistenceTransaction) => Promise<T>): Promise<T>;
   close(): Promise<void>;
 }
@@ -111,6 +117,16 @@ export class SqlitePersistenceRuntime implements PersistenceRuntime {
     } catch {
       return { reachable: true, migrationsApplied: false, migrationCount: 0 };
     }
+  }
+
+  async integrity(): Promise<PersistenceIntegrity> {
+    this.#assertOpen();
+    const foreignKeys = this.sqliteDatabase.pragma("foreign_key_check") as unknown[];
+    const rows = this.sqliteDatabase.pragma("integrity_check") as Array<{ integrity_check: string }>;
+    return {
+      valid: foreignKeys.length === 0 && rows.every((row) => row.integrity_check === "ok"),
+      foreignKeyViolations: foreignKeys.length
+    };
   }
 
   async transaction<T>(

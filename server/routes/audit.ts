@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { ApiActorLabel, ApiAuditEntry, ApiAuditPage } from "../../shared/api.js";
 import { config } from "../config.js";
-import { db } from "../db/connection.js";
+import type { DatabaseExecutor } from "../db/runtime.js";
 
 const readLimit = {
   config: { permission: "audit:view" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
@@ -28,46 +28,6 @@ interface AuditCursor {
 const actorLabelInputSchema = z.object({
   ids: z.array(z.string().trim().min(1).max(200)).max(200)
 }).strict();
-
-const auditSelect = `
-  SELECT
-    audit_log.id,
-    audit_log.timestamp,
-    audit_log.user_email AS userEmail,
-    COALESCE(app_users.display_name, transfer_actors.display_name) AS userDisplayName,
-    audit_log.entity_type AS entityType,
-    audit_log.entity_id AS entityId,
-    audit_log.action,
-    audit_log.field_name AS fieldName,
-    audit_log.old_value AS oldValue,
-    audit_log.new_value AS newValue,
-    audit_log.metadata_json AS metadataJson
-  FROM audit_log
-  LEFT JOIN app_users ON app_users.id = audit_log.user_email
-  LEFT JOIN data_transfer_actors transfer_actors ON transfer_actors.id = audit_log.user_email
-`;
-
-function auditFilters(query: AuditQuery): { conditions: string[]; values: Array<string | number> } {
-  const conditions = ["audit_log.deleted_at IS NULL"];
-  const values: Array<string | number> = [];
-  if (query.entityType) {
-    conditions.push("audit_log.entity_type = ?");
-    values.push(query.entityType);
-  }
-  if (query.entityId) {
-    conditions.push("audit_log.entity_id = ?");
-    values.push(query.entityId);
-  }
-  if (query.startDate) {
-    conditions.push("audit_log.timestamp >= ?");
-    values.push(`${query.startDate}T00:00:00.000Z`);
-  }
-  if (query.endDate) {
-    conditions.push("audit_log.timestamp <= ?");
-    values.push(`${query.endDate}T23:59:59.999Z`);
-  }
-  return { conditions, values };
-}
 
 function encodeCursor(entry: Pick<ApiAuditEntry, "timestamp" | "id">): string {
   return Buffer.from(JSON.stringify([entry.timestamp, entry.id])).toString("base64url");
@@ -103,19 +63,114 @@ function requestedLimit(value: string | undefined, fallback: number, maximum: nu
   return Math.min(Math.max(Number.isFinite(parsed) ? Math.floor(parsed) : fallback, 1), maximum);
 }
 
+function mapAuditEntry(row: {
+  id: number;
+  timestamp: string;
+  userEmail: string;
+  userDisplayName: string | null;
+  entityType: string;
+  entityId: string;
+  action: string;
+  fieldName: string | null;
+  oldValue: string | null;
+  newValue: string | null;
+  metadataJson: string | null;
+}): ApiAuditEntry {
+  return {
+    id: row.id,
+    timestamp: row.timestamp,
+    userEmail: row.userEmail,
+    userDisplayName: row.userDisplayName,
+    entityType: row.entityType,
+    entityId: row.entityId,
+    action: row.action as ApiAuditEntry["action"],
+    fieldName: row.fieldName,
+    oldValue: row.oldValue,
+    newValue: row.newValue,
+    metadataJson: row.metadataJson
+  };
+}
+
+async function auditEntries(
+  database: DatabaseExecutor,
+  query: AuditQuery,
+  limit: number,
+  cursor?: AuditCursor
+): Promise<ApiAuditEntry[]> {
+  let statement = database.selectFrom("audit_log")
+    .leftJoin("app_users", "app_users.id", "audit_log.user_email")
+    .leftJoin("data_transfer_actors as transfer_actors", "transfer_actors.id", "audit_log.user_email")
+    .select([
+      "audit_log.id",
+      "audit_log.timestamp",
+      "audit_log.user_email as userEmail",
+      (expression) => expression.fn.coalesce(
+        "app_users.display_name",
+        "transfer_actors.display_name"
+      ).as("userDisplayName"),
+      "audit_log.entity_type as entityType",
+      "audit_log.entity_id as entityId",
+      "audit_log.action",
+      "audit_log.field_name as fieldName",
+      "audit_log.old_value as oldValue",
+      "audit_log.new_value as newValue",
+      "audit_log.metadata_json as metadataJson"
+    ])
+    .where("audit_log.deleted_at", "is", null);
+  if (query.entityType) statement = statement.where("audit_log.entity_type", "=", query.entityType);
+  if (query.entityId) statement = statement.where("audit_log.entity_id", "=", query.entityId);
+  if (query.startDate) statement = statement.where("audit_log.timestamp", ">=", `${query.startDate}T00:00:00.000Z`);
+  if (query.endDate) statement = statement.where("audit_log.timestamp", "<=", `${query.endDate}T23:59:59.999Z`);
+  if (cursor) {
+    statement = statement.where((expression) => expression.or([
+      expression("audit_log.timestamp", "<", cursor.timestamp),
+      expression.and([
+        expression("audit_log.timestamp", "=", cursor.timestamp),
+        expression("audit_log.id", "<", cursor.id)
+      ])
+    ]));
+  }
+  const rows = await statement
+    .orderBy("audit_log.timestamp", "desc")
+    .orderBy("audit_log.id", "desc")
+    .limit(limit)
+    .execute();
+  return rows.map(mapAuditEntry);
+}
+
+async function referencedActorIds(database: DatabaseExecutor): Promise<Set<string>> {
+  const rows = await Promise.all([
+    database.selectFrom("children").select("created_by as id").where("deleted_at", "is", null).execute(),
+    database.selectFrom("children").select("updated_by as id").where("deleted_at", "is", null).execute(),
+    database.selectFrom("care_parties").select("created_by as id").where("deleted_at", "is", null).execute(),
+    database.selectFrom("care_parties").select("updated_by as id").where("deleted_at", "is", null).execute(),
+    database.selectFrom("care_entries").select("created_by as id").where("deleted_at", "is", null).execute(),
+    database.selectFrom("care_entries").select("updated_by as id").where("deleted_at", "is", null).execute(),
+    database.selectFrom("trips").select("created_by as id").where("deleted_at", "is", null).execute(),
+    database.selectFrom("trips").select("updated_by as id").where("deleted_at", "is", null).execute(),
+    database.selectFrom("costs").select("created_by as id").where("deleted_at", "is", null).execute(),
+    database.selectFrom("costs").select("updated_by as id").where("deleted_at", "is", null).execute(),
+    database.selectFrom("holiday_periods").select("created_by as id").where("deleted_at", "is", null).execute(),
+    database.selectFrom("holiday_periods").select("updated_by as id").where("deleted_at", "is", null).execute(),
+    database.selectFrom("unavailable_periods").select("created_by as id").where("deleted_at", "is", null).execute(),
+    database.selectFrom("unavailable_periods").select("updated_by as id").where("deleted_at", "is", null).execute(),
+    database.selectFrom("contact_patterns").select("created_by as id").where("deleted_at", "is", null).execute(),
+    database.selectFrom("contact_patterns").select("updated_by as id").where("deleted_at", "is", null).execute(),
+    database.selectFrom("contact_rules").select("created_by as id").where("deleted_at", "is", null).execute(),
+    database.selectFrom("contact_rules").select("updated_by as id").where("deleted_at", "is", null).execute(),
+    database.selectFrom("monthly_closings").select("closed_by as id").where("deleted_at", "is", null).execute(),
+    database.selectFrom("monthly_closings").select("updated_by as id").where("deleted_at", "is", null).execute()
+  ]);
+  return new Set(rows.flat().map((row) => row.id));
+}
+
 export async function auditRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: AuditQuery }>("/api/audit-log", readLimit, async (request, reply) => {
-    const { conditions, values } = auditFilters(request.query);
     const limit = requestedLimit(request.query.limit, 500, 500);
-    values.push(limit);
     reply.header("Cache-Control", "no-store");
     reply.header("Deprecation", "true");
     reply.header("Link", "</api/audit-log/page>; rel=\"successor-version\"");
-    return db.prepare(`${auditSelect}
-      WHERE ${conditions.join(" AND ")}
-      ORDER BY audit_log.timestamp DESC, audit_log.id DESC
-      LIMIT ?
-    `).all(...values) as ApiAuditEntry[];
+    return auditEntries(app.persistence.query, request.query, limit);
   });
 
   app.get<{ Querystring: AuditQuery }>("/api/audit-log/page", readLimit, async (request, reply) => {
@@ -126,18 +181,8 @@ export async function auditRoutes(app: FastifyInstance): Promise<void> {
     } catch {
       return reply.code(400).send({ error: "invalid_request", message: "Ungültige Anfrage." });
     }
-    const { conditions, values } = auditFilters(request.query);
-    if (cursor) {
-      conditions.push("(audit_log.timestamp < ? OR (audit_log.timestamp = ? AND audit_log.id < ?))");
-      values.push(cursor.timestamp, cursor.timestamp, cursor.id);
-    }
     const limit = requestedLimit(request.query.limit, 50, 100);
-    values.push(limit + 1);
-    const rows = db.prepare(`${auditSelect}
-      WHERE ${conditions.join(" AND ")}
-      ORDER BY audit_log.timestamp DESC, audit_log.id DESC
-      LIMIT ?
-    `).all(...values) as ApiAuditEntry[];
+    const rows = await auditEntries(app.persistence.query, request.query, limit + 1, cursor);
     const hasNextPage = rows.length > limit;
     const items = hasNextPage ? rows.slice(0, limit) : rows;
     const lastItem = items.at(-1);
@@ -158,38 +203,20 @@ export async function auditRoutes(app: FastifyInstance): Promise<void> {
     if (!ids.length) {
       return [];
     }
-    const placeholders = ids.map(() => "?").join(", ");
-    const rows = db.prepare(`
-      WITH referenced_actors(id) AS (
-        SELECT created_by FROM children WHERE deleted_at IS NULL
-        UNION SELECT updated_by FROM children WHERE deleted_at IS NULL
-        UNION SELECT created_by FROM care_parties WHERE deleted_at IS NULL
-        UNION SELECT updated_by FROM care_parties WHERE deleted_at IS NULL
-        UNION SELECT created_by FROM care_entries WHERE deleted_at IS NULL
-        UNION SELECT updated_by FROM care_entries WHERE deleted_at IS NULL
-        UNION SELECT created_by FROM trips WHERE deleted_at IS NULL
-        UNION SELECT updated_by FROM trips WHERE deleted_at IS NULL
-        UNION SELECT created_by FROM costs WHERE deleted_at IS NULL
-        UNION SELECT updated_by FROM costs WHERE deleted_at IS NULL
-        UNION SELECT created_by FROM holiday_periods WHERE deleted_at IS NULL
-        UNION SELECT updated_by FROM holiday_periods WHERE deleted_at IS NULL
-        UNION SELECT created_by FROM unavailable_periods WHERE deleted_at IS NULL
-        UNION SELECT updated_by FROM unavailable_periods WHERE deleted_at IS NULL
-        UNION SELECT created_by FROM contact_patterns WHERE deleted_at IS NULL
-        UNION SELECT updated_by FROM contact_patterns WHERE deleted_at IS NULL
-        UNION SELECT created_by FROM contact_rules WHERE deleted_at IS NULL
-        UNION SELECT updated_by FROM contact_rules WHERE deleted_at IS NULL
-        UNION SELECT closed_by FROM monthly_closings WHERE deleted_at IS NULL
-        UNION SELECT updated_by FROM monthly_closings WHERE deleted_at IS NULL
-      )
-      SELECT referenced_actors.id,
-        COALESCE(app_users.display_name, transfer_actors.display_name) AS displayName
-      FROM referenced_actors
-      LEFT JOIN app_users ON app_users.id = referenced_actors.id
-      LEFT JOIN data_transfer_actors transfer_actors ON transfer_actors.id = referenced_actors.id
-      WHERE referenced_actors.id IN (${placeholders})
-        AND COALESCE(app_users.display_name, transfer_actors.display_name) IS NOT NULL
-    `).all(...ids) as ApiActorLabel[];
+    const referenced = await referencedActorIds(app.persistence.query);
+    const visibleIds = ids.filter((id) => referenced.has(id));
+    if (!visibleIds.length) return [];
+    const [users, actors] = await Promise.all([
+      app.persistence.query.selectFrom("app_users")
+        .select(["id", "display_name as displayName"])
+        .where("id", "in", visibleIds)
+        .execute(),
+      app.persistence.query.selectFrom("data_transfer_actors")
+        .select(["id", "display_name as displayName"])
+        .where("id", "in", visibleIds)
+        .execute()
+    ]);
+    const rows: ApiActorLabel[] = [...users, ...actors];
     const labelsById = new Map(rows.map((row) => [row.id, row]));
     return ids.flatMap((id) => labelsById.get(id) ?? []);
   });
