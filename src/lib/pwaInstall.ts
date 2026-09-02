@@ -1,3 +1,5 @@
+import { activateOptionalServiceWorker } from "./serviceWorker";
+
 export const PWA_INSTALL_DISMISS_KEY = "betreuungskalender:ui:pwa-install-dismissed-at:v1";
 export const PWA_INSTALL_DISMISS_MS = 30 * 24 * 60 * 60 * 1000;
 
@@ -45,7 +47,7 @@ export function isInstallPromptDismissed(
   return Number.isFinite(timestamp) && timestamp > 0 && now - timestamp < dismissDuration;
 }
 
-function isRunningStandalone(): boolean {
+export function isRunningStandalone(): boolean {
   if (typeof window === "undefined" || typeof navigator === "undefined") return false;
   const navigatorWithStandalone = navigator as Navigator & { standalone?: boolean };
   return isStandaloneDisplay(
@@ -94,6 +96,9 @@ export async function promptPwaInstall(): Promise<PwaInstallOutcome | null> {
   emitChange();
   await prompt.prompt();
   const choice = await prompt.userChoice;
+  if (choice.outcome === "accepted") {
+    await activateOptionalServiceWorker().catch(() => undefined);
+  }
   if (choice.outcome === "dismissed") dismissPwaInstallPrompt();
   return choice.outcome;
 }
@@ -117,5 +122,6 @@ if (typeof window !== "undefined") {
   window.addEventListener("appinstalled", () => {
     deferredPrompt = null;
     emitChange();
+    void activateOptionalServiceWorker().catch(() => undefined);
   });
 }

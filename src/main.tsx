@@ -4,6 +4,8 @@ import { App } from "./App";
 import { HelpPreferencesProvider } from "./context/HelpPreferences";
 import { I18nProvider } from "./i18n/I18nProvider";
 import { AppStoreProvider } from "./store/AppStore";
+import { isRunningStandalone } from "./lib/pwaInstall";
+import { initializeOptionalServiceWorker } from "./lib/serviceWorker";
 import "@fontsource-variable/inter/wght.css";
 import "./styles.css";
 
@@ -20,17 +22,9 @@ createRoot(document.getElementById("root")!).render(
 );
 
 if ("serviceWorker" in navigator) {
-  if (import.meta.env.PROD) {
-    window.addEventListener("load", () => {
-      navigator.serviceWorker.register("/sw.js").catch(() => {
-        // Offline-Unterstützung ist eine Komfortfunktion; die App bleibt ohne sie nutzbar.
-      });
+  window.addEventListener("load", () => {
+    void initializeOptionalServiceWorker(isRunningStandalone()).catch(() => {
+      // Optional installation and push features remain unavailable on failure.
     });
-  } else {
-    void navigator.serviceWorker
-      .getRegistrations()
-      .then((registrations) =>
-        Promise.all(registrations.map((registration) => registration.unregister()))
-      );
-  }
+  });
 }

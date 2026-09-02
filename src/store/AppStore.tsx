@@ -27,6 +27,7 @@ import type {
 import { generatePatternEntries } from "../lib/contact";
 import { actorIdsForData, type ActorLabels } from "../lib/actors";
 import { buildMonthlyClosureSummary, monthKeysForRange } from "../lib/monthClosure";
+import { activateOptionalServiceWorker } from "../lib/serviceWorker";
 import type {
   AppData,
   CareConfirmationRequest,
@@ -380,10 +381,14 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
           setError("Dieser Browser unterstützt keine PWA-Push-Benachrichtigungen.");
           return false;
         }
-        const registration = await navigator.serviceWorker.ready;
         const permission = await Notification.requestPermission();
         if (permission !== "granted") {
           setError("Push-Benachrichtigungen wurden im Browser nicht erlaubt.");
+          return false;
+        }
+        const registration = await activateOptionalServiceWorker();
+        if (!registration) {
+          setError("Die optionale PWA-Unterstützung konnte nicht aktiviert werden.");
           return false;
         }
         const existing = await registration.pushManager.getSubscription();
