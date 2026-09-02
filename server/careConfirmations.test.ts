@@ -12,7 +12,7 @@ process.env.WEB_PUSH_PUBLIC_KEY = "";
 process.env.WEB_PUSH_PRIVATE_KEY = "";
 
 const { runMigrations } = await import("./db/migrate.js");
-const { db } = await import("./db/connection.js");
+const { db, persistence } = await import("./db/connection.js");
 const {
   answerCareConfirmation,
   createDueCareConfirmationRequests,
@@ -199,17 +199,17 @@ function assignCareParty(userId: string, carePartyId: string): void {
 
 beforeEach(resetDatabase);
 
-after(() => {
-  db.close();
+after(async () => {
+  await persistence.close();
   rmSync(temporaryDirectory, { recursive: true, force: true });
 });
 
 test("creates one due confirmation request for an unconfirmed past planned entry", async () => {
   insertPastPlannedEntry();
 
-  const created = await createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z"));
-  const duplicate = await createDueCareConfirmationRequests(new Date("2026-07-03T09:00:00.000Z"));
-  const open = await listOpenCareConfirmations("local-dev");
+  const created = await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
+  const duplicate = await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T09:00:00.000Z"));
+  const open = await listOpenCareConfirmations(persistence, "local-dev");
 
   assert.equal(created, 1);
   assert.equal(duplicate, 0);
@@ -246,10 +246,11 @@ test("batches multiple due confirmations into one push per user", async () => {
     SELECT ?, child_id, created_at, updated_at
     FROM care_entry_children WHERE care_entry_id = ?
   `).run("entry-confirmation-b", "entry-confirmation-a");
-  await createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z"));
+  await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
 
   let deliveries = 0;
   const sent = await sendDueCareConfirmationPushes(
+    persistence,
     new Date("2026-07-03T08:05:00.000Z"),
     async () => {
       deliveries += 1;
@@ -271,7 +272,7 @@ test("batches multiple due confirmations into one push per user", async () => {
 
 test("suppresses existing confirmation requests while a planned conflict is open", async () => {
   insertPastPlannedEntry();
-  assert.equal(await createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z")), 1);
+  assert.equal(await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z")), 1);
   db.prepare(`
     INSERT INTO care_entries (
       id, start_datetime, end_datetime, status, care_scope,
@@ -291,7 +292,7 @@ test("suppresses existing confirmation requests while a planned conflict is open
     FROM care_entry_children WHERE care_entry_id = 'entry-confirmation-a'
   `).run();
 
-  const open = await listOpenCareConfirmations("local-dev");
+  const open = await listOpenCareConfirmations(persistence, "local-dev");
   const activeRequests = db.prepare(`
     SELECT COUNT(*) AS count FROM care_confirmation_requests WHERE deleted_at IS NULL
   `).get() as { count: number };
@@ -301,13 +302,13 @@ test("suppresses existing confirmation requests while a planned conflict is open
 
 test("answers a confirmation request and stores partial status with audit metadata", async () => {
   insertPastPlannedEntry();
-  await createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z"));
+  await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
   const request = db.prepare(`
     SELECT id FROM care_confirmation_requests
     WHERE care_entry_id = ? AND user_id = ?
   `).get("entry-confirmation-a", "local-dev") as { id: string };
 
-  const answered = await answerCareConfirmation(request.id, "local-dev", {
+  const answered = await answerCareConfirmation(persistence, request.id, "local-dev", {
     status: "partial",
     note: "Fiktive Teilbestätigung",
     actualChildIds: ["child-confirmation-a"],
@@ -370,7 +371,7 @@ test("answers a confirmation request and stores partial status with audit metada
 
 test("rejects confirmation when actual care would overlap an existing actual entry", async () => {
   insertPastPlannedEntry();
-  await createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z"));
+  await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
   db.prepare(`
     INSERT INTO care_entries (
       id, start_datetime, end_datetime, status, care_scope,
@@ -395,7 +396,7 @@ test("rejects confirmation when actual care would overlap an existing actual ent
   `).get("entry-confirmation-a", "local-dev") as { id: string };
 
   await assert.rejects(
-    answerCareConfirmation(request.id, "local-dev", { status: "completed" }),
+    answerCareConfirmation(persistence, request.id, "local-dev", { status: "completed" }),
     (error: unknown) => (error as { code?: string }).code === "care_entry_conflict"
   );
   const entry = db.prepare("SELECT status FROM care_entries WHERE id = ?")
@@ -413,14 +414,14 @@ test("partial confirmation rejects actual care parties outside the assigned shar
   const user = parentUser();
   insertAppUser(user);
   assignCareParty(user.id, "party-confirmation-a");
-  await createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z"));
+  await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
   const request = db.prepare(`
     SELECT id FROM care_confirmation_requests
     WHERE care_entry_id = ? AND user_id = ?
   `).get("entry-confirmation-a", user.id) as { id: string };
 
   await assert.rejects(
-    answerCareConfirmation(request.id, user, {
+    answerCareConfirmation(persistence, request.id, user, {
       status: "partial",
       note: "Fiktiver Fremdversuch",
       actualChildIds: ["child-confirmation-a"],
@@ -441,7 +442,7 @@ test("removed care-party assignments hide and block stale confirmations", async 
   insertAppUser(otherUser);
   assignCareParty(user.id, "party-confirmation-a");
   assignCareParty(otherUser.id, "party-confirmation-b");
-  await createDueCareConfirmationRequests(new Date("2026-07-03T08:05:00.000Z"));
+  await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
   const request = db.prepare(`
     SELECT id FROM care_confirmation_requests
     WHERE care_entry_id = ? AND user_id = ?
@@ -458,17 +459,17 @@ test("removed care-party assignments hide and block stale confirmations", async 
     "party-confirmation-a"
   );
 
-  assert.deepEqual(await listOpenCareConfirmations(user), []);
-  assert.equal(await answerCareConfirmation(request.id, user, { status: "completed" }), undefined);
-  assert.equal(await remindCareConfirmationLater(request.id, user), undefined);
+  assert.deepEqual(await listOpenCareConfirmations(persistence, user), []);
+  assert.equal(await answerCareConfirmation(persistence, request.id, user, { status: "completed" }), undefined);
+  assert.equal(await remindCareConfirmationLater(persistence, request.id, user), undefined);
   assert.deepEqual(db.prepare(`
     SELECT status, answered_at AS answeredAt
     FROM care_confirmation_requests WHERE id = ?
   `).get(request.id), { status: "open", answeredAt: null });
 });
 
-test("notification preferences default to in-app and push while email stays opt-in", () => {
-  const defaults = getNotificationPreferences("local-dev");
+test("notification preferences default to in-app and push while email stays opt-in", async () => {
+  const defaults = await getNotificationPreferences(persistence.query, "local-dev");
   assert.equal(defaults.pushAvailable, false);
   assert.equal(defaults.preferences.length, 2);
   assert.deepEqual(
@@ -494,7 +495,7 @@ test("notification preferences default to in-app and push while email stays opt-
     ]
   );
 
-  const updated = updateNotificationPreferences("local-dev", [{
+  const updated = await updateNotificationPreferences(persistence, "local-dev", [{
     eventType: "care_confirmation_due",
     inAppEnabled: true,
     pushEnabled: false,
@@ -506,16 +507,16 @@ test("notification preferences default to in-app and push while email stays opt-
   assert.equal(due?.emailEnabled, true);
 });
 
-test("push subscriptions only allow configured public push service endpoints", () => {
-  assert.throws(
-    () => savePushSubscription("local-dev", {
+test("push subscriptions only allow configured public push service endpoints", async () => {
+  await assert.rejects(
+    savePushSubscription(persistence.query, "local-dev", {
       endpoint: "https://127.0.0.1/internal",
       keys: { p256dh: "fictional-public-key", auth: "fictional-auth-secret" }
     }),
     /Push-Endpunkt/
   );
 
-  savePushSubscription("local-dev", {
+  await savePushSubscription(persistence.query, "local-dev", {
     endpoint: "https://fcm.googleapis.com/fcm/send/fictional-subscription",
     keys: { p256dh: "fictional-public-key", auth: "fictional-auth-secret" }
   });

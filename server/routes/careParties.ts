@@ -1,15 +1,15 @@
 import type { FastifyInstance } from "fastify";
+import { sql } from "kysely";
 import { config } from "../config.js";
-import { db } from "../db/connection.js";
 import {
-  markAllClosedMonthsChanged,
-  recordAudit,
-  recordFieldChanges
-} from "../services/audit.js";
-import { getCareParty, mapCareParty, type CarePartyRow } from "../services/careParties.js";
+  assignedPersistedCarePartyIds,
+  getPersistedCareParty,
+  markAllDomainClosedMonthsChanged,
+  recordDomainAudit,
+  recordDomainFieldChanges
+} from "../services/domainPersistence.js";
 import { makeId, nowIso } from "../services/common.js";
 import { carePartyInputSchema } from "../validation/schemas.js";
-import { assignedCarePartyIds } from "../services/carePartyAccess.js";
 
 const readLimit = {
   config: { permission: "planning:view" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
@@ -21,46 +21,49 @@ const summaryLimit = {
   config: { permission: "appointments:view" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
 };
 
-function assignedUsageCount(id: string): number {
-  const row = db.prepare(`
-    SELECT
-      (
-        SELECT COUNT(*) FROM care_entries
-        WHERE responsible_party_id = ? AND deleted_at IS NULL
-      ) + (
-        SELECT COUNT(*) FROM contact_rules
-        WHERE responsible_party_id = ? AND deleted_at IS NULL
-      ) + (
-        SELECT COUNT(*) FROM unavailable_periods
-        WHERE responsible_party_id = ? AND deleted_at IS NULL
-      ) AS count
-  `).get(id, id, id) as { count: number };
-  return row.count;
+async function assignedUsageCount(app: FastifyInstance, id: string): Promise<number> {
+  const database = app.persistence.query;
+  const [entries, rules, unavailable] = await Promise.all([
+    database.selectFrom("care_entries").select(({ fn }) => fn.count<number>("id").as("count"))
+      .where("responsible_party_id", "=", id).where("deleted_at", "is", null).executeTakeFirst(),
+    database.selectFrom("contact_rules").select(({ fn }) => fn.count<number>("id").as("count"))
+      .where("responsible_party_id", "=", id).where("deleted_at", "is", null).executeTakeFirst(),
+    database.selectFrom("unavailable_periods").select(({ fn }) => fn.count<number>("id").as("count"))
+      .where("responsible_party_id", "=", id).where("deleted_at", "is", null).executeTakeFirst()
+  ]);
+  return Number(entries?.count ?? 0) + Number(rules?.count ?? 0) + Number(unavailable?.count ?? 0);
 }
 
 export async function carePartyRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/care-parties/summary", summaryLimit, async (request) => {
     const assigned = request.user?.workspaceRole === "scheduler"
-      ? assignedCarePartyIds(request.user.id)
+      ? await assignedPersistedCarePartyIds(app.persistence.query, request.user.id)
       : [];
     if (request.user?.workspaceRole === "scheduler" && assigned.length === 0) return [];
-    return db.prepare(`
-      SELECT id, name
-      FROM care_parties
-      WHERE deleted_at IS NULL
-        ${request.user?.workspaceRole === "scheduler" ? `AND id IN (${assigned.map(() => "?").join(", ")})` : ""}
-      ORDER BY name COLLATE NOCASE
-    `).all(...assigned);
+    let query = app.persistence.query.selectFrom("care_parties")
+      .select(["id", "name"])
+      .where("deleted_at", "is", null);
+    if (request.user?.workspaceRole === "scheduler") {
+      query = query.where("id", "in", assigned);
+    }
+    return query.orderBy(sql`name COLLATE NOCASE`).execute();
   });
 
   app.get("/api/care-parties", readLimit, async () => {
-    const rows = db.prepare(`
-      SELECT id, name, kind, created_by, updated_by, created_at, updated_at
-      FROM care_parties
-      WHERE deleted_at IS NULL
-      ORDER BY name COLLATE NOCASE
-    `).all() as CarePartyRow[];
-    return rows.map(mapCareParty);
+    const rows = await app.persistence.query.selectFrom("care_parties")
+      .select(["id", "name", "kind", "created_by", "updated_by", "created_at", "updated_at"])
+      .where("deleted_at", "is", null)
+      .orderBy(sql`name COLLATE NOCASE`)
+      .execute();
+    return rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      kind: row.kind,
+      createdBy: row.created_by,
+      updatedBy: row.updated_by,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at
+    }));
   });
 
   app.post("/api/care-parties", writeLimit, async (request, reply) => {
@@ -69,52 +72,46 @@ export async function carePartyRoutes(app: FastifyInstance): Promise<void> {
 
     const id = makeId("party");
     const timestamp = nowIso();
-    db.transaction(() => {
-      db.prepare(`
-        INSERT INTO care_parties (
-          id, name, kind, created_by, updated_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      `).run(
+    const careParty = await app.persistence.transaction(async (database) => {
+      await database.insertInto("care_parties").values({
         id,
-        parsed.data.name,
-        parsed.data.kind,
-        request.userEmail,
-        request.userEmail,
-        timestamp,
-        timestamp
-      );
-      recordAudit({
+        name: parsed.data.name,
+        kind: parsed.data.kind,
+        created_by: request.userEmail,
+        updated_by: request.userEmail,
+        created_at: timestamp,
+        updated_at: timestamp,
+        deleted_at: null
+      }).execute();
+      await recordDomainAudit(database, {
         userEmail: request.userEmail,
         entityType: "care_party",
         entityId: id,
         action: "created",
         newValue: parsed.data
       });
-    })();
+      return getPersistedCareParty(database, id);
+    });
 
-    return reply.code(201).send(getCareParty(id));
+    return reply.code(201).send(careParty);
   });
 
   app.put<{ Params: { id: string } }>("/api/care-parties/:id", writeLimit, async (request, reply) => {
-    const before = getCareParty(request.params.id);
+    const before = await getPersistedCareParty(app.persistence.query, request.params.id);
     if (!before) return reply.code(404).send({ error: "not_found" });
     const parsed = carePartyInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
 
     const timestamp = nowIso();
-    db.transaction(() => {
-      db.prepare(`
-        UPDATE care_parties
-        SET name = ?, kind = ?, updated_by = ?, updated_at = ?
-        WHERE id = ? AND deleted_at IS NULL
-      `).run(
-        parsed.data.name,
-        parsed.data.kind,
-        request.userEmail,
-        timestamp,
-        request.params.id
-      );
-      recordFieldChanges(
+    const careParty = await app.persistence.transaction(async (database) => {
+      await database.updateTable("care_parties").set({
+        name: parsed.data.name,
+        kind: parsed.data.kind,
+        updated_by: request.userEmail,
+        updated_at: timestamp
+      }).where("id", "=", request.params.id).where("deleted_at", "is", null).execute();
+      await recordDomainFieldChanges(
+        database,
         request.userEmail,
         "care_party",
         request.params.id,
@@ -122,21 +119,23 @@ export async function carePartyRoutes(app: FastifyInstance): Promise<void> {
         { ...before, ...parsed.data, updatedBy: request.userEmail, updatedAt: timestamp },
         ["updatedAt", "updatedBy"]
       );
-      markAllClosedMonthsChanged(
+      await markAllDomainClosedMonthsChanged(
+        database,
         request.userEmail,
         "care_party",
         request.params.id,
         timestamp
       );
-    })();
+      return getPersistedCareParty(database, request.params.id);
+    });
 
-    return getCareParty(request.params.id);
+    return careParty;
   });
 
   app.delete<{ Params: { id: string } }>("/api/care-parties/:id", writeLimit, async (request, reply) => {
-    const before = getCareParty(request.params.id);
+    const before = await getPersistedCareParty(app.persistence.query, request.params.id);
     if (!before) return reply.code(404).send({ error: "not_found" });
-    const usageCount = assignedUsageCount(request.params.id);
+    const usageCount = await assignedUsageCount(app, request.params.id);
     if (usageCount > 0) {
       return reply.code(409).send({
         error: "care_party_in_use",
@@ -145,23 +144,26 @@ export async function carePartyRoutes(app: FastifyInstance): Promise<void> {
     }
     const timestamp = nowIso();
 
-    db.transaction(() => {
-      db.prepare("UPDATE care_parties SET deleted_at = ?, updated_by = ?, updated_at = ? WHERE id = ?")
-        .run(timestamp, request.userEmail, timestamp, request.params.id);
-      recordAudit({
+    await app.persistence.transaction(async (database) => {
+      await database.updateTable("care_parties")
+        .set({ deleted_at: timestamp, updated_by: request.userEmail, updated_at: timestamp })
+        .where("id", "=", request.params.id)
+        .execute();
+      await recordDomainAudit(database, {
         userEmail: request.userEmail,
         entityType: "care_party",
         entityId: request.params.id,
         action: "deleted",
         oldValue: before
       });
-      markAllClosedMonthsChanged(
+      await markAllDomainClosedMonthsChanged(
+        database,
         request.userEmail,
         "care_party",
         request.params.id,
         timestamp
       );
-    })();
+    });
 
     return reply.code(204).send();
   });

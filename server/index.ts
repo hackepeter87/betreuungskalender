@@ -433,12 +433,12 @@ await app.register(legalRoutes, { legalContentDir: config.legalContentDir });
 await registerProtectedApplicationRoutes(app);
 
 const confirmationSweep = setInterval(() => {
-  void runCareConfirmationSweep().catch((error) => {
+  void runCareConfirmationSweep(persistence).catch((error) => {
     app.log.warn({ error }, "care confirmation sweep failed");
   });
 }, 15 * 60 * 1000);
 confirmationSweep.unref();
-void runCareConfirmationSweep().catch((error) => {
+void runCareConfirmationSweep(persistence).catch((error) => {
   app.log.warn({ error }, "initial care confirmation sweep failed");
 });
 

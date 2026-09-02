@@ -1,11 +1,13 @@
 import type { FastifyInstance } from "fastify";
+import { sql } from "kysely";
 import { config } from "../config.js";
-import { db } from "../db/connection.js";
 import {
-  markAllClosedMonthsChanged,
-  recordAudit,
-  recordFieldChanges
-} from "../services/audit.js";
+  markAllDomainClosedMonthsChanged,
+  recordDomainAudit,
+  recordDomainFieldChanges,
+  softDeletePersistedChildRelations
+} from "../services/domainPersistence.js";
+import type { DatabaseExecutor } from "../db/runtime.js";
 import { makeId, nowIso } from "../services/common.js";
 import { childInputSchema } from "../validation/schemas.js";
 
@@ -45,32 +47,30 @@ function mapChild(row: ChildRow) {
   };
 }
 
-function getChild(id: string) {
-  const row = db.prepare(`
-    SELECT id, name, birth_month, birth_year, color, created_by, updated_by, created_at, updated_at
-    FROM children
-    WHERE id = ? AND deleted_at IS NULL
-  `).get(id) as ChildRow | undefined;
+async function getChild(database: DatabaseExecutor, id: string) {
+  const row = await database.selectFrom("children")
+    .select(["id", "name", "birth_month", "birth_year", "color", "created_by", "updated_by", "created_at", "updated_at"])
+    .where("id", "=", id)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst() as ChildRow | undefined;
   return row ? mapChild(row) : undefined;
 }
 
 export async function childrenRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/children/summary", summaryLimit, async () =>
-    db.prepare(`
-      SELECT id, name, color
-      FROM children
-      WHERE deleted_at IS NULL
-      ORDER BY name COLLATE NOCASE
-    `).all()
+    app.persistence.query.selectFrom("children")
+      .select(["id", "name", "color"])
+      .where("deleted_at", "is", null)
+      .orderBy(sql`name COLLATE NOCASE`)
+      .execute()
   );
 
   app.get("/api/children", readLimit, async () => {
-    const rows = db.prepare(`
-      SELECT id, name, birth_month, birth_year, color, created_by, updated_by, created_at, updated_at
-      FROM children
-      WHERE deleted_at IS NULL
-      ORDER BY name COLLATE NOCASE
-    `).all() as ChildRow[];
+    const rows = await app.persistence.query.selectFrom("children")
+      .select(["id", "name", "birth_month", "birth_year", "color", "created_by", "updated_by", "created_at", "updated_at"])
+      .where("deleted_at", "is", null)
+      .orderBy(sql`name COLLATE NOCASE`)
+      .execute() as ChildRow[];
     return rows.map(mapChild);
   });
 
@@ -80,56 +80,50 @@ export async function childrenRoutes(app: FastifyInstance): Promise<void> {
 
     const id = makeId("child");
     const timestamp = nowIso();
-    db.transaction(() => {
-      db.prepare(`
-        INSERT INTO children (
-          id, name, birth_month, birth_year, color, created_by, updated_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
+    const child = await app.persistence.transaction(async (database) => {
+      await database.insertInto("children").values({
         id,
-        parsed.data.name,
-        parsed.data.birthMonth,
-        parsed.data.birthYear,
-        parsed.data.color,
-        request.userEmail,
-        request.userEmail,
-        timestamp,
-        timestamp
-      );
-      recordAudit({
+        name: parsed.data.name,
+        birth_month: parsed.data.birthMonth,
+        birth_year: parsed.data.birthYear,
+        color: parsed.data.color,
+        created_by: request.userEmail,
+        updated_by: request.userEmail,
+        created_at: timestamp,
+        updated_at: timestamp,
+        deleted_at: null
+      }).execute();
+      await recordDomainAudit(database, {
         userEmail: request.userEmail,
         entityType: "child",
         entityId: id,
         action: "created",
         newValue: parsed.data
       });
-    })();
+      return getChild(database, id);
+    });
 
-    return reply.code(201).send(getChild(id));
+    return reply.code(201).send(child);
   });
 
   app.put<{ Params: { id: string } }>("/api/children/:id", writeLimit, async (request, reply) => {
-    const before = getChild(request.params.id);
+    const before = await getChild(app.persistence.query, request.params.id);
     if (!before) return reply.code(404).send({ error: "not_found" });
     const parsed = childInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
 
     const timestamp = nowIso();
-    db.transaction(() => {
-      db.prepare(`
-        UPDATE children
-        SET name = ?, birth_month = ?, birth_year = ?, color = ?, updated_by = ?, updated_at = ?
-        WHERE id = ? AND deleted_at IS NULL
-      `).run(
-        parsed.data.name,
-        parsed.data.birthMonth,
-        parsed.data.birthYear,
-        parsed.data.color,
-        request.userEmail,
-        timestamp,
-        request.params.id
-      );
-      recordFieldChanges(
+    const child = await app.persistence.transaction(async (database) => {
+      await database.updateTable("children").set({
+        name: parsed.data.name,
+        birth_month: parsed.data.birthMonth,
+        birth_year: parsed.data.birthYear,
+        color: parsed.data.color,
+        updated_by: request.userEmail,
+        updated_at: timestamp
+      }).where("id", "=", request.params.id).where("deleted_at", "is", null).execute();
+      await recordDomainFieldChanges(
+        database,
         request.userEmail,
         "child",
         request.params.id,
@@ -137,61 +131,45 @@ export async function childrenRoutes(app: FastifyInstance): Promise<void> {
         { ...before, ...parsed.data, updatedBy: request.userEmail, updatedAt: timestamp },
         ["updatedAt", "updatedBy"]
       );
-      markAllClosedMonthsChanged(
+      await markAllDomainClosedMonthsChanged(
+        database,
         request.userEmail,
         "child",
         request.params.id,
         timestamp
       );
-    })();
+      return getChild(database, request.params.id);
+    });
 
-    return getChild(request.params.id);
+    return child;
   });
 
   app.delete<{ Params: { id: string } }>("/api/children/:id", writeLimit, async (request, reply) => {
-    const before = getChild(request.params.id);
+    const before = await getChild(app.persistence.query, request.params.id);
     if (!before) return reply.code(404).send({ error: "not_found" });
     const timestamp = nowIso();
 
-    db.transaction(() => {
-      db.prepare("UPDATE children SET deleted_at = ?, updated_by = ?, updated_at = ? WHERE id = ?")
-        .run(timestamp, request.userEmail, timestamp, request.params.id);
-      for (const table of [
-        ["care_entry_children", "care_entry_id", "care_entries"],
-        ["holiday_period_children", "holiday_period_id", "holiday_periods"],
-        ["unavailable_period_children", "unavailable_period_id", "unavailable_periods"],
-        ["contact_pattern_children", "contact_pattern_id", "contact_patterns"]
-      ] as const) {
-        db.prepare(`
-          UPDATE ${table[0]}
-          SET deleted_at = ?, updated_at = ?
-          WHERE child_id = ? AND deleted_at IS NULL
-        `).run(timestamp, timestamp, request.params.id);
-        db.prepare(`
-          UPDATE ${table[2]}
-          SET deleted_at = ?, updated_at = ?
-          WHERE id IN (
-            SELECT owner.${table[1]}
-            FROM ${table[0]} owner
-            GROUP BY owner.${table[1]}
-            HAVING SUM(CASE WHEN owner.deleted_at IS NULL THEN 1 ELSE 0 END) = 0
-          ) AND deleted_at IS NULL
-        `).run(timestamp, timestamp);
-      }
-      recordAudit({
+    await app.persistence.transaction(async (database) => {
+      await database.updateTable("children")
+        .set({ deleted_at: timestamp, updated_by: request.userEmail, updated_at: timestamp })
+        .where("id", "=", request.params.id)
+        .execute();
+      await softDeletePersistedChildRelations(database, request.params.id, timestamp);
+      await recordDomainAudit(database, {
         userEmail: request.userEmail,
         entityType: "child",
         entityId: request.params.id,
         action: "deleted",
         oldValue: before
       });
-      markAllClosedMonthsChanged(
+      await markAllDomainClosedMonthsChanged(
+        database,
         request.userEmail,
         "child",
         request.params.id,
         timestamp
       );
-    })();
+    });
 
     return reply.code(204).send();
   });
