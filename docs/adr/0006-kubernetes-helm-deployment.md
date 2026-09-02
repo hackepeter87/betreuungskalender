@@ -55,3 +55,10 @@ management.
   remain the rollback boundary for incompatible schema changes.
 - Cluster-specific ingress, certificate, backup-copy and network policies remain
   outside the chart.
+
+## Relationship to ADR 0007
+
+[ADR 0007](0007-database-persistence-drivers.md) defines a staged persistence
+boundary while preserving SQLite and this ADR's single-replica deployment
+contract for v1.27.0. It does not introduce another database driver or supersede
+this decision.
