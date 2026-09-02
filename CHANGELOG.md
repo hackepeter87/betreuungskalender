@@ -6,6 +6,24 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.26.1] - 2026-09-02
+
+### Added
+
+- Serve operator-provided legal notice and privacy text through public,
+  non-cached pages without creating an application session.
+- Add clearly incomplete German operator templates and read-only Docker,
+  Compose, Podman, and Helm mounting guidance.
+- Add a deployment-specific framework for retention, erasure requests,
+  browser storage, and controller/processor role decisions.
+
+### Changed
+
+- Activate optional service-worker cache storage only after accepted PWA
+  installation, standalone use, or explicit Push activation.
+- Keep API, authentication, onboarding, recovery, and operator legal responses
+  outside the optional application cache.
+
 ## [1.26.0] - 2026-09-02
 
 ### Added
