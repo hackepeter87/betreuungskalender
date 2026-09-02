@@ -7,18 +7,20 @@ import {
   serializeSessionCookie
 } from "../cookies.js";
 import { NativeOidcError, NativeOidcService } from "../nativeOidc.js";
+import type { DatabaseExecutor, PersistenceRuntime } from "../db/runtime.js";
 import {
   applyMembershipRole,
   type MembershipResolution
 } from "../services/memberships.js";
-import { OidcSessionStore } from "../services/oidcSessions.js";
+import { OidcSessionStore, type OidcSessionRecord } from "../services/oidcSessions.js";
+import { OidcLoginStateStore } from "../services/oidcLoginStates.js";
 import {
   OwnerSetupTokenError,
   OwnerSetupTokenStore
 } from "../services/ownerSetupTokens.js";
 import { upsertAuthenticatedUser } from "../services/users.js";
 import {
-  acceptInvitationByHash,
+  acceptInvitationByHashInTransaction,
   InvitationError,
   prepareInvitationLogin
 } from "../services/invitations.js";
@@ -51,19 +53,45 @@ type NativeOidcRouteConfig = Pick<
 
 interface NativeOidcRoutesOptions {
   config: NativeOidcRouteConfig;
+  persistence: PersistenceRuntime;
   service?: Pick<
     NativeOidcService,
     "createLoginRedirect" | "createLogoutRedirect" | "validateCallback"
   >;
-  sessions?: OidcSessionStore;
-  upsertUser?: (user: RequestUser) => void;
-  applyMembershipRole?: (user: RequestUser) => MembershipResolution;
-  ownerSetupTokens?: Pick<OwnerSetupTokenStore, "begin" | "consumeAndClaim">;
+  sessions?: {
+    create(
+      externalSubject: string,
+      ttlSeconds: number,
+      now?: Date,
+      database?: DatabaseExecutor
+    ): Awaitable<{ token: string; session: OidcSessionRecord }>;
+    revokeByToken(token: string | undefined): Awaitable<boolean>;
+  };
+  upsertUser?: (user: RequestUser) => Awaitable<void>;
+  applyMembershipRole?: (
+    user: RequestUser,
+    database?: DatabaseExecutor
+  ) => Awaitable<MembershipResolution>;
+  ownerSetupTokens?: {
+    begin(token: string): Awaitable<string>;
+    consumeAndClaim(
+      tokenHash: string,
+      user: RequestUser,
+      now?: Date,
+      database?: DatabaseExecutor
+    ): Awaitable<void>;
+  };
   invitationFlow?: {
-    begin(token: string): string;
-    accept(tokenHash: string, user: RequestUser): void;
+    begin(token: string): Awaitable<string>;
+    accept(
+      tokenHash: string,
+      user: RequestUser,
+      database?: DatabaseExecutor
+    ): Awaitable<void>;
   };
 }
+
+type Awaitable<T> = T | Promise<T>;
 
 function notFound(reply: FastifyReply) {
   return reply.code(404).send({
@@ -193,6 +221,7 @@ export async function nativeOidcRoutes(
   app: FastifyInstance,
   options: NativeOidcRoutesOptions
 ): Promise<void> {
+  const persistence = options.persistence;
   const secureCookie = options.config.nodeEnv === "production";
   const authRateLimit = {
     config: {
@@ -213,20 +242,29 @@ export async function nativeOidcRoutes(
       groupsClaim: options.config.oidcGroupsClaim,
       displayNameClaim: options.config.oidcDisplayNameClaim ?? "preferred_username",
       loginStateTtlSeconds: options.config.oidcLoginStateTtlSeconds
-    }
+    },
+    loginStates: new OidcLoginStateStore(persistence)
   });
-  const sessions = options.sessions ?? new OidcSessionStore();
-  const upsertUser = options.upsertUser ?? upsertAuthenticatedUser;
-  const resolveMembership = options.applyMembershipRole ?? applyMembershipRole;
+  const sessions = options.sessions ?? new OidcSessionStore(persistence.query);
+  const upsertUser = options.upsertUser ?? (
+    (user: RequestUser) => upsertAuthenticatedUser(user, persistence.query)
+  );
+  const resolveMembership = options.applyMembershipRole ?? (
+    (user: RequestUser, database = persistence.query) =>
+      applyMembershipRole(user, database)
+  );
   const ownerSetupTokens = options.ownerSetupTokens ?? new OwnerSetupTokenStore({
     tokenFile: options.config.ownerSetupTokenFile ?? "/run/secrets/owner-setup-token",
-    ttlSeconds: options.config.ownerSetupTokenTtlSeconds ?? 86_400
+    ttlSeconds: options.config.ownerSetupTokenTtlSeconds ?? 86_400,
+    persistence
   });
   const invitationFlow = options.invitationFlow ?? {
-    begin: (token: string) => prepareInvitationLogin(token),
-    accept: (tokenHash: string, user: RequestUser) => {
-      acceptInvitationByHash(tokenHash, user);
-    }
+    begin: (token: string) => prepareInvitationLogin(token, persistence.query),
+    accept: (
+      tokenHash: string,
+      user: RequestUser,
+      database = persistence.query
+    ) => acceptInvitationByHashInTransaction(tokenHash, user, database)
   };
 
   const providerLogoutUrl = async (
@@ -270,7 +308,7 @@ export async function nativeOidcRoutes(
           "Der Owner-Setup-Link ist ungültig."
         );
       }
-      ownerSetupTokens.begin(token);
+      await ownerSetupTokens.begin(token);
       return onboardingReply.type("text/html; charset=utf-8").send(onboardingPage({
         flow: "owner_setup",
         token
@@ -292,7 +330,7 @@ export async function nativeOidcRoutes(
       if (!token) {
         throw new NativeOidcError("owner_setup_invalid", 400, "Der Owner-Setup-Link ist ungültig.");
       }
-      const tokenHash = ownerSetupTokens.begin(token);
+      const tokenHash = await ownerSetupTokens.begin(token);
       const redirectUrl = await service.createLoginRedirect({ type: "owner_setup", tokenHash });
       return onboardingReply.redirect(redirectUrl.href);
     } catch (error) {
@@ -312,7 +350,7 @@ export async function nativeOidcRoutes(
       if (!token) {
         throw new NativeOidcError("invalid_invitation", 400, "Die Einladung ist ungültig.");
       }
-      invitationFlow.begin(token);
+      await invitationFlow.begin(token);
       return onboardingReply.type("text/html; charset=utf-8").send(onboardingPage({
         flow: "invitation",
         token
@@ -334,7 +372,7 @@ export async function nativeOidcRoutes(
       if (!token) {
         throw new NativeOidcError("invalid_invitation", 400, "Die Einladung ist ungültig.");
       }
-      const tokenHash = invitationFlow.begin(token);
+      const tokenHash = await invitationFlow.begin(token);
       const redirectUrl = await service.createLoginRedirect({ type: "invitation", tokenHash });
       return onboardingReply.redirect(redirectUrl.href);
     } catch (error) {
@@ -364,9 +402,13 @@ export async function nativeOidcRoutes(
           "Keine passende Berechtigung in den OIDC-Claims gefunden."
         );
       }
+      const user = auth.user;
+      const loginContext = claims.loginContext;
       let membership: MembershipResolution;
-      if (claims.loginContext.type === "normal") {
-        membership = resolveMembership(auth.user);
+      let session: { token: string; session: OidcSessionRecord } | undefined;
+      let completionPath = "/";
+      if (loginContext.type === "normal") {
+        membership = await resolveMembership(user);
         if (!membership.workspaceAccess) {
           throw new NativeOidcError(
             "authorization_required",
@@ -374,16 +416,41 @@ export async function nativeOidcRoutes(
             "Für diese Installation besteht keine aktive Mitgliedschaft."
           );
         }
-        upsertUser(auth.user);
-        membership = resolveMembership(auth.user);
+        await upsertUser(user);
+        membership = await resolveMembership(user);
       } else {
-        upsertUser(auth.user);
-        if (claims.loginContext.type === "owner_setup") {
-          ownerSetupTokens.consumeAndClaim(claims.loginContext.tokenHash, auth.user);
-        } else {
-          invitationFlow.accept(claims.loginContext.tokenHash, auth.user);
-        }
-        membership = resolveMembership(auth.user);
+        const completed = await persistence.transaction(async (database) => {
+          if (loginContext.type === "owner_setup") {
+            await ownerSetupTokens.consumeAndClaim(
+              loginContext.tokenHash,
+              user,
+              undefined,
+              database
+            );
+          } else {
+            await invitationFlow.accept(loginContext.tokenHash, user, database);
+          }
+          const resolvedMembership = await resolveMembership(user, database);
+          if (!resolvedMembership.workspaceAccess) {
+            throw new NativeOidcError(
+              "authorization_required",
+              403,
+              "Für diese Installation besteht keine aktive Mitgliedschaft."
+            );
+          }
+          const createdSession = await sessions.create(
+            resolvedMembership.user.externalSubject,
+            options.config.sessionTtlSeconds,
+            undefined,
+            database
+          );
+          return { membership: resolvedMembership, session: createdSession };
+        });
+        membership = completed.membership;
+        session = completed.session;
+        completionPath = loginContext.type === "owner_setup"
+          ? "/?onboarding=owner-setup"
+          : "/?onboarding=invitation";
       }
       if (!membership.workspaceAccess) {
         throw new NativeOidcError(
@@ -392,12 +459,10 @@ export async function nativeOidcRoutes(
           "Für diese Installation besteht keine aktive Mitgliedschaft."
         );
       }
-      const session = sessions.create(membership.user.externalSubject, options.config.sessionTtlSeconds);
-      const completionPath = claims.loginContext.type === "owner_setup"
-        ? "/?onboarding=owner-setup"
-        : claims.loginContext.type === "invitation"
-          ? "/?onboarding=invitation"
-          : "/";
+      session ??= await sessions.create(
+        membership.user.externalSubject,
+        options.config.sessionTtlSeconds
+      );
       return reply
         .header("set-cookie", serializeSessionCookie({
           name: options.config.sessionCookieName,
@@ -413,7 +478,7 @@ export async function nativeOidcRoutes(
         "native oidc callback rejected"
       );
       if (normalized.statusCode === 403) {
-        sessions.revokeByToken(
+        await sessions.revokeByToken(
           cookieValue(request.headers.cookie, options.config.sessionCookieName)
         );
         return preventOnboardingCache(reply)
@@ -431,7 +496,7 @@ export async function nativeOidcRoutes(
 
   app.get("/auth/logout", authRateLimit, async (request, reply) => {
     if (options.config.authMode !== "native-oidc") return notFound(reply);
-    sessions.revokeByToken(
+    await sessions.revokeByToken(
       cookieValue(request.headers.cookie, options.config.sessionCookieName)
     );
     const redirectUrl = await providerLogoutUrl(request.log);
@@ -442,7 +507,7 @@ export async function nativeOidcRoutes(
 
   app.post("/auth/logout", authRateLimit, async (request, reply) => {
     if (options.config.authMode !== "native-oidc") return notFound(reply);
-    sessions.revokeByToken(
+    await sessions.revokeByToken(
       cookieValue(request.headers.cookie, options.config.sessionCookieName)
     );
     const redirectUrl = await providerLogoutUrl(request.log);

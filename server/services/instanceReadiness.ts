@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
-import type Database from "better-sqlite3";
 import { config } from "../config.js";
-import { db } from "../db/connection.js";
 import { availableMigrationVersions } from "../db/migrationRunner.js";
+import type { DatabaseExecutor } from "../db/runtime.js";
 import { buildSetupState } from "./setupState.js";
 import type { ApiInstanceReadiness } from "../../shared/api.js";
 
@@ -19,12 +18,11 @@ type ReadinessConfig = Pick<
   | "webPushPublicKey"
 >;
 
-function appliedMigrations(database: Database.Database): Array<{ version: string; appliedAt: string }> {
-  return database.prepare(`
-    SELECT version, applied_at AS appliedAt
-    FROM schema_migrations
-    ORDER BY version
-  `).all() as Array<{ version: string; appliedAt: string }>;
+async function appliedMigrations(database: DatabaseExecutor) {
+  return database.selectFrom("schema_migrations")
+    .select(["version", "applied_at as appliedAt"])
+    .orderBy("version")
+    .execute();
 }
 
 function stableInstanceId(migrations: Array<{ version: string; appliedAt: string }>): string {
@@ -34,15 +32,15 @@ function stableInstanceId(migrations: Array<{ version: string; appliedAt: string
   return `inst_${createHash("sha256").update(seed).digest("hex").slice(0, 16)}`;
 }
 
-export function buildInstanceReadiness(
-  database: Database.Database = db,
+export async function buildInstanceReadiness(
+  database: DatabaseExecutor,
   runtime: ReadinessConfig = config
-): ApiInstanceReadiness {
-  const migrations = appliedMigrations(database);
+): Promise<ApiInstanceReadiness> {
+  const migrations = await appliedMigrations(database);
   const available = availableMigrationVersions();
   const latestApplied = migrations.at(-1)?.version;
   const latestAvailable = available.at(-1);
-  const setup = buildSetupState(database);
+  const setup = await buildSetupState(database);
 
   return {
     instanceId: stableInstanceId(migrations),

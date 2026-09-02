@@ -15,7 +15,7 @@ process.env.BACKUP_DIR = join(temporaryDirectory, "backups");
 process.env.INVITATION_PUBLIC_BASE_URL = "https://calendar.example.invalid";
 
 const { runMigrations } = await import("./db/migrate.js");
-const { db } = await import("./db/connection.js");
+const { db, persistence } = await import("./db/connection.js");
 const { dataTransferRoutes } = await import("./routes/dataTransfer.js");
 const { createInvitationRoutes } = await import("./routes/invitations.js");
 const { InvitationEmailError } = await import("./services/invitationEmail.js");
@@ -53,6 +53,7 @@ async function createApp(
   sendEmail: (input: InvitationEmailInput) => Promise<void> = async () => {}
 ) {
   const instance = Fastify();
+  instance.decorate("persistence", persistence);
   instance.addHook("onRequest", async (request) => {
     request.userEmail = "local-dev";
     request.user = {

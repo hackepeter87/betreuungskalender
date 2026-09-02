@@ -8,7 +8,7 @@ import type {
   ApiPushSubscriptionInput
 } from "../../shared/api.js";
 import type { RequestUser } from "../auth.js";
-import { db } from "../db/connection.js";
+import { db, persistence } from "../db/connection.js";
 import { config } from "../config.js";
 import { markClosedMonthsChanged, recordAudit, recordFieldChanges } from "./audit.js";
 import { assertCanUseCareParty, canUseCareParty } from "./carePartyAccess.js";
@@ -221,7 +221,7 @@ function activeCarePartyAssignmentsExist(): boolean {
   return Boolean(result);
 }
 
-function usersForEntry(entry: EntryRow): string[] {
+async function usersForEntry(entry: EntryRow): Promise<string[]> {
   if (entry.responsible_party_id && activeCarePartyAssignmentsExist()) {
     const rows = db.prepare(`
       SELECT user_id AS userId
@@ -230,40 +230,62 @@ function usersForEntry(entry: EntryRow): string[] {
       ORDER BY user_id
     `).all(entry.responsible_party_id) as Array<{ userId: string }>;
     if (rows.length) {
-      return rows
-        .map((row) => row.userId)
-        .filter((userId) => userHasWorkspacePermission(userId, "appointments:confirm"));
+      const allowed = await Promise.all(rows.map(async ({ userId }) => ({
+        userId,
+        allowed: await userHasWorkspacePermission(
+          userId,
+          "appointments:confirm",
+          persistence.query
+        )
+      })));
+      return allowed.filter((item) => item.allowed).map((item) => item.userId);
     }
   }
-  return (db.prepare(`
+  const users = (db.prepare(`
     SELECT id
     FROM app_users
     WHERE deleted_at IS NULL AND role IN ('admin', 'parent')
     ORDER BY id
-  `).all() as Array<{ id: string }>).map((row) => row.id).filter(
-    (userId) => userHasWorkspacePermission(userId, "appointments:confirm")
-  );
+  `).all() as Array<{ id: string }>).map((row) => row.id);
+  const allowed = await Promise.all(users.map(async (userId) => ({
+    userId,
+    allowed: await userHasWorkspacePermission(
+      userId,
+      "appointments:confirm",
+      persistence.query
+    )
+  })));
+  return allowed.filter((item) => item.allowed).map((item) => item.userId);
 }
 
-function currentUserForId(userId: string): RequestUser | undefined {
+async function currentUserForId(userId: string): Promise<RequestUser | undefined> {
   const row = db.prepare(`
     SELECT external_subject AS externalSubject
     FROM app_users
     WHERE id = ? AND deleted_at IS NULL
   `).get(userId) as { externalSubject: string } | undefined;
-  return row ? findAuthenticatedUserBySubject(row.externalSubject) : undefined;
+  return row
+    ? findAuthenticatedUserBySubject(row.externalSubject, persistence.query)
+    : undefined;
 }
 
-function canAccessConfirmation(user: RequestUser | undefined, entry: EntryRow): user is RequestUser {
-  if (!user || !userHasWorkspacePermission(user.id, "appointments:confirm")) return false;
+async function canAccessConfirmation(
+  user: RequestUser | undefined,
+  entry: EntryRow
+): Promise<boolean> {
+  if (!user || !(await userHasWorkspacePermission(
+    user.id,
+    "appointments:confirm",
+    persistence.query
+  ))) return false;
   return !entry.responsible_party_id || canUseCareParty(user, entry.responsible_party_id);
 }
 
-export function invalidateInaccessibleCareConfirmations(
+export async function invalidateInaccessibleCareConfirmations(
   userId: string,
   timestamp = nowIso()
-): number {
-  const user = currentUserForId(userId);
+): Promise<number> {
+  const user = await currentUserForId(userId);
   const rows = db.prepare(`
     SELECT requests.id, requests.care_entry_id AS careEntryId
     FROM care_confirmation_requests requests
@@ -280,14 +302,16 @@ export function invalidateInaccessibleCareConfirmations(
   for (const row of rows) {
     const entry = db.prepare("SELECT * FROM care_entries WHERE id = ? AND deleted_at IS NULL")
       .get(row.careEntryId) as EntryRow | undefined;
-    if (!entry || !canAccessConfirmation(user, entry)) {
+    if (!entry || !(await canAccessConfirmation(user, entry))) {
       revoked += revoke.run(timestamp, timestamp, row.id).changes;
     }
   }
   return revoked;
 }
 
-export function createDueCareConfirmationRequests(referenceTime = new Date()): number {
+export async function createDueCareConfirmationRequests(
+  referenceTime = new Date()
+): Promise<number> {
   const timestamp = nowIso();
   const conflictEntryIds = careConflictEntryIds(db);
   if (!conflictEntryIds) return 0;
@@ -310,6 +334,11 @@ export function createDueCareConfirmationRequests(referenceTime = new Date()): n
       AND end_datetime < ?
     ORDER BY end_datetime, id
   `).all(referenceTime.toISOString()) as EntryRow[];
+  const entryUsers = new Map<string, string[]>(await Promise.all(
+    entries
+      .filter((entry) => !conflictEntryIds.has(entry.id))
+      .map(async (entry) => [entry.id, await usersForEntry(entry)] as const)
+  ));
   let created = 0;
   db.transaction(() => {
     const insert = db.prepare(`
@@ -319,7 +348,7 @@ export function createDueCareConfirmationRequests(referenceTime = new Date()): n
     `);
     for (const entry of entries) {
       if (conflictEntryIds.has(entry.id)) continue;
-      for (const userId of usersForEntry(entry)) {
+      for (const userId of entryUsers.get(entry.id) ?? []) {
         const result = insert.run(
           makeId("confirm"),
           entry.id,
@@ -529,7 +558,8 @@ export async function sendDueCareConfirmationPushes(
     if (conflictEntryIds.has(row.care_entry_id)) continue;
     const entry = db.prepare("SELECT * FROM care_entries WHERE id = ? AND deleted_at IS NULL")
       .get(row.care_entry_id) as EntryRow | undefined;
-    if (!entry || !canAccessConfirmation(currentUserForId(row.user_id), entry)) continue;
+    const user = await currentUserForId(row.user_id);
+    if (!entry || !(await canAccessConfirmation(user, entry))) continue;
     const userRows = rowsByUser.get(row.user_id) ?? [];
     userRows.push(row);
     rowsByUser.set(row.user_id, userRows);
@@ -564,7 +594,7 @@ export async function sendDueCareConfirmationPushes(
 }
 
 export async function runCareConfirmationSweep(referenceTime = new Date()): Promise<void> {
-  createDueCareConfirmationRequests(referenceTime);
+  await createDueCareConfirmationRequests(referenceTime);
   await sendDueCareConfirmationPushes(referenceTime);
 }
 
@@ -572,7 +602,7 @@ export async function listOpenCareConfirmations(userOrId: RequestUser | string):
   await runCareConfirmationSweep();
   const conflictEntryIds = careConflictEntryIds(db);
   if (!conflictEntryIds) return [];
-  const user = typeof userOrId === "string" ? currentUserForId(userOrId) : userOrId;
+  const user = typeof userOrId === "string" ? await currentUserForId(userOrId) : userOrId;
   if (!user) return [];
   const rows = db.prepare(`
     SELECT *
@@ -583,19 +613,21 @@ export async function listOpenCareConfirmations(userOrId: RequestUser | string):
       AND status IN ('open', 'snoozed')
     ORDER BY due_at, id
   `).all(user.id) as RequestRow[];
-  return rows.flatMap((row) => {
-    if (conflictEntryIds.has(row.care_entry_id)) return [];
+  const visible: ApiCareConfirmationRequest[] = [];
+  for (const row of rows) {
+    if (conflictEntryIds.has(row.care_entry_id)) continue;
     const entry = db.prepare("SELECT * FROM care_entries WHERE id = ? AND deleted_at IS NULL")
       .get(row.care_entry_id) as EntryRow | undefined;
-    return entry && canAccessConfirmation(user, entry) ? [mapRequest(row, entry)] : [];
-  });
+    if (entry && await canAccessConfirmation(user, entry)) visible.push(mapRequest(row, entry));
+  }
+  return visible;
 }
 
-export function answerCareConfirmation(
+export async function answerCareConfirmation(
   requestId: string,
   userOrId: RequestUser | string,
   answer: ApiCareConfirmationAnswer
-): ApiCareConfirmationRequest | undefined {
+): Promise<ApiCareConfirmationRequest | undefined> {
   const userId = typeof userOrId === "string" ? userOrId : userOrId.id;
   const request = db.prepare(`
     SELECT *
@@ -609,7 +641,7 @@ export function answerCareConfirmation(
   const conflictEntryIds = careConflictEntryIds(db);
   if (!conflictEntryIds || conflictEntryIds.has(before.id)) throw new CareEntryConflictError();
   if (typeof userOrId !== "string") {
-    if (!canAccessConfirmation(userOrId, before)) return undefined;
+    if (!(await canAccessConfirmation(userOrId, before))) return undefined;
     if (before.responsible_party_id) assertCanUseCareParty(userOrId, before.responsible_party_id);
   }
   const timestamp = nowIso();
@@ -694,11 +726,11 @@ export function answerCareConfirmation(
   return mapRequest(updated, entry);
 }
 
-export function remindCareConfirmationLater(
+export async function remindCareConfirmationLater(
   requestId: string,
   userOrId: RequestUser | string,
   nextReminderAt?: string
-): ApiCareConfirmationRequest | undefined {
+): Promise<ApiCareConfirmationRequest | undefined> {
   const userId = typeof userOrId === "string" ? userOrId : userOrId.id;
   const request = db.prepare(`
     SELECT *
@@ -709,7 +741,7 @@ export function remindCareConfirmationLater(
   const entry = db.prepare("SELECT * FROM care_entries WHERE id = ? AND deleted_at IS NULL")
     .get(request.care_entry_id) as EntryRow | undefined;
   if (!entry) return undefined;
-  if (typeof userOrId !== "string" && !canAccessConfirmation(userOrId, entry)) {
+  if (typeof userOrId !== "string" && !(await canAccessConfirmation(userOrId, entry))) {
     return undefined;
   }
   const next = nextReminderAt ?? new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString();

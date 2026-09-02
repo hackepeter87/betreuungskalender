@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import Database from "better-sqlite3";
 import { migrateDatabase } from "../db/migrationRunner.js";
+import { createSqlitePersistenceRuntime } from "../db/runtime.js";
 import {
   OidcSessionStore,
   oidcSessionTokenForTesting
@@ -24,11 +25,11 @@ function testDatabase() {
   };
 }
 
-test("OIDC sessions store only a hash of the opaque browser token", () => {
+test("OIDC sessions store only a hash of the opaque browser token", async () => {
   const { database, cleanup } = testDatabase();
   try {
-    const store = new OidcSessionStore(database);
-    const { token, session } = store.create(
+    const store = new OidcSessionStore(createSqlitePersistenceRuntime(database).query);
+    const { token, session } = await store.create(
       "subject-123",
       3600,
       new Date("2026-01-01T00:00:00.000Z")
@@ -55,33 +56,33 @@ test("OIDC sessions store only a hash of the opaque browser token", () => {
   }
 });
 
-test("OIDC sessions expire and revoke server-side access", () => {
+test("OIDC sessions expire and revoke server-side access", async () => {
   const { database, cleanup } = testDatabase();
   try {
-    const store = new OidcSessionStore(database);
-    const { token } = store.create(
+    const store = new OidcSessionStore(createSqlitePersistenceRuntime(database).query);
+    const { token } = await store.create(
       "subject-123",
       60,
       new Date("2026-01-01T00:00:00.000Z")
     );
 
     assert.equal(
-      store.findByToken(token, new Date("2026-01-01T00:00:30.000Z"))?.externalSubject,
+      (await store.findByToken(token, new Date("2026-01-01T00:00:30.000Z")))?.externalSubject,
       "subject-123"
     );
     assert.equal(
-      store.findByToken(token, new Date("2026-01-01T00:01:00.000Z")),
+      await store.findByToken(token, new Date("2026-01-01T00:01:00.000Z")),
       undefined
     );
 
-    const { token: revokedToken } = store.create(
+    const { token: revokedToken } = await store.create(
       "subject-456",
       60,
       new Date("2026-01-01T00:02:00.000Z")
     );
-    assert.equal(store.revokeByToken(revokedToken, new Date("2026-01-01T00:02:10.000Z")), true);
+    assert.equal(await store.revokeByToken(revokedToken, new Date("2026-01-01T00:02:10.000Z")), true);
     assert.equal(
-      store.findByToken(revokedToken, new Date("2026-01-01T00:02:20.000Z")),
+      await store.findByToken(revokedToken, new Date("2026-01-01T00:02:20.000Z")),
       undefined
     );
   } finally {

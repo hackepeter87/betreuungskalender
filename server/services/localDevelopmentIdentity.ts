@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import type { PersistenceRuntime } from "../db/runtime.js";
 
 export const localDevelopmentUserId = "local-dev";
 
@@ -12,53 +12,52 @@ export function isLocalDevelopmentIdentity(user: {
     user.displayName === localDevelopmentUserId;
 }
 
-export function disableLocalDevelopmentIdentityAccess(
-  database: Database.Database,
+export async function disableLocalDevelopmentIdentityAccess(
+  persistence: PersistenceRuntime,
   timestamp = new Date().toISOString()
-): void {
-  database.transaction(() => {
-    const technicalIdentityExists = database.prepare(`
-      SELECT 1 FROM app_users
-      WHERE id = ? AND external_subject = ? AND display_name = ?
-      LIMIT 1
-    `).get(localDevelopmentUserId, localDevelopmentUserId, localDevelopmentUserId);
+): Promise<void> {
+  await persistence.transaction(async (database) => {
+    const technicalIdentityExists = await database.selectFrom("app_users")
+      .select("id")
+      .where("id", "=", localDevelopmentUserId)
+      .where("external_subject", "=", localDevelopmentUserId)
+      .where("display_name", "=", localDevelopmentUserId)
+      .executeTakeFirst();
     if (!technicalIdentityExists) return;
 
-    const explicitLocalOwner = database.prepare(`
-      SELECT 1 FROM settings
-      WHERE key = 'setup.ownerUserId'
-        AND deleted_at IS NULL
-        AND value_json = ?
-      LIMIT 1
-    `).get(JSON.stringify(localDevelopmentUserId));
+    const explicitLocalOwner = await database.selectFrom("settings")
+      .select("key")
+      .where("key", "=", "setup.ownerUserId")
+      .where("deleted_at", "is", null)
+      .where("value_json", "=", JSON.stringify(localDevelopmentUserId))
+      .executeTakeFirst();
     if (explicitLocalOwner) return;
 
-    database.prepare(`
-      UPDATE app_memberships
-      SET deleted_at = COALESCE(deleted_at, ?),
-          updated_by = 'runtime-access-cleanup', updated_at = ?
-      WHERE user_id = ? AND deleted_at IS NULL
-    `).run(timestamp, timestamp, localDevelopmentUserId);
-    database.prepare(`
-      UPDATE app_user_care_party_assignments
-      SET deleted_at = COALESCE(deleted_at, ?),
-          updated_by = 'runtime-access-cleanup', updated_at = ?
-      WHERE user_id = ? AND deleted_at IS NULL
-    `).run(timestamp, timestamp, localDevelopmentUserId);
-    database.prepare(`
-      UPDATE calendar_feed_tokens
-      SET revoked_at = COALESCE(revoked_at, ?)
-      WHERE user_id = ? AND revoked_at IS NULL
-    `).run(timestamp, localDevelopmentUserId);
-    database.prepare(`
-      UPDATE push_subscriptions
-      SET deleted_at = COALESCE(deleted_at, ?), updated_at = ?
-      WHERE user_id = ? AND deleted_at IS NULL
-    `).run(timestamp, timestamp, localDevelopmentUserId);
-    database.prepare(`
-      UPDATE care_confirmation_requests
-      SET deleted_at = COALESCE(deleted_at, ?), updated_at = ?
-      WHERE user_id = ? AND deleted_at IS NULL AND answered_at IS NULL
-    `).run(timestamp, timestamp, localDevelopmentUserId);
-  })();
+    await database.updateTable("app_memberships")
+      .set({ deleted_at: timestamp, updated_by: "runtime-access-cleanup", updated_at: timestamp })
+      .where("user_id", "=", localDevelopmentUserId)
+      .where("deleted_at", "is", null)
+      .execute();
+    await database.updateTable("app_user_care_party_assignments")
+      .set({ deleted_at: timestamp, updated_by: "runtime-access-cleanup", updated_at: timestamp })
+      .where("user_id", "=", localDevelopmentUserId)
+      .where("deleted_at", "is", null)
+      .execute();
+    await database.updateTable("calendar_feed_tokens")
+      .set({ revoked_at: timestamp })
+      .where("user_id", "=", localDevelopmentUserId)
+      .where("revoked_at", "is", null)
+      .execute();
+    await database.updateTable("push_subscriptions")
+      .set({ deleted_at: timestamp, updated_at: timestamp })
+      .where("user_id", "=", localDevelopmentUserId)
+      .where("deleted_at", "is", null)
+      .execute();
+    await database.updateTable("care_confirmation_requests")
+      .set({ deleted_at: timestamp, updated_at: timestamp })
+      .where("user_id", "=", localDevelopmentUserId)
+      .where("deleted_at", "is", null)
+      .where("answered_at", "is", null)
+      .execute();
+  });
 }

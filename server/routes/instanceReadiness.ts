@@ -14,6 +14,6 @@ export async function instanceReadinessRoutes(app: FastifyInstance): Promise<voi
         message: "Für diese Aktion fehlt die erforderliche Berechtigung."
       });
     }
-    return buildInstanceReadiness();
+    return buildInstanceReadiness(app.persistence.query);
   });
 }

@@ -1,8 +1,7 @@
-import type Database from "better-sqlite3";
+import { permissionsForRole, type RequestUser } from "../auth.js";
+import type { DatabaseExecutor, PersistenceRuntime } from "../db/runtime.js";
 import { createHash, randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { db as defaultDb } from "../db/connection.js";
-import { permissionsForRole, type RequestUser } from "../auth.js";
 import { upsertAuthenticatedUser } from "./users.js";
 
 export interface RecoveryAdminConfig {
@@ -22,27 +21,20 @@ export interface RecoverySessionRecord {
   passwordChangeRequired: boolean;
 }
 
-interface RecoveryCredentialRow {
+interface RecoveryLoginResult {
+  token: string;
+  session: RecoverySessionRecord;
+  user?: RequestUser;
+}
+
+type RecoveryCredentialRow = {
   username: string;
   password_hash: string;
   password_salt: string;
-}
-
-interface RecoverySessionRow {
-  id: string;
-  username: string;
-  password_change_required: number;
-  created_at: string;
-  last_seen_at: string | null;
-  expires_at: string;
-}
+};
 
 export class RecoveryAdminError extends Error {
-  constructor(
-    readonly code: string,
-    readonly statusCode: number,
-    message: string
-  ) {
+  constructor(readonly code: string, readonly statusCode: number, message: string) {
     super(message);
   }
 }
@@ -52,8 +44,10 @@ function hashSessionToken(token: string): string {
 }
 
 function hashPassword(password: string, salt = randomBytes(16).toString("base64url")) {
-  const hash = scryptSync(password, salt, 64, { N: 16_384, r: 8, p: 1 }).toString("base64url");
-  return { hash, salt };
+  return {
+    hash: scryptSync(password, salt, 64, { N: 16_384, r: 8, p: 1 }).toString("base64url"),
+    salt
+  };
 }
 
 function passwordMatches(password: string, row: RecoveryCredentialRow): boolean {
@@ -78,81 +72,58 @@ function userForUsername(username: string): RequestUser {
   };
 }
 
-function toRecord(row: RecoverySessionRow): RecoverySessionRecord {
-  return {
-    id: row.id,
-    username: row.username,
-    createdAt: row.created_at,
-    ...(row.last_seen_at ? { lastSeenAt: row.last_seen_at } : {}),
-    expiresAt: row.expires_at,
-    passwordChangeRequired: row.password_change_required === 1
-  };
-}
-
 export class RecoveryAdminStore {
-  readonly #db: Database.Database;
-  readonly #config: RecoveryAdminConfig;
-
   constructor(
-    config: RecoveryAdminConfig,
-    database: Database.Database = defaultDb
-  ) {
-    this.#config = config;
-    this.#db = database;
-  }
+    private readonly config: RecoveryAdminConfig,
+    private readonly persistence: PersistenceRuntime
+  ) {}
 
-  ensureConfigured(): void {
-    if (!this.#config.enabled) return;
-    if (this.hasCredential() || this.#initialPassword()) return;
+  async ensureConfigured(): Promise<void> {
+    if (!this.config.enabled) return;
+    if (await this.hasCredential() || this.#initialPassword()) return;
     throw new Error(
       "RECOVERY_ADMIN_ENABLED=true requires an existing recovery credential or RECOVERY_ADMIN_INITIAL_PASSWORD_FILE / RECOVERY_ADMIN_INITIAL_PASSWORD."
     );
   }
 
-  hasCredential(): boolean {
-    return Boolean(this.#credential());
+  async hasCredential(): Promise<boolean> {
+    return Boolean(await this.#credential(this.persistence.query));
   }
 
-  login(
-    username: string,
-    password: string,
-    now = new Date()
-  ): { token: string; session: RecoverySessionRecord; user?: RequestUser } {
+  async login(username: string, password: string, now = new Date()): Promise<RecoveryLoginResult> {
     this.#requireEnabled();
-    const normalizedUsername = safeUsername(this.#config.username);
+    const normalizedUsername = safeUsername(this.config.username);
     if (safeUsername(username) !== normalizedUsername) {
-      this.#audit("login_failed", safeUsername(username), now);
+      await this.#audit(this.persistence.query, "login_failed", safeUsername(username), now);
       throw new RecoveryAdminError("recovery_login_failed", 401, "Anmeldung fehlgeschlagen.");
     }
-
-    const credential = this.#credential();
+    const credential = await this.#credential(this.persistence.query);
     if (credential) {
       if (!passwordMatches(password, credential)) {
-        this.#audit("login_failed", normalizedUsername, now);
+        await this.#audit(this.persistence.query, "login_failed", normalizedUsername, now);
         throw new RecoveryAdminError("recovery_login_failed", 401, "Anmeldung fehlgeschlagen.");
       }
-      const user = userForUsername(normalizedUsername);
-      upsertAuthenticatedUser(user, now.toISOString(), this.#db);
-      const created = this.#createSession(normalizedUsername, false, now);
-      this.#audit("login_succeeded", normalizedUsername, now);
-      return { ...created, user };
+      return this.persistence.transaction(async (database) => {
+        const user = userForUsername(normalizedUsername);
+        await upsertAuthenticatedUser(user, database, now.toISOString());
+        const created = await this.#createSession(database, normalizedUsername, false, now);
+        await this.#audit(database, "login_succeeded", normalizedUsername, now);
+        return { ...created, user };
+      });
     }
-
     const initialPassword = this.#initialPassword();
     if (!initialPassword || initialPassword !== password) {
-      this.#audit("login_failed", normalizedUsername, now);
+      await this.#audit(this.persistence.query, "login_failed", normalizedUsername, now);
       throw new RecoveryAdminError("recovery_login_failed", 401, "Anmeldung fehlgeschlagen.");
     }
-    const created = this.#createSession(normalizedUsername, true, now);
-    this.#audit("bootstrap_login_succeeded", normalizedUsername, now);
-    return created;
+    return this.persistence.transaction(async (database) => {
+      const created = await this.#createSession(database, normalizedUsername, true, now);
+      await this.#audit(database, "bootstrap_login_succeeded", normalizedUsername, now);
+      return created;
+    });
   }
 
-  changePassword(
-    token: string | undefined,
-    newPassword: string,
-    now = new Date()
-  ): { session: RecoverySessionRecord; user: RequestUser } {
+  async changePassword(token: string | undefined, newPassword: string, now = new Date()) {
     this.#requireEnabled();
     if (newPassword.trim().length < 12) {
       throw new RecoveryAdminError(
@@ -161,169 +132,178 @@ export class RecoveryAdminStore {
         "Das neue Passwort muss mindestens 12 Zeichen lang sein."
       );
     }
-    const session = this.findSessionByToken(token, now);
+    const session = await this.findSessionByToken(token, now);
     if (!session) {
       throw new RecoveryAdminError("authentication_required", 401, "Authentifizierung erforderlich.");
     }
-
     const { hash, salt } = hashPassword(newPassword);
     const timestamp = now.toISOString();
-    this.#db.prepare(`
-      INSERT INTO recovery_admin_credentials (
-        username, password_hash, password_salt, password_changed_at, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT(username) DO UPDATE SET
-        password_hash = excluded.password_hash,
-        password_salt = excluded.password_salt,
-        password_changed_at = excluded.password_changed_at,
-        updated_at = excluded.updated_at
-    `).run(session.username, hash, salt, timestamp, timestamp, timestamp);
-    this.#db.prepare(`
-      UPDATE recovery_admin_sessions
-      SET revoked_at = ?
-      WHERE username = ? AND id <> ? AND revoked_at IS NULL
-    `).run(timestamp, session.username, session.id);
-    this.#db.prepare(`
-      UPDATE recovery_admin_sessions
-      SET password_change_required = 0, last_seen_at = ?
-      WHERE id = ?
-    `).run(timestamp, session.id);
-
     const user = userForUsername(session.username);
-    upsertAuthenticatedUser(user, timestamp, this.#db);
-    this.#audit("password_changed", session.username, now);
-    const refreshed = this.findSessionByToken(token, now);
+    await this.persistence.transaction(async (database) => {
+      await database.insertInto("recovery_admin_credentials").values({
+        username: session.username,
+        password_hash: hash,
+        password_salt: salt,
+        password_changed_at: timestamp,
+        created_at: timestamp,
+        updated_at: timestamp
+      }).onConflict((conflict) => conflict.column("username").doUpdateSet({
+        password_hash: hash,
+        password_salt: salt,
+        password_changed_at: timestamp,
+        updated_at: timestamp
+      })).execute();
+      await database.updateTable("recovery_admin_sessions")
+        .set({ revoked_at: timestamp })
+        .where("username", "=", session.username)
+        .where("id", "!=", session.id)
+        .where("revoked_at", "is", null)
+        .execute();
+      await database.updateTable("recovery_admin_sessions")
+        .set({ password_change_required: 0, last_seen_at: timestamp })
+        .where("id", "=", session.id)
+        .execute();
+      await upsertAuthenticatedUser(user, database, timestamp);
+      await this.#audit(database, "password_changed", session.username, now);
+    });
+    const refreshed = await this.findSessionByToken(token, now);
     if (!refreshed) {
       throw new RecoveryAdminError("authentication_required", 401, "Authentifizierung erforderlich.");
     }
     return { session: refreshed, user };
   }
 
-  findSessionByToken(token: string | undefined, now = new Date()): RecoverySessionRecord | undefined {
-    if (!this.#config.enabled) return undefined;
+  async findSessionByToken(
+    token: string | undefined,
+    now = new Date()
+  ): Promise<RecoverySessionRecord | undefined> {
+    if (!this.config.enabled) return undefined;
     const normalized = token?.trim();
     if (!normalized) return undefined;
     const nowIso = now.toISOString();
-    const row = this.#db.prepare(`
-      SELECT id, username, password_change_required, created_at, last_seen_at, expires_at
-      FROM recovery_admin_sessions
-      WHERE session_hash = ?
-        AND revoked_at IS NULL
-        AND expires_at > ?
-    `).get(hashSessionToken(normalized), nowIso) as RecoverySessionRow | undefined;
+    const row = await this.persistence.query.selectFrom("recovery_admin_sessions")
+      .select(["id", "username", "password_change_required", "created_at", "last_seen_at", "expires_at"])
+      .where("session_hash", "=", hashSessionToken(normalized))
+      .where("revoked_at", "is", null)
+      .where("expires_at", ">", nowIso)
+      .executeTakeFirst();
     if (!row) return undefined;
-    this.#db.prepare(`
-      UPDATE recovery_admin_sessions
-      SET last_seen_at = ?
-      WHERE id = ?
-    `).run(nowIso, row.id);
-    return toRecord({ ...row, last_seen_at: nowIso });
+    await this.persistence.query.updateTable("recovery_admin_sessions")
+      .set({ last_seen_at: nowIso })
+      .where("id", "=", row.id)
+      .execute();
+    return {
+      id: row.id,
+      username: row.username,
+      createdAt: row.created_at,
+      lastSeenAt: nowIso,
+      expiresAt: row.expires_at,
+      passwordChangeRequired: row.password_change_required === 1
+    };
   }
 
-  findUserByToken(token: string | undefined, now = new Date()): RequestUser | undefined {
-    const session = this.findSessionByToken(token, now);
+  async findUserByToken(token: string | undefined, now = new Date()): Promise<RequestUser | undefined> {
+    const session = await this.findSessionByToken(token, now);
     if (!session || session.passwordChangeRequired) return undefined;
     const user = userForUsername(session.username);
-    upsertAuthenticatedUser(user, now.toISOString(), this.#db);
+    await upsertAuthenticatedUser(user, this.persistence.query, now.toISOString());
     return user;
   }
 
-  revokeByToken(token: string | undefined, now = new Date()): boolean {
+  async revokeByToken(token: string | undefined, now = new Date()): Promise<boolean> {
     const normalized = token?.trim();
     if (!normalized) return false;
-    const session = this.findSessionByToken(normalized, now);
-    const result = this.#db.prepare(`
-      UPDATE recovery_admin_sessions
-      SET revoked_at = ?
-      WHERE session_hash = ?
-        AND revoked_at IS NULL
-    `).run(now.toISOString(), hashSessionToken(normalized));
-    if (result.changes > 0 && session) {
-      this.#audit("logout", session.username, now);
+    const session = await this.findSessionByToken(normalized, now);
+    const result = await this.persistence.query.updateTable("recovery_admin_sessions")
+      .set({ revoked_at: now.toISOString() })
+      .where("session_hash", "=", hashSessionToken(normalized))
+      .where("revoked_at", "is", null)
+      .executeTakeFirst();
+    const revoked = Number(result.numUpdatedRows) > 0;
+    if (revoked && session) {
+      await this.#audit(this.persistence.query, "logout", session.username, now);
     }
-    return result.changes > 0;
+    return revoked;
   }
 
   #requireEnabled(): void {
-    if (!this.#config.enabled) {
+    if (!this.config.enabled) {
       throw new RecoveryAdminError("not_found", 404, "Ressource nicht gefunden.");
     }
   }
 
-  #credential(): RecoveryCredentialRow | undefined {
-    return this.#db.prepare(`
-      SELECT username, password_hash, password_salt
-      FROM recovery_admin_credentials
-      WHERE username = ?
-    `).get(safeUsername(this.#config.username)) as RecoveryCredentialRow | undefined;
+  #credential(database: DatabaseExecutor): Promise<RecoveryCredentialRow | undefined> {
+    return database.selectFrom("recovery_admin_credentials")
+      .select(["username", "password_hash", "password_salt"])
+      .where("username", "=", safeUsername(this.config.username))
+      .executeTakeFirst();
   }
 
-  #createSession(
+  async #createSession(
+    database: DatabaseExecutor,
     username: string,
     passwordChangeRequired: boolean,
     now: Date
-  ): { token: string; session: RecoverySessionRecord } {
+  ) {
     const token = randomBytes(32).toString("base64url");
     const timestamp = now.toISOString();
-    const expiresAt = new Date(now.getTime() + this.#config.sessionTtlSeconds * 1000).toISOString();
-    const session = {
+    const expiresAt = new Date(now.getTime() + this.config.sessionTtlSeconds * 1000).toISOString();
+    const session: RecoverySessionRecord = {
       id: randomUUID(),
       username,
       createdAt: timestamp,
       expiresAt,
       passwordChangeRequired
     };
-    this.#db.prepare(`
-      INSERT INTO recovery_admin_sessions (
-        id, session_hash, username, password_change_required, created_at, expires_at
-      ) VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      session.id,
-      hashSessionToken(token),
+    await database.insertInto("recovery_admin_sessions").values({
+      id: session.id,
+      session_hash: hashSessionToken(token),
       username,
-      passwordChangeRequired ? 1 : 0,
-      timestamp,
-      expiresAt
-    );
+      password_change_required: passwordChangeRequired ? 1 : 0,
+      created_at: timestamp,
+      last_seen_at: null,
+      expires_at: expiresAt,
+      revoked_at: null
+    }).execute();
     return { token, session };
   }
 
   #initialPassword(): string | undefined {
-    const file = this.#config.initialPasswordFile?.trim();
+    const file = this.config.initialPasswordFile?.trim();
     if (file) {
       try {
         const value = readFileSync(file, "utf8").trim();
         if (value) return value;
       } catch {
-        // Missing or unreadable secret files are tolerated when a stored
-        // recovery credential already exists or an env fallback is configured.
+        // Stored credentials or the environment fallback may still be available.
       }
     }
-    return this.#config.initialPassword?.trim() || undefined;
+    return this.config.initialPassword?.trim() || undefined;
   }
 
-  #audit(event: string, username: string, now: Date): void {
+  async #audit(
+    database: DatabaseExecutor,
+    event: string,
+    username: string,
+    now: Date
+  ): Promise<void> {
     const timestamp = now.toISOString();
-    this.#db.prepare(`
-      INSERT INTO audit_log (
-        timestamp, user_email, entity_type, entity_id, action, field_name,
-        old_value, new_value, metadata_json, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, 'created', ?, NULL, NULL, ?, ?, ?)
-    `).run(
+    const normalized = safeUsername(username);
+    await database.insertInto("audit_log").values({
       timestamp,
-      `recovery:${safeUsername(username)}`,
-      "recovery_admin",
-      safeUsername(username),
-      event,
-      JSON.stringify({ event }),
-      timestamp,
-      timestamp
-    );
+      user_email: `recovery:${normalized}`,
+      entity_type: "recovery_admin",
+      entity_id: normalized,
+      action: "created",
+      field_name: event,
+      old_value: null,
+      new_value: null,
+      metadata_json: JSON.stringify({ event }),
+      created_at: timestamp,
+      updated_at: timestamp,
+      deleted_at: null
+    }).execute();
   }
 }
 
-export const recoveryAdminTesting = {
-  hashSessionToken,
-  hashPassword,
-  userForUsername
-};
+export const recoveryAdminTesting = { hashSessionToken, hashPassword, userForUsername };

@@ -36,9 +36,9 @@ export async function careConfirmationRoutes(app: FastifyInstance): Promise<void
     const parsed = careConfirmationAnswerSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     if (!request.user) return reply.code(401).send({ error: "authentication_required" });
-    let result: ReturnType<typeof answerCareConfirmation>;
+    let result: Awaited<ReturnType<typeof answerCareConfirmation>>;
     try {
-      result = answerCareConfirmation(request.params.id, request.user, parsed.data);
+      result = await answerCareConfirmation(request.params.id, request.user, parsed.data);
     } catch (error) {
       if (isCareEntryConflictError(error)) {
         return reply.code(409).send({ error: "care_entry_conflict" });
@@ -55,7 +55,11 @@ export async function careConfirmationRoutes(app: FastifyInstance): Promise<void
     const parsed = careConfirmationRemindLaterSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     if (!request.user) return reply.code(401).send({ error: "authentication_required" });
-    const result = remindCareConfirmationLater(request.params.id, request.user, parsed.data.nextReminderAt);
+    const result = await remindCareConfirmationLater(
+      request.params.id,
+      request.user,
+      parsed.data.nextReminderAt
+    );
     return result ?? reply.code(404).send({ error: "not_found" });
   });
 

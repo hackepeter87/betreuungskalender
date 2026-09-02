@@ -71,7 +71,7 @@ async function registerInvitationRoutes(
 ): Promise<void> {
   app.get("/api/invitations/capabilities", readLimit, async (request, reply) => {
     try {
-      assertCanAdministerMembers(request.user);
+      await assertCanAdministerMembers(request.user, app.persistence.query);
     } catch (error) {
       const normalized = normalizeMemberError(error);
       return reply.code(normalized.statusCode).send({
@@ -84,7 +84,7 @@ async function registerInvitationRoutes(
 
   app.get("/api/invitations", readLimit, async (request, reply) => {
     try {
-      assertCanAdministerMembers(request.user);
+      await assertCanAdministerMembers(request.user, app.persistence.query);
     } catch (error) {
       const normalized = normalizeMemberError(error);
       return reply.code(normalized.statusCode).send({
@@ -92,13 +92,13 @@ async function registerInvitationRoutes(
         message: normalized.message
       });
     }
-    return listInvitations();
+    return listInvitations(app.persistence.query);
   });
 
   app.post("/api/invitations", writeLimit, async (request, reply) => {
     const invitationReply = preventInvitationCache(reply);
     try {
-      assertCanAdministerMembers(request.user);
+      await assertCanAdministerMembers(request.user, app.persistence.query);
     } catch (error) {
       const normalized = normalizeMemberError(error);
       return invitationReply.code(normalized.statusCode).send({
@@ -113,10 +113,10 @@ async function registerInvitationRoutes(
         issues: parsed.error.issues
       });
     }
-    const created = createInvitation({
+    const created = await createInvitation({
       ...parsed.data,
       actorId: request.userEmail
-    });
+    }, app.persistence.query);
     if (!parsed.data.sendEmail) {
       return invitationReply.code(201).send(toApiCreatedInvitation(
         created,
@@ -156,7 +156,7 @@ async function registerInvitationRoutes(
 
   app.delete<{ Params: { id: string } }>("/api/invitations/:id", writeLimit, async (request, reply) => {
     try {
-      assertCanAdministerMembers(request.user);
+      await assertCanAdministerMembers(request.user, app.persistence.query);
     } catch (error) {
       const normalized = normalizeMemberError(error);
       return reply.code(normalized.statusCode).send({
@@ -164,7 +164,11 @@ async function registerInvitationRoutes(
         message: normalized.message
       });
     }
-    const invitation = revokeInvitation(request.params.id, request.userEmail);
+    const invitation = await revokeInvitation(
+      request.params.id,
+      request.userEmail,
+      app.persistence.query
+    );
     if (!invitation) {
       return reply.code(404).send({
         error: "not_found",

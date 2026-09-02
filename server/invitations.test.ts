@@ -6,6 +6,7 @@ import test from "node:test";
 import Database from "better-sqlite3";
 import { permissionsForRole, type RequestUser } from "./auth.js";
 import { migrateDatabase } from "./db/migrationRunner.js";
+import { createSqlitePersistenceRuntime, type PersistenceRuntime } from "./db/runtime.js";
 import {
   acceptInvitation,
   acceptInvitationByHash,
@@ -27,13 +28,15 @@ import { membershipRoleForUser } from "./services/memberships.js";
 
 const migrationsDirectory = resolve(process.cwd(), "server/migrations");
 
-function withDatabase(run: (database: Database.Database) => void): void {
+async function withDatabase(
+  run: (database: Database.Database, persistence: PersistenceRuntime) => Promise<void>
+): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), "betreuungskalender-invitations-"));
   const database = new Database(join(root, "app.sqlite"));
   database.pragma("foreign_keys = ON");
   try {
     migrateDatabase(database, migrationsDirectory);
-    run(database);
+    await run(database, createSqlitePersistenceRuntime(database));
   } finally {
     database.close();
     rmSync(root, { recursive: true, force: true });
@@ -69,23 +72,23 @@ function insertUser(database: Database.Database, id = "user_invited"): RequestUs
   };
 }
 
-test("valid invitations can be accepted by authenticated users", () => {
-  withDatabase((database) => {
+test("valid invitations can be accepted by authenticated users", async () => {
+  await withDatabase(async (database, persistence) => {
     const user = insertUser(database);
-    const created = createInvitation({
+    const created = await createInvitation({
       role: "editor",
       emailHint: "USER_INVITED@EXAMPLE.INVALID",
       expiresAt: "2026-07-06T10:00:00.000Z",
       actorId: "local-dev",
       token: "test-token-valid-invitation-000000",
       timestamp: "2026-07-05T10:00:00.000Z"
-    }, database);
+    }, persistence.query);
 
-    const accepted = acceptInvitation(
+    const accepted = await acceptInvitation(
       created.token,
       user,
-      "2026-07-05T11:00:00.000Z",
-      database
+      persistence,
+      "2026-07-05T11:00:00.000Z"
     );
 
     assert.equal(accepted.id, created.invitation.id);
@@ -93,12 +96,59 @@ test("valid invitations can be accepted by authenticated users", () => {
     assert.equal(accepted.emailHint, "user_invited@example.invalid");
     assert.equal(accepted.acceptedUserId, user.id);
     assert.equal(accepted.acceptedAt, "2026-07-05T11:00:00.000Z");
-    assert.equal(membershipRoleForUser(user.id, database), "editor");
+    assert.equal(await membershipRoleForUser(user.id, persistence.query), "editor");
   });
 });
 
-test("transfer-linked invitations apply only the selected role and proposed care parties", () => {
-  withDatabase((database) => {
+test("invitation acceptance rolls back user, membership, and token state after a late failure", async () => {
+  await withDatabase(async (database, persistence) => {
+    const user: RequestUser = {
+      id: "user_rollback",
+      externalSubject: "subject-user_rollback",
+      email: "user_rollback@example.invalid",
+      displayName: "Rollback User",
+      groups: [],
+      role: "readonly",
+      permissions: permissionsForRole("readonly")
+    };
+    const created = await createInvitation({
+      role: "editor",
+      expiresAt: "2026-07-06T10:00:00.000Z",
+      actorId: "local-dev",
+      token: "test-token-rollback-invitation-000000",
+      timestamp: "2026-07-05T10:00:00.000Z"
+    }, persistence.query);
+    database.exec(`
+      CREATE TRIGGER reject_test_invitation_accept
+      BEFORE UPDATE OF accepted_at ON app_invitations
+      WHEN NEW.accepted_at IS NOT NULL
+      BEGIN
+        SELECT RAISE(ABORT, 'forced invitation failure');
+      END
+    `);
+
+    await assert.rejects(
+      acceptInvitation(created.token, user, persistence, "2026-07-05T11:00:00.000Z"),
+      /forced invitation failure/
+    );
+
+    assert.equal(await membershipRoleForUser(user.id, persistence.query), undefined);
+    const userCount = database.prepare(`
+      SELECT COUNT(*) AS count
+      FROM app_users
+      WHERE id = ?
+    `).get(user.id) as { count: number };
+    assert.equal(userCount.count, 0);
+    assert.deepEqual(database.prepare(`
+      SELECT accepted_user_id AS acceptedUserId, accepted_at AS acceptedAt
+      FROM app_invitations
+      WHERE id = ?
+    `).get(created.invitation.id), { acceptedUserId: null, acceptedAt: null });
+  });
+});
+
+test("transfer-linked invitations apply only the selected role and proposed care parties", async () => {
+  await withDatabase(async (database, persistence) => {
     const user = insertUser(database, "user_transferred");
     const timestamp = "2026-07-05T10:00:00.000Z";
     database.prepare(`
@@ -123,18 +173,18 @@ test("transfer-linked invitations apply only the selected role and proposed care
         actor_id, source_care_party_id, target_care_party_id, created_at, updated_at
       ) VALUES ('actor-transfer', 'source-party', 'party-transfer', ?, ?)
     `).run(timestamp, timestamp);
-    const created = createInvitation({
+    const created = await createInvitation({
       role: "scheduler",
       expiresAt: "2026-07-06T10:00:00.000Z",
       actorId: "owner",
       token: "test-token-transfer-invitation-000000",
       timestamp,
       dataTransferActorId: "actor-transfer"
-    }, database);
+    }, persistence.query);
 
-    acceptInvitation(created.token, user, "2026-07-05T11:00:00.000Z", database);
+    await acceptInvitation(created.token, user, persistence, "2026-07-05T11:00:00.000Z");
 
-    assert.equal(membershipRoleForUser(user.id, database), "scheduler");
+    assert.equal(await membershipRoleForUser(user.id, persistence.query), "scheduler");
     assert.deepEqual(database.prepare(`
       SELECT care_party_id AS carePartyId
       FROM app_user_care_party_assignments
@@ -144,46 +194,46 @@ test("transfer-linked invitations apply only the selected role and proposed care
   });
 });
 
-test("invitation login uses a hash and accepts after authentication", () => {
-  withDatabase((database) => {
+test("invitation login uses a hash and accepts after authentication", async () => {
+  await withDatabase(async (database, persistence) => {
     const user = insertUser(database);
-    const created = createInvitation({
+    const created = await createInvitation({
       role: "editor",
       expiresAt: "2026-07-06T10:00:00.000Z",
       actorId: "local-dev",
       token: "test-token-login-flow-000000",
       timestamp: "2026-07-05T10:00:00.000Z"
-    }, database);
+    }, persistence.query);
 
-    const hash = prepareInvitationLogin(
+    const hash = await prepareInvitationLogin(
       created.token,
-      "2026-07-05T10:30:00.000Z",
-      database
+      persistence.query,
+      "2026-07-05T10:30:00.000Z"
     );
     assert.match(hash, /^[0-9a-f]{64}$/);
     assert.notEqual(hash, created.token);
 
-    const accepted = acceptInvitationByHash(
+    const accepted = await acceptInvitationByHash(
       hash,
       user,
-      "2026-07-05T11:00:00.000Z",
-      database
+      persistence,
+      "2026-07-05T11:00:00.000Z"
     );
     assert.equal(accepted.acceptedUserId, user.id);
-    assert.equal(membershipRoleForUser(user.id, database), "editor");
+    assert.equal(await membershipRoleForUser(user.id, persistence.query), "editor");
   });
 });
 
-test("raw invitation tokens are not persisted", () => {
-  withDatabase((database) => {
+test("raw invitation tokens are not persisted", async () => {
+  await withDatabase(async (database, persistence) => {
     const rawToken = "test-token-never-persisted-000000";
-    const created = createInvitation({
+    const created = await createInvitation({
       role: "viewer",
       expiresAt: "2026-07-06T10:00:00.000Z",
       actorId: "local-dev",
       token: rawToken,
       timestamp: "2026-07-05T10:00:00.000Z"
-    }, database);
+    }, persistence.query);
 
     const row = database.prepare(`
       SELECT token_hash AS tokenHash
@@ -202,80 +252,80 @@ test("raw invitation tokens are not persisted", () => {
   });
 });
 
-test("expired invitations cannot be accepted", () => {
-  withDatabase((database) => {
+test("expired invitations cannot be accepted", async () => {
+  await withDatabase(async (database, persistence) => {
     const user = insertUser(database);
-    const created = createInvitation({
+    const created = await createInvitation({
       role: "editor",
       expiresAt: "2026-07-05T10:00:00.000Z",
       actorId: "local-dev",
       token: "test-token-expired-invitation-000000",
       timestamp: "2026-07-05T09:00:00.000Z"
-    }, database);
+    }, persistence.query);
 
-    assert.throws(
-      () => acceptInvitation(created.token, user, "2026-07-05T10:00:00.000Z", database),
+    await assert.rejects(
+      acceptInvitation(created.token, user, persistence, "2026-07-05T10:00:00.000Z"),
       (error) =>
         error instanceof InvitationError &&
         error.code === "invitation_expired" &&
         error.statusCode === 410
     );
-    assert.equal(membershipRoleForUser(user.id, database), undefined);
+    assert.equal(await membershipRoleForUser(user.id, persistence.query), undefined);
   });
 });
 
-test("revoked invitations cannot be accepted", () => {
-  withDatabase((database) => {
+test("revoked invitations cannot be accepted", async () => {
+  await withDatabase(async (database, persistence) => {
     const user = insertUser(database);
-    const created = createInvitation({
+    const created = await createInvitation({
       role: "admin",
       expiresAt: "2026-07-06T10:00:00.000Z",
       actorId: "local-dev",
       token: "test-token-revoked-invitation-000000",
       timestamp: "2026-07-05T09:00:00.000Z"
-    }, database);
-    const revoked = revokeInvitation(
+    }, persistence.query);
+    const revoked = await revokeInvitation(
       created.invitation.id,
       "local-dev",
-      "2026-07-05T09:30:00.000Z",
-      database
+      persistence.query,
+      "2026-07-05T09:30:00.000Z"
     );
 
     assert.equal(revoked?.revokedAt, "2026-07-05T09:30:00.000Z");
-    assert.throws(
-      () => acceptInvitation(created.token, user, "2026-07-05T10:00:00.000Z", database),
+    await assert.rejects(
+      acceptInvitation(created.token, user, persistence, "2026-07-05T10:00:00.000Z"),
       (error) =>
         error instanceof InvitationError &&
         error.code === "invitation_revoked" &&
         error.statusCode === 410
     );
-    assert.equal(membershipRoleForUser(user.id, database), undefined);
+    assert.equal(await membershipRoleForUser(user.id, persistence.query), undefined);
   });
 });
 
-test("accepted invitations cannot be reused", () => {
-  withDatabase((database) => {
+test("accepted invitations cannot be reused", async () => {
+  await withDatabase(async (database, persistence) => {
     const firstUser = insertUser(database, "user_first");
     const secondUser = insertUser(database, "user_second");
-    const created = createInvitation({
+    const created = await createInvitation({
       role: "editor",
       expiresAt: "2026-07-06T10:00:00.000Z",
       actorId: "local-dev",
       token: "test-token-single-use-invitation-000000",
       timestamp: "2026-07-05T09:00:00.000Z"
-    }, database);
+    }, persistence.query);
 
-    acceptInvitation(created.token, firstUser, "2026-07-05T10:00:00.000Z", database);
+    await acceptInvitation(created.token, firstUser, persistence, "2026-07-05T10:00:00.000Z");
 
-    assert.throws(
-      () => acceptInvitation(created.token, secondUser, "2026-07-05T10:05:00.000Z", database),
+    await assert.rejects(
+      acceptInvitation(created.token, secondUser, persistence, "2026-07-05T10:05:00.000Z"),
       (error) =>
         error instanceof InvitationError &&
         error.code === "invitation_already_accepted" &&
         error.statusCode === 409
     );
-    assert.equal(membershipRoleForUser(firstUser.id, database), "editor");
-    assert.equal(membershipRoleForUser(secondUser.id, database), undefined);
+    assert.equal(await membershipRoleForUser(firstUser.id, persistence.query), "editor");
+    assert.equal(await membershipRoleForUser(secondUser.id, persistence.query), undefined);
   });
 });
 
