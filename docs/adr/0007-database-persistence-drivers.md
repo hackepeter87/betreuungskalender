@@ -91,6 +91,18 @@ one process, so the existing single-replica boundary continues to apply.
    contract tests and opt-in deployment paths.
 3. Horizontal scaling requires a separate architecture decision.
 
+### v1.27.0 implementation status
+
+- Startup and identity persistence use the asynchronous runtime.
+- Domain persistence for children, care parties, care entries, confirmations,
+  contact rules, holidays, unavailable periods, external calendars, trips,
+  costs and settings uses an explicitly injected runtime or transaction.
+- Full application-data import retains a temporary synchronous compatibility
+  path so its existing all-or-nothing transaction is preserved. Operational,
+  reporting, backup and transfer paths are converted in the next reviewed
+  delivery slice before the SQLite parity gate.
+- SQLite remains the only selectable driver throughout v1.27.0.
+
 ## Verification contract
 
 The common persistence suite covers:

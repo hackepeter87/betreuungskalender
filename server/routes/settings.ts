@@ -1,9 +1,10 @@
 import type { FastifyInstance } from "fastify";
 import { config } from "../config.js";
-import { db } from "../db/connection.js";
-import { recordFieldChanges } from "../services/audit.js";
 import { nowIso } from "../services/common.js";
-import { getClientSettings, isActiveCarePartyId } from "../services/settings.js";
+import {
+  getPersistedClientSettings,
+  recordDomainFieldChanges
+} from "../services/domainPersistence.js";
 import { settingsInputSchema } from "../validation/schemas.js";
 
 const readLimit = {
@@ -14,51 +15,60 @@ const writeLimit = {
 };
 
 export async function settingsRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/settings", readLimit, async () => getClientSettings());
+  app.get("/api/settings", readLimit, async () =>
+    getPersistedClientSettings(app.persistence.query)
+  );
 
   app.put("/api/settings", writeLimit, async (request, reply) => {
     const parsed = settingsInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
-    const inactiveReference = [
+    const referencedIds = [
       parsed.data.primaryCarePartyId,
       parsed.data.defaultResponsiblePartyId
-    ].find((value) => value !== undefined && !isActiveCarePartyId(value));
+    ].filter((value): value is string => value !== undefined);
+    const activeReferences = referencedIds.length
+      ? await app.persistence.query.selectFrom("care_parties")
+        .select("id")
+        .where("id", "in", referencedIds)
+        .where("deleted_at", "is", null)
+        .execute()
+      : [];
+    const activeIds = new Set(activeReferences.map((row) => row.id));
+    const inactiveReference = referencedIds.find((value) => !activeIds.has(value));
     if (inactiveReference) {
       return reply.code(400).send({
         error: "validation_error",
         message: "Die ausgewaehlte betreuende Person ist nicht aktiv."
       });
     }
-    const before = getClientSettings();
+    const before = await getPersistedClientSettings(app.persistence.query);
     const timestamp = nowIso();
-    db.transaction(() => {
-      const upsert = db.prepare(`
-        INSERT INTO settings (key, value_json, created_by, updated_by, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ON CONFLICT(key) DO UPDATE SET
-          value_json = excluded.value_json,
-          updated_by = excluded.updated_by,
-          updated_at = excluded.updated_at,
-          deleted_at = NULL
-      `);
+    return app.persistence.transaction(async (database) => {
       for (const [key, value] of Object.entries(parsed.data)) {
-        upsert.run(
+        await database.insertInto("settings").values({
           key,
-          JSON.stringify(value),
-          request.userEmail,
-          request.userEmail,
-          timestamp,
-          timestamp
-        );
+          value_json: JSON.stringify(value),
+          created_by: request.userEmail,
+          updated_by: request.userEmail,
+          created_at: timestamp,
+          updated_at: timestamp,
+          deleted_at: null
+        }).onConflict((conflict) => conflict.column("key").doUpdateSet({
+          value_json: JSON.stringify(value),
+          updated_by: request.userEmail,
+          updated_at: timestamp,
+          deleted_at: null
+        })).execute();
       }
-      recordFieldChanges(
+      await recordDomainFieldChanges(
+        database,
         request.userEmail,
         "settings",
         "global",
         before,
         { ...before, ...parsed.data }
       );
-    })();
-    return getClientSettings();
+      return getPersistedClientSettings(database);
+    });
   });
 }

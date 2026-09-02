@@ -1,15 +1,17 @@
 import type { FastifyInstance } from "fastify";
 import type { ApiUnavailablePeriod } from "../../shared/api.js";
 import { config } from "../config.js";
-import { db } from "../db/connection.js";
 import {
-  markClosedMonthsChanged,
-  recordAudit,
-  recordFieldChanges
-} from "../services/audit.js";
-import { assertCanUseCareParty } from "../services/carePartyAccess.js";
-import { assertActiveCareParty } from "../services/careParties.js";
-import { assertActiveChildren, bool, makeId, nowIso, syncJunction } from "../services/common.js";
+  assertCanUsePersistedCareParty,
+  assertPersistedCareParty,
+  assertPersistedChildren,
+  markDomainClosedMonthsChanged,
+  recordDomainAudit,
+  recordDomainFieldChanges,
+  syncPersistedChildJunction
+} from "../services/domainPersistence.js";
+import type { DatabaseExecutor } from "../db/runtime.js";
+import { bool, makeId, nowIso } from "../services/common.js";
 import {
   unavailablePeriodInputSchema,
   unavailablePeriodWarnings
@@ -42,23 +44,24 @@ interface UnavailableRow {
   updated_at: string;
 }
 
-function childIdsForPeriod(id: string): string[] {
-  return (db.prepare(`
-    SELECT child_id AS childId
-    FROM unavailable_period_children
-    WHERE unavailable_period_id = ? AND deleted_at IS NULL
-    ORDER BY child_id
-  `).all(id) as Array<{ childId: string }>).map((row) => row.childId);
+async function childIdsForPeriod(database: DatabaseExecutor, id: string): Promise<string[]> {
+  const rows = await database.selectFrom("unavailable_period_children")
+    .select("child_id")
+    .where("unavailable_period_id", "=", id)
+    .where("deleted_at", "is", null)
+    .orderBy("child_id")
+    .execute();
+  return rows.map((row) => row.child_id);
 }
 
-function mapPeriod(row: UnavailableRow): ApiUnavailablePeriod {
+async function mapPeriod(database: DatabaseExecutor, row: UnavailableRow): Promise<ApiUnavailablePeriod> {
   const period = {
     id: row.id,
     startDateTime: row.start_datetime,
     endDateTime: row.end_datetime,
     scope: row.scope,
     responsiblePartyId: row.responsible_party_id ?? undefined,
-    childIds: childIdsForPeriod(row.id),
+    childIds: await childIdsForPeriod(database, row.id),
     category: row.category,
     dutyRelated: bool(row.duty_related),
     affectsContact: bool(row.affects_contact),
@@ -78,27 +81,29 @@ function mapPeriod(row: UnavailableRow): ApiUnavailablePeriod {
   };
 }
 
-function validateRelations(input: {
+async function validateRelations(database: DatabaseExecutor, input: {
   childIds: string[];
   responsiblePartyId?: string;
-}): void {
-  if (input.childIds.length) assertActiveChildren(input.childIds);
-  assertActiveCareParty(input.responsiblePartyId);
+}): Promise<void> {
+  if (input.childIds.length) await assertPersistedChildren(database, input.childIds);
+  await assertPersistedCareParty(database, input.responsiblePartyId);
 }
 
-function assertOptionalCarePartyAccess(
-  user: Parameters<typeof assertCanUseCareParty>[0],
+async function assertOptionalCarePartyAccess(
+  database: DatabaseExecutor,
+  user: Parameters<typeof assertCanUsePersistedCareParty>[1],
   responsiblePartyId?: string
-): void {
-  if (responsiblePartyId) assertCanUseCareParty(user, responsiblePartyId);
+): Promise<void> {
+  if (responsiblePartyId) await assertCanUsePersistedCareParty(database, user, responsiblePartyId);
 }
 
-function getPeriod(id: string): ApiUnavailablePeriod | undefined {
-  const row = db.prepare(`
-    SELECT * FROM unavailable_periods
-    WHERE id = ? AND deleted_at IS NULL
-  `).get(id) as UnavailableRow | undefined;
-  return row ? mapPeriod(row) : undefined;
+async function getPeriod(database: DatabaseExecutor, id: string): Promise<ApiUnavailablePeriod | undefined> {
+  const row = await database.selectFrom("unavailable_periods")
+    .selectAll()
+    .where("id", "=", id)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst() as UnavailableRow | undefined;
+  return row ? mapPeriod(database, row) : undefined;
 }
 
 export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<void> {
@@ -106,22 +111,17 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
     "/api/unavailable-periods",
     readLimit,
     async (request) => {
-      const conditions = ["deleted_at IS NULL"];
-      const values: string[] = [];
+      let query = app.persistence.query.selectFrom("unavailable_periods")
+        .selectAll()
+        .where("deleted_at", "is", null);
       if (request.query.startDate) {
-        conditions.push("end_datetime >= ?");
-        values.push(`${request.query.startDate}T00:00:00`);
+        query = query.where("end_datetime", ">=", `${request.query.startDate}T00:00:00`);
       }
       if (request.query.endDate) {
-        conditions.push("start_datetime <= ?");
-        values.push(`${request.query.endDate}T23:59:59`);
+        query = query.where("start_datetime", "<=", `${request.query.endDate}T23:59:59`);
       }
-      const rows = db.prepare(`
-        SELECT * FROM unavailable_periods
-        WHERE ${conditions.join(" AND ")}
-        ORDER BY start_datetime, id
-      `).all(...values) as UnavailableRow[];
-      return rows.map(mapPeriod);
+      const rows = await query.orderBy("start_datetime").orderBy("id").execute() as UnavailableRow[];
+      return Promise.all(rows.map((row) => mapPeriod(app.persistence.query, row)));
     }
   );
 
@@ -133,68 +133,58 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
         issues: parsed.error.issues
       });
     }
+    const id = makeId("unavailable");
+    const timestamp = nowIso();
     try {
-      validateRelations(parsed.data);
-      assertOptionalCarePartyAccess(request.user, parsed.data.responsiblePartyId);
+      const period = await app.persistence.transaction(async (database) => {
+        await validateRelations(database, parsed.data);
+        await assertOptionalCarePartyAccess(database, request.user, parsed.data.responsiblePartyId);
+        await database.insertInto("unavailable_periods").values({
+          id,
+          start_datetime: parsed.data.startDateTime,
+          end_datetime: parsed.data.endDateTime,
+          scope: parsed.data.scope,
+          responsible_party_id: parsed.data.responsiblePartyId ?? null,
+          category: parsed.data.category,
+          duty_related: Number(parsed.data.dutyRelated),
+          affects_contact: Number(parsed.data.affectsContact),
+          affects_holidays: Number(parsed.data.affectsHolidays),
+          location: parsed.data.location ?? null,
+          notes: parsed.data.notes ?? null,
+          has_evidence: Number(parsed.data.hasEvidence),
+          evidence_reference: parsed.data.evidenceReference ?? null,
+          created_by: request.userEmail,
+          updated_by: request.userEmail,
+          created_at: timestamp,
+          updated_at: timestamp,
+          deleted_at: null
+        }).execute();
+        await syncPersistedChildJunction(database, { table: "unavailable_period_children", owner: "unavailable_period_id" }, id, parsed.data.childIds, timestamp);
+        const created = await getPeriod(database, id);
+        await recordDomainAudit(database, {
+          userEmail: request.userEmail,
+          entityType: "unavailable_period",
+          entityId: id,
+          action: "created",
+          newValue: created
+        });
+        await markDomainClosedMonthsChanged(database, request.userEmail, "unavailable_period", id, parsed.data.startDateTime.slice(0, 10), parsed.data.endDateTime.slice(0, 10), timestamp);
+        return created;
+      });
+      return reply.code(201).send(period);
     } catch (error) {
       return reply.code(400).send({
         error: "validation_error",
         message: error instanceof Error ? error.message : String(error)
       });
     }
-    const id = makeId("unavailable");
-    const timestamp = nowIso();
-    db.transaction(() => {
-      db.prepare(`
-        INSERT INTO unavailable_periods (
-          id, start_datetime, end_datetime, scope, responsible_party_id, category, duty_related,
-          affects_contact, affects_holidays, location, notes, has_evidence,
-          evidence_reference, created_by, updated_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        id,
-        parsed.data.startDateTime,
-        parsed.data.endDateTime,
-        parsed.data.scope,
-        parsed.data.responsiblePartyId ?? null,
-        parsed.data.category,
-        Number(parsed.data.dutyRelated),
-        Number(parsed.data.affectsContact),
-        Number(parsed.data.affectsHolidays),
-        parsed.data.location ?? null,
-        parsed.data.notes ?? null,
-        Number(parsed.data.hasEvidence),
-        parsed.data.evidenceReference ?? null,
-        request.userEmail,
-        request.userEmail,
-        timestamp,
-        timestamp
-      );
-      syncJunction("unavailable_period_children", "unavailable_period_id", id, parsed.data.childIds, timestamp);
-      recordAudit({
-        userEmail: request.userEmail,
-        entityType: "unavailable_period",
-        entityId: id,
-        action: "created",
-        newValue: getPeriod(id)
-      });
-      markClosedMonthsChanged(
-        request.userEmail,
-        "unavailable_period",
-        id,
-        parsed.data.startDateTime.slice(0, 10),
-        parsed.data.endDateTime.slice(0, 10),
-        timestamp
-      );
-    })();
-    return reply.code(201).send(getPeriod(id));
   });
 
   app.put<{ Params: { id: string } }>(
     "/api/unavailable-periods/:id",
     writeLimit,
     async (request, reply) => {
-      const before = getPeriod(request.params.id);
+      const before = await getPeriod(app.persistence.query, request.params.id);
       if (!before) return reply.code(404).send({ error: "not_found" });
       const parsed = unavailablePeriodInputSchema.safeParse(request.body);
       if (!parsed.success) {
@@ -204,51 +194,33 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
         });
       }
       try {
-        validateRelations(parsed.data);
-        assertOptionalCarePartyAccess(request.user, before.responsiblePartyId);
-        assertOptionalCarePartyAccess(request.user, parsed.data.responsiblePartyId);
-      } catch (error) {
-        return reply.code(400).send({
-          error: "validation_error",
-          message: error instanceof Error ? error.message : String(error)
-        });
-      }
-      const timestamp = nowIso();
-      db.transaction(() => {
-        db.prepare(`
-          UPDATE unavailable_periods SET
-            start_datetime = ?, end_datetime = ?, scope = ?, responsible_party_id = ?, category = ?,
-            duty_related = ?, affects_contact = ?, affects_holidays = ?,
-            location = ?, notes = ?, has_evidence = ?, evidence_reference = ?,
-            updated_by = ?, updated_at = ?, deleted_at = NULL
-          WHERE id = ?
-        `).run(
-          parsed.data.startDateTime,
-          parsed.data.endDateTime,
-          parsed.data.scope,
-          parsed.data.responsiblePartyId ?? null,
-          parsed.data.category,
-          Number(parsed.data.dutyRelated),
-          Number(parsed.data.affectsContact),
-          Number(parsed.data.affectsHolidays),
-          parsed.data.location ?? null,
-          parsed.data.notes ?? null,
-          Number(parsed.data.hasEvidence),
-          parsed.data.evidenceReference ?? null,
-          request.userEmail,
-          timestamp,
-          request.params.id
-        );
-        syncJunction(
-          "unavailable_period_children",
-          "unavailable_period_id",
-          request.params.id,
-          parsed.data.childIds,
-          timestamp
-        );
-        const after = getPeriod(request.params.id);
+        const timestamp = nowIso();
+        return await app.persistence.transaction(async (database) => {
+        await validateRelations(database, parsed.data);
+        await assertOptionalCarePartyAccess(database, request.user, before.responsiblePartyId);
+        await assertOptionalCarePartyAccess(database, request.user, parsed.data.responsiblePartyId);
+        await database.updateTable("unavailable_periods").set({
+          start_datetime: parsed.data.startDateTime,
+          end_datetime: parsed.data.endDateTime,
+          scope: parsed.data.scope,
+          responsible_party_id: parsed.data.responsiblePartyId ?? null,
+          category: parsed.data.category,
+          duty_related: Number(parsed.data.dutyRelated),
+          affects_contact: Number(parsed.data.affectsContact),
+          affects_holidays: Number(parsed.data.affectsHolidays),
+          location: parsed.data.location ?? null,
+          notes: parsed.data.notes ?? null,
+          has_evidence: Number(parsed.data.hasEvidence),
+          evidence_reference: parsed.data.evidenceReference ?? null,
+          updated_by: request.userEmail,
+          updated_at: timestamp,
+          deleted_at: null
+        }).where("id", "=", request.params.id).execute();
+        await syncPersistedChildJunction(database, { table: "unavailable_period_children", owner: "unavailable_period_id" }, request.params.id, parsed.data.childIds, timestamp);
+        const after = await getPeriod(database, request.params.id);
         if (after) {
-          recordFieldChanges(
+          await recordDomainFieldChanges(
+            database,
             request.userEmail,
             "unavailable_period",
             request.params.id,
@@ -263,7 +235,8 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
           parsed.data.startDateTime.slice(0, 10),
           parsed.data.endDateTime.slice(0, 10)
         ].sort();
-        markClosedMonthsChanged(
+        await markDomainClosedMonthsChanged(
+          database,
           request.userEmail,
           "unavailable_period",
           request.params.id,
@@ -271,8 +244,14 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
           dates.at(-1) ?? parsed.data.endDateTime.slice(0, 10),
           timestamp
         );
-      })();
-      return getPeriod(request.params.id);
+        return after;
+      });
+      } catch (error) {
+        return reply.code(400).send({
+          error: "validation_error",
+          message: error instanceof Error ? error.message : String(error)
+        });
+      }
     }
   );
 
@@ -280,10 +259,10 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
     "/api/unavailable-periods/:id",
     writeLimit,
     async (request, reply) => {
-      const before = getPeriod(request.params.id);
+      const before = await getPeriod(app.persistence.query, request.params.id);
       if (!before) return reply.code(404).send({ error: "not_found" });
       try {
-        assertOptionalCarePartyAccess(request.user, before.responsiblePartyId);
+        await assertOptionalCarePartyAccess(app.persistence.query, request.user, before.responsiblePartyId);
       } catch (error) {
         return reply.code(400).send({
           error: "validation_error",
@@ -291,25 +270,23 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
         });
       }
       const timestamp = nowIso();
-      db.transaction(() => {
-        db.prepare(`
-          UPDATE unavailable_periods
-          SET deleted_at = ?, updated_at = ?, updated_by = ?
-          WHERE id = ?
-        `).run(timestamp, timestamp, request.userEmail, request.params.id);
-        db.prepare(`
-          UPDATE unavailable_period_children
-          SET deleted_at = ?, updated_at = ?
-          WHERE unavailable_period_id = ? AND deleted_at IS NULL
-        `).run(timestamp, timestamp, request.params.id);
-        recordAudit({
+      await app.persistence.transaction(async (database) => {
+        await database.updateTable("unavailable_periods")
+          .set({ deleted_at: timestamp, updated_at: timestamp, updated_by: request.userEmail })
+          .where("id", "=", request.params.id).execute();
+        await database.updateTable("unavailable_period_children")
+          .set({ deleted_at: timestamp, updated_at: timestamp })
+          .where("unavailable_period_id", "=", request.params.id)
+          .where("deleted_at", "is", null).execute();
+        await recordDomainAudit(database, {
           userEmail: request.userEmail,
           entityType: "unavailable_period",
           entityId: request.params.id,
           action: "deleted",
           oldValue: before
         });
-        markClosedMonthsChanged(
+        await markDomainClosedMonthsChanged(
+          database,
           request.userEmail,
           "unavailable_period",
           request.params.id,
@@ -317,7 +294,7 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
           before.endDateTime.slice(0, 10),
           timestamp
         );
-      })();
+      });
       return reply.code(204).send();
     }
   );

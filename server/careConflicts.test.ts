@@ -7,6 +7,7 @@ import { join, resolve } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import test from "node:test";
 import Database from "better-sqlite3";
+import { createSqlitePersistenceRuntime } from "./db/runtime.js";
 import type { ApiCareConflictList, ApiCareConflictPreview, ApiCareEntry, ApiCareParty, ApiChild } from "../shared/api.js";
 import {
   CareConflictDetectionLimitError,
@@ -94,8 +95,9 @@ test("stops conflict materialization at the configured result budget", () => {
   );
 });
 
-test("actual conflict validation only considers matching children and times", () => {
+test("actual conflict validation only considers matching children and times", async () => {
   const database = new Database(":memory:");
+  const persistence = createSqlitePersistenceRuntime(database);
   database.exec(`
     CREATE TABLE care_entries (
       id TEXT PRIMARY KEY,
@@ -136,12 +138,12 @@ test("actual conflict validation only considers matching children and times", ()
   })();
 
   const candidate = entry({ id: "candidate", status: "completed", childIds: ["child-a"] });
-  assert.doesNotThrow(() => assertNoActualCareConflict(candidate, database));
+  await assert.doesNotReject(() => assertNoActualCareConflict(candidate, persistence.query));
 
   insertEntry.run("matching", "2026-07-04T17:00:00.000Z", "2026-07-04T19:00:00.000Z");
   insertChild.run("matching", "child-a");
-  assert.throws(
-    () => assertNoActualCareConflict(candidate, database),
+  await assert.rejects(
+    () => assertNoActualCareConflict(candidate, persistence.query),
     CareEntryConflictError
   );
 
@@ -149,21 +151,22 @@ test("actual conflict validation only considers matching children and times", ()
   database.prepare("DELETE FROM care_entries WHERE id = 'matching'").run();
   insertEntry.run("offset-matching", "2026-07-04T16:30:00.000Z", "2026-07-04T17:30:00.000Z");
   insertChild.run("offset-matching", "child-a");
-  assert.throws(
+  await assert.rejects(
     () => assertNoActualCareConflict(entry({
       id: "offset-candidate",
       status: "completed",
       childIds: ["child-a"],
       startDateTime: "2026-07-04T18:00:00+02:00",
       endDateTime: "2026-07-04T19:00:00+02:00"
-    }), database),
+    }), persistence.query),
     CareEntryConflictError
   );
-  database.close();
+  await persistence.close();
 });
 
-test("planned conflict previews are stable and change with the candidate range", () => {
+test("planned conflict previews are stable and change with the candidate range", async () => {
   const database = new Database(":memory:");
+  const persistence = createSqlitePersistenceRuntime(database);
   database.exec(`
     CREATE TABLE care_entries (
       id TEXT PRIMARY KEY, status TEXT NOT NULL, start_datetime TEXT NOT NULL,
@@ -178,28 +181,28 @@ test("planned conflict previews are stable and change with the candidate range",
     );
     INSERT INTO care_entry_children VALUES ('existing', 'child-a', NULL);
   `);
-  const first = previewPlannedCareConflicts({
+  const first = await previewPlannedCareConflicts({
     status: "planned",
     startDateTime: "2026-07-04T16:00:00.000Z",
     endDateTime: "2026-07-04T18:00:00.000Z",
     childIds: ["child-a"]
-  }, database);
-  const repeated = previewPlannedCareConflicts({
+  }, persistence.query);
+  const repeated = await previewPlannedCareConflicts({
     status: "planned",
     startDateTime: "2026-07-04T16:00:00.000Z",
     endDateTime: "2026-07-04T18:00:00.000Z",
     childIds: ["child-a"]
-  }, database);
-  const changed = previewPlannedCareConflicts({
+  }, persistence.query);
+  const changed = await previewPlannedCareConflicts({
     status: "planned",
     startDateTime: "2026-07-04T15:00:00.000Z",
     endDateTime: "2026-07-04T18:00:00.000Z",
     childIds: ["child-a"]
-  }, database);
+  }, persistence.query);
   assert.equal(first.conflicts.length, 1);
   assert.equal(first.fingerprint, repeated.fingerprint);
   assert.notEqual(first.fingerprint, changed.fingerprint);
-  database.close();
+  await persistence.close();
 });
 
 async function freePort(): Promise<number> {

@@ -1,5 +1,5 @@
-import type Database from "better-sqlite3";
 import { createHash } from "node:crypto";
+import { sql } from "kysely";
 import type {
   ApiContactRule,
   ApiContactRuleSegment,
@@ -12,10 +12,13 @@ import {
   expandContactRule,
   type ExpandedContactRuleEntry
 } from "../../shared/contactRuleExpansion.js";
-import { db as defaultDb } from "../db/connection.js";
-import { recordAudit } from "./audit.js";
+import type { DatabaseExecutor } from "../db/runtime.js";
 import { bool, makeId, nowIso } from "./common.js";
 import { previewPlannedCareConflicts } from "./careConflicts.js";
+import {
+  recordDomainAudit,
+  syncPersistedChildJunction
+} from "./domainPersistence.js";
 
 const indexWeekdays: ContactRuleWeekday[] = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 
@@ -75,7 +78,8 @@ export interface ContactRuleSyncOptions {
   endDate?: string;
   now?: string;
   userEmail: string;
-  database?: Database.Database;
+  database: DatabaseExecutor;
+  recordAudit?: boolean;
   previewFingerprint?: string;
   suppressPastConfirmations?: boolean;
   strictWindow?: boolean;
@@ -126,18 +130,17 @@ function parseJson<T>(value: string, fallback: T): T {
   }
 }
 
-function assertActiveRuleChildren(database: Database.Database, childIds: string[]): void {
+async function assertActiveRuleChildren(database: DatabaseExecutor, childIds: string[]): Promise<void> {
   const uniqueIds = [...new Set(childIds)];
   if (!uniqueIds.length) {
     throw new Error("Mindestens ein Kind ist erforderlich.");
   }
-  const placeholders = uniqueIds.map(() => "?").join(", ");
-  const row = database.prepare(`
-    SELECT COUNT(*) AS count
-    FROM children
-    WHERE deleted_at IS NULL AND id IN (${placeholders})
-  `).get(...uniqueIds) as { count: number };
-  if (row.count !== uniqueIds.length) {
+  const row = await database.selectFrom("children")
+    .select(({ fn }) => fn.count<number>("id").as("count"))
+    .where("deleted_at", "is", null)
+    .where("id", "in", uniqueIds)
+    .executeTakeFirst();
+  if (Number(row?.count ?? 0) !== uniqueIds.length) {
     throw new Error("Mindestens ein zugeordnetes Kind existiert nicht oder wurde gelöscht.");
   }
 }
@@ -187,176 +190,113 @@ export function mapContactRule(row: ContactRuleRow, childIds: string[], syncSumm
   };
 }
 
-export function contactRuleChildIds(ruleId: string, database = defaultDb): string[] {
-  return (database.prepare(`
-    SELECT child_id AS childId
-    FROM contact_rule_children
-    WHERE contact_rule_id = ? AND deleted_at IS NULL
-    ORDER BY child_id
-  `).all(ruleId) as Array<{ childId: string }>).map((row) => row.childId);
+export async function contactRuleChildIds(ruleId: string, database: DatabaseExecutor): Promise<string[]> {
+  const rows = await database.selectFrom("contact_rule_children")
+    .select("child_id")
+    .where("contact_rule_id", "=", ruleId)
+    .where("deleted_at", "is", null)
+    .orderBy("child_id")
+    .execute();
+  return rows.map((row) => row.child_id);
 }
 
-export function getContactRule(ruleId: string, database = defaultDb): ApiContactRule | undefined {
-  const row = database.prepare(`
-    SELECT *
-    FROM contact_rules
-    WHERE id = ? AND deleted_at IS NULL
-  `).get(ruleId) as ContactRuleRow | undefined;
-  return row ? mapContactRule(row, contactRuleChildIds(ruleId, database)) : undefined;
+export async function getContactRule(ruleId: string, database: DatabaseExecutor): Promise<ApiContactRule | undefined> {
+  const row = await database.selectFrom("contact_rules")
+    .selectAll()
+    .where("id", "=", ruleId)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst() as ContactRuleRow | undefined;
+  return row ? mapContactRule(row, await contactRuleChildIds(ruleId, database)) : undefined;
 }
 
-export function upsertContactRuleFromPattern(
+export async function upsertContactRuleFromPattern(
   pattern: ContactRulePatternInput,
-  database = defaultDb
-): ApiContactRule {
+  database: DatabaseExecutor
+): Promise<ApiContactRule> {
   const recurrence = legacyRecurrenceForPattern();
   const segments = legacySegmentsForPattern(pattern);
-  database.prepare(`
-    INSERT INTO contact_rules (
-      id, name, start_date, timezone, recurrence_json, segments_json,
-      sync_horizon_months, responsible_party_id, active, source_contact_pattern_id,
-      created_by, updated_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      name = excluded.name,
-      start_date = excluded.start_date,
-      timezone = excluded.timezone,
-      recurrence_json = excluded.recurrence_json,
-      segments_json = excluded.segments_json,
-      responsible_party_id = excluded.responsible_party_id,
-      active = excluded.active,
-      source_contact_pattern_id = excluded.source_contact_pattern_id,
-      updated_by = excluded.updated_by,
-      updated_at = excluded.updated_at,
-      deleted_at = NULL
-  `).run(
-    pattern.id,
-    pattern.name,
-    pattern.startDate,
-    "Europe/Berlin",
-    JSON.stringify(recurrence),
-    JSON.stringify(segments),
-    12,
-    pattern.responsiblePartyId ?? null,
-    Number(pattern.active),
-    pattern.id,
-    pattern.createdBy,
-    pattern.updatedBy,
-    pattern.createdAt,
-    pattern.updatedAt
-  );
+  await database.insertInto("contact_rules").values({
+    id: pattern.id,
+    name: pattern.name,
+    start_date: pattern.startDate,
+    end_date: null,
+    timezone: "Europe/Berlin",
+    recurrence_json: JSON.stringify(recurrence),
+    segments_json: JSON.stringify(segments),
+    sync_horizon_months: 12,
+    responsible_party_id: pattern.responsiblePartyId ?? null,
+    active: Number(pattern.active),
+    source_contact_pattern_id: pattern.id,
+    created_by: pattern.createdBy,
+    updated_by: pattern.updatedBy,
+    created_at: pattern.createdAt,
+    updated_at: pattern.updatedAt,
+    deleted_at: null
+  }).onConflict((conflict) => conflict.column("id").doUpdateSet({
+    name: pattern.name,
+    start_date: pattern.startDate,
+    timezone: "Europe/Berlin",
+    recurrence_json: JSON.stringify(recurrence),
+    segments_json: JSON.stringify(segments),
+    responsible_party_id: pattern.responsiblePartyId ?? null,
+    active: Number(pattern.active),
+    source_contact_pattern_id: pattern.id,
+    updated_by: pattern.updatedBy,
+    updated_at: pattern.updatedAt,
+    deleted_at: null
+  })).execute();
 
-  const timestamp = pattern.updatedAt;
-  const existing = database.prepare(`
-    SELECT child_id AS childId, deleted_at AS deletedAt
-    FROM contact_rule_children
-    WHERE contact_rule_id = ?
-  `).all(pattern.id) as Array<{ childId: string; deletedAt: string | null }>;
-  const selected = new Set(pattern.childIds);
-  for (const link of existing) {
-    if (selected.has(link.childId)) {
-      database.prepare(`
-        UPDATE contact_rule_children
-        SET deleted_at = NULL, updated_at = ?
-        WHERE contact_rule_id = ? AND child_id = ?
-      `).run(timestamp, pattern.id, link.childId);
-      selected.delete(link.childId);
-    } else if (!link.deletedAt) {
-      database.prepare(`
-        UPDATE contact_rule_children
-        SET deleted_at = ?, updated_at = ?
-        WHERE contact_rule_id = ? AND child_id = ?
-      `).run(timestamp, timestamp, pattern.id, link.childId);
-    }
-  }
-  const insert = database.prepare(`
-    INSERT INTO contact_rule_children (contact_rule_id, child_id, created_at, updated_at)
-    VALUES (?, ?, ?, ?)
-  `);
-  for (const childId of selected) insert.run(pattern.id, childId, timestamp, timestamp);
+  await syncPersistedChildJunction(database, { table: "contact_rule_children", owner: "contact_rule_id" }, pattern.id, pattern.childIds, pattern.updatedAt);
 
-  const rule = getContactRule(pattern.id, database);
+  const rule = await getContactRule(pattern.id, database);
   if (!rule) throw new Error("Umgangsregel konnte nicht geladen werden.");
   return rule;
 }
 
-export function upsertContactRule(input: {
+export async function upsertContactRule(input: {
   id: string;
   rule: ContactRuleInput;
   createdBy: string;
   updatedBy: string;
   createdAt: string;
   updatedAt: string;
-  database?: Database.Database;
-}): ApiContactRule {
-  const database = input.database ?? defaultDb;
-  database.prepare(`
-    INSERT INTO contact_rules (
-      id, name, start_date, end_date, timezone, recurrence_json, segments_json,
-      sync_horizon_months, responsible_party_id, active, source_contact_pattern_id,
-      created_by, updated_by, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(id) DO UPDATE SET
-      name = excluded.name,
-      start_date = excluded.start_date,
-      end_date = excluded.end_date,
-      timezone = excluded.timezone,
-      recurrence_json = excluded.recurrence_json,
-      segments_json = excluded.segments_json,
-      sync_horizon_months = excluded.sync_horizon_months,
-      responsible_party_id = excluded.responsible_party_id,
-      active = excluded.active,
-      source_contact_pattern_id = excluded.source_contact_pattern_id,
-      updated_by = excluded.updated_by,
-      updated_at = excluded.updated_at,
-      deleted_at = NULL
-  `).run(
-    input.id,
-    input.rule.name,
-    input.rule.startDate,
-    input.rule.endDate ?? null,
-    input.rule.timezone,
-    JSON.stringify(input.rule.recurrence),
-    JSON.stringify(input.rule.segments),
-    input.rule.syncHorizonMonths,
-    input.rule.responsiblePartyId ?? null,
-    Number(input.rule.active),
-    input.rule.sourceContactPatternId ?? null,
-    input.createdBy,
-    input.updatedBy,
-    input.createdAt,
-    input.updatedAt
-  );
-
-  const existing = database.prepare(`
-    SELECT child_id AS childId, deleted_at AS deletedAt
-    FROM contact_rule_children
-    WHERE contact_rule_id = ?
-  `).all(input.id) as Array<{ childId: string; deletedAt: string | null }>;
-  const selected = new Set(input.rule.childIds);
-  for (const link of existing) {
-    if (selected.has(link.childId)) {
-      database.prepare(`
-        UPDATE contact_rule_children
-        SET deleted_at = NULL, updated_at = ?
-        WHERE contact_rule_id = ? AND child_id = ?
-      `).run(input.updatedAt, input.id, link.childId);
-      selected.delete(link.childId);
-    } else if (!link.deletedAt) {
-      database.prepare(`
-        UPDATE contact_rule_children
-        SET deleted_at = ?, updated_at = ?
-        WHERE contact_rule_id = ? AND child_id = ?
-      `).run(input.updatedAt, input.updatedAt, input.id, link.childId);
-    }
-  }
-  const insert = database.prepare(`
-    INSERT INTO contact_rule_children (contact_rule_id, child_id, created_at, updated_at)
-    VALUES (?, ?, ?, ?)
-  `);
-  for (const childId of selected) insert.run(input.id, childId, input.updatedAt, input.updatedAt);
-
-  const rule = getContactRule(input.id, database);
+  database: DatabaseExecutor;
+}): Promise<ApiContactRule> {
+  const database = input.database;
+  await database.insertInto("contact_rules").values({
+    id: input.id,
+    name: input.rule.name,
+    start_date: input.rule.startDate,
+    end_date: input.rule.endDate ?? null,
+    timezone: input.rule.timezone,
+    recurrence_json: JSON.stringify(input.rule.recurrence),
+    segments_json: JSON.stringify(input.rule.segments),
+    sync_horizon_months: input.rule.syncHorizonMonths,
+    responsible_party_id: input.rule.responsiblePartyId ?? null,
+    active: Number(input.rule.active),
+    source_contact_pattern_id: input.rule.sourceContactPatternId ?? null,
+    created_by: input.createdBy,
+    updated_by: input.updatedBy,
+    created_at: input.createdAt,
+    updated_at: input.updatedAt,
+    deleted_at: null
+  }).onConflict((conflict) => conflict.column("id").doUpdateSet({
+    name: input.rule.name,
+    start_date: input.rule.startDate,
+    end_date: input.rule.endDate ?? null,
+    timezone: input.rule.timezone,
+    recurrence_json: JSON.stringify(input.rule.recurrence),
+    segments_json: JSON.stringify(input.rule.segments),
+    sync_horizon_months: input.rule.syncHorizonMonths,
+    responsible_party_id: input.rule.responsiblePartyId ?? null,
+    active: Number(input.rule.active),
+    source_contact_pattern_id: input.rule.sourceContactPatternId ?? null,
+    updated_by: input.updatedBy,
+    updated_at: input.updatedAt,
+    deleted_at: null
+  })).execute();
+  await syncPersistedChildJunction(database, { table: "contact_rule_children", owner: "contact_rule_id" }, input.id, input.rule.childIds, input.updatedAt);
+  const rule = await getContactRule(input.id, database);
   if (!rule) throw new Error("Umgangsregel konnte nicht geladen werden.");
   return rule;
 }
@@ -404,90 +344,96 @@ interface ExistingGeneratedRow {
   deleted_at: string | null;
 }
 
-function existingGeneratedEntry(
-  database: Database.Database,
+async function existingGeneratedEntry(
+  database: DatabaseExecutor,
   ruleId: string,
   occurrenceKey: string,
   legacyOccurrenceDate: string
-): ExistingGeneratedRow | undefined {
-  return database.prepare(`
-    SELECT id, status, contact_rule_sync_state, deleted_at
-    FROM care_entries
-    WHERE (
-        (contact_rule_id = ? AND contact_rule_occurrence_key = ?)
-        OR (generated_by_pattern_id = ? AND rule_occurrence_date = ?)
-      )
-    ORDER BY deleted_at IS NULL DESC, updated_at DESC
-    LIMIT 1
-  `).get(ruleId, occurrenceKey, ruleId, legacyOccurrenceDate) as ExistingGeneratedRow | undefined;
+): Promise<ExistingGeneratedRow | undefined> {
+  return await database.selectFrom("care_entries")
+    .select(["id", "status", "contact_rule_sync_state", "deleted_at"])
+    .where((expression) => expression.or([
+      expression.and([
+        expression("contact_rule_id", "=", ruleId),
+        expression("contact_rule_occurrence_key", "=", occurrenceKey)
+      ]),
+      expression.and([
+        expression("generated_by_pattern_id", "=", ruleId),
+        expression("rule_occurrence_date", "=", legacyOccurrenceDate)
+      ])
+    ]))
+    .orderBy(sql<boolean>`deleted_at IS NULL`, "desc")
+    .orderBy("updated_at", "desc")
+    .executeTakeFirst() as ExistingGeneratedRow | undefined;
 }
 
-function insertGeneratedEntry(input: {
-  database: Database.Database;
+async function insertGeneratedEntry(input: {
+  database: DatabaseExecutor;
   rule: ApiContactRule;
   expanded: ExpandedContactRuleEntry;
   timestamp: string;
   userEmail: string;
   confirmationSuppressed?: boolean;
-}): void {
+  recordAudit?: boolean;
+}): Promise<void> {
   const id = makeId("entry");
   const durationMinutes = Math.round(
     (Date.parse(input.expanded.endDateTime) - Date.parse(input.expanded.startDateTime)) / 60000
   );
-  input.database.prepare(`
-    INSERT INTO care_entries (
-      id, generated_by_pattern_id, rule_occurrence_date,
-      contact_rule_id, contact_rule_segment_id, contact_rule_occurrence_key,
-      responsible_party_id, contact_rule_sync_state,
-      start_datetime, end_datetime, status, care_scope, cancellation_reason,
-      overnight, school_handover, holiday, weekend, additional_care, location,
-      custom_location, handover_from, handover_to, notes, evidence_reference,
-      has_evidence, duration_minutes, is_contact_time, created_by, updated_by,
-      created_at, updated_at, confirmation_suppressed
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
+  await input.database.insertInto("care_entries").values({
     id,
-    input.rule.sourceContactPatternId ?? input.rule.id,
-    input.expanded.occurrenceDate,
-    input.rule.id,
-    input.expanded.segmentId,
-    input.expanded.occurrenceKey,
-    input.rule.responsiblePartyId ?? null,
-    "generated",
-    input.expanded.startDateTime,
-    input.expanded.endDateTime,
-    "planned",
-    durationMinutes >= 12 * 60 ? "overnight" : durationMinutes >= 5 * 60 ? "half_day" : "hourly",
-    null,
-    Number(durationMinutes >= 12 * 60),
-    0,
-    0,
-    Number(["FR", "SA", "SU"].includes(weekdayFor(input.expanded.occurrenceDate))),
-    0,
-    null,
-    null,
-    null,
-    null,
-    null,
-    null,
-    0,
-    durationMinutes,
-    Number(durationMinutes < 120),
-    input.userEmail,
-    input.userEmail,
-    input.timestamp,
-    input.timestamp,
-    Number(input.confirmationSuppressed)
+    generated_by_pattern_id: input.rule.sourceContactPatternId ?? input.rule.id,
+    rule_occurrence_date: input.expanded.occurrenceDate,
+    contact_rule_id: input.rule.id,
+    contact_rule_segment_id: input.expanded.segmentId,
+    contact_rule_occurrence_key: input.expanded.occurrenceKey,
+    responsible_party_id: input.rule.responsiblePartyId ?? null,
+    contact_rule_sync_state: "generated",
+    start_datetime: input.expanded.startDateTime,
+    end_datetime: input.expanded.endDateTime,
+    status: "planned",
+    care_scope: durationMinutes >= 12 * 60 ? "overnight" : durationMinutes >= 5 * 60 ? "half_day" : "hourly",
+    cancellation_reason: null,
+    confirmation_note: null,
+    confirmed_at: null,
+    confirmed_by: null,
+    overnight: Number(durationMinutes >= 12 * 60),
+    school_handover: 0,
+    holiday: 0,
+    weekend: Number(["FR", "SA", "SU"].includes(weekdayFor(input.expanded.occurrenceDate))),
+    additional_care: 0,
+    location: null,
+    custom_location: null,
+    handover_from: null,
+    handover_to: null,
+    notes: null,
+    evidence_reference: null,
+    has_evidence: 0,
+    duration_minutes: durationMinutes,
+    is_contact_time: Number(durationMinutes < 120),
+    actual_start_datetime: null,
+    actual_end_datetime: null,
+    actual_responsible_party_id: null,
+    planned_start_datetime: null,
+    planned_end_datetime: null,
+    deviation_type: null,
+    deviation_note: null,
+    created_by: input.userEmail,
+    updated_by: input.userEmail,
+    created_at: input.timestamp,
+    updated_at: input.timestamp,
+    confirmation_suppressed: Number(input.confirmationSuppressed),
+    deleted_at: null
+  }).execute();
+  await syncPersistedChildJunction(
+    input.database,
+    { table: "care_entry_children", owner: "care_entry_id" },
+    id,
+    input.rule.childIds,
+    input.timestamp
   );
-
-  const childInsert = input.database.prepare(`
-    INSERT INTO care_entry_children (care_entry_id, child_id, created_at, updated_at)
-    VALUES (?, ?, ?, ?)
-  `);
-  for (const childId of input.rule.childIds) childInsert.run(id, childId, input.timestamp, input.timestamp);
-
-  if (input.database === defaultDb) {
-    recordAudit({
+  if (input.recordAudit) {
+    await recordDomainAudit(input.database, {
       userEmail: input.userEmail,
       entityType: "care_entry",
       entityId: id,
@@ -504,110 +450,56 @@ function insertGeneratedEntry(input: {
   }
 }
 
-function syncGeneratedEntryChildren(input: {
-  database: Database.Database;
-  entryId: string;
-  childIds: string[];
-  timestamp: string;
-}): void {
-  const existing = input.database.prepare(`
-    SELECT child_id AS childId, deleted_at AS deletedAt
-    FROM care_entry_children
-    WHERE care_entry_id = ?
-  `).all(input.entryId) as Array<{ childId: string; deletedAt: string | null }>;
-  const selected = new Set(input.childIds);
-
-  for (const link of existing) {
-    if (selected.has(link.childId)) {
-      input.database.prepare(`
-        UPDATE care_entry_children
-        SET deleted_at = NULL, updated_at = ?
-        WHERE care_entry_id = ? AND child_id = ?
-      `).run(input.timestamp, input.entryId, link.childId);
-      selected.delete(link.childId);
-    } else if (!link.deletedAt) {
-      input.database.prepare(`
-        UPDATE care_entry_children
-        SET deleted_at = ?, updated_at = ?
-        WHERE care_entry_id = ? AND child_id = ?
-      `).run(input.timestamp, input.timestamp, input.entryId, link.childId);
-    }
-  }
-
-  const insert = input.database.prepare(`
-    INSERT INTO care_entry_children (care_entry_id, child_id, created_at, updated_at)
-    VALUES (?, ?, ?, ?)
-  `);
-  for (const childId of selected) {
-    insert.run(input.entryId, childId, input.timestamp, input.timestamp);
-  }
-}
-
-function updateGeneratedEntry(input: {
-  database: Database.Database;
+async function updateGeneratedEntry(input: {
+  database: DatabaseExecutor;
   id: string;
   rule: ApiContactRule;
   expanded: ExpandedContactRuleEntry;
   timestamp: string;
   userEmail: string;
-}): void {
+}): Promise<void> {
   const durationMinutes = Math.round(
     (Date.parse(input.expanded.endDateTime) - Date.parse(input.expanded.startDateTime)) / 60000
   );
-  input.database.prepare(`
-    UPDATE care_entries
-    SET generated_by_pattern_id = ?,
-        rule_occurrence_date = ?,
-        contact_rule_id = ?,
-        contact_rule_segment_id = ?,
-        contact_rule_occurrence_key = ?,
-        responsible_party_id = ?,
-        contact_rule_sync_state = 'generated',
-        start_datetime = ?,
-        end_datetime = ?,
-        care_scope = ?,
-        overnight = ?,
-        weekend = ?,
-        duration_minutes = ?,
-        is_contact_time = ?,
-        updated_by = ?,
-        updated_at = ?
-    WHERE id = ?
-  `).run(
-    input.rule.sourceContactPatternId ?? input.rule.id,
-    input.expanded.occurrenceDate,
-    input.rule.id,
-    input.expanded.segmentId,
-    input.expanded.occurrenceKey,
-    input.rule.responsiblePartyId ?? null,
-    input.expanded.startDateTime,
-    input.expanded.endDateTime,
-    durationMinutes >= 12 * 60 ? "overnight" : durationMinutes >= 5 * 60 ? "half_day" : "hourly",
-    Number(durationMinutes >= 12 * 60),
-    Number(["FR", "SA", "SU"].includes(weekdayFor(input.expanded.occurrenceDate))),
-    durationMinutes,
-    Number(durationMinutes < 120),
-    input.userEmail,
-    input.timestamp,
-    input.id
+  await input.database.updateTable("care_entries").set({
+    generated_by_pattern_id: input.rule.sourceContactPatternId ?? input.rule.id,
+    rule_occurrence_date: input.expanded.occurrenceDate,
+    contact_rule_id: input.rule.id,
+    contact_rule_segment_id: input.expanded.segmentId,
+    contact_rule_occurrence_key: input.expanded.occurrenceKey,
+    responsible_party_id: input.rule.responsiblePartyId ?? null,
+    contact_rule_sync_state: "generated",
+    start_datetime: input.expanded.startDateTime,
+    end_datetime: input.expanded.endDateTime,
+    care_scope: durationMinutes >= 12 * 60 ? "overnight" : durationMinutes >= 5 * 60 ? "half_day" : "hourly",
+    overnight: Number(durationMinutes >= 12 * 60),
+    weekend: Number(["FR", "SA", "SU"].includes(weekdayFor(input.expanded.occurrenceDate))),
+    duration_minutes: durationMinutes,
+    is_contact_time: Number(durationMinutes < 120),
+    updated_by: input.userEmail,
+    updated_at: input.timestamp
+  }).where("id", "=", input.id).execute();
+  await syncPersistedChildJunction(
+    input.database,
+    { table: "care_entry_children", owner: "care_entry_id" },
+    input.id,
+    input.rule.childIds,
+    input.timestamp
   );
-  syncGeneratedEntryChildren({
-    database: input.database,
-    entryId: input.id,
-    childIds: input.rule.childIds,
-    timestamp: input.timestamp
-  });
 }
 
-export function syncContactRule(ruleId: string, options: ContactRuleSyncOptions): ApiContactRuleSyncSummary {
-  const database = options.database ?? defaultDb;
-  const rule = getContactRule(ruleId, database);
+export async function syncContactRule(
+  ruleId: string,
+  options: ContactRuleSyncOptions
+): Promise<ApiContactRuleSyncSummary> {
+  const database = options.database;
+  const rule = await getContactRule(ruleId, database);
   if (!rule) throw new Error("Umgangsregel wurde nicht gefunden.");
-  assertActiveRuleChildren(database, rule.childIds);
+  await assertActiveRuleChildren(database, rule.childIds);
 
   const window = syncWindow(rule, options);
   if (options.previewFingerprint) {
-    const preview = previewContactRuleSync(ruleId, {
+    const preview = await previewContactRuleSync(ruleId, {
       startDate: window.startDate,
       endDate: window.endDate,
       now: options.now,
@@ -638,9 +530,9 @@ export function syncContactRule(ruleId: string, options: ContactRuleSyncOptions)
   const timestamp = options.now ?? nowIso();
 
   for (const item of expanded) {
-    const existing = existingGeneratedEntry(database, rule.id, item.occurrenceKey, item.occurrenceDate);
+    const existing = await existingGeneratedEntry(database, rule.id, item.occurrenceKey, item.occurrenceDate);
     if (!existing) {
-      insertGeneratedEntry({
+      await insertGeneratedEntry({
         database,
         rule,
         expanded: item,
@@ -649,7 +541,8 @@ export function syncContactRule(ruleId: string, options: ContactRuleSyncOptions)
         confirmationSuppressed: Boolean(
           options.suppressPastConfirmations &&
           Date.parse(item.endDateTime) < Date.parse(options.now ?? timestamp)
-        )
+        ),
+        recordAudit: options.recordAudit
       });
       summary.created += 1;
       continue;
@@ -662,7 +555,14 @@ export function syncContactRule(ruleId: string, options: ContactRuleSyncOptions)
       summary.preserved += 1;
       continue;
     }
-    updateGeneratedEntry({ database, id: existing.id, rule, expanded: item, timestamp, userEmail: options.userEmail });
+    await updateGeneratedEntry({
+      database,
+      id: existing.id,
+      rule,
+      expanded: item,
+      timestamp,
+      userEmail: options.userEmail
+    });
     summary.updated += 1;
   }
 
@@ -674,12 +574,12 @@ export function isContactRuleSyncPreviewChangedError(error: unknown): boolean {
     (error instanceof Error && (error as { code?: string }).code === "contact_rule_sync_preview_changed");
 }
 
-export function previewContactRuleSync(
+export async function previewContactRuleSync(
   ruleId: string,
   options: Pick<ContactRuleSyncOptions, "startDate" | "endDate" | "now" | "database">
-): ApiContactRuleSyncPreview {
-  const database = options.database ?? defaultDb;
-  const rule = getContactRule(ruleId, database);
+): Promise<ApiContactRuleSyncPreview> {
+  const database = options.database;
+  const rule = await getContactRule(ruleId, database);
   if (!rule) throw new Error("Umgangsregel wurde nicht gefunden.");
   const window = syncWindow(rule, { ...options, userEmail: "preview", strictWindow: true });
   const expanded = expandContactRule({
@@ -702,10 +602,10 @@ export function previewContactRuleSync(
 
   for (const item of expanded) {
     if (item.occurrenceDate < today) pastOccurrences += 1;
-    const existing = existingGeneratedEntry(database, rule.id, item.occurrenceKey, item.occurrenceDate);
+    const existing = await existingGeneratedEntry(database, rule.id, item.occurrenceKey, item.occurrenceDate);
     if (!existing) {
       create += 1;
-      const conflictPreview = previewPlannedCareConflicts({
+      const conflictPreview = await previewPlannedCareConflicts({
         status: "planned",
         startDateTime: item.startDateTime,
         endDateTime: item.endDateTime,

@@ -1,13 +1,22 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import test from "node:test";
 import { gzipSync } from "node:zlib";
+import { createSqlitePersistenceRuntime, type PersistenceRuntime } from "./db/runtime.js";
 import {
   ExternalCalendarError,
   type ExternalCalendarFetchDependencies,
+  deriveHolidayPeriodsFromExternalCalendar,
   fetchExternalCalendarFeedContent,
+  importExternalCalendar,
+  listExternalCalendarBackupEvents,
+  listExternalCalendarSources,
   normalizeExternalCalendarFeedUrl,
   parseIcs,
-  redactExternalCalendarFeedUrl
+  redactExternalCalendarFeedUrl,
+  visibleExternalCalendarEvents
 } from "./services/externalCalendars.js";
 
 const calendar = (event: string) => `BEGIN:VCALENDAR\r\nVERSION:2.0\r\n${event}\r\nEND:VCALENDAR\r\n`;
@@ -19,6 +28,21 @@ const event = (id: number, body = "SUMMARY:Import test") => [
   "DTEND:20260501T100000Z",
   "END:VEVENT"
 ].join("\r\n");
+
+async function withRuntime(run: (runtime: PersistenceRuntime) => Promise<void>): Promise<void> {
+  const root = mkdtempSync(join(tmpdir(), "betreuungskalender-external-calendar-"));
+  const runtime = createSqlitePersistenceRuntime(
+    join(root, "app.sqlite"),
+    resolve(process.cwd(), "server/migrations")
+  );
+  try {
+    await runtime.migrate();
+    await run(runtime);
+  } finally {
+    await runtime.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+}
 
 function assertExternalCalendarError(
   action: () => unknown,
@@ -294,4 +318,80 @@ test("aborts feed retrieval when the whole-operation timeout expires", async () 
     ),
     (error: unknown) => error instanceof ExternalCalendarError && error.code === "external_calendar_fetch_failed"
   );
+});
+
+test("persists normalized events and derives inclusive holiday periods atomically", async () => {
+  await withRuntime(async (runtime) => {
+    const timestamp = "2026-04-01T10:00:00.000Z";
+    await runtime.query.insertInto("children").values({
+      id: "child-calendar-test",
+      name: "Testkind",
+      birth_month: 4,
+      birth_year: 2018,
+      color: "#087f7b",
+      created_by: "tester",
+      updated_by: "tester",
+      created_at: timestamp,
+      updated_at: timestamp,
+      deleted_at: null
+    }).execute();
+    const content = calendar([
+      "BEGIN:VEVENT",
+      "UID:holiday-test",
+      "SUMMARY:Fiktive Frühlingsferien",
+      "DTSTART;VALUE=DATE:20260403",
+      "DTEND;VALUE=DATE:20260406",
+      "END:VEVENT"
+    ].join("\r\n"));
+
+    const imported = await importExternalCalendar(runtime, {
+      name: "Fiktiver Ferienkalender",
+      color: "#f2b134",
+      sourceType: "holiday",
+      content
+    });
+    const sources = await listExternalCalendarSources(runtime.query);
+    const events = await listExternalCalendarBackupEvents(runtime.query);
+    const visible = await visibleExternalCalendarEvents(
+      runtime.query,
+      "2026-04-01T00:00:00.000Z",
+      "2026-04-10T00:00:00.000Z"
+    );
+    const derived = await deriveHolidayPeriodsFromExternalCalendar(runtime, imported.source.id, {
+      childIds: ["child-calendar-test"],
+      assignedTo: "shared",
+      userEmail: "tester"
+    });
+    const repeated = await deriveHolidayPeriodsFromExternalCalendar(runtime, imported.source.id, {
+      childIds: ["child-calendar-test"],
+      assignedTo: "shared",
+      userEmail: "tester"
+    });
+
+    assert.equal(sources.length, 1);
+    assert.equal(events.length, 1);
+    assert.equal(visible.length, 1);
+    assert.deepEqual(
+      [derived.created, derived.holidays[0]?.startDate, derived.holidays[0]?.endDate],
+      [1, "2026-04-03", "2026-04-05"]
+    );
+    assert.deepEqual(derived.holidays[0]?.childIds, ["child-calendar-test"]);
+    assert.deepEqual([repeated.created, repeated.skippedExisting], [0, 1]);
+  });
+});
+
+test("rolls back event replacement when the target source does not exist", async () => {
+  await withRuntime(async (runtime) => {
+    await assert.rejects(
+      importExternalCalendar(runtime, {
+        name: "Nicht vorhandene Quelle",
+        color: "#087f7b",
+        sourceType: "overlay",
+        content: calendar(event(99))
+      }, "missing-source"),
+      (error: unknown) => error instanceof ExternalCalendarError && error.code === "external_calendar_not_found"
+    );
+    assert.equal((await listExternalCalendarSources(runtime.query)).length, 0);
+    assert.equal((await listExternalCalendarBackupEvents(runtime.query)).length, 0);
+  });
 });

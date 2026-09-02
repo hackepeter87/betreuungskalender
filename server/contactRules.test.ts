@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 import Database from "better-sqlite3";
 import { migrateDatabase } from "./db/migrationRunner.js";
+import { createSqlitePersistenceRuntime, type DatabaseExecutor } from "./db/runtime.js";
 import {
   isContactRuleSyncPreviewChangedError,
   expandContactRule as expandContactRuleOnServer,
@@ -20,15 +21,18 @@ import { contactRuleInputSchema } from "./validation/schemas.js";
 const migrationsDirectory = resolve(process.cwd(), "server/migrations");
 const timestamp = "2026-07-01T10:00:00.000Z";
 
-function withDatabase(run: (database: Database.Database) => void): void {
+async function withDatabase(
+  run: (database: Database.Database, persistence: DatabaseExecutor) => Promise<void> | void
+): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), "betreuungskalender-contact-rules-"));
   const database = new Database(join(root, "app.sqlite"));
   database.pragma("foreign_keys = ON");
+  const runtime = createSqlitePersistenceRuntime(database);
   try {
     migrateDatabase(database, migrationsDirectory);
-    run(database);
+    await run(database, runtime.query);
   } finally {
-    database.close();
+    await runtime.close();
     rmSync(root, { recursive: true, force: true });
   }
 }
@@ -408,10 +412,10 @@ test("contact rule validation rejects unsupported or excessive RRULE input", () 
   }).success, false);
 });
 
-test("bounded rule sync covers the complete configured date range", () => {
-  withDatabase((database) => {
+test("bounded rule sync covers the complete configured date range", async () => {
+  await withDatabase(async (database, persistence) => {
     insertChild(database);
-    const rule = upsertContactRule({
+    const rule = await upsertContactRule({
       id: "rule-bounded",
       rule: {
         name: "Ganzjahresregel",
@@ -434,11 +438,11 @@ test("bounded rule sync covers the complete configured date range", () => {
       updatedBy: "tester",
       createdAt: timestamp,
       updatedAt: timestamp,
-      database
+      database: persistence
     });
 
-    const summary = syncContactRule(rule.id, {
-      database,
+    const summary = await syncContactRule(rule.id, {
+      database: persistence,
       userEmail: "tester",
       now: timestamp
     });
@@ -461,10 +465,10 @@ test("bounded rule sync covers the complete configured date range", () => {
   });
 });
 
-test("open-ended rule sync keeps the rolling future horizon", () => {
-  withDatabase((database) => {
+test("open-ended rule sync keeps the rolling future horizon", async () => {
+  await withDatabase(async (database, persistence) => {
     insertChild(database);
-    const rule = upsertContactRule({
+    const rule = await upsertContactRule({
       id: "rule-open",
       rule: {
         name: "Offene Regel",
@@ -486,11 +490,11 @@ test("open-ended rule sync keeps the rolling future horizon", () => {
       updatedBy: "tester",
       createdAt: timestamp,
       updatedAt: timestamp,
-      database
+      database: persistence
     });
 
-    const summary = syncContactRule(rule.id, {
-      database,
+    const summary = await syncContactRule(rule.id, {
+      database: persistence,
       userEmail: "tester",
       now: timestamp
     });
@@ -499,10 +503,10 @@ test("open-ended rule sync keeps the rolling future horizon", () => {
   });
 });
 
-test("sync rejects stored bounded rules beyond the 36 month safety limit", () => {
-  withDatabase((database) => {
+test("sync rejects stored bounded rules beyond the 36 month safety limit", async () => {
+  await withDatabase(async (database, persistence) => {
     insertChild(database);
-    const rule = upsertContactRule({
+    const rule = await upsertContactRule({
       id: "rule-too-long",
       rule: {
         name: "Zu lange Regel",
@@ -525,21 +529,21 @@ test("sync rejects stored bounded rules beyond the 36 month safety limit", () =>
       updatedBy: "tester",
       createdAt: timestamp,
       updatedAt: timestamp,
-      database
+      database: persistence
     });
 
-    assert.throws(
-      () => syncContactRule(rule.id, { database, userEmail: "tester", now: timestamp }),
+    await assert.rejects(
+      syncContactRule(rule.id, { database: persistence, userEmail: "tester", now: timestamp }),
       /höchstens 36 Monate/
     );
   });
 });
 
-test("sync creates planned entries from a legacy pattern and does not duplicate them", () => {
-  withDatabase((database) => {
+test("sync creates planned entries from a legacy pattern and does not duplicate them", async () => {
+  await withDatabase(async (database, persistence) => {
     insertChild(database);
     insertLegacyPattern(database);
-    const rule = upsertContactRuleFromPattern({
+    const rule = await upsertContactRuleFromPattern({
       id: "pattern-a",
       name: "14-Tage-Regel",
       startDate: "2026-07-03",
@@ -551,17 +555,17 @@ test("sync creates planned entries from a legacy pattern and does not duplicate 
       updatedBy: "tester",
       createdAt: timestamp,
       updatedAt: timestamp
-    }, database);
+    }, persistence);
 
-    const first = syncContactRule(rule.id, {
-      database,
+    const first = await syncContactRule(rule.id, {
+      database: persistence,
       userEmail: "tester",
       startDate: "2026-07-01",
       endDate: "2026-07-31",
       now: timestamp
     });
-    const second = syncContactRule(rule.id, {
-      database,
+    const second = await syncContactRule(rule.id, {
+      database: persistence,
       userEmail: "tester",
       startDate: "2026-07-01",
       endDate: "2026-07-31",
@@ -593,11 +597,11 @@ test("sync creates planned entries from a legacy pattern and does not duplicate 
   });
 });
 
-test("sync preserves manually changed generated entries", () => {
-  withDatabase((database) => {
+test("sync preserves manually changed generated entries", async () => {
+  await withDatabase(async (database, persistence) => {
     insertChild(database);
     insertLegacyPattern(database);
-    upsertContactRuleFromPattern({
+    await upsertContactRuleFromPattern({
       id: "pattern-a",
       name: "14-Tage-Regel",
       startDate: "2026-07-03",
@@ -609,9 +613,9 @@ test("sync preserves manually changed generated entries", () => {
       updatedBy: "tester",
       createdAt: timestamp,
       updatedAt: timestamp
-    }, database);
-    syncContactRule("pattern-a", {
-      database,
+    }, persistence);
+    await syncContactRule("pattern-a", {
+      database: persistence,
       userEmail: "tester",
       startDate: "2026-07-01",
       endDate: "2026-07-31",
@@ -624,8 +628,8 @@ test("sync preserves manually changed generated entries", () => {
           start_datetime = '2026-07-03T17:00'
       WHERE rule_occurrence_date = '2026-07-03'
     `).run();
-    const summary = syncContactRule("pattern-a", {
-      database,
+    const summary = await syncContactRule("pattern-a", {
+      database: persistence,
       userEmail: "tester",
       startDate: "2026-07-01",
       endDate: "2026-07-31",
@@ -646,11 +650,11 @@ test("sync preserves manually changed generated entries", () => {
   });
 });
 
-test("sync preserves cancelled generated entries as exceptions", () => {
-  withDatabase((database) => {
+test("sync preserves cancelled generated entries as exceptions", async () => {
+  await withDatabase(async (database, persistence) => {
     insertChild(database);
     insertLegacyPattern(database);
-    upsertContactRuleFromPattern({
+    await upsertContactRuleFromPattern({
       id: "pattern-a",
       name: "14-Tage-Regel",
       startDate: "2026-07-03",
@@ -662,9 +666,9 @@ test("sync preserves cancelled generated entries as exceptions", () => {
       updatedBy: "tester",
       createdAt: timestamp,
       updatedAt: timestamp
-    }, database);
-    syncContactRule("pattern-a", {
-      database,
+    }, persistence);
+    await syncContactRule("pattern-a", {
+      database: persistence,
       userEmail: "tester",
       startDate: "2026-07-01",
       endDate: "2026-07-31",
@@ -676,8 +680,8 @@ test("sync preserves cancelled generated entries as exceptions", () => {
       SET status = 'cancelled', cancellation_reason = 'Fiktive Testabsage'
       WHERE rule_occurrence_date = '2026-07-17'
     `).run();
-    const summary = syncContactRule("pattern-a", {
-      database,
+    const summary = await syncContactRule("pattern-a", {
+      database: persistence,
       userEmail: "tester",
       startDate: "2026-07-01",
       endDate: "2026-07-31",
@@ -698,12 +702,12 @@ test("sync preserves cancelled generated entries as exceptions", () => {
   });
 });
 
-test("sync updates child assignments for unchanged planned entries", () => {
-  withDatabase((database) => {
+test("sync updates child assignments for unchanged planned entries", async () => {
+  await withDatabase(async (database, persistence) => {
     insertChild(database);
     insertChild(database, "child-b", "Zweites Testkind");
     insertLegacyPattern(database);
-    upsertContactRuleFromPattern({
+    await upsertContactRuleFromPattern({
       id: "pattern-a",
       name: "14-Tage-Regel",
       startDate: "2026-07-03",
@@ -715,16 +719,16 @@ test("sync updates child assignments for unchanged planned entries", () => {
       updatedBy: "tester",
       createdAt: timestamp,
       updatedAt: timestamp
-    }, database);
-    syncContactRule("pattern-a", {
-      database,
+    }, persistence);
+    await syncContactRule("pattern-a", {
+      database: persistence,
       userEmail: "tester",
       startDate: "2026-07-01",
       endDate: "2026-07-31",
       now: timestamp
     });
 
-    upsertContactRuleFromPattern({
+    await upsertContactRuleFromPattern({
       id: "pattern-a",
       name: "14-Tage-Regel",
       startDate: "2026-07-03",
@@ -736,9 +740,9 @@ test("sync updates child assignments for unchanged planned entries", () => {
       updatedBy: "tester",
       createdAt: timestamp,
       updatedAt: timestamp
-    }, database);
-    syncContactRule("pattern-a", {
-      database,
+    }, persistence);
+    await syncContactRule("pattern-a", {
+      database: persistence,
       userEmail: "tester",
       startDate: "2026-07-01",
       endDate: "2026-07-31",
@@ -758,11 +762,11 @@ test("sync updates child assignments for unchanged planned entries", () => {
   });
 });
 
-test("historical sync requires a current preview and suppresses automatic confirmations", () => {
-  withDatabase((database) => {
+test("historical sync requires a current preview and suppresses automatic confirmations", async () => {
+  await withDatabase(async (database, persistence) => {
     insertChild(database);
     insertLegacyPattern(database);
-    upsertContactRuleFromPattern({
+    await upsertContactRuleFromPattern({
       id: "pattern-a",
       name: "14-Tage-Regel",
       startDate: "2026-07-03",
@@ -774,10 +778,10 @@ test("historical sync requires a current preview and suppresses automatic confir
       updatedBy: "tester",
       createdAt: timestamp,
       updatedAt: timestamp
-    }, database);
+    }, persistence);
 
-    const preview = previewContactRuleSync("pattern-a", {
-      database,
+    const preview = await previewContactRuleSync("pattern-a", {
+      database: persistence,
       startDate: "2026-07-03",
       endDate: "2026-07-31",
       now: "2026-08-26T12:00:00.000Z"
@@ -787,8 +791,8 @@ test("historical sync requires a current preview and suppresses automatic confir
       [3, 0, 0, 3]
     );
 
-    const summary = syncContactRule("pattern-a", {
-      database,
+    const summary = await syncContactRule("pattern-a", {
+      database: persistence,
       userEmail: "tester",
       startDate: preview.startDate,
       endDate: preview.endDate,
@@ -804,9 +808,9 @@ test("historical sync requires a current preview and suppresses automatic confir
     `).get("pattern-a") as { count: number };
     assert.equal(suppressed.count, 3);
 
-    assert.throws(
-      () => syncContactRule("pattern-a", {
-        database,
+    await assert.rejects(
+      syncContactRule("pattern-a", {
+        database: persistence,
         userEmail: "tester",
         startDate: preview.startDate,
         endDate: preview.endDate,
@@ -817,8 +821,8 @@ test("historical sync requires a current preview and suppresses automatic confir
       isContactRuleSyncPreviewChangedError
     );
 
-    const repeated = previewContactRuleSync("pattern-a", {
-      database,
+    const repeated = await previewContactRuleSync("pattern-a", {
+      database: persistence,
       startDate: "2026-07-03",
       endDate: "2026-07-31",
       now: "2026-08-26T12:00:00.000Z"

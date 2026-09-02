@@ -10,15 +10,19 @@ import type {
 } from "../../shared/api.js";
 import type { RequestUser } from "../auth.js";
 import { config } from "../config.js";
-import { db } from "../db/connection.js";
+import { sql } from "kysely";
+import type { DatabaseExecutor } from "../db/runtime.js";
 import {
-  markClosedMonthsChanged,
-  recordAudit,
-  recordFieldChanges
-} from "../services/audit.js";
-import { assertCanUseCareParty } from "../services/carePartyAccess.js";
-import { assignedCarePartyIds } from "../services/carePartyAccess.js";
-import { assertActiveCareParty } from "../services/careParties.js";
+  assertCanUsePersistedCareParty,
+  assertPersistedCareParty,
+  assertPersistedChildren,
+  assignedPersistedCarePartyIds,
+  getPersistedDefaultResponsiblePartyId,
+  markDomainClosedMonthsChanged,
+  recordDomainAudit,
+  recordDomainFieldChanges,
+  syncPersistedChildJunction
+} from "../services/domainPersistence.js";
 import {
   assertNoActualCareConflict,
   assertPlannedCareConflictAcknowledged,
@@ -28,8 +32,7 @@ import {
   previewPlannedCareConflicts,
   listCareConflicts
 } from "../services/careConflicts.js";
-import { assertActiveChildren, bool, makeId, nowIso, syncJunction } from "../services/common.js";
-import { getDefaultResponsiblePartyId } from "../services/settings.js";
+import { bool, makeId, nowIso } from "../services/common.js";
 import { careEntryInputSchema, schedulerCareEntryInputSchema } from "../validation/schemas.js";
 
 const readLimit = {
@@ -60,9 +63,9 @@ function scheduleLocation(value: string | null): string | undefined {
   return value && scheduleLocations.has(value) ? value : undefined;
 }
 
-function scheduleConflictEntryIds(): Set<string> {
+async function scheduleConflictEntryIds(database: DatabaseExecutor): Promise<Set<string>> {
   try {
-    return new Set(listCareConflicts(db).flatMap((conflict) => conflict.entryIds));
+    return new Set((await listCareConflicts(database)).flatMap((conflict) => conflict.entryIds));
   } catch (error) {
     if (isCareConflictWorkLimitError(error)) return new Set();
     throw error;
@@ -139,31 +142,24 @@ function optional<T>(value: T | null): T | undefined {
   return value === null ? undefined : value;
 }
 
-function getChildIds(entryId: string): string[] {
-  return (db.prepare(`
-    SELECT child_id AS childId
-    FROM care_entry_children
-    WHERE care_entry_id = ? AND deleted_at IS NULL
-    ORDER BY child_id
-  `).all(entryId) as Array<{ childId: string }>).map((row) => row.childId);
+async function childIds(database: DatabaseExecutor, table: "care_entry_children" | "care_entry_actual_children", entryId: string): Promise<string[]> {
+  const rows = await database.selectFrom(table)
+    .select("child_id")
+    .where("care_entry_id", "=", entryId)
+    .where("deleted_at", "is", null)
+    .orderBy("child_id")
+    .execute();
+  return rows.map((row) => row.child_id);
 }
 
-function getActualChildIds(entryId: string): string[] {
-  return (db.prepare(`
-    SELECT child_id AS childId
-    FROM care_entry_actual_children
-    WHERE care_entry_id = ? AND deleted_at IS NULL
-    ORDER BY child_id
-  `).all(entryId) as Array<{ childId: string }>).map((row) => row.childId);
-}
-
-function getTrips(entryId: string): ApiTrip[] {
-  const rows = db.prepare(`
-    SELECT id, purpose, km, own_car, reimbursed, reimbursement_amount, notes, created_by, updated_by
-    FROM trips
-    WHERE care_entry_id = ? AND deleted_at IS NULL
-    ORDER BY created_at, id
-  `).all(entryId) as TripRow[];
+async function getTrips(database: DatabaseExecutor, entryId: string): Promise<ApiTrip[]> {
+  const rows = await database.selectFrom("trips")
+    .select(["id", "purpose", "km", "own_car", "reimbursed", "reimbursement_amount", "notes", "created_by", "updated_by"])
+    .where("care_entry_id", "=", entryId)
+    .where("deleted_at", "is", null)
+    .orderBy("created_at")
+    .orderBy("id")
+    .execute() as TripRow[];
   return rows.map((row) => ({
     id: row.id,
     purpose: row.purpose,
@@ -177,13 +173,14 @@ function getTrips(entryId: string): ApiTrip[] {
   }));
 }
 
-function getCosts(entryId: string): ApiCost[] {
-  const rows = db.prepare(`
-    SELECT id, category, amount, paid_by, notes, created_by, updated_by
-    FROM costs
-    WHERE care_entry_id = ? AND deleted_at IS NULL
-    ORDER BY created_at, id
-  `).all(entryId) as CostRow[];
+async function getCosts(database: DatabaseExecutor, entryId: string): Promise<ApiCost[]> {
+  const rows = await database.selectFrom("costs")
+    .select(["id", "category", "amount", "paid_by", "notes", "created_by", "updated_by"])
+    .where("care_entry_id", "=", entryId)
+    .where("deleted_at", "is", null)
+    .orderBy("created_at")
+    .orderBy("id")
+    .execute() as CostRow[];
   return rows.map((row) => ({
     id: row.id,
     category: row.category,
@@ -195,7 +192,13 @@ function getCosts(entryId: string): ApiCost[] {
   }));
 }
 
-function mapEntry(row: EntryRow): ApiCareEntry {
+async function mapEntry(database: DatabaseExecutor, row: EntryRow): Promise<ApiCareEntry> {
+  const [plannedChildren, actualChildren, trips, costs] = await Promise.all([
+    childIds(database, "care_entry_children", row.id),
+    childIds(database, "care_entry_actual_children", row.id),
+    getTrips(database, row.id),
+    getCosts(database, row.id)
+  ]);
   return {
     id: row.id,
     generatedByPatternId: optional(row.generated_by_pattern_id),
@@ -212,8 +215,8 @@ function mapEntry(row: EntryRow): ApiCareEntry {
     plannedEndDateTime: optional(row.planned_end_datetime),
     actualStartDateTime: optional(row.actual_start_datetime),
     actualEndDateTime: optional(row.actual_end_datetime),
-    childIds: getChildIds(row.id),
-    actualChildIds: getActualChildIds(row.id),
+    childIds: plannedChildren,
+    actualChildIds: actualChildren,
     status: row.status,
     deviationType: optional(row.deviation_type),
     deviationNote: optional(row.deviation_note),
@@ -245,31 +248,37 @@ function mapEntry(row: EntryRow): ApiCareEntry {
     updatedBy: row.updated_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    trips: getTrips(row.id),
-    costs: getCosts(row.id)
+    trips,
+    costs
   };
 }
 
-function getEntry(id: string): ApiCareEntry | undefined {
-  const row = db.prepare(`
-    SELECT *
-    FROM care_entries
-    WHERE id = ? AND deleted_at IS NULL
-  `).get(id) as EntryRow | undefined;
-  return row ? mapEntry(row) : undefined;
+async function getEntry(database: DatabaseExecutor, id: string): Promise<ApiCareEntry | undefined> {
+  const row = await database.selectFrom("care_entries")
+    .selectAll()
+    .where("id", "=", id)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst() as EntryRow | undefined;
+  return row ? mapEntry(database, row) : undefined;
 }
 
-function getScheduleEntry(id: string): ApiScheduleEntry | undefined {
-  const row = db.prepare(`
-    SELECT entries.id, entries.start_datetime AS startDateTime,
-      entries.end_datetime AS endDateTime, entries.status,
-      entries.location, entries.responsible_party_id AS responsiblePartyId,
-      parties.name AS responsiblePartyName
-    FROM care_entries entries
-    LEFT JOIN care_parties parties
-      ON parties.id = entries.responsible_party_id AND parties.deleted_at IS NULL
-    WHERE entries.id = ? AND entries.deleted_at IS NULL
-  `).get(id) as {
+async function getScheduleEntry(database: DatabaseExecutor, id: string): Promise<ApiScheduleEntry | undefined> {
+  const row = await database.selectFrom("care_entries as entries")
+    .leftJoin("care_parties as parties", (join) => join
+      .onRef("parties.id", "=", "entries.responsible_party_id")
+      .on("parties.deleted_at", "is", null))
+    .select([
+      "entries.id as id",
+      "entries.start_datetime as startDateTime",
+      "entries.end_datetime as endDateTime",
+      "entries.status as status",
+      "entries.location as location",
+      "entries.responsible_party_id as responsiblePartyId",
+      "parties.name as responsiblePartyName"
+    ])
+    .where("entries.id", "=", id)
+    .where("entries.deleted_at", "is", null)
+    .executeTakeFirst() as {
     id: string;
     startDateTime: string;
     endDateTime: string;
@@ -279,14 +288,16 @@ function getScheduleEntry(id: string): ApiScheduleEntry | undefined {
     responsiblePartyName: string | null;
   } | undefined;
   if (!row) return undefined;
-  const children = db.prepare(`
-    SELECT children.id, children.name, children.color
-    FROM care_entry_children links
-    JOIN children ON children.id = links.child_id AND children.deleted_at IS NULL
-    WHERE links.care_entry_id = ? AND links.deleted_at IS NULL
-    ORDER BY children.name COLLATE NOCASE
-  `).all(id) as ApiScheduleEntry["children"];
-  const hasConflict = scheduleConflictEntryIds().has(id);
+  const children = await database.selectFrom("care_entry_children as links")
+    .innerJoin("children", (join) => join
+      .onRef("children.id", "=", "links.child_id")
+      .on("children.deleted_at", "is", null))
+    .select(["children.id", "children.name", "children.color"])
+    .where("links.care_entry_id", "=", id)
+    .where("links.deleted_at", "is", null)
+    .orderBy(sql`children.name COLLATE NOCASE`)
+    .execute() as ApiScheduleEntry["children"];
+  const hasConflict = (await scheduleConflictEntryIds(database)).has(id);
   const location = scheduleLocation(row.location);
   return {
     id: row.id,
@@ -302,14 +313,15 @@ function getScheduleEntry(id: string): ApiScheduleEntry | undefined {
   };
 }
 
-function schedulerWriteAllowed(
+async function schedulerWriteAllowed(
+  database: DatabaseExecutor,
   user: RequestUser | undefined,
   responsiblePartyId: string,
   submittedStartDateTime: string,
   existing?: ApiCareEntry
-): boolean {
+): Promise<boolean> {
   if (user?.workspaceRole !== "scheduler") return true;
-  const assigned = new Set(assignedCarePartyIds(user.id));
+  const assigned = new Set(await assignedPersistedCarePartyIds(database, user.id));
   if (!assigned.has(responsiblePartyId)) return false;
   if (existing?.responsiblePartyId && !assigned.has(existing.responsiblePartyId)) return false;
   if (Date.parse(submittedStartDateTime) <= Date.now()) return false;
@@ -366,7 +378,8 @@ function schedulerForbidden(reply: { code(status: number): { send(payload: unkno
   });
 }
 
-function syncTrips(
+async function syncTrips(
+  database: DatabaseExecutor,
   entryId: string,
   trips: Array<{
     id?: string;
@@ -379,8 +392,8 @@ function syncTrips(
   }>,
   userEmail: string,
   timestamp: string
-): void {
-  const existing = new Map(getTrips(entryId).map((trip) => [trip.id, trip]));
+): Promise<void> {
+  const existing = new Map((await getTrips(database, entryId)).map((trip) => [trip.id, trip]));
   const retained = new Set<string>();
 
   for (const trip of trips) {
@@ -388,16 +401,19 @@ function syncTrips(
     const before = existing.get(id);
     retained.add(id);
     if (before) {
-      db.prepare(`
-        UPDATE trips
-        SET purpose = ?, km = ?, own_car = ?, reimbursed = ?,
-            reimbursement_amount = ?, notes = ?, updated_by = ?, updated_at = ?, deleted_at = NULL
-        WHERE id = ? AND care_entry_id = ?
-      `).run(
-        trip.purpose, trip.km, Number(trip.ownCar), Number(trip.reimbursed),
-        trip.reimbursementAmount ?? null, trip.notes ?? null, userEmail, timestamp, id, entryId
-      );
-      recordFieldChanges(
+      await database.updateTable("trips").set({
+        purpose: trip.purpose,
+        km: trip.km,
+        own_car: Number(trip.ownCar),
+        reimbursed: Number(trip.reimbursed),
+        reimbursement_amount: trip.reimbursementAmount ?? null,
+        notes: trip.notes ?? null,
+        updated_by: userEmail,
+        updated_at: timestamp,
+        deleted_at: null
+      }).where("id", "=", id).where("care_entry_id", "=", entryId).execute();
+      await recordDomainFieldChanges(
+        database,
         userEmail,
         "trip",
         id,
@@ -406,17 +422,22 @@ function syncTrips(
         ["createdBy", "updatedBy"]
       );
     } else {
-      db.prepare(`
-        INSERT INTO trips (
-          id, care_entry_id, purpose, km, own_car, reimbursed,
-          reimbursement_amount, notes, created_by, updated_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        id, entryId, trip.purpose, trip.km, Number(trip.ownCar),
-        Number(trip.reimbursed), trip.reimbursementAmount ?? null,
-        trip.notes ?? null, userEmail, userEmail, timestamp, timestamp
-      );
-      recordAudit({
+      await database.insertInto("trips").values({
+        id,
+        care_entry_id: entryId,
+        purpose: trip.purpose,
+        km: trip.km,
+        own_car: Number(trip.ownCar),
+        reimbursed: Number(trip.reimbursed),
+        reimbursement_amount: trip.reimbursementAmount ?? null,
+        notes: trip.notes ?? null,
+        created_by: userEmail,
+        updated_by: userEmail,
+        created_at: timestamp,
+        updated_at: timestamp,
+        deleted_at: null
+      }).execute();
+      await recordDomainAudit(database, {
         userEmail,
         entityType: "trip",
         entityId: id,
@@ -429,9 +450,10 @@ function syncTrips(
 
   for (const [id, trip] of existing) {
     if (retained.has(id)) continue;
-    db.prepare("UPDATE trips SET deleted_at = ?, updated_by = ?, updated_at = ? WHERE id = ?")
-      .run(timestamp, userEmail, timestamp, id);
-    recordAudit({
+    await database.updateTable("trips")
+      .set({ deleted_at: timestamp, updated_by: userEmail, updated_at: timestamp })
+      .where("id", "=", id).execute();
+    await recordDomainAudit(database, {
       userEmail,
       entityType: "trip",
       entityId: id,
@@ -442,7 +464,8 @@ function syncTrips(
   }
 }
 
-function syncCosts(
+async function syncCosts(
+  database: DatabaseExecutor,
   entryId: string,
   costs: Array<{
     id?: string;
@@ -453,8 +476,8 @@ function syncCosts(
   }>,
   userEmail: string,
   timestamp: string
-): void {
-  const existing = new Map(getCosts(entryId).map((cost) => [cost.id, cost]));
+): Promise<void> {
+  const existing = new Map((await getCosts(database, entryId)).map((cost) => [cost.id, cost]));
   const retained = new Set<string>();
 
   for (const cost of costs) {
@@ -462,13 +485,17 @@ function syncCosts(
     const before = existing.get(id);
     retained.add(id);
     if (before) {
-      db.prepare(`
-        UPDATE costs
-        SET category = ?, amount = ?, paid_by = ?, notes = ?,
-            updated_by = ?, updated_at = ?, deleted_at = NULL
-        WHERE id = ? AND care_entry_id = ?
-      `).run(cost.category, cost.amount, cost.paidBy, cost.notes ?? null, userEmail, timestamp, id, entryId);
-      recordFieldChanges(
+      await database.updateTable("costs").set({
+        category: cost.category,
+        amount: cost.amount,
+        paid_by: cost.paidBy,
+        notes: cost.notes ?? null,
+        updated_by: userEmail,
+        updated_at: timestamp,
+        deleted_at: null
+      }).where("id", "=", id).where("care_entry_id", "=", entryId).execute();
+      await recordDomainFieldChanges(
+        database,
         userEmail,
         "cost",
         id,
@@ -477,16 +504,20 @@ function syncCosts(
         ["createdBy", "updatedBy"]
       );
     } else {
-      db.prepare(`
-        INSERT INTO costs (
-          id, care_entry_id, category, amount, paid_by, notes,
-          created_by, updated_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `).run(
-        id, entryId, cost.category, cost.amount, cost.paidBy,
-        cost.notes ?? null, userEmail, userEmail, timestamp, timestamp
-      );
-      recordAudit({
+      await database.insertInto("costs").values({
+        id,
+        care_entry_id: entryId,
+        category: cost.category,
+        amount: cost.amount,
+        paid_by: cost.paidBy,
+        notes: cost.notes ?? null,
+        created_by: userEmail,
+        updated_by: userEmail,
+        created_at: timestamp,
+        updated_at: timestamp,
+        deleted_at: null
+      }).execute();
+      await recordDomainAudit(database, {
         userEmail,
         entityType: "cost",
         entityId: id,
@@ -499,9 +530,10 @@ function syncCosts(
 
   for (const [id, cost] of existing) {
     if (retained.has(id)) continue;
-    db.prepare("UPDATE costs SET deleted_at = ?, updated_by = ?, updated_at = ? WHERE id = ?")
-      .run(timestamp, userEmail, timestamp, id);
-    recordAudit({
+    await database.updateTable("costs")
+      .set({ deleted_at: timestamp, updated_by: userEmail, updated_at: timestamp })
+      .where("id", "=", id).execute();
+    await recordDomainAudit(database, {
       userEmail,
       entityType: "cost",
       entityId: id,
@@ -512,22 +544,23 @@ function syncCosts(
   }
 }
 
-function persistEntry(
+async function persistEntry(
+  database: DatabaseExecutor,
   id: string,
   input: ReturnType<typeof careEntryInputSchema.parse>,
   userEmail: string,
   existing?: ApiCareEntry,
   user?: RequestUser
-): void {
+): Promise<ApiCareEntry> {
   if (existing) {
-    assertCanUseCareParty(user, existing.responsiblePartyId);
-    if (existing.actualResponsiblePartyId) assertCanUseCareParty(user, existing.actualResponsiblePartyId);
+    await assertCanUsePersistedCareParty(database, user, existing.responsiblePartyId);
+    if (existing.actualResponsiblePartyId) await assertCanUsePersistedCareParty(database, user, existing.actualResponsiblePartyId);
   }
   const effectiveResponsiblePartyId =
-    input.responsiblePartyId ?? existing?.responsiblePartyId ?? getDefaultResponsiblePartyId();
-  assertActiveChildren(input.childIds);
-  assertActiveCareParty(effectiveResponsiblePartyId);
-  assertCanUseCareParty(user, effectiveResponsiblePartyId);
+    input.responsiblePartyId ?? existing?.responsiblePartyId ?? await getPersistedDefaultResponsiblePartyId(database);
+  await assertPersistedChildren(database, input.childIds);
+  await assertPersistedCareParty(database, effectiveResponsiblePartyId);
+  await assertCanUsePersistedCareParty(database, user, effectiveResponsiblePartyId);
   const timestamp = nowIso();
   const durationMinutes = Math.round(
     (Date.parse(input.endDateTime) - Date.parse(input.startDateTime)) / 60000
@@ -540,11 +573,11 @@ function persistEntry(
     ? input.actualResponsiblePartyId ?? existing?.actualResponsiblePartyId ?? effectiveResponsiblePartyId
     : undefined;
   if (input.status === "partial") {
-    assertActiveChildren(actualChildIds);
-    assertActiveCareParty(actualResponsiblePartyId);
-    assertCanUseCareParty(user, actualResponsiblePartyId);
+    await assertPersistedChildren(database, actualChildIds);
+    await assertPersistedCareParty(database, actualResponsiblePartyId);
+    await assertCanUsePersistedCareParty(database, user, actualResponsiblePartyId);
   }
-  assertPlannedCareConflictAcknowledged({
+  await assertPlannedCareConflictAcknowledged({
     candidate: {
       status: input.status,
       startDateTime: input.startDateTime,
@@ -556,10 +589,10 @@ function persistEntry(
     },
     confirmPlannedConflict: input.confirmPlannedConflict,
     conflictFingerprint: input.conflictFingerprint,
-    database: db,
+    database,
     excludeId: existing?.id
   });
-  assertNoActualCareConflict({
+  await assertNoActualCareConflict({
     id,
     status: input.status,
     startDateTime: input.startDateTime,
@@ -572,7 +605,7 @@ function persistEntry(
       ? input.actualEndDateTime ?? existing?.actualEndDateTime ?? input.endDateTime
       : undefined,
     actualChildIds
-  }, db);
+  }, database);
 
   if (existing) {
     const generatedByPatternId = input.generatedByPatternId ?? existing.generatedByPatternId ?? null;
@@ -589,97 +622,107 @@ function persistEntry(
     const plannedEndDateTime = deviationType
       ? input.plannedEndDateTime ?? existing.plannedEndDateTime ?? existing.endDateTime
       : null;
-    db.prepare(`
-      UPDATE care_entries SET
-        generated_by_pattern_id = ?, rule_occurrence_date = ?,
-        contact_rule_id = ?, contact_rule_segment_id = ?, contact_rule_occurrence_key = ?,
-        responsible_party_id = ?, contact_rule_sync_state = ?,
-        start_datetime = ?, end_datetime = ?, planned_start_datetime = ?, planned_end_datetime = ?,
-        status = ?, deviation_type = ?, deviation_note = ?, care_scope = ?,
-        cancellation_reason = ?, confirmation_note = ?, confirmed_at = ?, confirmed_by = ?,
-        actual_start_datetime = ?, actual_end_datetime = ?, actual_responsible_party_id = ?,
-        overnight = ?, school_handover = ?,
-        holiday = ?, weekend = ?, additional_care = ?, location = ?, custom_location = ?,
-        handover_from = ?, handover_to = ?, notes = ?, evidence_reference = ?,
-        has_evidence = ?, duration_minutes = ?, is_contact_time = ?,
-        updated_by = ?, updated_at = ?, deleted_at = NULL
-      WHERE id = ?
-    `).run(
-      generatedByPatternId, ruleOccurrenceDate,
-      contactRuleId, contactRuleSegmentId,
-      contactRuleOccurrenceKey, responsiblePartyId,
-      contactRuleSyncState,
-      input.startDateTime, input.endDateTime, plannedStartDateTime, plannedEndDateTime,
-      input.status, deviationType, input.deviationNote?.trim() || null, input.careScope,
-      input.status === "cancelled" ? input.cancellationReason ?? null : null,
-      input.status === "planned" ? null : existing.confirmationNote ?? null,
-      input.status === "planned" ? null : existing.confirmedAt ?? null,
-      input.status === "planned" ? null : existing.confirmedBy ?? null,
-      input.status === "partial" ? input.actualStartDateTime ?? existing.actualStartDateTime ?? input.startDateTime : null,
-      input.status === "partial" ? input.actualEndDateTime ?? existing.actualEndDateTime ?? input.endDateTime : null,
-      actualResponsiblePartyId ?? null,
-      Number(input.overnight), Number(input.schoolHandover), Number(input.holiday),
-      Number(input.weekend), Number(input.additionalCare), input.location ?? null,
-      input.customLocation ?? null,
-      input.handoverFrom ?? null, input.handoverTo ?? null, input.notes ?? null,
-      input.evidenceReference ?? null, Number(input.hasEvidence), durationMinutes,
-      Number(isContactTime), userEmail, timestamp, id
-    );
+    await database.updateTable("care_entries").set({
+      generated_by_pattern_id: generatedByPatternId,
+      rule_occurrence_date: ruleOccurrenceDate,
+      contact_rule_id: contactRuleId,
+      contact_rule_segment_id: contactRuleSegmentId,
+      contact_rule_occurrence_key: contactRuleOccurrenceKey,
+      responsible_party_id: responsiblePartyId,
+      contact_rule_sync_state: contactRuleSyncState,
+      start_datetime: input.startDateTime,
+      end_datetime: input.endDateTime,
+      planned_start_datetime: plannedStartDateTime,
+      planned_end_datetime: plannedEndDateTime,
+      status: input.status,
+      deviation_type: deviationType,
+      deviation_note: input.deviationNote?.trim() || null,
+      care_scope: input.careScope,
+      cancellation_reason: input.status === "cancelled" ? input.cancellationReason ?? null : null,
+      confirmation_note: input.status === "planned" ? null : existing.confirmationNote ?? null,
+      confirmed_at: input.status === "planned" ? null : existing.confirmedAt ?? null,
+      confirmed_by: input.status === "planned" ? null : existing.confirmedBy ?? null,
+      actual_start_datetime: input.status === "partial" ? input.actualStartDateTime ?? existing.actualStartDateTime ?? input.startDateTime : null,
+      actual_end_datetime: input.status === "partial" ? input.actualEndDateTime ?? existing.actualEndDateTime ?? input.endDateTime : null,
+      actual_responsible_party_id: actualResponsiblePartyId ?? null,
+      overnight: Number(input.overnight),
+      school_handover: Number(input.schoolHandover),
+      holiday: Number(input.holiday),
+      weekend: Number(input.weekend),
+      additional_care: Number(input.additionalCare),
+      location: input.location ?? null,
+      custom_location: input.customLocation ?? null,
+      handover_from: input.handoverFrom ?? null,
+      handover_to: input.handoverTo ?? null,
+      notes: input.notes ?? null,
+      evidence_reference: input.evidenceReference ?? null,
+      has_evidence: Number(input.hasEvidence),
+      duration_minutes: durationMinutes,
+      is_contact_time: Number(isContactTime),
+      updated_by: userEmail,
+      updated_at: timestamp,
+      deleted_at: null
+    }).where("id", "=", id).execute();
   } else {
-    db.prepare(`
-      INSERT INTO care_entries (
-        id, generated_by_pattern_id, rule_occurrence_date,
-        contact_rule_id, contact_rule_segment_id, contact_rule_occurrence_key,
-        responsible_party_id, contact_rule_sync_state,
-        start_datetime, end_datetime, planned_start_datetime, planned_end_datetime,
-        status, deviation_type, deviation_note, care_scope, cancellation_reason,
-        confirmation_note, confirmed_at, confirmed_by,
-        actual_start_datetime, actual_end_datetime, actual_responsible_party_id,
-        overnight, school_handover, holiday, weekend, additional_care, location,
-        custom_location, handover_from, handover_to, notes, evidence_reference, has_evidence,
-        duration_minutes, is_contact_time, created_by, updated_by, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(
-      id, input.generatedByPatternId ?? null, input.ruleOccurrenceDate ?? null,
-      input.contactRuleId ?? null, input.contactRuleSegmentId ?? null,
-      input.contactRuleOccurrenceKey ?? null, effectiveResponsiblePartyId ?? null,
-      input.contactRuleSyncState ?? null,
-      input.startDateTime, input.endDateTime,
-      input.deviationType ? input.plannedStartDateTime ?? input.startDateTime : null,
-      input.deviationType ? input.plannedEndDateTime ?? input.endDateTime : null,
-      input.status,
-      input.deviationType ?? (input.status === "cancelled" ? "cancelled" : input.status === "partial" ? "partial" : null),
-      input.deviationNote?.trim() || null,
-      input.careScope,
-      input.status === "cancelled" ? input.cancellationReason ?? null : null,
-      null,
-      null,
-      null,
-      input.status === "partial" ? input.actualStartDateTime ?? input.startDateTime : null,
-      input.status === "partial" ? input.actualEndDateTime ?? input.endDateTime : null,
-      actualResponsiblePartyId ?? null,
-      Number(input.overnight), Number(input.schoolHandover), Number(input.holiday),
-      Number(input.weekend), Number(input.additionalCare), input.location ?? null,
-      input.customLocation ?? null,
-      input.handoverFrom ?? null, input.handoverTo ?? null, input.notes ?? null,
-      input.evidenceReference ?? null, Number(input.hasEvidence), durationMinutes,
-      Number(isContactTime), userEmail, userEmail, timestamp, timestamp
-    );
+    await database.insertInto("care_entries").values({
+      id,
+      generated_by_pattern_id: input.generatedByPatternId ?? null,
+      rule_occurrence_date: input.ruleOccurrenceDate ?? null,
+      contact_rule_id: input.contactRuleId ?? null,
+      contact_rule_segment_id: input.contactRuleSegmentId ?? null,
+      contact_rule_occurrence_key: input.contactRuleOccurrenceKey ?? null,
+      responsible_party_id: effectiveResponsiblePartyId ?? null,
+      contact_rule_sync_state: input.contactRuleSyncState ?? null,
+      start_datetime: input.startDateTime,
+      end_datetime: input.endDateTime,
+      planned_start_datetime: input.deviationType ? input.plannedStartDateTime ?? input.startDateTime : null,
+      planned_end_datetime: input.deviationType ? input.plannedEndDateTime ?? input.endDateTime : null,
+      status: input.status,
+      deviation_type: input.deviationType ?? (input.status === "cancelled" ? "cancelled" : input.status === "partial" ? "partial" : null),
+      deviation_note: input.deviationNote?.trim() || null,
+      care_scope: input.careScope,
+      cancellation_reason: input.status === "cancelled" ? input.cancellationReason ?? null : null,
+      confirmation_note: null,
+      confirmed_at: null,
+      confirmed_by: null,
+      actual_start_datetime: input.status === "partial" ? input.actualStartDateTime ?? input.startDateTime : null,
+      actual_end_datetime: input.status === "partial" ? input.actualEndDateTime ?? input.endDateTime : null,
+      actual_responsible_party_id: actualResponsiblePartyId ?? null,
+      overnight: Number(input.overnight),
+      school_handover: Number(input.schoolHandover),
+      holiday: Number(input.holiday),
+      weekend: Number(input.weekend),
+      additional_care: Number(input.additionalCare),
+      location: input.location ?? null,
+      custom_location: input.customLocation ?? null,
+      handover_from: input.handoverFrom ?? null,
+      handover_to: input.handoverTo ?? null,
+      notes: input.notes ?? null,
+      evidence_reference: input.evidenceReference ?? null,
+      has_evidence: Number(input.hasEvidence),
+      duration_minutes: durationMinutes,
+      is_contact_time: Number(isContactTime),
+      created_by: userEmail,
+      updated_by: userEmail,
+      created_at: timestamp,
+      updated_at: timestamp,
+      deleted_at: null
+    }).execute();
   }
 
-  syncJunction("care_entry_children", "care_entry_id", id, input.childIds, timestamp);
-  syncJunction("care_entry_actual_children", "care_entry_id", id, input.status === "partial" ? actualChildIds : [], timestamp);
-  syncTrips(id, input.trips, userEmail, timestamp);
-  syncCosts(id, input.costs, userEmail, timestamp);
+  await syncPersistedChildJunction(database, { table: "care_entry_children", owner: "care_entry_id" }, id, input.childIds, timestamp);
+  await syncPersistedChildJunction(database, { table: "care_entry_actual_children", owner: "care_entry_id" }, id, input.status === "partial" ? actualChildIds : [], timestamp);
+  await syncTrips(database, id, input.trips, userEmail, timestamp);
+  await syncCosts(database, id, input.costs, userEmail, timestamp);
 
-  const after = getEntry(id);
+  const after = await getEntry(database, id);
   if (!after) throw new Error("Betreuungseintrag konnte nicht geladen werden.");
   if (existing) {
-    recordFieldChanges(userEmail, "care_entry", id, existing, after, [
+    await recordDomainFieldChanges(database, userEmail, "care_entry", id, existing, after, [
       "updatedAt", "updatedBy", "trips", "costs"
     ]);
   } else {
-    recordAudit({
+    await recordDomainAudit(database, {
       userEmail,
       entityType: "care_entry",
       entityId: id,
@@ -693,7 +736,8 @@ function persistEntry(
     existing?.startDateTime.slice(0, 10),
     existing?.endDateTime.slice(0, 10)
   ].filter((value): value is string => Boolean(value)).sort();
-  markClosedMonthsChanged(
+  await markDomainClosedMonthsChanged(
+    database,
     userEmail,
     "care_entry",
     id,
@@ -701,6 +745,7 @@ function persistEntry(
     dates.at(-1) ?? input.endDateTime.slice(0, 10),
     timestamp
   );
+  return after;
 }
 
 export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
@@ -711,17 +756,17 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
       const parsed = careEntryInputSchema.safeParse(request.body);
       if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
       const input = parsed.data;
-      const preview = previewPlannedCareConflicts({
+      const preview = await previewPlannedCareConflicts({
         status: input.status,
         startDateTime: input.startDateTime,
         endDateTime: input.endDateTime,
         childIds: input.childIds
-      }, db, request.query.entryId);
-      const items = preview.conflicts.flatMap((conflict) => {
+      }, app.persistence.query, request.query.entryId);
+      const items = (await Promise.all(preview.conflicts.map(async (conflict) => {
         const conflictingId = conflict.entryIds.find((id) => id !== "__care_conflict_candidate__");
-        const entry = conflictingId ? getEntry(conflictingId) : undefined;
+        const entry = conflictingId ? await getEntry(app.persistence.query, conflictingId) : undefined;
         return entry ? [{ conflict, entry }] : [];
-      });
+      }))).flat();
       return { fingerprint: preview.fingerprint, items };
     }
   );
@@ -738,32 +783,33 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: "validation_error" });
       }
       try {
-        return db.transaction(() => {
-          const conflict = listCareConflicts(db).find((item) =>
+        return await app.persistence.transaction(async (database) => {
+          const conflict = (await listCareConflicts(database)).find((item) =>
             item.id === input.conflictId && item.entryIds.includes(input.entryId!)
           );
-          const existing = getEntry(input.entryId!);
+          const existing = await getEntry(database, input.entryId!);
           if (!conflict || !existing || !existing.contactRuleId || existing.status !== "planned") {
             return reply.code(409).send({ error: "care_conflict_changed" });
           }
-          assertCanUseCareParty(request.user, existing.responsiblePartyId);
+          await assertCanUsePersistedCareParty(database, request.user, existing.responsiblePartyId);
           const timestamp = nowIso();
-          db.prepare(`
-            UPDATE care_entries
-            SET status = 'cancelled', deviation_type = 'cancelled',
-              cancellation_reason = 'Regeltermin wegen Überschneidung ersetzt.',
-              planned_start_datetime = COALESCE(planned_start_datetime, start_datetime),
-              planned_end_datetime = COALESCE(planned_end_datetime, end_datetime),
-              contact_rule_sync_state = 'manual_override',
-              updated_by = ?, updated_at = ?
-            WHERE id = ? AND deleted_at IS NULL
-          `).run(request.userEmail, timestamp, input.entryId);
-          const updated = getEntry(input.entryId!);
+          await database.updateTable("care_entries").set((expression) => ({
+            status: "cancelled",
+            deviation_type: "cancelled",
+            cancellation_reason: "Regeltermin wegen Überschneidung ersetzt.",
+            planned_start_datetime: expression.fn.coalesce("planned_start_datetime", "start_datetime"),
+            planned_end_datetime: expression.fn.coalesce("planned_end_datetime", "end_datetime"),
+            contact_rule_sync_state: "manual_override",
+            updated_by: request.userEmail,
+            updated_at: timestamp
+          })).where("id", "=", input.entryId!).where("deleted_at", "is", null).execute();
+          const updated = await getEntry(database, input.entryId!);
           if (!updated) throw new Error("Resolved care entry could not be loaded.");
-          recordFieldChanges(request.userEmail, "care_entry", input.entryId!, existing, updated, [
+          await recordDomainFieldChanges(database, request.userEmail, "care_entry", input.entryId!, existing, updated, [
             "updatedAt", "updatedBy", "trips", "costs"
           ]);
-          markClosedMonthsChanged(
+          await markDomainClosedMonthsChanged(
+            database,
             request.userEmail,
             "care_entry",
             input.entryId!,
@@ -772,7 +818,7 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
             timestamp
           );
           return updated;
-        })();
+        });
       } catch (error) {
         if (isCareConflictWorkLimitError(error)) {
           return reply.code(409).send({ error: "care_conflict_changed" });
@@ -786,28 +832,30 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
     "/api/care-entries/schedule",
     scheduleLimit,
     async (request): Promise<ApiScheduleEntry[]> => {
-      const conditions = ["entries.deleted_at IS NULL"];
-      const values: string[] = [];
+      let query = app.persistence.query.selectFrom("care_entries as entries")
+        .leftJoin("care_parties as parties", (join) => join
+          .onRef("parties.id", "=", "entries.responsible_party_id")
+          .on("parties.deleted_at", "is", null))
+        .select([
+          "entries.id as id",
+          "entries.start_datetime as startDateTime",
+          "entries.end_datetime as endDateTime",
+          "entries.status as status",
+          "entries.location as location",
+          "entries.responsible_party_id as responsiblePartyId",
+          "parties.name as responsiblePartyName"
+        ])
+        .where("entries.deleted_at", "is", null);
       if (request.query.startDate) {
-        conditions.push("entries.end_datetime >= ?");
-        values.push(`${request.query.startDate}T00:00:00.000Z`);
+        query = query.where("entries.end_datetime", ">=", `${request.query.startDate}T00:00:00.000Z`);
       }
       if (request.query.endDate) {
-        conditions.push("entries.start_datetime <= ?");
-        values.push(`${request.query.endDate}T23:59:59.999Z`);
+        query = query.where("entries.start_datetime", "<=", `${request.query.endDate}T23:59:59.999Z`);
       }
-      const conflicts = scheduleConflictEntryIds();
-      const rows = db.prepare(`
-        SELECT entries.id, entries.start_datetime AS startDateTime,
-          entries.end_datetime AS endDateTime, entries.status,
-          entries.location, entries.responsible_party_id AS responsiblePartyId,
-          parties.name AS responsiblePartyName
-        FROM care_entries entries
-        LEFT JOIN care_parties parties
-          ON parties.id = entries.responsible_party_id AND parties.deleted_at IS NULL
-        WHERE ${conditions.join(" AND ")}
-        ORDER BY entries.start_datetime, entries.id
-      `).all(...values) as Array<{
+      const [conflicts, rows] = await Promise.all([
+        scheduleConflictEntryIds(app.persistence.query),
+        query.orderBy("entries.start_datetime").orderBy("entries.id").execute()
+      ]) as [Set<string>, Array<{
         id: string;
         startDateTime: string;
         endDateTime: string;
@@ -815,19 +863,21 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
         location: string | null;
         responsiblePartyId: string | null;
         responsiblePartyName: string | null;
-      }>;
-      const childStatement = db.prepare(`
-        SELECT children.id, children.name, children.color
-        FROM care_entry_children links
-        JOIN children ON children.id = links.child_id AND children.deleted_at IS NULL
-        WHERE links.care_entry_id = ? AND links.deleted_at IS NULL
-        ORDER BY children.name COLLATE NOCASE
-      `);
-      return rows.map((row) => {
+      }>];
+      return Promise.all(rows.map(async (row) => {
         const location = scheduleLocation(row.location);
+        const children = await app.persistence.query.selectFrom("care_entry_children as links")
+          .innerJoin("children", (join) => join
+            .onRef("children.id", "=", "links.child_id")
+            .on("children.deleted_at", "is", null))
+          .select(["children.id", "children.name", "children.color"])
+          .where("links.care_entry_id", "=", row.id)
+          .where("links.deleted_at", "is", null)
+          .orderBy(sql`children.name COLLATE NOCASE`)
+          .execute() as ApiScheduleEntry["children"];
         return ({
         id: row.id,
-        children: childStatement.all(row.id) as ApiScheduleEntry["children"],
+        children,
         startDateTime: row.startDateTime,
         endDateTime: row.endDateTime,
         status: row.status,
@@ -837,13 +887,13 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
         ...(location ? { location } : {}),
         hasConflict: conflicts.has(row.id)
         });
-      });
+      }));
     }
   );
 
   app.get("/api/care-conflicts", readLimit, async (): Promise<ApiCareConflictList> => {
     try {
-      return { items: listCareConflicts(db), complete: true };
+      return { items: await listCareConflicts(app.persistence.query), complete: true };
     } catch (error) {
       if (isCareConflictWorkLimitError(error)) {
         return { items: [], complete: false };
@@ -856,27 +906,22 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
     "/api/care-entries",
     readLimit,
     async (request) => {
-      const conditions = ["deleted_at IS NULL"];
-      const values: string[] = [];
+      let query = app.persistence.query.selectFrom("care_entries")
+        .selectAll()
+        .where("deleted_at", "is", null);
       if (request.query.startDate) {
-        conditions.push("end_datetime >= ?");
-        values.push(`${request.query.startDate}T00:00:00.000Z`);
+        query = query.where("end_datetime", ">=", `${request.query.startDate}T00:00:00.000Z`);
       }
       if (request.query.endDate) {
-        conditions.push("start_datetime <= ?");
-        values.push(`${request.query.endDate}T23:59:59.999Z`);
+        query = query.where("start_datetime", "<=", `${request.query.endDate}T23:59:59.999Z`);
       }
-      const rows = db.prepare(`
-        SELECT * FROM care_entries
-        WHERE ${conditions.join(" AND ")}
-        ORDER BY start_datetime, id
-      `).all(...values) as EntryRow[];
-      return rows.map(mapEntry);
+      const rows = await query.orderBy("start_datetime").orderBy("id").execute() as EntryRow[];
+      return Promise.all(rows.map((row) => mapEntry(app.persistence.query, row)));
     }
   );
 
   app.get<{ Params: { id: string } }>("/api/care-entries/:id", readLimit, async (request, reply) => {
-    const entry = getEntry(request.params.id);
+    const entry = await getEntry(app.persistence.query, request.params.id);
     return entry ?? reply.code(404).send({ error: "not_found" });
   });
 
@@ -889,10 +934,15 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
     const input = scheduler
       ? schedulingInput(parsed.data as ReturnType<typeof schedulerCareEntryInputSchema.parse>)
       : parsed.data as ReturnType<typeof careEntryInputSchema.parse>;
-    if (!schedulerWriteAllowed(request.user, input.responsiblePartyId ?? "", input.startDateTime)) return schedulerForbidden(reply);
+    if (!(await schedulerWriteAllowed(app.persistence.query, request.user, input.responsiblePartyId ?? "", input.startDateTime))) return schedulerForbidden(reply);
     const id = makeId("entry");
     try {
-      db.transaction(() => persistEntry(id, input, request.userEmail, undefined, request.user))();
+      const created = await app.persistence.transaction((database) =>
+        persistEntry(database, id, input, request.userEmail, undefined, request.user)
+      );
+      return reply.code(201).send(scheduler
+        ? await getScheduleEntry(app.persistence.query, id)
+        : created);
     } catch (error) {
       if (isPlannedCareConflictPreviewRequiredError(error)) {
         return reply.code(409).send({
@@ -905,11 +955,10 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
       }
       return reply.code(400).send({ error: "invalid_relation", message: error instanceof Error ? error.message : String(error) });
     }
-    return reply.code(201).send(scheduler ? getScheduleEntry(id) : getEntry(id));
   });
 
   app.put<{ Params: { id: string } }>("/api/care-entries/:id", editLimit, async (request, reply) => {
-    const existing = getEntry(request.params.id);
+    const existing = await getEntry(app.persistence.query, request.params.id);
     if (!existing) return reply.code(404).send({ error: "not_found" });
     const scheduler = request.user?.workspaceRole === "scheduler";
     const parsed = scheduler
@@ -919,9 +968,14 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
     const input = scheduler
       ? schedulingInput(parsed.data as ReturnType<typeof schedulerCareEntryInputSchema.parse>, existing)
       : parsed.data as ReturnType<typeof careEntryInputSchema.parse>;
-    if (!schedulerWriteAllowed(request.user, input.responsiblePartyId ?? "", input.startDateTime, existing)) return schedulerForbidden(reply);
+    if (!(await schedulerWriteAllowed(app.persistence.query, request.user, input.responsiblePartyId ?? "", input.startDateTime, existing))) return schedulerForbidden(reply);
     try {
-      db.transaction(() => persistEntry(request.params.id, input, request.userEmail, existing, request.user))();
+      const updated = await app.persistence.transaction((database) =>
+        persistEntry(database, request.params.id, input, request.userEmail, existing, request.user)
+      );
+      return scheduler
+        ? await getScheduleEntry(app.persistence.query, request.params.id)
+        : updated;
     } catch (error) {
       if (isPlannedCareConflictPreviewRequiredError(error)) {
         return reply.code(409).send({
@@ -934,38 +988,43 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
       }
       return reply.code(400).send({ error: "invalid_relation", message: error instanceof Error ? error.message : String(error) });
     }
-    return scheduler ? getScheduleEntry(request.params.id) : getEntry(request.params.id);
   });
 
   app.delete<{ Params: { id: string } }>("/api/care-entries/:id", deleteLimit, async (request, reply) => {
-    const existing = getEntry(request.params.id);
+    const existing = await getEntry(app.persistence.query, request.params.id);
     if (!existing) return reply.code(404).send({ error: "not_found" });
     try {
-      assertCanUseCareParty(request.user, existing.responsiblePartyId);
-      if (existing.actualResponsiblePartyId) assertCanUseCareParty(request.user, existing.actualResponsiblePartyId);
+      await assertCanUsePersistedCareParty(app.persistence.query, request.user, existing.responsiblePartyId);
+      if (existing.actualResponsiblePartyId) await assertCanUsePersistedCareParty(app.persistence.query, request.user, existing.actualResponsiblePartyId);
     } catch (error) {
       return reply.code(400).send({ error: "invalid_relation", message: error instanceof Error ? error.message : String(error) });
     }
     const timestamp = nowIso();
-    db.transaction(() => {
-      db.prepare("UPDATE care_entries SET deleted_at = ?, updated_at = ?, updated_by = ? WHERE id = ?")
-        .run(timestamp, timestamp, request.userEmail, request.params.id);
-      db.prepare("UPDATE care_entry_children SET deleted_at = ?, updated_at = ? WHERE care_entry_id = ? AND deleted_at IS NULL")
-        .run(timestamp, timestamp, request.params.id);
-      db.prepare("UPDATE care_entry_actual_children SET deleted_at = ?, updated_at = ? WHERE care_entry_id = ? AND deleted_at IS NULL")
-        .run(timestamp, timestamp, request.params.id);
-      db.prepare("UPDATE trips SET deleted_at = ?, updated_by = ?, updated_at = ? WHERE care_entry_id = ? AND deleted_at IS NULL")
-        .run(timestamp, request.userEmail, timestamp, request.params.id);
-      db.prepare("UPDATE costs SET deleted_at = ?, updated_by = ?, updated_at = ? WHERE care_entry_id = ? AND deleted_at IS NULL")
-        .run(timestamp, request.userEmail, timestamp, request.params.id);
-      recordAudit({
+    await app.persistence.transaction(async (database) => {
+      await database.updateTable("care_entries")
+        .set({ deleted_at: timestamp, updated_at: timestamp, updated_by: request.userEmail })
+        .where("id", "=", request.params.id).execute();
+      await database.updateTable("care_entry_children")
+        .set({ deleted_at: timestamp, updated_at: timestamp })
+        .where("care_entry_id", "=", request.params.id).where("deleted_at", "is", null).execute();
+      await database.updateTable("care_entry_actual_children")
+        .set({ deleted_at: timestamp, updated_at: timestamp })
+        .where("care_entry_id", "=", request.params.id).where("deleted_at", "is", null).execute();
+      await database.updateTable("trips")
+        .set({ deleted_at: timestamp, updated_by: request.userEmail, updated_at: timestamp })
+        .where("care_entry_id", "=", request.params.id).where("deleted_at", "is", null).execute();
+      await database.updateTable("costs")
+        .set({ deleted_at: timestamp, updated_by: request.userEmail, updated_at: timestamp })
+        .where("care_entry_id", "=", request.params.id).where("deleted_at", "is", null).execute();
+      await recordDomainAudit(database, {
         userEmail: request.userEmail,
         entityType: "care_entry",
         entityId: request.params.id,
         action: "deleted",
         oldValue: existing
       });
-      markClosedMonthsChanged(
+      await markDomainClosedMonthsChanged(
+        database,
         request.userEmail,
         "care_entry",
         request.params.id,
@@ -973,7 +1032,7 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
         existing.endDateTime.slice(0, 10),
         timestamp
       );
-    })();
+    });
     return reply.code(204).send();
   });
 }

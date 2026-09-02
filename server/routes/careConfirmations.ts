@@ -29,7 +29,7 @@ const confirmationLimit = {
 
 export async function careConfirmationRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/care-confirmations/open", readLimit, async (request) =>
-    request.user ? listOpenCareConfirmations(request.user) : []
+    request.user ? listOpenCareConfirmations(app.persistence, request.user) : []
   );
 
   app.post<{ Params: { id: string } }>("/api/care-confirmations/:id/answer", confirmationLimit, async (request, reply) => {
@@ -38,7 +38,7 @@ export async function careConfirmationRoutes(app: FastifyInstance): Promise<void
     if (!request.user) return reply.code(401).send({ error: "authentication_required" });
     let result: Awaited<ReturnType<typeof answerCareConfirmation>>;
     try {
-      result = await answerCareConfirmation(request.params.id, request.user, parsed.data);
+      result = await answerCareConfirmation(app.persistence, request.params.id, request.user, parsed.data);
     } catch (error) {
       if (isCareEntryConflictError(error)) {
         return reply.code(409).send({ error: "care_entry_conflict" });
@@ -56,6 +56,7 @@ export async function careConfirmationRoutes(app: FastifyInstance): Promise<void
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     if (!request.user) return reply.code(401).send({ error: "authentication_required" });
     const result = await remindCareConfirmationLater(
+      app.persistence,
       request.params.id,
       request.user,
       parsed.data.nextReminderAt
@@ -64,24 +65,24 @@ export async function careConfirmationRoutes(app: FastifyInstance): Promise<void
   });
 
   app.get("/api/notification-preferences", readLimit, async (request) =>
-    getNotificationPreferences(request.userEmail)
+    getNotificationPreferences(app.persistence.query, request.userEmail)
   );
 
   app.put("/api/notification-preferences", writeLimit, async (request, reply) => {
     const parsed = notificationPreferencesSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
-    return updateNotificationPreferences(request.userEmail, parsed.data.preferences);
+    return updateNotificationPreferences(app.persistence, request.userEmail, parsed.data.preferences);
   });
 
   app.post("/api/push-subscriptions", writeLimit, async (request, reply) => {
     const parsed = pushSubscriptionSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
-    savePushSubscription(request.userEmail, parsed.data, request.headers["user-agent"]);
+    await savePushSubscription(app.persistence.query, request.userEmail, parsed.data, request.headers["user-agent"]);
     return reply.code(204).send();
   });
 
   app.delete<{ Params: { id: string } }>("/api/push-subscriptions/:id", writeLimit, async (request, reply) => {
-    if (!deletePushSubscription(request.userEmail, request.params.id)) {
+    if (!await deletePushSubscription(app.persistence.query, request.userEmail, request.params.id)) {
       return reply.code(404).send({ error: "not_found" });
     }
     return reply.code(204).send();

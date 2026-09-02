@@ -3,7 +3,7 @@ import type Database from "better-sqlite3";
 import { db } from "../db/connection.js";
 import { recordAudit } from "../services/audit.js";
 import { nowIso } from "../services/common.js";
-import { upsertContactRule, upsertContactRuleFromPattern } from "../services/contactRules.js";
+import { legacyRecurrenceForPattern, legacySegmentsForPattern } from "../services/contactRules.js";
 import { getDefaultResponsiblePartyId, normalizeClientSettings } from "../services/settings.js";
 import {
   appDataImportSchema,
@@ -474,20 +474,93 @@ export function insertPattern(
     ) VALUES (?, ?, ?, ?)
   `);
   for (const childId of input.childIds) junction.run(id, childId, timestamp, timestamp);
-  upsertContactRuleFromPattern({
+  insertImportedContactRule({
     id,
     name: input.name,
     startDate: input.startDate,
-    fridayStartTime: input.fridayStartTime,
-    sundayEndTime: input.sundayEndTime,
-    childIds: input.childIds,
+    timezone: "Europe/Berlin",
+    recurrence: legacyRecurrenceForPattern(),
+    segments: legacySegmentsForPattern(input),
+    syncHorizonMonths: 12,
     responsiblePartyId: fallbackResponsiblePartyId,
+    childIds: input.childIds,
     active: input.active,
+    sourceContactPatternId: id,
     createdBy: text(record, "createdBy", userEmail),
     updatedBy: text(record, "updatedBy", userEmail),
     createdAt: text(record, "createdAt", timestamp),
-    updatedAt: text(record, "updatedAt", timestamp)
-  }, database);
+    updatedAt: text(record, "updatedAt", timestamp),
+    database
+  });
+}
+
+interface ImportedContactRule {
+  id: string;
+  name: string;
+  startDate: string;
+  endDate?: string;
+  timezone: string;
+  recurrence: unknown;
+  segments: unknown;
+  syncHorizonMonths: number;
+  responsiblePartyId?: string;
+  childIds: string[];
+  active: boolean;
+  sourceContactPatternId?: string;
+  createdBy: string;
+  updatedBy: string;
+  createdAt: string;
+  updatedAt: string;
+  database: Database.Database;
+}
+
+// Removed with the synchronous app-data import path in #449.
+function insertImportedContactRule(input: ImportedContactRule): void {
+  input.database.prepare(`
+    INSERT INTO contact_rules (
+      id, name, start_date, end_date, timezone, recurrence_json, segments_json,
+      sync_horizon_months, responsible_party_id, active, source_contact_pattern_id,
+      created_by, updated_by, created_at, updated_at, deleted_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+    ON CONFLICT(id) DO UPDATE SET
+      name = excluded.name,
+      start_date = excluded.start_date,
+      end_date = excluded.end_date,
+      timezone = excluded.timezone,
+      recurrence_json = excluded.recurrence_json,
+      segments_json = excluded.segments_json,
+      sync_horizon_months = excluded.sync_horizon_months,
+      responsible_party_id = excluded.responsible_party_id,
+      active = excluded.active,
+      source_contact_pattern_id = excluded.source_contact_pattern_id,
+      updated_by = excluded.updated_by,
+      updated_at = excluded.updated_at,
+      deleted_at = NULL
+  `).run(
+    input.id,
+    input.name,
+    input.startDate,
+    input.endDate ?? null,
+    input.timezone,
+    JSON.stringify(input.recurrence),
+    JSON.stringify(input.segments),
+    input.syncHorizonMonths,
+    input.responsiblePartyId ?? null,
+    Number(input.active),
+    input.sourceContactPatternId ?? null,
+    input.createdBy,
+    input.updatedBy,
+    input.createdAt,
+    input.updatedAt
+  );
+  input.database.prepare("DELETE FROM contact_rule_children WHERE contact_rule_id = ?").run(input.id);
+  const childInsert = input.database.prepare(`
+    INSERT INTO contact_rule_children (contact_rule_id, child_id, created_at, updated_at)
+    VALUES (?, ?, ?, ?)
+  `);
+  for (const childId of input.childIds) {
+    childInsert.run(input.id, childId, input.updatedAt, input.updatedAt);
+  }
 }
 
 export function insertContactRule(
@@ -511,12 +584,10 @@ export function insertContactRule(
   });
   const id = text(record, "id");
   if (!id) throw new Error("Umgangsregel ohne ID kann nicht importiert werden.");
-  upsertContactRule({
+  insertImportedContactRule({
     id,
-    rule: {
-      ...input,
-      sourceContactPatternId: optionalText(record, "sourceContactPatternId") ?? undefined
-    },
+    ...input,
+    sourceContactPatternId: optionalText(record, "sourceContactPatternId") ?? undefined,
     createdBy: text(record, "createdBy", userEmail),
     updatedBy: text(record, "updatedBy", userEmail),
     createdAt: text(record, "createdAt", timestamp),

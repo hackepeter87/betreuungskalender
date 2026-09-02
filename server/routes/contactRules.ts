@@ -2,11 +2,15 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { isValidDateKey } from "../../shared/temporal.js";
 import { config } from "../config.js";
-import { db } from "../db/connection.js";
-import { recordAudit, recordFieldChanges } from "../services/audit.js";
-import { assertCanUseCareParty } from "../services/carePartyAccess.js";
-import { assertActiveCareParty } from "../services/careParties.js";
-import { assertActiveChildren, makeId, nowIso } from "../services/common.js";
+import {
+  assertCanUsePersistedCareParty,
+  assertPersistedCareParty,
+  assertPersistedChildren,
+  getPersistedDefaultResponsiblePartyId,
+  recordDomainAudit,
+  recordDomainFieldChanges
+} from "../services/domainPersistence.js";
+import { makeId, nowIso } from "../services/common.js";
 import {
   getContactRule,
   isContactRuleSyncPreviewChangedError,
@@ -14,7 +18,6 @@ import {
   syncContactRule,
   upsertContactRule
 } from "../services/contactRules.js";
-import { getDefaultResponsiblePartyId } from "../services/settings.js";
 import { contactRuleInputSchema } from "../validation/schemas.js";
 
 const readLimit = {
@@ -38,13 +41,14 @@ const syncInputSchema = z.object({
 
 export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/contact-rules", readLimit, async () => {
-    const rows = db.prepare(`
-      SELECT id
-      FROM contact_rules
-      WHERE deleted_at IS NULL
-      ORDER BY start_date, name
-    `).all() as Array<{ id: string }>;
-    return rows.map((row) => getContactRule(row.id)).filter(Boolean);
+    const rows = await app.persistence.query.selectFrom("contact_rules")
+      .select("id")
+      .where("deleted_at", "is", null)
+      .orderBy("start_date")
+      .orderBy("name")
+      .execute();
+    const rules = await Promise.all(rows.map((row) => getContactRule(row.id, app.persistence.query)));
+    return rules.filter((rule) => rule !== undefined);
   });
 
   app.post("/api/contact-rules", writeLimit, async (request, reply) => {
@@ -52,71 +56,75 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     const id = makeId("rule");
     const timestamp = nowIso();
-    let syncSummary;
     try {
-      db.transaction(() => {
+      const result = await app.persistence.transaction(async (database) => {
         const rule = {
           ...parsed.data,
-          responsiblePartyId: parsed.data.responsiblePartyId ?? getDefaultResponsiblePartyId()
+          responsiblePartyId: parsed.data.responsiblePartyId ?? await getPersistedDefaultResponsiblePartyId(database)
         };
-        assertActiveChildren(parsed.data.childIds);
-        assertActiveCareParty(rule.responsiblePartyId);
-        assertCanUseCareParty(request.user, rule.responsiblePartyId);
-        const saved = upsertContactRule({
+        await assertPersistedChildren(database, rule.childIds);
+        await assertPersistedCareParty(database, rule.responsiblePartyId);
+        await assertCanUsePersistedCareParty(database, request.user, rule.responsiblePartyId);
+        const saved = await upsertContactRule({
           id,
           rule,
           createdBy: request.userEmail,
           updatedBy: request.userEmail,
           createdAt: timestamp,
-          updatedAt: timestamp
+          updatedAt: timestamp,
+          database
         });
-        recordAudit({
+        await recordDomainAudit(database, {
           userEmail: request.userEmail,
           entityType: "contact_rule",
           entityId: id,
           action: "created",
           newValue: saved
         });
-        syncSummary = syncContactRule(id, { userEmail: request.userEmail });
-      })();
+        const syncSummary = await syncContactRule(id, {
+          userEmail: request.userEmail,
+          database,
+          recordAudit: true
+        });
+        return { ...await getContactRule(id, database), syncSummary };
+      });
+      return reply.code(201).send(result);
     } catch (error) {
       return reply.code(400).send({
         error: "invalid_relation",
         message: error instanceof Error ? error.message : String(error)
       });
     }
-    return reply.code(201).send({ ...getContactRule(id), syncSummary });
   });
 
   app.put<{ Params: { id: string } }>("/api/contact-rules/:id", writeLimit, async (request, reply) => {
-    const before = getContactRule(request.params.id);
+    const before = await getContactRule(request.params.id, app.persistence.query);
     if (!before) return reply.code(404).send({ error: "not_found" });
     const parsed = contactRuleInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     const timestamp = nowIso();
-    let syncSummary;
     try {
-      db.transaction(() => {
-        assertCanUseCareParty(request.user, before.responsiblePartyId);
+      return await app.persistence.transaction(async (database) => {
+        await assertCanUsePersistedCareParty(database, request.user, before.responsiblePartyId);
         const rule = {
           ...parsed.data,
-          responsiblePartyId: parsed.data.responsiblePartyId ?? before.responsiblePartyId ?? getDefaultResponsiblePartyId()
+          responsiblePartyId: parsed.data.responsiblePartyId ?? before.responsiblePartyId ??
+            await getPersistedDefaultResponsiblePartyId(database)
         };
-        assertActiveChildren(parsed.data.childIds);
-        assertActiveCareParty(rule.responsiblePartyId);
-        assertCanUseCareParty(request.user, rule.responsiblePartyId);
-        const saved = upsertContactRule({
+        await assertPersistedChildren(database, rule.childIds);
+        await assertPersistedCareParty(database, rule.responsiblePartyId);
+        await assertCanUsePersistedCareParty(database, request.user, rule.responsiblePartyId);
+        const saved = await upsertContactRule({
           id: request.params.id,
-          rule: {
-            ...rule,
-            sourceContactPatternId: before.sourceContactPatternId
-          },
+          rule: { ...rule, sourceContactPatternId: before.sourceContactPatternId },
           createdBy: before.createdBy,
           updatedBy: request.userEmail,
           createdAt: before.createdAt,
-          updatedAt: timestamp
+          updatedAt: timestamp,
+          database
         });
-        recordFieldChanges(
+        await recordDomainFieldChanges(
+          database,
           request.userEmail,
           "contact_rule",
           request.params.id,
@@ -124,25 +132,32 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
           saved,
           ["updatedAt", "updatedBy", "syncSummary"]
         );
-        syncSummary = syncContactRule(request.params.id, { userEmail: request.userEmail });
-      })();
+        const syncSummary = await syncContactRule(request.params.id, {
+          userEmail: request.userEmail,
+          database,
+          recordAudit: true
+        });
+        return { ...await getContactRule(request.params.id, database), syncSummary };
+      });
     } catch (error) {
       return reply.code(400).send({
         error: "invalid_relation",
         message: error instanceof Error ? error.message : String(error)
       });
     }
-    return { ...getContactRule(request.params.id), syncSummary };
   });
 
   app.post<{ Params: { id: string } }>("/api/contact-rules/:id/sync-preview", writeLimit, async (request, reply) => {
-    const rule = getContactRule(request.params.id);
+    const rule = await getContactRule(request.params.id, app.persistence.query);
     if (!rule) return reply.code(404).send({ error: "not_found" });
     const parsed = syncRangeSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     try {
-      assertCanUseCareParty(request.user, rule.responsiblePartyId);
-      return previewContactRuleSync(request.params.id, parsed.data);
+      await assertCanUsePersistedCareParty(app.persistence.query, request.user, rule.responsiblePartyId);
+      return await previewContactRuleSync(request.params.id, {
+        ...parsed.data,
+        database: app.persistence.query
+      });
     } catch (error) {
       return reply.code(400).send({
         error: "invalid_sync_range",
@@ -152,28 +167,30 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post<{ Params: { id: string } }>("/api/contact-rules/:id/sync", writeLimit, async (request, reply) => {
-    const rule = getContactRule(request.params.id);
+    const rule = await getContactRule(request.params.id, app.persistence.query);
     if (!rule) return reply.code(404).send({ error: "not_found" });
     try {
-      assertCanUseCareParty(request.user, rule.responsiblePartyId);
+      await assertCanUsePersistedCareParty(app.persistence.query, request.user, rule.responsiblePartyId);
       const ranged = request.body && Object.keys(request.body as object).length
         ? syncInputSchema.safeParse(request.body)
         : undefined;
       if (ranged && !ranged.success) {
         return reply.code(400).send({ error: "validation_error", issues: ranged.error.issues });
       }
-      const syncSummary = db.transaction(() =>
-        syncContactRule(request.params.id, {
+      return await app.persistence.transaction(async (database) => {
+        const syncSummary = await syncContactRule(request.params.id, {
+          database,
           userEmail: request.userEmail,
+          recordAudit: true,
           ...(ranged?.success ? {
             startDate: ranged.data.startDate,
             endDate: ranged.data.endDate,
             previewFingerprint: ranged.data.previewFingerprint,
             suppressPastConfirmations: true
           } : {})
-        })
-      )();
-      return { ...getContactRule(request.params.id), syncSummary };
+        });
+        return { ...await getContactRule(request.params.id, database), syncSummary };
+      });
     } catch (error) {
       if (isContactRuleSyncPreviewChangedError(error)) {
         return reply.code(409).send({ error: "contact_rule_sync_preview_changed" });
@@ -186,10 +203,10 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.delete<{ Params: { id: string } }>("/api/contact-rules/:id", writeLimit, async (request, reply) => {
-    const before = getContactRule(request.params.id);
+    const before = await getContactRule(request.params.id, app.persistence.query);
     if (!before) return reply.code(404).send({ error: "not_found" });
     try {
-      assertCanUseCareParty(request.user, before.responsiblePartyId);
+      await assertCanUsePersistedCareParty(app.persistence.query, request.user, before.responsiblePartyId);
     } catch (error) {
       return reply.code(400).send({
         error: "invalid_relation",
@@ -197,25 +214,24 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     const timestamp = nowIso();
-    db.transaction(() => {
-      db.prepare(`
-        UPDATE contact_rules
-        SET deleted_at = ?, updated_by = ?, updated_at = ?
-        WHERE id = ?
-      `).run(timestamp, request.userEmail, timestamp, request.params.id);
-      db.prepare(`
-        UPDATE contact_rule_children
-        SET deleted_at = ?, updated_at = ?
-        WHERE contact_rule_id = ? AND deleted_at IS NULL
-      `).run(timestamp, timestamp, request.params.id);
-      recordAudit({
+    await app.persistence.transaction(async (database) => {
+      await database.updateTable("contact_rules")
+        .set({ deleted_at: timestamp, updated_by: request.userEmail, updated_at: timestamp })
+        .where("id", "=", request.params.id)
+        .execute();
+      await database.updateTable("contact_rule_children")
+        .set({ deleted_at: timestamp, updated_at: timestamp })
+        .where("contact_rule_id", "=", request.params.id)
+        .where("deleted_at", "is", null)
+        .execute();
+      await recordDomainAudit(database, {
         userEmail: request.userEmail,
         entityType: "contact_rule",
         entityId: request.params.id,
         action: "deleted",
         oldValue: before
       });
-    })();
+    });
     return reply.code(204).send();
   });
 }

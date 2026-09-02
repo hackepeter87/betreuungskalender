@@ -1,4 +1,5 @@
 import webPush, { type PushSubscription } from "web-push";
+import { sql } from "kysely";
 import type {
   ApiCareConfirmationAnswer,
   ApiCareConfirmationRequest,
@@ -8,17 +9,23 @@ import type {
   ApiPushSubscriptionInput
 } from "../../shared/api.js";
 import type { RequestUser } from "../auth.js";
-import { db, persistence } from "../db/connection.js";
 import { config } from "../config.js";
-import { markClosedMonthsChanged, recordAudit, recordFieldChanges } from "./audit.js";
-import { assertCanUseCareParty, canUseCareParty } from "./carePartyAccess.js";
-import { assertActiveCareParty } from "./careParties.js";
+import type { DatabaseExecutor, PersistenceRuntime } from "../db/runtime.js";
 import {
   CareEntryConflictError,
   assertNoActualCareConflict,
   careConflictEntryIds
 } from "./careConflicts.js";
-import { assertActiveChildren, bool, makeId, nowIso, syncJunction } from "./common.js";
+import { bool, makeId, nowIso } from "./common.js";
+import {
+  assertCanUsePersistedCareParty,
+  assertPersistedCareParty,
+  assertPersistedChildren,
+  markDomainClosedMonthsChanged,
+  recordDomainAudit,
+  recordDomainFieldChanges,
+  syncPersistedChildJunction
+} from "./domainPersistence.js";
 import { userHasWorkspacePermission } from "./memberships.js";
 import { findAuthenticatedUserBySubject } from "./users.js";
 
@@ -44,12 +51,8 @@ function isAllowedPushEndpoint(endpoint: string): boolean {
   try {
     const url = new URL(endpoint);
     const hostname = url.hostname.toLowerCase().replace(/\.$/, "");
-    return (
-      url.protocol === "https:" &&
-      !url.username &&
-      !url.password &&
-      config.webPushAllowedEndpointHosts.includes(hostname)
-    );
+    return url.protocol === "https:" && !url.username && !url.password &&
+      config.webPushAllowedEndpointHosts.includes(hostname);
   } catch {
     return false;
   }
@@ -117,25 +120,28 @@ function optional<T>(value: T | null): T | undefined {
   return value === null ? undefined : value;
 }
 
-function childIds(entryId: string): string[] {
-  return (db.prepare(`
-    SELECT child_id AS childId
-    FROM care_entry_children
-    WHERE care_entry_id = ? AND deleted_at IS NULL
-    ORDER BY child_id
-  `).all(entryId) as Array<{ childId: string }>).map((row) => row.childId);
+async function linkedChildIds(
+  database: DatabaseExecutor,
+  table: "care_entry_children" | "care_entry_actual_children",
+  entryId: string
+): Promise<string[]> {
+  const rows = await database.selectFrom(table)
+    .select("child_id")
+    .where("care_entry_id", "=", entryId)
+    .where("deleted_at", "is", null)
+    .orderBy("child_id")
+    .execute();
+  return rows.map((row) => row.child_id);
 }
 
-function actualChildIds(entryId: string): string[] {
-  return (db.prepare(`
-    SELECT child_id AS childId
-    FROM care_entry_actual_children
-    WHERE care_entry_id = ? AND deleted_at IS NULL
-    ORDER BY child_id
-  `).all(entryId) as Array<{ childId: string }>).map((row) => row.childId);
-}
-
-function mapEntry(row: EntryRow): ApiCareConfirmationRequest["entry"] {
+async function mapEntry(
+  database: DatabaseExecutor,
+  row: EntryRow
+): Promise<ApiCareConfirmationRequest["entry"]> {
+  const [childIds, actualChildIds] = await Promise.all([
+    linkedChildIds(database, "care_entry_children", row.id),
+    linkedChildIds(database, "care_entry_actual_children", row.id)
+  ]);
   const unconfirmed = row.status === "planned" && !row.confirmed_at && Date.parse(row.end_datetime) < Date.now();
   return {
     id: row.id,
@@ -153,12 +159,13 @@ function mapEntry(row: EntryRow): ApiCareConfirmationRequest["entry"] {
     plannedEndDateTime: optional(row.planned_end_datetime),
     actualStartDateTime: optional(row.actual_start_datetime),
     actualEndDateTime: optional(row.actual_end_datetime),
-    childIds: childIds(row.id),
-    actualChildIds: actualChildIds(row.id),
+    childIds,
+    actualChildIds,
     status: row.status,
     deviationType: optional(row.deviation_type),
     deviationNote: optional(row.deviation_note),
-    ...(unconfirmed ? { confirmationState: "unconfirmed" as const } : row.confirmed_at ? { confirmationState: "confirmed" as const } : {}),
+    ...(unconfirmed ? { confirmationState: "unconfirmed" as const } :
+      row.confirmed_at ? { confirmationState: "confirmed" as const } : {}),
     confirmedAt: optional(row.confirmed_at),
     confirmedBy: optional(row.confirmed_by),
     confirmationNote: optional(row.confirmation_note),
@@ -187,7 +194,11 @@ function mapEntry(row: EntryRow): ApiCareConfirmationRequest["entry"] {
   };
 }
 
-function mapRequest(row: RequestRow, entry: EntryRow): ApiCareConfirmationRequest {
+async function mapRequest(
+  database: DatabaseExecutor,
+  row: RequestRow,
+  entry: EntryRow
+): Promise<ApiCareConfirmationRequest> {
   return {
     id: row.id,
     careEntryId: row.care_entry_id,
@@ -200,7 +211,7 @@ function mapRequest(row: RequestRow, entry: EntryRow): ApiCareConfirmationReques
     nextReminderAt: optional(row.next_reminder_at),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    entry: mapEntry(entry)
+    entry: await mapEntry(database, entry)
   };
 }
 
@@ -211,316 +222,320 @@ function dueAtForEntry(endDateTime: string): string {
   return due.toISOString();
 }
 
-function activeCarePartyAssignmentsExist(): boolean {
-  const result = db.prepare(`
-    SELECT 1 AS ok
-    FROM app_user_care_party_assignments
-    WHERE deleted_at IS NULL
-    LIMIT 1
-  `).get() as { ok: number } | undefined;
-  return Boolean(result);
+async function activeCarePartyAssignmentsExist(database: DatabaseExecutor): Promise<boolean> {
+  return Boolean(await database.selectFrom("app_user_care_party_assignments")
+    .select("id")
+    .where("deleted_at", "is", null)
+    .executeTakeFirst());
 }
 
-async function usersForEntry(entry: EntryRow): Promise<string[]> {
-  if (entry.responsible_party_id && activeCarePartyAssignmentsExist()) {
-    const rows = db.prepare(`
-      SELECT user_id AS userId
-      FROM app_user_care_party_assignments
-      WHERE care_party_id = ? AND deleted_at IS NULL
-      ORDER BY user_id
-    `).all(entry.responsible_party_id) as Array<{ userId: string }>;
+async function usersForEntry(database: DatabaseExecutor, entry: EntryRow): Promise<string[]> {
+  if (entry.responsible_party_id && await activeCarePartyAssignmentsExist(database)) {
+    const rows = await database.selectFrom("app_user_care_party_assignments")
+      .select("user_id")
+      .where("care_party_id", "=", entry.responsible_party_id)
+      .where("deleted_at", "is", null)
+      .orderBy("user_id")
+      .execute();
     if (rows.length) {
-      const allowed = await Promise.all(rows.map(async ({ userId }) => ({
-        userId,
-        allowed: await userHasWorkspacePermission(
-          userId,
-          "appointments:confirm",
-          persistence.query
-        )
+      const allowed = await Promise.all(rows.map(async (row) => ({
+        userId: row.user_id,
+        allowed: await userHasWorkspacePermission(row.user_id, "appointments:confirm", database)
       })));
       return allowed.filter((item) => item.allowed).map((item) => item.userId);
     }
   }
-  const users = (db.prepare(`
-    SELECT id
-    FROM app_users
-    WHERE deleted_at IS NULL AND role IN ('admin', 'parent')
-    ORDER BY id
-  `).all() as Array<{ id: string }>).map((row) => row.id);
-  const allowed = await Promise.all(users.map(async (userId) => ({
-    userId,
-    allowed: await userHasWorkspacePermission(
-      userId,
-      "appointments:confirm",
-      persistence.query
-    )
+  const users = await database.selectFrom("app_users")
+    .select("id")
+    .where("deleted_at", "is", null)
+    .where("role", "in", ["admin", "parent"])
+    .orderBy("id")
+    .execute();
+  const allowed = await Promise.all(users.map(async ({ id }) => ({
+    userId: id,
+    allowed: await userHasWorkspacePermission(id, "appointments:confirm", database)
   })));
   return allowed.filter((item) => item.allowed).map((item) => item.userId);
 }
 
-async function currentUserForId(userId: string): Promise<RequestUser | undefined> {
-  const row = db.prepare(`
-    SELECT external_subject AS externalSubject
-    FROM app_users
-    WHERE id = ? AND deleted_at IS NULL
-  `).get(userId) as { externalSubject: string } | undefined;
-  return row
-    ? findAuthenticatedUserBySubject(row.externalSubject, persistence.query)
-    : undefined;
+async function currentUserForId(database: DatabaseExecutor, userId: string): Promise<RequestUser | undefined> {
+  const row = await database.selectFrom("app_users")
+    .select("external_subject")
+    .where("id", "=", userId)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst();
+  return row ? findAuthenticatedUserBySubject(row.external_subject, database) : undefined;
 }
 
 async function canAccessConfirmation(
+  database: DatabaseExecutor,
   user: RequestUser | undefined,
   entry: EntryRow
 ): Promise<boolean> {
-  if (!user || !(await userHasWorkspacePermission(
-    user.id,
-    "appointments:confirm",
-    persistence.query
-  ))) return false;
-  return !entry.responsible_party_id || canUseCareParty(user, entry.responsible_party_id);
+  if (!user || !(await userHasWorkspacePermission(user.id, "appointments:confirm", database))) return false;
+  try {
+    await assertCanUsePersistedCareParty(database, user, entry.responsible_party_id ?? undefined);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function getEntry(database: DatabaseExecutor, id: string): Promise<EntryRow | undefined> {
+  return await database.selectFrom("care_entries")
+    .selectAll()
+    .where("id", "=", id)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst() as EntryRow | undefined;
+}
+
+async function getRequest(database: DatabaseExecutor, id: string): Promise<RequestRow | undefined> {
+  return await database.selectFrom("care_confirmation_requests")
+    .selectAll()
+    .where("id", "=", id)
+    .executeTakeFirst() as RequestRow | undefined;
 }
 
 export async function invalidateInaccessibleCareConfirmations(
+  runtime: PersistenceRuntime,
   userId: string,
   timestamp = nowIso()
 ): Promise<number> {
-  const user = await currentUserForId(userId);
-  const rows = db.prepare(`
-    SELECT requests.id, requests.care_entry_id AS careEntryId
-    FROM care_confirmation_requests requests
-    WHERE requests.user_id = ?
-      AND requests.deleted_at IS NULL
-      AND requests.answered_at IS NULL
-  `).all(userId) as Array<{ id: string; careEntryId: string }>;
-  const revoke = db.prepare(`
-    UPDATE care_confirmation_requests
-    SET deleted_at = ?, updated_at = ?
-    WHERE id = ? AND deleted_at IS NULL
-  `);
-  let revoked = 0;
-  for (const row of rows) {
-    const entry = db.prepare("SELECT * FROM care_entries WHERE id = ? AND deleted_at IS NULL")
-      .get(row.careEntryId) as EntryRow | undefined;
-    if (!entry || !(await canAccessConfirmation(user, entry))) {
-      revoked += revoke.run(timestamp, timestamp, row.id).changes;
+  const user = await currentUserForId(runtime.query, userId);
+  const rows = await runtime.query.selectFrom("care_confirmation_requests")
+    .select(["id", "care_entry_id"])
+    .where("user_id", "=", userId)
+    .where("deleted_at", "is", null)
+    .where("answered_at", "is", null)
+    .execute();
+  let revoked = 0n;
+  await runtime.transaction(async (database) => {
+    for (const row of rows) {
+      const entry = await getEntry(database, row.care_entry_id);
+      if (!entry || !(await canAccessConfirmation(database, user, entry))) {
+        const result = await database.updateTable("care_confirmation_requests")
+          .set({ deleted_at: timestamp, updated_at: timestamp })
+          .where("id", "=", row.id)
+          .where("deleted_at", "is", null)
+          .executeTakeFirst();
+        revoked += result.numUpdatedRows;
+      }
     }
-  }
-  return revoked;
+  });
+  return Number(revoked);
 }
 
 export async function createDueCareConfirmationRequests(
+  runtime: PersistenceRuntime,
   referenceTime = new Date()
 ): Promise<number> {
   const timestamp = nowIso();
-  const conflictEntryIds = careConflictEntryIds(db);
-  if (!conflictEntryIds) return 0;
-  if (conflictEntryIds.size) {
-    const placeholders = [...conflictEntryIds].map(() => "?").join(", ");
-    db.prepare(`
-      UPDATE care_confirmation_requests
-      SET deleted_at = ?, updated_at = ?
-      WHERE answered_at IS NULL AND deleted_at IS NULL
-        AND care_entry_id IN (${placeholders})
-    `).run(timestamp, timestamp, ...conflictEntryIds);
-  }
-  const entries = db.prepare(`
-    SELECT *
-    FROM care_entries
-    WHERE deleted_at IS NULL
-      AND status = 'planned'
-      AND confirmed_at IS NULL
-      AND confirmation_suppressed = 0
-      AND end_datetime < ?
-    ORDER BY end_datetime, id
-  `).all(referenceTime.toISOString()) as EntryRow[];
+  const conflictIds = await careConflictEntryIds(runtime.query);
+  if (!conflictIds) return 0;
+  const entries = await runtime.query.selectFrom("care_entries")
+    .selectAll()
+    .where("deleted_at", "is", null)
+    .where("status", "=", "planned")
+    .where("confirmed_at", "is", null)
+    .where("confirmation_suppressed", "=", 0)
+    .where("end_datetime", "<", referenceTime.toISOString())
+    .orderBy("end_datetime")
+    .orderBy("id")
+    .execute() as EntryRow[];
   const entryUsers = new Map<string, string[]>(await Promise.all(
-    entries
-      .filter((entry) => !conflictEntryIds.has(entry.id))
-      .map(async (entry) => [entry.id, await usersForEntry(entry)] as const)
+    entries.filter((entry) => !conflictIds.has(entry.id))
+      .map(async (entry) => [entry.id, await usersForEntry(runtime.query, entry)] as const)
   ));
-  let created = 0;
-  db.transaction(() => {
-    const insert = db.prepare(`
-      INSERT OR IGNORE INTO care_confirmation_requests (
-        id, care_entry_id, user_id, due_at, status, created_at, updated_at
-      ) VALUES (?, ?, ?, ?, 'open', ?, ?)
-    `);
+  return runtime.transaction(async (database) => {
+    if (conflictIds.size) {
+      await database.updateTable("care_confirmation_requests")
+        .set({ deleted_at: timestamp, updated_at: timestamp })
+        .where("answered_at", "is", null)
+        .where("deleted_at", "is", null)
+        .where("care_entry_id", "in", [...conflictIds])
+        .execute();
+    }
+    let created = 0n;
     for (const entry of entries) {
-      if (conflictEntryIds.has(entry.id)) continue;
+      if (conflictIds.has(entry.id)) continue;
       for (const userId of entryUsers.get(entry.id) ?? []) {
-        const result = insert.run(
-          makeId("confirm"),
-          entry.id,
-          userId,
-          dueAtForEntry(entry.end_datetime),
-          timestamp,
-          timestamp
-        );
-        created += result.changes;
+        const result = await database.insertInto("care_confirmation_requests").values({
+          id: makeId("confirm"),
+          care_entry_id: entry.id,
+          user_id: userId,
+          due_at: dueAtForEntry(entry.end_datetime),
+          sent_at: null,
+          answered_at: null,
+          status: "open",
+          reminder_count: 0,
+          next_reminder_at: null,
+          created_at: timestamp,
+          updated_at: timestamp,
+          deleted_at: null
+        }).onConflict((conflict) => conflict.doNothing()).executeTakeFirst();
+        created += result.numInsertedOrUpdatedRows ?? 0n;
       }
     }
-  })();
-  return created;
+    return Number(created);
+  });
 }
 
 function defaultPreference(eventType: ApiNotificationEventType): ApiNotificationPreference {
-  return {
-    eventType,
-    inAppEnabled: true,
-    pushEnabled: true,
-    emailEnabled: false
-  };
+  return { eventType, inAppEnabled: true, pushEnabled: true, emailEnabled: false };
 }
 
-export function getNotificationPreferences(userId: string): ApiNotificationPreferencesResponse {
-  const rows = db.prepare(`
-    SELECT event_type AS eventType, in_app_enabled AS inAppEnabled,
-      push_enabled AS pushEnabled, email_enabled AS emailEnabled
-    FROM notification_preferences
-    WHERE user_id = ? AND deleted_at IS NULL
-  `).all(userId) as Array<{
-    eventType: ApiNotificationEventType;
-    inAppEnabled: number;
-    pushEnabled: number;
-    emailEnabled: number;
-  }>;
-  const stored = new Map(rows.map((row) => [row.eventType, row]));
+export async function getNotificationPreferences(
+  database: DatabaseExecutor,
+  userId: string
+): Promise<ApiNotificationPreferencesResponse> {
+  const rows = await database.selectFrom("notification_preferences")
+    .select(["event_type", "push_enabled", "email_enabled"])
+    .where("user_id", "=", userId)
+    .where("deleted_at", "is", null)
+    .execute();
+  const stored = new Map(rows.map((row) => [row.event_type, row]));
   const preferences = notificationEvents.map((eventType) => {
     const row = stored.get(eventType);
-    return row
-      ? {
-          eventType,
-          inAppEnabled: true,
-          pushEnabled: bool(row.pushEnabled),
-          emailEnabled: bool(row.emailEnabled)
-        }
-      : defaultPreference(eventType);
+    return row ? {
+      eventType,
+      inAppEnabled: true,
+      pushEnabled: bool(row.push_enabled),
+      emailEnabled: bool(row.email_enabled)
+    } : defaultPreference(eventType);
   });
-  const subscriptionCount = db.prepare(`
-    SELECT COUNT(*) AS count
-    FROM push_subscriptions
-    WHERE user_id = ? AND deleted_at IS NULL
-  `).get(userId) as { count: number };
+  const subscriptionCount = await database.selectFrom("push_subscriptions")
+    .select(({ fn }) => fn.count<number>("id").as("count"))
+    .where("user_id", "=", userId)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst();
   return {
     preferences,
     pushAvailable: pushConfigured,
     pushConfigured,
     ...(config.webPushPublicKey ? { vapidPublicKey: config.webPushPublicKey } : {}),
-    activePushSubscriptions: subscriptionCount.count
+    activePushSubscriptions: Number(subscriptionCount?.count ?? 0)
   };
 }
 
-export function updateNotificationPreferences(userId: string, preferences: ApiNotificationPreference[]): ApiNotificationPreferencesResponse {
+export async function updateNotificationPreferences(
+  runtime: PersistenceRuntime,
+  userId: string,
+  preferences: ApiNotificationPreference[]
+): Promise<ApiNotificationPreferencesResponse> {
   const timestamp = nowIso();
-  db.transaction(() => {
-    const upsert = db.prepare(`
-      INSERT INTO notification_preferences (
-        id, user_id, event_type, in_app_enabled, push_enabled, email_enabled,
-        created_at, updated_at
-      ) VALUES (?, ?, ?, 1, ?, ?, ?, ?)
-      ON CONFLICT(user_id, event_type) WHERE deleted_at IS NULL DO UPDATE SET
-        in_app_enabled = 1,
-        push_enabled = excluded.push_enabled,
-        email_enabled = excluded.email_enabled,
-        updated_at = excluded.updated_at
-    `);
+  await runtime.transaction(async (database) => {
     for (const preference of preferences) {
-      upsert.run(
-        makeId("pref"),
-        userId,
-        preference.eventType,
-        Number(preference.pushEnabled),
-        Number(preference.emailEnabled),
-        timestamp,
-        timestamp
-      );
+      await database.insertInto("notification_preferences").values({
+        id: makeId("pref"),
+        user_id: userId,
+        event_type: preference.eventType,
+        in_app_enabled: 1,
+        push_enabled: Number(preference.pushEnabled),
+        email_enabled: Number(preference.emailEnabled),
+        created_at: timestamp,
+        updated_at: timestamp,
+        deleted_at: null
+      }).onConflict((conflict) => conflict.columns(["user_id", "event_type"])
+        .where("deleted_at", "is", null)
+        .doUpdateSet({
+          in_app_enabled: 1,
+          push_enabled: Number(preference.pushEnabled),
+          email_enabled: Number(preference.emailEnabled),
+          updated_at: timestamp
+        })).execute();
     }
-  })();
-  return getNotificationPreferences(userId);
+  });
+  return getNotificationPreferences(runtime.query, userId);
 }
 
-function preferenceAllowsPush(userId: string, eventType: ApiNotificationEventType): boolean {
-  const row = db.prepare(`
-    SELECT push_enabled AS pushEnabled
-    FROM notification_preferences
-    WHERE user_id = ? AND event_type = ? AND deleted_at IS NULL
-  `).get(userId, eventType) as { pushEnabled: number } | undefined;
-  return row ? bool(row.pushEnabled) : true;
+async function preferenceAllowsPush(
+  database: DatabaseExecutor,
+  userId: string,
+  eventType: ApiNotificationEventType
+): Promise<boolean> {
+  const row = await database.selectFrom("notification_preferences")
+    .select("push_enabled")
+    .where("user_id", "=", userId)
+    .where("event_type", "=", eventType)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst();
+  return row ? bool(row.push_enabled) : true;
 }
 
-export function savePushSubscription(userId: string, input: ApiPushSubscriptionInput, userAgent?: string): void {
+export async function savePushSubscription(
+  database: DatabaseExecutor,
+  userId: string,
+  input: ApiPushSubscriptionInput,
+  userAgent?: string
+): Promise<void> {
   if (!isAllowedPushEndpoint(input.endpoint)) {
-    throw httpError(
-      "invalid_push_endpoint",
-      400,
-      "Der Push-Endpunkt ist nicht zugelassen."
-    );
+    throw httpError("invalid_push_endpoint", 400, "Der Push-Endpunkt ist nicht zugelassen.");
   }
   const timestamp = nowIso();
-  db.prepare(`
-    INSERT INTO push_subscriptions (
-      id, user_id, endpoint, p256dh, auth, user_agent, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(endpoint) WHERE deleted_at IS NULL DO UPDATE SET
-      user_id = excluded.user_id,
-      p256dh = excluded.p256dh,
-      auth = excluded.auth,
-      user_agent = excluded.user_agent,
-      updated_at = excluded.updated_at
-  `).run(
-    makeId("push"),
-    userId,
-    input.endpoint,
-    input.keys.p256dh,
-    input.keys.auth,
-    userAgent ?? null,
-    timestamp,
-    timestamp
-  );
+  await database.insertInto("push_subscriptions").values({
+    id: makeId("push"),
+    user_id: userId,
+    endpoint: input.endpoint,
+    p256dh: input.keys.p256dh,
+    auth: input.keys.auth,
+    user_agent: userAgent ?? null,
+    created_at: timestamp,
+    updated_at: timestamp,
+    deleted_at: null
+  }).onConflict((conflict) => conflict.column("endpoint")
+    .where("deleted_at", "is", null)
+    .doUpdateSet({
+      user_id: userId,
+      p256dh: input.keys.p256dh,
+      auth: input.keys.auth,
+      user_agent: userAgent ?? null,
+      updated_at: timestamp
+    })).execute();
 }
 
-export function deletePushSubscription(userId: string, id: string): boolean {
-  const result = db.prepare(`
-    UPDATE push_subscriptions
-    SET deleted_at = ?, updated_at = ?
-    WHERE id = ? AND user_id = ? AND deleted_at IS NULL
-  `).run(nowIso(), nowIso(), id, userId);
-  return result.changes > 0;
+export async function deletePushSubscription(
+  database: DatabaseExecutor,
+  userId: string,
+  id: string
+): Promise<boolean> {
+  const timestamp = nowIso();
+  const result = await database.updateTable("push_subscriptions")
+    .set({ deleted_at: timestamp, updated_at: timestamp })
+    .where("id", "=", id)
+    .where("user_id", "=", userId)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst();
+  return result.numUpdatedRows > 0n;
 }
 
-function pushSubscriptionsForUser(userId: string) {
-  return db.prepare(`
-    SELECT id, endpoint, p256dh, auth
-    FROM push_subscriptions
-    WHERE user_id = ? AND deleted_at IS NULL
-  `).all(userId) as Array<{
-    id: string;
-    endpoint: string;
-    p256dh: string;
-    auth: string;
-  }>;
+async function pushSubscriptionsForUser(database: DatabaseExecutor, userId: string) {
+  return database.selectFrom("push_subscriptions")
+    .select(["id", "endpoint", "p256dh", "auth"])
+    .where("user_id", "=", userId)
+    .where("deleted_at", "is", null)
+    .execute();
 }
 
-async function sendPushForRequest(row: RequestRow, eventType: ApiNotificationEventType): Promise<boolean> {
-  if (!pushConfigured || !preferenceAllowsPush(row.user_id, eventType)) return false;
+async function sendPushForRequest(
+  database: DatabaseExecutor,
+  row: RequestRow,
+  eventType: ApiNotificationEventType
+): Promise<boolean> {
+  if (!pushConfigured || !(await preferenceAllowsPush(database, row.user_id, eventType))) return false;
   const payload = JSON.stringify({
     title: "Betreuung bestätigen",
     body: "Wurde eine geplante Betreuung durchgeführt?",
     url: `/?confirmation=${encodeURIComponent(row.id)}`
   });
   let delivered = false;
-  for (const subscription of pushSubscriptionsForUser(row.user_id)) {
+  for (const subscription of await pushSubscriptionsForUser(database, row.user_id)) {
     if (!isAllowedPushEndpoint(subscription.endpoint)) {
-      deletePushSubscription(row.user_id, subscription.id);
+      await deletePushSubscription(database, row.user_id, subscription.id);
       continue;
     }
     const pushSubscription: PushSubscription = {
       endpoint: subscription.endpoint,
-      keys: {
-        p256dh: subscription.p256dh,
-        auth: subscription.auth
-      }
+      keys: { p256dh: subscription.p256dh, auth: subscription.auth }
     };
     try {
       await webPush.sendNotification(pushSubscription, payload);
@@ -528,7 +543,7 @@ async function sendPushForRequest(row: RequestRow, eventType: ApiNotificationEve
     } catch (error) {
       const statusCode = (error as { statusCode?: number }).statusCode;
       if (statusCode === 404 || statusCode === 410) {
-        deletePushSubscription(row.user_id, subscription.id);
+        await deletePushSubscription(database, row.user_id, subscription.id);
       }
     }
   }
@@ -536,33 +551,43 @@ async function sendPushForRequest(row: RequestRow, eventType: ApiNotificationEve
 }
 
 export async function sendDueCareConfirmationPushes(
+  runtime: PersistenceRuntime,
   referenceTime = new Date(),
-  deliverPush = sendPushForRequest
+  deliverPush: (
+    database: DatabaseExecutor,
+    row: RequestRow,
+    eventType: ApiNotificationEventType
+  ) => Promise<boolean> = sendPushForRequest
 ): Promise<number> {
   const now = referenceTime.toISOString();
-  const conflictEntryIds = careConflictEntryIds(db);
-  if (!conflictEntryIds) return 0;
-  const rows = db.prepare(`
-    SELECT *
-    FROM care_confirmation_requests
-    WHERE deleted_at IS NULL
-      AND answered_at IS NULL
-      AND (
-        (status = 'open' AND due_at <= ? AND sent_at IS NULL)
-        OR (status = 'snoozed' AND next_reminder_at IS NOT NULL AND next_reminder_at <= ?)
-      )
-    ORDER BY due_at, id
-  `).all(now, now) as RequestRow[];
+  const conflictIds = await careConflictEntryIds(runtime.query);
+  if (!conflictIds) return 0;
+  const rows = await runtime.query.selectFrom("care_confirmation_requests")
+    .selectAll()
+    .where("deleted_at", "is", null)
+    .where("answered_at", "is", null)
+    .where((expression) => expression.or([
+      expression.and([
+        expression("status", "=", "open"),
+        expression("due_at", "<=", now),
+        expression("sent_at", "is", null)
+      ]),
+      expression.and([
+        expression("status", "=", "snoozed"),
+        expression("next_reminder_at", "is not", null),
+        expression("next_reminder_at", "<=", now)
+      ])
+    ]))
+    .orderBy("due_at")
+    .orderBy("id")
+    .execute() as RequestRow[];
   const rowsByUser = new Map<string, RequestRow[]>();
   for (const row of rows) {
-    if (conflictEntryIds.has(row.care_entry_id)) continue;
-    const entry = db.prepare("SELECT * FROM care_entries WHERE id = ? AND deleted_at IS NULL")
-      .get(row.care_entry_id) as EntryRow | undefined;
-    const user = await currentUserForId(row.user_id);
-    if (!entry || !(await canAccessConfirmation(user, entry))) continue;
-    const userRows = rowsByUser.get(row.user_id) ?? [];
-    userRows.push(row);
-    rowsByUser.set(row.user_id, userRows);
+    if (conflictIds.has(row.care_entry_id)) continue;
+    const entry = await getEntry(runtime.query, row.care_entry_id);
+    const user = await currentUserForId(runtime.query, row.user_id);
+    if (!entry || !(await canAccessConfirmation(runtime.query, user, entry))) continue;
+    rowsByUser.set(row.user_id, [...(rowsByUser.get(row.user_id) ?? []), row]);
   }
 
   let sent = 0;
@@ -572,77 +597,82 @@ export async function sendDueCareConfirmationPushes(
     const eventType = representative.status === "snoozed"
       ? "care_confirmation_reminder"
       : "care_confirmation_due";
-    const delivered = await deliverPush(representative, eventType);
+    const delivered = await deliverPush(runtime.query, representative, eventType);
     const timestamp = nowIso();
-    const update = db.prepare(`
-        UPDATE care_confirmation_requests
-        SET sent_at = COALESCE(sent_at, ?),
-          status = 'open',
-          reminder_count = reminder_count + ?,
-          next_reminder_at = NULL,
-          updated_at = ?
-        WHERE id = ?
-      `);
-    db.transaction(() => {
+    await runtime.transaction(async (database) => {
       for (const row of userRows) {
-        update.run(timestamp, delivered ? 1 : 0, timestamp, row.id);
+        await database.updateTable("care_confirmation_requests").set({
+          sent_at: sql`COALESCE(sent_at, ${timestamp})`,
+          status: "open",
+          reminder_count: sql`reminder_count + ${delivered ? 1 : 0}`,
+          next_reminder_at: null,
+          updated_at: timestamp
+        }).where("id", "=", row.id).execute();
       }
-    })();
+    });
     if (delivered) sent += 1;
   }
   return sent;
 }
 
-export async function runCareConfirmationSweep(referenceTime = new Date()): Promise<void> {
-  await createDueCareConfirmationRequests(referenceTime);
-  await sendDueCareConfirmationPushes(referenceTime);
+export async function runCareConfirmationSweep(
+  runtime: PersistenceRuntime,
+  referenceTime = new Date()
+): Promise<void> {
+  await createDueCareConfirmationRequests(runtime, referenceTime);
+  await sendDueCareConfirmationPushes(runtime, referenceTime);
 }
 
-export async function listOpenCareConfirmations(userOrId: RequestUser | string): Promise<ApiCareConfirmationRequest[]> {
-  await runCareConfirmationSweep();
-  const conflictEntryIds = careConflictEntryIds(db);
-  if (!conflictEntryIds) return [];
-  const user = typeof userOrId === "string" ? await currentUserForId(userOrId) : userOrId;
+export async function listOpenCareConfirmations(
+  runtime: PersistenceRuntime,
+  userOrId: RequestUser | string
+): Promise<ApiCareConfirmationRequest[]> {
+  await runCareConfirmationSweep(runtime);
+  const conflictIds = await careConflictEntryIds(runtime.query);
+  if (!conflictIds) return [];
+  const user = typeof userOrId === "string" ? await currentUserForId(runtime.query, userOrId) : userOrId;
   if (!user) return [];
-  const rows = db.prepare(`
-    SELECT *
-    FROM care_confirmation_requests
-    WHERE user_id = ?
-      AND deleted_at IS NULL
-      AND answered_at IS NULL
-      AND status IN ('open', 'snoozed')
-    ORDER BY due_at, id
-  `).all(user.id) as RequestRow[];
+  const rows = await runtime.query.selectFrom("care_confirmation_requests")
+    .selectAll()
+    .where("user_id", "=", user.id)
+    .where("deleted_at", "is", null)
+    .where("answered_at", "is", null)
+    .where("status", "in", ["open", "snoozed"])
+    .orderBy("due_at")
+    .orderBy("id")
+    .execute() as RequestRow[];
   const visible: ApiCareConfirmationRequest[] = [];
   for (const row of rows) {
-    if (conflictEntryIds.has(row.care_entry_id)) continue;
-    const entry = db.prepare("SELECT * FROM care_entries WHERE id = ? AND deleted_at IS NULL")
-      .get(row.care_entry_id) as EntryRow | undefined;
-    if (entry && await canAccessConfirmation(user, entry)) visible.push(mapRequest(row, entry));
+    if (conflictIds.has(row.care_entry_id)) continue;
+    const entry = await getEntry(runtime.query, row.care_entry_id);
+    if (entry && await canAccessConfirmation(runtime.query, user, entry)) {
+      visible.push(await mapRequest(runtime.query, row, entry));
+    }
   }
   return visible;
 }
 
 export async function answerCareConfirmation(
+  runtime: PersistenceRuntime,
   requestId: string,
   userOrId: RequestUser | string,
   answer: ApiCareConfirmationAnswer
 ): Promise<ApiCareConfirmationRequest | undefined> {
   const userId = typeof userOrId === "string" ? userOrId : userOrId.id;
-  const request = db.prepare(`
-    SELECT *
-    FROM care_confirmation_requests
-    WHERE id = ? AND user_id = ? AND deleted_at IS NULL AND answered_at IS NULL
-  `).get(requestId, userId) as RequestRow | undefined;
+  const request = await runtime.query.selectFrom("care_confirmation_requests")
+    .selectAll()
+    .where("id", "=", requestId)
+    .where("user_id", "=", userId)
+    .where("deleted_at", "is", null)
+    .where("answered_at", "is", null)
+    .executeTakeFirst() as RequestRow | undefined;
   if (!request) return undefined;
-  const before = db.prepare("SELECT * FROM care_entries WHERE id = ? AND deleted_at IS NULL")
-    .get(request.care_entry_id) as EntryRow | undefined;
+  const before = await getEntry(runtime.query, request.care_entry_id);
   if (!before) return undefined;
-  const conflictEntryIds = careConflictEntryIds(db);
-  if (!conflictEntryIds || conflictEntryIds.has(before.id)) throw new CareEntryConflictError();
-  if (typeof userOrId !== "string") {
-    if (!(await canAccessConfirmation(userOrId, before))) return undefined;
-    if (before.responsible_party_id) assertCanUseCareParty(userOrId, before.responsible_party_id);
+  const conflictIds = await careConflictEntryIds(runtime.query);
+  if (!conflictIds || conflictIds.has(before.id)) throw new CareEntryConflictError();
+  if (typeof userOrId !== "string" && !(await canAccessConfirmation(runtime.query, userOrId, before))) {
+    return undefined;
   }
   const timestamp = nowIso();
   const note = answer.note?.trim() || answer.cancellationReason?.trim() || null;
@@ -655,61 +685,72 @@ export async function answerCareConfirmation(
   const actualResponsiblePartyId = answer.status === "partial"
     ? answer.actualResponsiblePartyId ?? before.responsible_party_id
     : null;
+  const plannedChildIds = await linkedChildIds(runtime.query, "care_entry_children", before.id);
   const resolvedActualChildIds = answer.status === "partial"
-    ? [...new Set(answer.actualChildIds ?? childIds(before.id))]
+    ? [...new Set(answer.actualChildIds ?? plannedChildIds)]
     : [];
   if (answer.status === "partial") {
-    assertActiveChildren(resolvedActualChildIds);
-    assertActiveCareParty(actualResponsiblePartyId ?? undefined);
-    if (typeof userOrId !== "string" && actualResponsiblePartyId) {
-      assertCanUseCareParty(userOrId, actualResponsiblePartyId);
+    await assertPersistedChildren(runtime.query, resolvedActualChildIds);
+    await assertPersistedCareParty(runtime.query, actualResponsiblePartyId ?? undefined);
+    if (typeof userOrId !== "string") {
+      await assertCanUsePersistedCareParty(runtime.query, userOrId, actualResponsiblePartyId ?? undefined);
     }
   }
-  db.transaction(() => {
-    assertNoActualCareConflict({
+  const result = await runtime.transaction(async (database) => {
+    await assertNoActualCareConflict({
       id: before.id,
       status: answer.status,
       startDateTime: before.start_datetime,
       endDateTime: before.end_datetime,
-      childIds: childIds(before.id),
+      childIds: plannedChildIds,
       actualStartDateTime: actualStartDateTime ?? undefined,
       actualEndDateTime: actualEndDateTime ?? undefined,
       actualChildIds: resolvedActualChildIds
-    }, db);
-    db.prepare(`
-      UPDATE care_entries
-      SET status = ?, confirmation_note = ?, confirmed_at = ?, confirmed_by = ?,
-        planned_start_datetime = ?, planned_end_datetime = ?, deviation_type = ?, deviation_note = ?,
-        cancellation_reason = ?, actual_start_datetime = ?, actual_end_datetime = ?,
-        actual_responsible_party_id = ?, updated_by = ?, updated_at = ?
-      WHERE id = ?
-    `).run(
-      answer.status,
-      note,
-      timestamp,
-      userId,
-      answer.status === "completed" ? null : before.planned_start_datetime ?? before.start_datetime,
-      answer.status === "completed" ? null : before.planned_end_datetime ?? before.end_datetime,
-      answer.status === "completed" ? null : answer.status,
-      answer.status === "completed" ? null : note,
-      answer.status === "cancelled" ? answer.cancellationReason?.trim() || answer.note?.trim() || null : null,
-      actualStartDateTime,
-      actualEndDateTime,
-      actualResponsiblePartyId,
-      userId,
-      timestamp,
-      before.id
+    }, database);
+    await database.updateTable("care_entries").set({
+      status: answer.status,
+      confirmation_note: note,
+      confirmed_at: timestamp,
+      confirmed_by: userId,
+      planned_start_datetime: answer.status === "completed" ? null : before.planned_start_datetime ?? before.start_datetime,
+      planned_end_datetime: answer.status === "completed" ? null : before.planned_end_datetime ?? before.end_datetime,
+      deviation_type: answer.status === "completed" ? null : answer.status,
+      deviation_note: answer.status === "completed" ? null : note,
+      cancellation_reason: answer.status === "cancelled"
+        ? answer.cancellationReason?.trim() || answer.note?.trim() || null
+        : null,
+      actual_start_datetime: actualStartDateTime,
+      actual_end_datetime: actualEndDateTime,
+      actual_responsible_party_id: actualResponsiblePartyId,
+      updated_by: userId,
+      updated_at: timestamp
+    }).where("id", "=", before.id).execute();
+    await syncPersistedChildJunction(
+      database,
+      { table: "care_entry_actual_children", owner: "care_entry_id" },
+      before.id,
+      resolvedActualChildIds,
+      timestamp
     );
-    syncJunction("care_entry_actual_children", "care_entry_id", before.id, resolvedActualChildIds, timestamp);
-    db.prepare(`
-      UPDATE care_confirmation_requests
-      SET status = 'answered', answered_at = ?, updated_at = ?
-      WHERE care_entry_id = ? AND user_id = ? AND deleted_at IS NULL
-    `).run(timestamp, timestamp, before.id, userId);
-    const after = db.prepare("SELECT * FROM care_entries WHERE id = ?")
-      .get(before.id) as EntryRow;
-    recordFieldChanges(userId, "care_entry", before.id, mapEntry(before), mapEntry(after), []);
-    recordAudit({
+    await database.updateTable("care_confirmation_requests").set({
+      status: "answered",
+      answered_at: timestamp,
+      updated_at: timestamp
+    }).where("care_entry_id", "=", before.id)
+      .where("user_id", "=", userId)
+      .where("deleted_at", "is", null)
+      .execute();
+    const after = await getEntry(database, before.id);
+    if (!after) throw new Error("Betreuungseintrag wurde nicht gefunden.");
+    await recordDomainFieldChanges(
+      database,
+      userId,
+      "care_entry",
+      before.id,
+      await mapEntry(database, before),
+      await mapEntry(database, after)
+    );
+    await recordDomainAudit(database, {
       userEmail: userId,
       entityType: "care_confirmation_request",
       entityId: request.id,
@@ -717,41 +758,48 @@ export async function answerCareConfirmation(
       oldValue: request,
       newValue: { ...request, status: "answered", answeredAt: timestamp }
     });
-    markClosedMonthsChanged(userId, "care_entry", before.id, before.start_datetime.slice(0, 10), before.end_datetime.slice(0, 10), timestamp);
-  })();
-  const entry = db.prepare("SELECT * FROM care_entries WHERE id = ?")
-    .get(request.care_entry_id) as EntryRow;
-  const updated = db.prepare("SELECT * FROM care_confirmation_requests WHERE id = ?")
-    .get(requestId) as RequestRow;
-  return mapRequest(updated, entry);
+    await markDomainClosedMonthsChanged(
+      database,
+      userId,
+      "care_entry",
+      before.id,
+      before.start_datetime.slice(0, 10),
+      before.end_datetime.slice(0, 10),
+      timestamp
+    );
+    const updated = await getRequest(database, requestId);
+    if (!updated) throw new Error("Bestätigungsanfrage wurde nicht gefunden.");
+    return mapRequest(database, updated, after);
+  });
+  return result;
 }
 
 export async function remindCareConfirmationLater(
+  runtime: PersistenceRuntime,
   requestId: string,
   userOrId: RequestUser | string,
   nextReminderAt?: string
 ): Promise<ApiCareConfirmationRequest | undefined> {
   const userId = typeof userOrId === "string" ? userOrId : userOrId.id;
-  const request = db.prepare(`
-    SELECT *
-    FROM care_confirmation_requests
-    WHERE id = ? AND user_id = ? AND deleted_at IS NULL AND answered_at IS NULL
-  `).get(requestId, userId) as RequestRow | undefined;
+  const request = await runtime.query.selectFrom("care_confirmation_requests")
+    .selectAll()
+    .where("id", "=", requestId)
+    .where("user_id", "=", userId)
+    .where("deleted_at", "is", null)
+    .where("answered_at", "is", null)
+    .executeTakeFirst() as RequestRow | undefined;
   if (!request) return undefined;
-  const entry = db.prepare("SELECT * FROM care_entries WHERE id = ? AND deleted_at IS NULL")
-    .get(request.care_entry_id) as EntryRow | undefined;
+  const entry = await getEntry(runtime.query, request.care_entry_id);
   if (!entry) return undefined;
-  if (typeof userOrId !== "string" && !(await canAccessConfirmation(userOrId, entry))) {
+  if (typeof userOrId !== "string" && !(await canAccessConfirmation(runtime.query, userOrId, entry))) {
     return undefined;
   }
   const next = nextReminderAt ?? new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString();
   const timestamp = nowIso();
-  db.prepare(`
-    UPDATE care_confirmation_requests
-    SET status = 'snoozed', next_reminder_at = ?, updated_at = ?
-    WHERE id = ?
-  `).run(next, timestamp, requestId);
-  const updated = db.prepare("SELECT * FROM care_confirmation_requests WHERE id = ?")
-    .get(requestId) as RequestRow;
-  return mapRequest(updated, entry);
+  await runtime.query.updateTable("care_confirmation_requests")
+    .set({ status: "snoozed", next_reminder_at: next, updated_at: timestamp })
+    .where("id", "=", requestId)
+    .execute();
+  const updated = await getRequest(runtime.query, requestId);
+  return updated ? mapRequest(runtime.query, updated, entry) : undefined;
 }

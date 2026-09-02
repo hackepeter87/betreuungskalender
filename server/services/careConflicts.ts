@@ -1,6 +1,7 @@
-import type Database from "better-sqlite3";
 import { createHash } from "node:crypto";
+import { sql } from "kysely";
 import type { ApiCareConflict, ApiEntryStatus } from "../../shared/api.js";
+import type { DatabaseExecutor } from "../db/runtime.js";
 import {
   CareConflictDetectionLimitError,
   detectCareConflicts,
@@ -78,113 +79,99 @@ function positiveLimit(value: number): number {
   return value;
 }
 
-function loadChildIds(
-  database: Database.Database,
+async function loadChildIds(
+  database: DatabaseExecutor,
   table: "care_entry_children" | "care_entry_actual_children",
   entryIds: string[],
   maxRows: number
-): Map<string, string[]> {
+): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>();
   let loadedRows = 0;
   for (let offset = 0; offset < entryIds.length; offset += 400) {
     const chunk = entryIds.slice(offset, offset + 400);
-    const placeholders = chunk.map(() => "?").join(", ");
     const remaining = maxRows - loadedRows;
-    const rows = database.prepare(`
-      SELECT care_entry_id AS entryId, child_id AS childId
-      FROM ${table}
-      WHERE deleted_at IS NULL AND care_entry_id IN (${placeholders})
-      ORDER BY care_entry_id, child_id
-      LIMIT ?
-    `).all(...chunk, remaining + 1) as Array<{ entryId: string; childId: string }>;
+    const rows = await database.selectFrom(table)
+      .select(["care_entry_id", "child_id"])
+      .where("deleted_at", "is", null)
+      .where("care_entry_id", "in", chunk)
+      .orderBy("care_entry_id")
+      .orderBy("child_id")
+      .limit(remaining + 1)
+      .execute();
     if (rows.length > remaining) throw new CareConflictWorkLimitError();
     loadedRows += rows.length;
     for (const row of rows) {
-      const ids = result.get(row.entryId) ?? [];
-      ids.push(row.childId);
-      result.set(row.entryId, ids);
+      const ids = result.get(row.care_entry_id) ?? [];
+      ids.push(row.child_id);
+      result.set(row.care_entry_id, ids);
     }
   }
   return result;
 }
 
-export function listCareConflictEntries(
-  database: Database.Database,
+export async function listCareConflictEntries(
+  database: DatabaseExecutor,
   options: CareConflictEntryQuery = {}
-): CareConflictEntry[] {
+): Promise<CareConflictEntry[]> {
   const maxEntries = positiveLimit(options.maxEntries ?? MAX_CARE_CONFLICT_ENTRIES);
   const maxChildLinks = positiveLimit(options.maxChildLinks ?? MAX_CARE_CONFLICT_CHILD_LINKS);
-  const conditions = ["deleted_at IS NULL", "status != 'cancelled'"];
-  const values: string[] = [];
-  if (options.actualOnly) conditions.push("status IN ('completed', 'partial')");
+  let query = database.selectFrom("care_entries")
+    .select(["id", "status", "start_datetime", "end_datetime", "actual_start_datetime", "actual_end_datetime"])
+    .where("deleted_at", "is", null)
+    .where("status", "!=", "cancelled");
+  if (options.actualOnly) query = query.where("status", "in", ["completed", "partial"]);
   if (options.excludeId) {
-    conditions.push("id != ?");
-    values.push(options.excludeId);
+    query = query.where("id", "!=", options.excludeId);
   }
   if (options.startBefore) {
-    conditions.push(`julianday(
+    query = query.where(sql<boolean>`julianday(
       CASE WHEN status = 'partial'
         THEN COALESCE(actual_start_datetime, start_datetime)
         ELSE start_datetime
       END
-    ) < julianday(?)`);
-    values.push(options.startBefore);
+    ) < julianday(${options.startBefore})`);
   }
   if (options.endAfter) {
-    conditions.push(`julianday(
+    query = query.where(sql<boolean>`julianday(
       CASE WHEN status = 'partial'
         THEN COALESCE(actual_end_datetime, end_datetime)
         ELSE end_datetime
       END
-    ) > julianday(?)`);
-    values.push(options.endAfter);
+    ) > julianday(${options.endAfter})`);
   }
   const childIds = [...new Set(options.childIds ?? [])];
   if (childIds.length) {
-    const placeholders = childIds.map(() => "?").join(", ");
-    conditions.push(`(
-      (status = 'partial' AND (
-        EXISTS (
-          SELECT 1 FROM care_entry_actual_children actual_child
-          WHERE actual_child.care_entry_id = care_entries.id
-            AND actual_child.deleted_at IS NULL
-            AND actual_child.child_id IN (${placeholders})
-        )
-        OR (
-          NOT EXISTS (
-            SELECT 1 FROM care_entry_actual_children any_actual_child
-            WHERE any_actual_child.care_entry_id = care_entries.id
-              AND any_actual_child.deleted_at IS NULL
-          )
-          AND EXISTS (
-            SELECT 1 FROM care_entry_children planned_child
-            WHERE planned_child.care_entry_id = care_entries.id
-              AND planned_child.deleted_at IS NULL
-              AND planned_child.child_id IN (${placeholders})
-          )
-        )
-      ))
-      OR (status != 'partial' AND EXISTS (
-        SELECT 1 FROM care_entry_children planned_child
-        WHERE planned_child.care_entry_id = care_entries.id
-          AND planned_child.deleted_at IS NULL
-          AND planned_child.child_id IN (${placeholders})
-      ))
-    )`);
-    values.push(...childIds, ...childIds, ...childIds);
+    query = query.where(({ and, eb, exists, not, or, selectFrom }) => {
+      const matchingActual = exists(selectFrom("care_entry_actual_children as actual_child")
+        .select("actual_child.care_entry_id")
+        .whereRef("actual_child.care_entry_id", "=", "care_entries.id")
+        .where("actual_child.deleted_at", "is", null)
+        .where("actual_child.child_id", "in", childIds));
+      const anyActual = exists(selectFrom("care_entry_actual_children as any_actual_child")
+        .select("any_actual_child.care_entry_id")
+        .whereRef("any_actual_child.care_entry_id", "=", "care_entries.id")
+        .where("any_actual_child.deleted_at", "is", null));
+      const matchingPlanned = exists(selectFrom("care_entry_children as planned_child")
+        .select("planned_child.care_entry_id")
+        .whereRef("planned_child.care_entry_id", "=", "care_entries.id")
+        .where("planned_child.deleted_at", "is", null)
+        .where("planned_child.child_id", "in", childIds));
+      return or([
+        and([
+          eb("status", "=", "partial"),
+          or([matchingActual, and([not(anyActual), matchingPlanned])])
+        ]),
+        and([eb("status", "!=", "partial"), matchingPlanned])
+      ]);
+    });
   }
-  const rows = database.prepare(`
-    SELECT id, status, start_datetime, end_datetime,
-      actual_start_datetime, actual_end_datetime
-    FROM care_entries
-    WHERE ${conditions.join(" AND ")}
-    ORDER BY start_datetime, id
-    LIMIT ?
-  `).all(...values, maxEntries + 1) as EntryRow[];
+  const rows = await query.orderBy("start_datetime").orderBy("id").limit(maxEntries + 1).execute() as EntryRow[];
   if (rows.length > maxEntries) throw new CareConflictWorkLimitError();
   const entryIds = rows.map((row) => row.id);
-  const plannedChildren = loadChildIds(database, "care_entry_children", entryIds, maxChildLinks);
-  const actualChildren = loadChildIds(database, "care_entry_actual_children", entryIds, maxChildLinks);
+  const [plannedChildren, actualChildren] = await Promise.all([
+    loadChildIds(database, "care_entry_children", entryIds, maxChildLinks),
+    loadChildIds(database, "care_entry_actual_children", entryIds, maxChildLinks)
+  ]);
   return rows.map((row) => ({
     id: row.id,
     status: row.status,
@@ -197,25 +184,25 @@ export function listCareConflictEntries(
   }));
 }
 
-export function listCareConflicts(
-  database: Database.Database
-): ApiCareConflict[] {
-  return detectCareConflicts(listCareConflictEntries(database), {
+export async function listCareConflicts(
+  database: DatabaseExecutor
+): Promise<ApiCareConflict[]> {
+  return detectCareConflicts(await listCareConflictEntries(database), {
     maxConflicts: MAX_CARE_CONFLICT_RESULTS
   });
 }
 
 const previewCandidateId = "__care_conflict_candidate__";
 
-export function previewPlannedCareConflicts(
+export async function previewPlannedCareConflicts(
   candidate: Omit<CareConflictEntry, "id">,
-  database: Database.Database,
+  database: DatabaseExecutor,
   excludeId?: string
-): { conflicts: ApiCareConflict[]; fingerprint: string } {
+): Promise<{ conflicts: ApiCareConflict[]; fingerprint: string }> {
   if (candidate.status !== "planned") {
     return { conflicts: [], fingerprint: createHash("sha256").update("no-planned-conflict").digest("hex") };
   }
-  const entries = listCareConflictEntries(database, {
+  const entries = await listCareConflictEntries(database, {
     childIds: candidate.childIds,
     endAfter: candidate.startDateTime,
     excludeId,
@@ -246,14 +233,14 @@ export function previewPlannedCareConflicts(
   return { conflicts, fingerprint };
 }
 
-export function assertPlannedCareConflictAcknowledged(input: {
+export async function assertPlannedCareConflictAcknowledged(input: {
   candidate: Omit<CareConflictEntry, "id">;
   confirmPlannedConflict: boolean;
   conflictFingerprint?: string;
-  database: Database.Database;
+  database: DatabaseExecutor;
   excludeId?: string;
-}): void {
-  const preview = previewPlannedCareConflicts(input.candidate, input.database, input.excludeId);
+}): Promise<void> {
+  const preview = await previewPlannedCareConflicts(input.candidate, input.database, input.excludeId);
   if (
     preview.conflicts.length &&
     (!input.confirmPlannedConflict || input.conflictFingerprint !== preview.fingerprint)
@@ -262,19 +249,19 @@ export function assertPlannedCareConflictAcknowledged(input: {
   }
 }
 
-export function careConflictEntryIds(database: Database.Database): Set<string> | undefined {
+export async function careConflictEntryIds(database: DatabaseExecutor): Promise<Set<string> | undefined> {
   try {
-    return new Set(listCareConflicts(database).flatMap((conflict) => conflict.entryIds));
+    return new Set((await listCareConflicts(database)).flatMap((conflict) => conflict.entryIds));
   } catch (error) {
     if (isCareConflictWorkLimitError(error)) return undefined;
     throw error;
   }
 }
 
-export function assertNoActualCareConflict(
+export async function assertNoActualCareConflict(
   candidate: CareConflictEntry,
-  database: Database.Database
-): void {
+  database: DatabaseExecutor
+): Promise<void> {
   if (!isActualStatus(candidate.status)) return;
   const partial = candidate.status === "partial";
   const startDateTime = partial && candidate.actualStartDateTime
@@ -287,7 +274,7 @@ export function assertNoActualCareConflict(
     ? candidate.actualChildIds
     : candidate.childIds;
   try {
-    const entries = listCareConflictEntries(database, {
+    const entries = await listCareConflictEntries(database, {
       actualOnly: true,
       childIds,
       endAfter: startDateTime,
