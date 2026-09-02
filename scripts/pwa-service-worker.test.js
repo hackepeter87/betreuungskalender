@@ -7,6 +7,8 @@ async function loadServiceWorker(options = {}) {
   const listeners = new Map();
   const networkRequests = [];
   const cacheWrites = [];
+  const deletedCaches = [];
+  const precachedRequests = [];
   const cachedResponses = new Map(Object.entries(options.cachedResponses ?? {}));
   let cacheAccesses = 0;
   const source = await readFile(new URL("../public/sw.js", import.meta.url), "utf8");
@@ -26,6 +28,17 @@ async function loadServiceWorker(options = {}) {
       if (options.failNetwork) return Promise.reject(new Error("network unavailable"));
       return Promise.resolve({
         ok: true,
+        redirected: Boolean(options.redirected),
+        type: options.responseType ?? "basic",
+        url: options.responseUrl ?? (request.url ?? request),
+        headers: {
+          get(name) {
+            const headers = options.responseHeaders ?? {
+              "content-type": request.mode === "navigate" ? "text/html" : "application/javascript"
+            };
+            return headers[name.toLowerCase()] ?? null;
+          }
+        },
         clone() {
           return this;
         }
@@ -35,7 +48,7 @@ async function loadServiceWorker(options = {}) {
       async open() {
         cacheAccesses += 1;
         return {
-          addAll: async () => {},
+          addAll: async (requests) => { precachedRequests.push(...requests); },
           match: async (request) => cachedResponses.get(request.url ?? request),
           put: async (request, response) => {
             const key = request.url ?? request;
@@ -47,14 +60,15 @@ async function loadServiceWorker(options = {}) {
       },
       async keys() {
         cacheAccesses += 1;
-        return [];
+        return options.cacheKeys ?? [];
       },
       async match(request) {
         cacheAccesses += 1;
         return cachedResponses.get(request.url ?? request);
       },
-      async delete() {
+      async delete(key) {
         cacheAccesses += 1;
+        deletedCaches.push(key);
         return true;
       }
     }
@@ -62,12 +76,35 @@ async function loadServiceWorker(options = {}) {
 
   vm.runInContext(source, context);
   return {
+    installHandler: listeners.get("install"),
+    activateHandler: listeners.get("activate"),
     fetchHandler: listeners.get("fetch"),
     networkRequests,
     cacheWrites,
-    cacheAccesses: () => cacheAccesses
+    cacheAccesses: () => cacheAccesses,
+    precachedRequests,
+    deletedCaches
   };
 }
+
+test("service worker precaches a static shell without requesting the protected root", async () => {
+  const worker = await loadServiceWorker();
+  let installation;
+  worker.installHandler({ waitUntil(value) { installation = value; } });
+  await installation;
+  assert.ok(worker.precachedRequests.includes("/index.html"));
+  assert.equal(worker.precachedRequests.includes("/"), false);
+});
+
+test("service worker activation removes only outdated application caches", async () => {
+  const worker = await loadServiceWorker({
+    cacheKeys: ["betreuungskalender-v4", "betreuungskalender-v5", "unrelated-cache"]
+  });
+  let activation;
+  worker.activateHandler({ waitUntil(value) { activation = value; } });
+  await activation;
+  assert.deepEqual(worker.deletedCaches, ["betreuungskalender-v4"]);
+});
 
 test("service worker keeps API GET requests network-only", async () => {
   const worker = await loadServiceWorker();
@@ -106,6 +143,40 @@ test("service worker does not intercept API write requests", async () => {
   assert.equal(intercepted, false);
   assert.deepEqual(worker.networkRequests, []);
   assert.equal(worker.cacheAccesses(), 0);
+});
+
+test("service worker keeps authentication, onboarding, recovery, and legal pages network-only", async () => {
+  for (const path of [
+    "/auth/login",
+    "/setup?token=fictional",
+    "/invite?token=fictional",
+    "/auth/recovery",
+    "/impressum",
+    "/datenschutz"
+  ]) {
+    const worker = await loadServiceWorker();
+    const request = { method: "GET", mode: "navigate", url: `http://127.0.0.1:3100${path}` };
+    let response;
+    worker.fetchHandler({ request, respondWith(value) { response = value; } });
+    await response;
+    assert.deepEqual(worker.networkRequests, [request]);
+    assert.deepEqual(worker.cacheWrites, []);
+    assert.equal(worker.cacheAccesses(), 0);
+  }
+});
+
+test("service worker never stores no-store or redirected navigation responses", async () => {
+  for (const options of [
+    { responseHeaders: { "cache-control": "no-store", "content-type": "text/html" } },
+    { redirected: true, responseUrl: "https://idp.example.invalid/login" }
+  ]) {
+    const worker = await loadServiceWorker(options);
+    const request = { method: "GET", mode: "navigate", url: "http://127.0.0.1:3100/" };
+    let response;
+    worker.fetchHandler({ request, respondWith(value) { response = value; } });
+    await response;
+    assert.deepEqual(worker.cacheWrites, []);
+  }
 });
 
 test("service worker caches a deferred frontend chunk after its first load", async () => {

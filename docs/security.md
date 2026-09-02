@@ -297,6 +297,21 @@ whose host is configured in `WEB_PUSH_ALLOWED_ENDPOINT_HOSTS`. Keep that list
 limited to real browser push providers and do not add internal, loopback, or
 wildcard domains.
 
+The optional service worker is not registered during an ordinary browser
+visit. An accepted PWA installation, a standalone app launch, or explicit Push
+activation records the local activation preference and enables the application
+cache. Existing automatic registrations without that preference or an active
+Push subscription are removed. API, authentication, onboarding, recovery, and
+operator legal responses are network-only, and responses marked `no-store`
+must never be written to the cache. This storage is operational PWA state only;
+it is not analytics or tracking storage.
+
+Opaque authentication and recovery cookies are technically required for the
+selected login flow and expire with their configured server-side sessions.
+Local interface preferences retain only presentation choices such as language,
+help visibility, and navigation state until the user clears site data. Neither
+storage category is used for analytics, advertising, or cross-site tracking.
+
 The UI references external evidence by name only; it does not upload or store
 evidence files.
 

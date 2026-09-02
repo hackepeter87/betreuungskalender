@@ -80,6 +80,9 @@ test("reopens an already loaded deferred page while the browser is offline", asy
   context,
   page
 }) => {
+  await page.addInitScript(() => {
+    window.localStorage.setItem("betreuungskalender:ui:pwa-storage-activated:v1", "true");
+  });
   await openApp(page);
   await navigate(page, "report");
   await expect(page.getByTestId("page-report")).toBeVisible();
@@ -241,6 +244,12 @@ test("offers PWA installation only after the browser reports availability", asyn
 }) => {
   await openApp(page);
   await expect(page.getByTestId("pwa-install-prompt")).toHaveCount(0);
+  await expect.poll(() => page.evaluate(async () => (
+    await navigator.serviceWorker.getRegistrations()
+  ).length)).toBe(0);
+  await expect.poll(() => page.evaluate(async () => (
+    await caches.keys()
+  ).filter((key) => key.startsWith("betreuungskalender-")).length)).toBe(0);
 
   await page.evaluate(() => {
     const installEvent = new Event("beforeinstallprompt", { cancelable: true });
@@ -264,6 +273,9 @@ test("offers PWA installation only after the browser reports availability", asyn
     window as Window & { __pwaPromptCalls?: number }
   ).__pwaPromptCalls)).toBe(1);
   await expect(page.getByTestId("pwa-install-prompt")).toHaveCount(0);
+  await expect.poll(() => page.evaluate(async () => (
+    await navigator.serviceWorker.getRegistrations()
+  ).length)).toBe(1);
 });
 
 test("exposes operator legal information from the desktop footer", async ({ page }) => {

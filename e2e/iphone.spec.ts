@@ -171,6 +171,9 @@ test("explains the iOS home-screen installation without blocking the app", async
   const prompt = page.getByTestId("pwa-install-prompt");
   await expect(prompt).toBeVisible();
   await expect(prompt).toContainText("Zum Home-Bildschirm");
+  await expect.poll(() => page.evaluate(async () => (
+    await navigator.serviceWorker.getRegistrations()
+  ).length)).toBe(0);
   await expectNoDocumentHorizontalOverflow(page);
 
   await prompt.getByRole("button", { name: "Verstanden" }).click();
