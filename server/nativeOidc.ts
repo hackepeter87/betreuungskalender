@@ -101,7 +101,7 @@ export class NativeOidcError extends Error {
 
 export interface NativeOidcServiceOptions {
   config: NativeOidcConfig;
-  loginStates?: OidcLoginStateStore;
+  loginStates: OidcLoginStateStore;
   library?: OidcLibrary;
 }
 
@@ -113,7 +113,7 @@ export class NativeOidcService {
 
   constructor(options: NativeOidcServiceOptions) {
     this.#config = options.config;
-    this.#loginStates = options.loginStates ?? new OidcLoginStateStore();
+    this.#loginStates = options.loginStates;
     this.#library = options.library ?? openidClientLibrary;
   }
 
@@ -125,7 +125,7 @@ export class NativeOidcService {
     const nonce = this.#library.randomNonce();
     const redirectUri = this.#required("redirectUri", this.#config.redirectUri);
 
-    this.#loginStates.create(
+    await this.#loginStates.create(
       {
         state,
         nonce,
@@ -166,7 +166,7 @@ export class NativeOidcService {
       );
     }
 
-    const loginState = this.#loginStates.consume(state);
+    const loginState = await this.#loginStates.consume(state);
     if (!loginState) {
       throw new NativeOidcError(
         "native_oidc_invalid_state",

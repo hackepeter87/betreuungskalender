@@ -1,11 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { randomUUID } from "node:crypto";
 import { config } from "../config.js";
-import { db } from "../db/connection.js";
-import { recordAudit } from "../services/audit.js";
-import { assertActiveCareParty } from "../services/careParties.js";
-import { nowIso } from "../services/common.js";
-import { invalidateInaccessibleCareConfirmations } from "../services/careConfirmations.js";
+import type { DatabaseExecutor } from "../db/runtime.js";
 import {
   assertCanAdministerMembers,
   listMembers,
@@ -26,22 +22,29 @@ const writeLimit = {
   config: { permission: "members:manage" as const, rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
 };
 
-function activeAssignmentIds(userId: string): string[] {
-  return (db.prepare(`
-    SELECT care_party_id AS carePartyId
-    FROM app_user_care_party_assignments
-    WHERE user_id = ? AND deleted_at IS NULL
-    ORDER BY care_party_id
-  `).all(userId) as Array<{ carePartyId: string }>).map((row) => row.carePartyId);
+class AssignmentError extends Error {
+  constructor(
+    readonly code: "unknown_user" | "invalid_relation",
+    readonly statusCode: 400 | 404,
+    message: string
+  ) {
+    super(message);
+  }
+}
+
+async function activeAssignmentIds(userId: string, database: DatabaseExecutor): Promise<string[]> {
+  const rows = await database.selectFrom("app_user_care_party_assignments")
+    .select("care_party_id")
+    .where("user_id", "=", userId)
+    .where("deleted_at", "is", null)
+    .orderBy("care_party_id")
+    .execute();
+  return rows.map((row) => row.care_party_id);
 }
 
 function normalizeMemberError(error: unknown) {
   if (error instanceof MemberManagementError) {
-    return {
-      statusCode: error.statusCode,
-      error: error.code,
-      message: error.message
-    };
+    return { statusCode: error.statusCode, error: error.code, message: error.message };
   }
   return {
     statusCode: 500,
@@ -51,16 +54,16 @@ function normalizeMemberError(error: unknown) {
 }
 
 export async function appUserRoutes(app: FastifyInstance): Promise<void> {
-  const userListOptions = {
-    includeLocalDevelopmentIdentity: config.authMode === "local"
-  };
+  const userListOptions = { includeLocalDevelopmentIdentity: config.authMode === "local" };
 
-  app.get("/api/app-users", readLimit, async () => listAppUsers(db, userListOptions));
+  app.get("/api/app-users", readLimit, async () =>
+    listAppUsers(app.persistence.query, userListOptions)
+  );
 
   app.get("/api/members", readLimit, async (request, reply) => {
     try {
-      assertCanAdministerMembers(request.user);
-      return listMembers(db, userListOptions);
+      await assertCanAdministerMembers(request.user, app.persistence.query);
+      return await listMembers(app.persistence.query, userListOptions);
     } catch (error) {
       const normalized = normalizeMemberError(error);
       return reply.code(normalized.statusCode).send({
@@ -72,7 +75,9 @@ export async function appUserRoutes(app: FastifyInstance): Promise<void> {
 
   app.put<{ Params: { userId: string } }>("/api/members/:userId/role", writeLimit, async (request, reply) => {
     const parsed = memberRoleInputSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
+    }
     if (!request.user) {
       return reply.code(401).send({
         error: "authentication_required",
@@ -80,7 +85,12 @@ export async function appUserRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     try {
-      return updateMemberRole(request.user, request.params.userId, parsed.data.role);
+      return await updateMemberRole(
+        request.user,
+        request.params.userId,
+        parsed.data.role,
+        app.persistence
+      );
     } catch (error) {
       const normalized = normalizeMemberError(error);
       return reply.code(normalized.statusCode).send({
@@ -98,7 +108,7 @@ export async function appUserRoutes(app: FastifyInstance): Promise<void> {
       });
     }
     try {
-      return removeMember(request.user, request.params.userId);
+      return await removeMember(request.user, request.params.userId, app.persistence);
     } catch (error) {
       const normalized = normalizeMemberError(error);
       return reply.code(normalized.statusCode).send({
@@ -108,68 +118,94 @@ export async function appUserRoutes(app: FastifyInstance): Promise<void> {
     }
   });
 
-  app.get("/api/user-care-party-assignments", readLimit, async () =>
-    listAppUsers(db, userListOptions).map((user) => ({
+  app.get("/api/user-care-party-assignments", readLimit, async () => {
+    const users = await listAppUsers(app.persistence.query, userListOptions);
+    return Promise.all(users.map(async (user) => ({
       userId: user.id,
-      carePartyIds: activeAssignmentIds(user.id)
-    }))
-  );
+      carePartyIds: await activeAssignmentIds(user.id, app.persistence.query)
+    })));
+  });
 
   app.put<{ Params: { userId: string } }>("/api/user-care-party-assignments/:userId", writeLimit, async (request, reply) => {
     const parsed = userCarePartyAssignmentInputSchema.safeParse(request.body);
-    if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
-    const user = listAppUsers(db, userListOptions).find((item) => item.id === request.params.userId);
-    if (!user) return reply.code(404).send({ error: "not_found" });
-
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
+    }
     const uniqueIds = [...new Set(parsed.data.carePartyIds)];
+    const timestamp = new Date().toISOString();
     try {
-      for (const carePartyId of uniqueIds) assertActiveCareParty(carePartyId);
+      const result = await app.persistence.transaction(async (database) => {
+        const user = await database.selectFrom("app_users")
+          .select("id")
+          .where("id", "=", request.params.userId)
+          .where("deleted_at", "is", null)
+          .executeTakeFirst();
+        if (!user) {
+          throw new AssignmentError("unknown_user", 404, "Mitglied nicht gefunden.");
+        }
+        for (const carePartyId of uniqueIds) {
+          const careParty = await database.selectFrom("care_parties")
+            .select("id")
+            .where("id", "=", carePartyId)
+            .where("deleted_at", "is", null)
+            .executeTakeFirst();
+          if (!careParty) {
+            throw new AssignmentError(
+              "invalid_relation",
+              400,
+              "Betreuende Person ist nicht vorhanden."
+            );
+          }
+        }
+        const before = await activeAssignmentIds(request.params.userId, database);
+        await database.updateTable("app_user_care_party_assignments")
+          .set({ deleted_at: timestamp, updated_by: request.userEmail, updated_at: timestamp })
+          .where("user_id", "=", request.params.userId)
+          .where("deleted_at", "is", null)
+          .execute();
+        for (const carePartyId of uniqueIds) {
+          await database.insertInto("app_user_care_party_assignments").values({
+            id: randomUUID(),
+            user_id: request.params.userId,
+            care_party_id: carePartyId,
+            created_by: request.userEmail,
+            updated_by: request.userEmail,
+            created_at: timestamp,
+            updated_at: timestamp,
+            deleted_at: null
+          }).execute();
+        }
+        await database.updateTable("care_confirmation_requests")
+          .set({ deleted_at: timestamp, updated_at: timestamp })
+          .where("user_id", "=", request.params.userId)
+          .where("deleted_at", "is", null)
+          .where("answered_at", "is", null)
+          .execute();
+        await database.insertInto("audit_log").values({
+          timestamp,
+          user_email: request.userEmail,
+          entity_type: "user_care_party_assignment",
+          entity_id: request.params.userId,
+          action: "updated",
+          field_name: null,
+          old_value: JSON.stringify(before),
+          new_value: JSON.stringify(uniqueIds),
+          metadata_json: null,
+          created_at: timestamp,
+          updated_at: timestamp,
+          deleted_at: null
+        }).execute();
+        return activeAssignmentIds(request.params.userId, database);
+      });
+      return { userId: request.params.userId, carePartyIds: result };
     } catch (error) {
-      return reply.code(400).send({
-        error: "invalid_relation",
-        message: error instanceof Error ? error.message : String(error)
+      const normalized = error instanceof AssignmentError
+        ? error
+        : new AssignmentError("invalid_relation", 400, "Zuordnung konnte nicht gespeichert werden.");
+      return reply.code(normalized.statusCode).send({
+        error: normalized.code,
+        message: normalized.message
       });
     }
-
-    const timestamp = nowIso();
-    const before = activeAssignmentIds(request.params.userId);
-    db.transaction(() => {
-      db.prepare(`
-        UPDATE app_user_care_party_assignments
-        SET deleted_at = ?, updated_by = ?, updated_at = ?
-        WHERE user_id = ? AND deleted_at IS NULL
-      `).run(timestamp, request.userEmail, timestamp, request.params.userId);
-
-      const insert = db.prepare(`
-        INSERT INTO app_user_care_party_assignments (
-          id, user_id, care_party_id, created_by, updated_by, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?)
-      `);
-      for (const carePartyId of uniqueIds) {
-        insert.run(
-          randomUUID(),
-          request.params.userId,
-          carePartyId,
-          request.userEmail,
-          request.userEmail,
-          timestamp,
-          timestamp
-        );
-      }
-      invalidateInaccessibleCareConfirmations(request.params.userId, timestamp);
-      recordAudit({
-        userEmail: request.userEmail,
-        entityType: "user_care_party_assignment",
-        entityId: request.params.userId,
-        action: "updated",
-        oldValue: before,
-        newValue: uniqueIds
-      });
-    })();
-
-    return {
-      userId: request.params.userId,
-      carePartyIds: activeAssignmentIds(request.params.userId)
-    };
   });
 }

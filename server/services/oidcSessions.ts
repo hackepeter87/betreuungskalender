@@ -1,6 +1,5 @@
-import type Database from "better-sqlite3";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { db as defaultDb } from "../db/connection.js";
+import type { DatabaseExecutor } from "../db/runtime.js";
 
 export interface OidcSessionRecord {
   id: string;
@@ -10,105 +9,85 @@ export interface OidcSessionRecord {
   expiresAt: string;
 }
 
-interface OidcSessionRow {
-  id: string;
-  external_subject: string;
-  created_at: string;
-  last_seen_at: string | null;
-  expires_at: string;
-}
-
 function hashSessionToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
-function toRecord(row: OidcSessionRow): OidcSessionRecord {
-  return {
-    id: row.id,
-    externalSubject: row.external_subject,
-    createdAt: row.created_at,
-    ...(row.last_seen_at ? { lastSeenAt: row.last_seen_at } : {}),
-    expiresAt: row.expires_at
-  };
-}
-
 export class OidcSessionStore {
-  readonly #db: Database.Database;
+  constructor(private readonly database: DatabaseExecutor) {}
 
-  constructor(database: Database.Database = defaultDb) {
-    this.#db = database;
-  }
-
-  create(
+  async create(
     externalSubject: string,
     ttlSeconds: number,
-    now = new Date()
-  ): { token: string; session: OidcSessionRecord } {
-    this.deleteExpired(now);
+    now = new Date(),
+    database: DatabaseExecutor = this.database
+  ) {
+    await this.deleteExpired(now, database);
     const token = randomBytes(32).toString("base64url");
     const createdAt = now.toISOString();
     const expiresAt = new Date(now.getTime() + ttlSeconds * 1000).toISOString();
-    const session = {
-      id: randomUUID(),
-      externalSubject,
-      createdAt,
-      expiresAt
-    };
-    this.#db.prepare(`
-      INSERT INTO native_oidc_sessions (
-        id, session_hash, external_subject, created_at, expires_at
-      ) VALUES (?, ?, ?, ?, ?)
-    `).run(
-      session.id,
-      hashSessionToken(token),
-      externalSubject,
-      createdAt,
-      expiresAt
-    );
+    const session = { id: randomUUID(), externalSubject, createdAt, expiresAt };
+    await database.insertInto("native_oidc_sessions").values({
+      id: session.id,
+      session_hash: hashSessionToken(token),
+      external_subject: externalSubject,
+      created_at: createdAt,
+      last_seen_at: null,
+      expires_at: expiresAt,
+      revoked_at: null
+    }).execute();
     return { token, session };
   }
 
-  findByToken(token: string | undefined, now = new Date()): OidcSessionRecord | undefined {
+  async findByToken(
+    token: string | undefined,
+    now = new Date()
+  ): Promise<OidcSessionRecord | undefined> {
     const normalized = token?.trim();
     if (!normalized) return undefined;
     const nowIso = now.toISOString();
-    const row = this.#db.prepare(`
-      SELECT id, external_subject, created_at, last_seen_at, expires_at
-      FROM native_oidc_sessions
-      WHERE session_hash = ?
-        AND revoked_at IS NULL
-        AND expires_at > ?
-    `).get(hashSessionToken(normalized), nowIso) as OidcSessionRow | undefined;
+    const row = await this.database.selectFrom("native_oidc_sessions")
+      .select(["id", "external_subject", "created_at", "last_seen_at", "expires_at"])
+      .where("session_hash", "=", hashSessionToken(normalized))
+      .where("revoked_at", "is", null)
+      .where("expires_at", ">", nowIso)
+      .executeTakeFirst();
     if (!row) return undefined;
-    this.#db.prepare(`
-      UPDATE native_oidc_sessions
-      SET last_seen_at = ?
-      WHERE id = ?
-    `).run(nowIso, row.id);
-    return toRecord({ ...row, last_seen_at: nowIso });
+    await this.database.updateTable("native_oidc_sessions")
+      .set({ last_seen_at: nowIso })
+      .where("id", "=", row.id)
+      .execute();
+    return {
+      id: row.id,
+      externalSubject: row.external_subject,
+      createdAt: row.created_at,
+      lastSeenAt: nowIso,
+      expiresAt: row.expires_at
+    };
   }
 
-  revokeByToken(token: string | undefined, now = new Date()): boolean {
+  async revokeByToken(token: string | undefined, now = new Date()): Promise<boolean> {
     const normalized = token?.trim();
     if (!normalized) return false;
-    const result = this.#db.prepare(`
-      UPDATE native_oidc_sessions
-      SET revoked_at = ?
-      WHERE session_hash = ?
-        AND revoked_at IS NULL
-    `).run(now.toISOString(), hashSessionToken(normalized));
-    return result.changes > 0;
+    const result = await this.database.updateTable("native_oidc_sessions")
+      .set({ revoked_at: now.toISOString() })
+      .where("session_hash", "=", hashSessionToken(normalized))
+      .where("revoked_at", "is", null)
+      .executeTakeFirst();
+    return Number(result.numUpdatedRows) > 0;
   }
 
-  deleteExpired(now = new Date()): void {
-    this.#db.prepare(`
-      DELETE FROM native_oidc_sessions
-      WHERE expires_at <= ?
-        OR revoked_at IS NOT NULL
-    `).run(now.toISOString());
+  async deleteExpired(
+    now = new Date(),
+    database: DatabaseExecutor = this.database
+  ): Promise<void> {
+    await database.deleteFrom("native_oidc_sessions")
+      .where((expression) => expression.or([
+        expression("expires_at", "<=", now.toISOString()),
+        expression("revoked_at", "is not", null)
+      ]))
+      .execute();
   }
 }
 
-export const oidcSessionTokenForTesting = {
-  hashSessionToken
-};
+export const oidcSessionTokenForTesting = { hashSessionToken };

@@ -6,18 +6,21 @@ import test from "node:test";
 import Database from "better-sqlite3";
 import { permissionsForRole, type RequestUser } from "./auth.js";
 import { migrateDatabase } from "./db/migrationRunner.js";
+import { createSqlitePersistenceRuntime, type PersistenceRuntime } from "./db/runtime.js";
 import { applyMembershipRole, hasWorkspaceAccess, membershipRoleForUser } from "./services/memberships.js";
 import { findAuthenticatedUserBySubject } from "./services/users.js";
 
 const timestamp = "2026-07-05T10:00:00.000Z";
 
-function withDatabase(run: (database: Database.Database) => void): void {
+async function withDatabase(
+  run: (database: Database.Database, persistence: PersistenceRuntime) => Promise<void>
+): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), "betreuungskalender-memberships-"));
   const database = new Database(join(root, "app.sqlite"));
   database.pragma("foreign_keys = ON");
   try {
     migrateDatabase(database);
-    run(database);
+    await run(database, createSqlitePersistenceRuntime(database));
   } finally {
     database.close();
     rmSync(root, { recursive: true, force: true });
@@ -47,23 +50,23 @@ function setOwner(database: Database.Database, userId: string): void {
   `).run(JSON.stringify(userId), timestamp, timestamp);
 }
 
-test("active app membership overrides the identity-provider derived role", () => {
-  withDatabase((database) => {
+test("active app membership overrides the identity-provider derived role", async () => {
+  await withDatabase(async (database, persistence) => {
     database.prepare(`
       UPDATE app_memberships
       SET role = 'viewer', updated_at = ?
       WHERE user_id = 'local-dev' AND deleted_at IS NULL
     `).run(timestamp);
 
-    const user = findAuthenticatedUserBySubject("local-dev", database);
+    const user = await findAuthenticatedUserBySubject("local-dev", persistence.query);
 
     assert.equal(user?.role, "readonly");
     assert.deepEqual(user?.permissions, permissionsForRole("readonly"));
-    assert.equal(membershipRoleForUser("local-dev", database), "viewer");
+    assert.equal(await membershipRoleForUser("local-dev", persistence.query), "viewer");
   });
 });
 
-test("strict membership resolution denies claim-derived roles before ownership is configured", () => {
+test("strict membership resolution denies claim-derived roles before ownership is configured", async () => {
   const user: RequestUser = {
     id: "user-parent",
     externalSubject: "subject-parent",
@@ -73,8 +76,8 @@ test("strict membership resolution denies claim-derived roles before ownership i
     permissions: permissionsForRole("parent")
   };
 
-  withDatabase((database) => {
-    const resolved = applyMembershipRole(user, database);
+  await withDatabase(async (_database, persistence) => {
+    const resolved = await applyMembershipRole(user, persistence.query);
 
     assert.equal(resolved.membershipRole, undefined);
     assert.equal(resolved.workspaceAccess, false);
@@ -83,7 +86,7 @@ test("strict membership resolution denies claim-derived roles before ownership i
   });
 });
 
-test("trusted-proxy compatibility can retain claim-derived roles before ownership is configured", () => {
+test("trusted-proxy compatibility can retain claim-derived roles before ownership is configured", async () => {
   const user: RequestUser = {
     id: "user-parent",
     externalSubject: "subject-parent",
@@ -93,8 +96,8 @@ test("trusted-proxy compatibility can retain claim-derived roles before ownershi
     permissions: permissionsForRole("parent")
   };
 
-  withDatabase((database) => {
-    const resolved = applyMembershipRole(user, database, "legacy-pre-owner");
+  await withDatabase(async (_database, persistence) => {
+    const resolved = await applyMembershipRole(user, persistence.query, "legacy-pre-owner");
 
     assert.equal(resolved.membershipRole, undefined);
     assert.equal(resolved.workspaceAccess, true);
@@ -103,7 +106,7 @@ test("trusted-proxy compatibility can retain claim-derived roles before ownershi
   });
 });
 
-test("users without an active membership lose workspace access after ownership is configured", () => {
+test("users without an active membership lose workspace access after ownership is configured", async () => {
   const user: RequestUser = {
     id: "user-without-membership",
     externalSubject: "subject-without-membership",
@@ -113,19 +116,19 @@ test("users without an active membership lose workspace access after ownership i
     permissions: permissionsForRole("admin")
   };
 
-  withDatabase((database) => {
+  await withDatabase(async (database, persistence) => {
     setOwner(database, "different-owner");
-    const resolved = applyMembershipRole(user, database);
+    const resolved = await applyMembershipRole(user, persistence.query);
 
     assert.equal(resolved.membershipState, "none");
     assert.equal(resolved.workspaceAccess, false);
     assert.equal(resolved.user.workspaceAccess, false);
     assert.deepEqual(resolved.user.workspacePermissions, []);
-    assert.equal(hasWorkspaceAccess(user.id, database), false);
+    assert.equal(await hasWorkspaceAccess(user.id, persistence.query), false);
   });
 });
 
-test("a deleted membership is authoritative and never falls back to identity claims", () => {
+test("a deleted membership is authoritative and never falls back to identity claims", async () => {
   const user: RequestUser = {
     id: "user-revoked",
     externalSubject: "subject-revoked",
@@ -135,7 +138,7 @@ test("a deleted membership is authoritative and never falls back to identity cla
     permissions: permissionsForRole("admin")
   };
 
-  withDatabase((database) => {
+  await withDatabase(async (database, persistence) => {
     database.prepare(`
       INSERT INTO app_users (
         id, external_subject, display_name, role, groups_json,
@@ -148,13 +151,13 @@ test("a deleted membership is authoritative and never falls back to identity cla
       SET deleted_at = ?, updated_at = ?
       WHERE user_id = ?
     `).run(timestamp, timestamp, user.id);
-    const resolved = applyMembershipRole(user, database);
+    const resolved = await applyMembershipRole(user, persistence.query);
 
     assert.equal(resolved.membershipState, "revoked");
     assert.equal(resolved.workspaceAccess, false);
     assert.equal(resolved.user.workspaceAccess, false);
     assert.deepEqual(resolved.user.permissions, []);
     assert.deepEqual(resolved.user.workspacePermissions, []);
-    assert.equal(hasWorkspaceAccess(user.id, database), false);
+    assert.equal(await hasWorkspaceAccess(user.id, persistence.query), false);
   });
 });

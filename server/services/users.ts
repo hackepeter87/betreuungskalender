@@ -1,27 +1,15 @@
-import { db } from "../db/connection.js";
+import { sql } from "kysely";
 import { permissionsForRole, type AuthRole, type RequestUser } from "../auth.js";
-import type Database from "better-sqlite3";
-import {
-  applyMembershipRole,
-  type MembershipResolutionPolicy
-} from "./memberships.js";
+import type { DatabaseExecutor } from "../db/runtime.js";
+import { applyMembershipRole, type MembershipResolutionPolicy } from "./memberships.js";
 import { isLocalDevelopmentIdentity } from "./localDevelopmentIdentity.js";
-
-interface AppUserRow {
-  id: string;
-  external_subject: string;
-  email: string | null;
-  display_name: string;
-  role: string;
-  groups_json: string;
-  last_seen_at?: string;
-}
 
 function parseGroups(value: string): string[] {
   try {
     const parsed = JSON.parse(value) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((item): item is string => typeof item === "string");
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is string => typeof item === "string")
+      : [];
   } catch {
     return [];
   }
@@ -31,50 +19,45 @@ function isAuthRole(value: string): value is AuthRole {
   return value === "admin" || value === "parent" || value === "readonly";
 }
 
-export function upsertAuthenticatedUser(
+export async function upsertAuthenticatedUser(
   user: RequestUser,
-  timestamp = new Date().toISOString(),
-  database: Database.Database = db
-): void {
-  database.prepare(`
-    INSERT INTO app_users (
-      id, external_subject, email, display_name, role, groups_json,
-      last_seen_at, created_at, updated_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ON CONFLICT(external_subject) DO UPDATE SET
-      email = excluded.email,
-      display_name = excluded.display_name,
-      role = excluded.role,
-      groups_json = excluded.groups_json,
-      last_seen_at = excluded.last_seen_at,
-      updated_at = excluded.updated_at,
-      deleted_at = NULL
-  `).run(
-    user.id,
-    user.externalSubject,
-    user.email ?? null,
-    user.displayName,
-    user.role,
-    JSON.stringify(user.groups),
-    timestamp,
-    timestamp,
-    timestamp
-  );
+  database: DatabaseExecutor,
+  timestamp = new Date().toISOString()
+): Promise<void> {
+  await database.insertInto("app_users").values({
+    id: user.id,
+    external_subject: user.externalSubject,
+    email: user.email ?? null,
+    display_name: user.displayName,
+    role: user.role,
+    groups_json: JSON.stringify(user.groups),
+    last_seen_at: timestamp,
+    created_at: timestamp,
+    updated_at: timestamp,
+    deleted_at: null
+  }).onConflict((conflict) => conflict.column("external_subject").doUpdateSet({
+    email: user.email ?? null,
+    display_name: user.displayName,
+    role: user.role,
+    groups_json: JSON.stringify(user.groups),
+    last_seen_at: timestamp,
+    updated_at: timestamp,
+    deleted_at: null
+  })).execute();
 }
 
-export function findAuthenticatedUserBySubject(
+export async function findAuthenticatedUserBySubject(
   externalSubject: string,
-  database: Database.Database = db,
+  database: DatabaseExecutor,
   policy: MembershipResolutionPolicy = "strict"
-): RequestUser | undefined {
-  const row = database.prepare(`
-    SELECT id, external_subject, email, display_name, role, groups_json
-    FROM app_users
-    WHERE external_subject = ?
-      AND deleted_at IS NULL
-  `).get(externalSubject) as AppUserRow | undefined;
+): Promise<RequestUser | undefined> {
+  const row = await database.selectFrom("app_users")
+    .select(["id", "external_subject", "email", "display_name", "role", "groups_json"])
+    .where("external_subject", "=", externalSubject)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst();
   if (!row || !isAuthRole(row.role)) return undefined;
-  return applyMembershipRole({
+  return (await applyMembershipRole({
     id: row.id,
     externalSubject: row.external_subject,
     ...(row.email ? { email: row.email } : {}),
@@ -82,39 +65,33 @@ export function findAuthenticatedUserBySubject(
     groups: parseGroups(row.groups_json),
     role: row.role,
     permissions: permissionsForRole(row.role)
-  }, database, policy).user;
+  }, database, policy)).user;
 }
 
-export function listAppUsers(
-  database: Database.Database = db,
+export async function listAppUsers(
+  database: DatabaseExecutor,
   options: { includeLocalDevelopmentIdentity?: boolean } = {
     includeLocalDevelopmentIdentity: true
   }
 ) {
-  const rows = database.prepare(`
-    SELECT id, external_subject, email, display_name, role, last_seen_at
-    FROM app_users
-    WHERE deleted_at IS NULL
-    ORDER BY display_name COLLATE NOCASE, id
-  `).all() as Array<{
-    id: string;
-    external_subject: string;
-    email: string | null;
-    display_name: string;
-    role: AuthRole;
-    last_seen_at: string;
-  }>;
-  return rows.filter((row) =>
-    options.includeLocalDevelopmentIdentity || !isLocalDevelopmentIdentity({
+  const rows = await database.selectFrom("app_users")
+    .select(["id", "external_subject", "email", "display_name", "role", "last_seen_at"])
+    .where("deleted_at", "is", null)
+    .orderBy(sql`display_name COLLATE NOCASE`)
+    .orderBy("id")
+    .execute();
+  return rows
+    .filter((row) => options.includeLocalDevelopmentIdentity || !isLocalDevelopmentIdentity({
       id: row.id,
       externalSubject: row.external_subject,
       displayName: row.display_name
-    })
-  ).map((row) => ({
-    id: row.id,
-    displayName: row.display_name,
-    role: row.role,
-    ...(row.email ? { email: row.email } : {}),
-    lastSeenAt: row.last_seen_at
-  }));
+    }))
+    .filter((row): row is typeof row & { role: AuthRole } => isAuthRole(row.role))
+    .map((row) => ({
+      id: row.id,
+      displayName: row.display_name,
+      role: row.role,
+      ...(row.email ? { email: row.email } : {}),
+      lastSeenAt: row.last_seen_at
+    }));
 }

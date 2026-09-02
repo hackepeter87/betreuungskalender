@@ -7,12 +7,14 @@ import Database from "better-sqlite3";
 import Fastify from "fastify";
 import type { Configuration } from "openid-client";
 import { migrateDatabase } from "./db/migrationRunner.js";
+import { createSqlitePersistenceRuntime } from "./db/runtime.js";
 import {
   NativeOidcError,
   NativeOidcService,
   type OidcLibrary
 } from "./nativeOidc.js";
 import { nativeOidcRoutes } from "./routes/nativeOidc.js";
+import { createInvitation, invitationTokenHash } from "./services/invitations.js";
 import { OidcLoginStateStore } from "./services/oidcLoginStates.js";
 import { OidcSessionStore } from "./services/oidcSessions.js";
 import { applyMembershipRole } from "./services/memberships.js";
@@ -30,6 +32,10 @@ function testDatabase() {
       rmSync(root, { recursive: true, force: true });
     }
   };
+}
+
+function persistenceFor(database: Database.Database) {
+  return createSqlitePersistenceRuntime(database);
 }
 
 function fakeLibrary(
@@ -97,7 +103,7 @@ test("native OIDC login stores server-side state and redirects with PKCE and non
   try {
     const service = new NativeOidcService({
       config: nativeConfig(),
-      loginStates: new OidcLoginStateStore(database),
+      loginStates: new OidcLoginStateStore(persistenceFor(database)),
       library: fakeLibrary()
     });
 
@@ -145,7 +151,7 @@ test("native OIDC login stores only hashed onboarding context", async () => {
     const tokenHash = "a".repeat(64);
     const service = new NativeOidcService({
       config: nativeConfig(),
-      loginStates: new OidcLoginStateStore(database),
+      loginStates: new OidcLoginStateStore(persistenceFor(database)),
       library: fakeLibrary()
     });
 
@@ -173,7 +179,7 @@ test("native OIDC login rejects raw onboarding tokens as context", async () => {
   try {
     const service = new NativeOidcService({
       config: nativeConfig(),
-      loginStates: new OidcLoginStateStore(database),
+      loginStates: new OidcLoginStateStore(persistenceFor(database)),
       library: fakeLibrary()
     });
 
@@ -194,40 +200,50 @@ test("native OIDC login rejects raw onboarding tokens as context", async () => {
 });
 
 test("native OIDC logout redirects to the provider end-session endpoint", async () => {
+  const { database, cleanup } = testDatabase();
   const service = new NativeOidcService({
     config: {
       ...nativeConfig(),
       postLogoutRedirectUri: "https://bk.example.test/logged-out"
     },
-    library: fakeLibrary()
+    library: fakeLibrary(),
+    loginStates: new OidcLoginStateStore(persistenceFor(database))
   });
+  try {
+    const redirect = await service.createLogoutRedirect();
 
-  const redirect = await service.createLogoutRedirect();
-
-  assert.equal(
-    redirect.origin + redirect.pathname,
-    "https://idp.example.test/realms/demo/protocol/openid-connect/logout"
-  );
-  assert.equal(redirect.searchParams.get("client_id"), "betreuungskalender");
-  assert.equal(
-    redirect.searchParams.get("post_logout_redirect_uri"),
-    "https://bk.example.test/logged-out"
-  );
-  assert.equal(redirect.searchParams.has("id_token_hint"), false);
+    assert.equal(
+      redirect.origin + redirect.pathname,
+      "https://idp.example.test/realms/demo/protocol/openid-connect/logout"
+    );
+    assert.equal(redirect.searchParams.get("client_id"), "betreuungskalender");
+    assert.equal(
+      redirect.searchParams.get("post_logout_redirect_uri"),
+      "https://bk.example.test/logged-out"
+    );
+    assert.equal(redirect.searchParams.has("id_token_hint"), false);
+  } finally {
+    cleanup();
+  }
 });
 
 test("native OIDC logout defaults the post-logout redirect to the app origin", async () => {
+  const { database, cleanup } = testDatabase();
   const service = new NativeOidcService({
     config: nativeConfig(),
-    library: fakeLibrary()
+    library: fakeLibrary(),
+    loginStates: new OidcLoginStateStore(persistenceFor(database))
   });
+  try {
+    const redirect = await service.createLogoutRedirect();
 
-  const redirect = await service.createLogoutRedirect();
-
-  assert.equal(
-    redirect.searchParams.get("post_logout_redirect_uri"),
-    "https://bk.example.test/"
-  );
+    assert.equal(
+      redirect.searchParams.get("post_logout_redirect_uri"),
+      "https://bk.example.test/"
+    );
+  } finally {
+    cleanup();
+  }
 });
 
 test("native OIDC callback validates state nonce and PKCE through the client library", async () => {
@@ -243,7 +259,7 @@ test("native OIDC callback validates state nonce and PKCE through the client lib
     }> = [];
     const service = new NativeOidcService({
       config: nativeConfig(),
-      loginStates: new OidcLoginStateStore(database),
+      loginStates: new OidcLoginStateStore(persistenceFor(database)),
       library: fakeLibrary({}, grantCalls)
     });
 
@@ -282,7 +298,7 @@ test("native OIDC can use a configurable display claim without changing the subj
   try {
     const service = new NativeOidcService({
       config: { ...nativeConfig(), displayNameClaim: "name" },
-      loginStates: new OidcLoginStateStore(database),
+      loginStates: new OidcLoginStateStore(persistenceFor(database)),
       library: fakeLibrary({
         authorizationCodeGrant: async () => ({
           claims: () => ({
@@ -316,7 +332,7 @@ test("native OIDC callback rejects state mismatches before token exchange", asyn
     }> = [];
     const service = new NativeOidcService({
       config: nativeConfig(),
-      loginStates: new OidcLoginStateStore(database),
+      loginStates: new OidcLoginStateStore(persistenceFor(database)),
       library: fakeLibrary({}, grantCalls)
     });
 
@@ -347,7 +363,7 @@ for (const validationCase of [
     try {
       const service = new NativeOidcService({
         config: nativeConfig(),
-        loginStates: new OidcLoginStateStore(database),
+        loginStates: new OidcLoginStateStore(persistenceFor(database)),
         library: fakeLibrary({
           authorizationCodeGrant: async () => {
             throw new Error(validationCase);
@@ -376,7 +392,7 @@ test("native OIDC callback rejects missing subjects without exposing token detai
   try {
     const service = new NativeOidcService({
       config: nativeConfig(),
-      loginStates: new OidcLoginStateStore(database),
+      loginStates: new OidcLoginStateStore(persistenceFor(database)),
       library: fakeLibrary({
         authorizationCodeGrant: async () => ({
           claims: () => ({})
@@ -401,7 +417,8 @@ test("native OIDC callback rejects missing subjects without exposing token detai
 test("native OIDC routes redirect login and keep callback responses token-free", async () => {
   const { database, cleanup } = testDatabase();
   const app = Fastify({ logger: false });
-  const sessions = new OidcSessionStore(database);
+  const persistence = persistenceFor(database);
+  const sessions = new OidcSessionStore(persistence.query);
   const ownerHash = "b".repeat(64);
   const invitationHash = "c".repeat(64);
   const loginContexts: unknown[] = [];
@@ -412,6 +429,7 @@ test("native OIDC routes redirect login and keep callback responses token-free",
     tokenHash: ownerHash
   };
   await app.register(nativeOidcRoutes, {
+    persistence,
     config: {
       authMode: "native-oidc",
       nodeEnv: "production",
@@ -459,7 +477,8 @@ test("native OIDC routes redirect login and keep callback responses token-free",
         assert.equal(token, "fictional-owner-token");
         return ownerHash;
       },
-      consumeAndClaim: (tokenHash, user) => {
+      consumeAndClaim: async (tokenHash, user, _now, database) => {
+        await upsertAuthenticatedUser(user, database ?? persistence.query);
         ownerClaims.push({ tokenHash, userId: user.id });
       }
     },
@@ -475,12 +494,13 @@ test("native OIDC routes redirect login and keep callback responses token-free",
         assert.equal(token, "fictional-invitation-token");
         return invitationHash;
       },
-      accept: (tokenHash, user) => {
+      accept: async (tokenHash, user, database) => {
+        await upsertAuthenticatedUser(user, database ?? persistence.query);
         invitationClaims.push({ tokenHash, userId: user.id });
       }
     },
     sessions,
-    upsertUser: (user) => upsertAuthenticatedUser(user, new Date().toISOString(), database),
+    upsertUser: (user) => upsertAuthenticatedUser(user, persistence.query),
     applyMembershipRole: (candidate) => ({ user: candidate, workspaceAccess: true })
   });
 
@@ -604,7 +624,7 @@ test("native OIDC routes redirect login and keep callback responses token-free",
     const cookieHeader = setCookie.split(";")[0];
     const sessionToken = cookieHeader?.split("=")[1];
     assert.equal(Boolean(sessionToken), true);
-    assert.equal(sessions.findByToken(sessionToken)?.externalSubject, "subject-123");
+    assert.equal((await sessions.findByToken(sessionToken))?.externalSubject, "subject-123");
     const user = database.prepare(`
       SELECT email, display_name, role, groups_json
       FROM app_users
@@ -634,7 +654,7 @@ test("native OIDC routes redirect login and keep callback responses token-free",
       logoutRedirectUrl: "https://idp.example.test/logout?client_id=betreuungskalender"
     });
     assert.match(String(logout.headers["set-cookie"]), /Max-Age=0/);
-    assert.equal(sessions.findByToken(sessionToken), undefined);
+    assert.equal(await sessions.findByToken(sessionToken), undefined);
 
     const browserLogout = await app.inject({
       method: "GET",
@@ -652,13 +672,97 @@ test("native OIDC routes redirect login and keep callback responses token-free",
   }
 });
 
+test("native OIDC invitation callback rolls back every write when session creation fails", async () => {
+  const { database, cleanup } = testDatabase();
+  const app = Fastify({ logger: false });
+  const persistence = persistenceFor(database);
+  const invitation = await createInvitation({
+    role: "editor",
+    expiresAt: "2026-09-03T12:00:00.000Z",
+    actorId: "local-dev",
+    token: "fictional-callback-rollback-token",
+    timestamp: "2026-09-02T12:00:00.000Z"
+  }, persistence.query);
+  database.exec(`
+    CREATE TRIGGER reject_test_oidc_session
+    BEFORE INSERT ON native_oidc_sessions
+    BEGIN
+      SELECT RAISE(ABORT, 'forced session failure');
+    END
+  `);
+  await app.register(nativeOidcRoutes, {
+    persistence,
+    config: {
+      authMode: "native-oidc",
+      nodeEnv: "production",
+      oidcIssuerUrl: "https://idp.example.test/realms/demo",
+      oidcClientId: "betreuungskalender",
+      oidcClientSecret: "test-secret",
+      oidcRedirectUri: "https://bk.example.test/auth/callback",
+      oidcPostLogoutRedirectUri: "https://bk.example.test/",
+      oidcScopes: "openid email profile",
+      oidcGroupsClaim: "groups",
+      oidcLoginStateTtlSeconds: 600,
+      oidcAdminGroup: "/betreuungskalender/admins",
+      oidcParentGroup: "/betreuungskalender/parents",
+      oidcReadonlyGroup: "/betreuungskalender/readers",
+      oidcRequireRoleClaim: true,
+      sessionCookieName: "betreuungskalender_session",
+      sessionTtlSeconds: 3600,
+      rateLimitSensitiveMax: 5,
+      rateLimitWindowMs: 60_000
+    },
+    service: {
+      createLoginRedirect: async () => new URL("https://idp.example.test/auth"),
+      createLogoutRedirect: async () => new URL("https://idp.example.test/logout"),
+      validateCallback: async () => ({
+        subject: "subject-session-rollback",
+        email: "rollback@example.invalid",
+        displayName: "Rollback User",
+        groups: ["/betreuungskalender/parents"],
+        loginContext: {
+          type: "invitation",
+          tokenHash: invitationTokenHash(invitation.token)
+        }
+      })
+    }
+  });
+
+  try {
+    const callback = await app.inject({
+      method: "GET",
+      url: "/auth/callback?code=code-rollback&state=state-rollback"
+    });
+
+    assert.equal(callback.statusCode, 500);
+    assert.equal(callback.headers["set-cookie"], undefined);
+    const counts = database.prepare(`
+      SELECT
+        (SELECT COUNT(*) FROM app_users WHERE external_subject = 'subject-session-rollback') AS users,
+        (SELECT COUNT(*) FROM app_memberships WHERE user_id <> 'local-dev') AS memberships,
+        (SELECT COUNT(*) FROM native_oidc_sessions) AS sessions
+    `).get() as { users: number; memberships: number; sessions: number };
+    assert.deepEqual(counts, { users: 0, memberships: 0, sessions: 0 });
+    assert.deepEqual(database.prepare(`
+      SELECT accepted_user_id AS acceptedUserId, accepted_at AS acceptedAt
+      FROM app_invitations
+      WHERE id = ?
+    `).get(invitation.invitation.id), { acceptedUserId: null, acceptedAt: null });
+  } finally {
+    await app.close();
+    cleanup();
+  }
+});
+
 test("native OIDC callback rejects normal login without workspace membership", async () => {
   const { database, cleanup } = testDatabase();
   const app = Fastify({ logger: false });
-  const sessions = new OidcSessionStore(database);
-  const staleSession = sessions.create("previous-subject", 3600);
+  const persistence = persistenceFor(database);
+  const sessions = new OidcSessionStore(persistence.query);
+  const staleSession = await sessions.create("previous-subject", 3600);
   let upsertCalls = 0;
   await app.register(nativeOidcRoutes, {
+    persistence,
     config: {
       authMode: "native-oidc",
       nodeEnv: "production",
@@ -710,7 +814,7 @@ test("native OIDC callback rejects normal login without workspace membership", a
     assert.match(callback.payload, /Kein Zugriff auf diese Installation/);
     assert.match(callback.payload, /href="\/impressum"/);
     assert.doesNotMatch(callback.payload, /subject-123|parents|editor|admin/);
-    assert.equal(sessions.findByToken(staleSession.token), undefined);
+    assert.equal(await sessions.findByToken(staleSession.token), undefined);
     assert.equal(upsertCalls, 0);
   } finally {
     await app.close();
@@ -721,8 +825,10 @@ test("native OIDC callback rejects normal login without workspace membership", a
 test("native OIDC callback accepts users with app membership without role groups", async () => {
   const { database, cleanup } = testDatabase();
   const app = Fastify({ logger: false });
-  const sessions = new OidcSessionStore(database);
+  const persistence = persistenceFor(database);
+  const sessions = new OidcSessionStore(persistence.query);
   await app.register(nativeOidcRoutes, {
+    persistence,
     config: {
       authMode: "native-oidc",
       nodeEnv: "production",
@@ -755,7 +861,7 @@ test("native OIDC callback accepts users with app membership without role groups
       })
     },
     sessions,
-    upsertUser: (user) => upsertAuthenticatedUser(user, new Date().toISOString(), database),
+    upsertUser: (user) => upsertAuthenticatedUser(user, persistence.query),
     applyMembershipRole: (candidate) => ({
       membershipRole: "editor",
       workspaceAccess: true,
@@ -779,7 +885,7 @@ test("native OIDC callback accepts users with app membership without role groups
     const setCookie = String(callback.headers["set-cookie"]);
     const sessionToken = setCookie.split(";")[0]?.split("=")[1];
     assert.equal(Boolean(sessionToken), true);
-    assert.equal(sessions.findByToken(sessionToken)?.externalSubject, "subject-member");
+    assert.equal((await sessions.findByToken(sessionToken))?.externalSubject, "subject-member");
   } finally {
     await app.close();
     cleanup();
@@ -798,9 +904,11 @@ test("native OIDC normal login stays closed before owner setup for every claim r
     await t.test(label, async () => {
       const { database, cleanup } = testDatabase();
       const app = Fastify({ logger: false });
-      const sessions = new OidcSessionStore(database);
+      const persistence = persistenceFor(database);
+      const sessions = new OidcSessionStore(persistence.query);
       let upsertCalls = 0;
       await app.register(nativeOidcRoutes, {
+        persistence,
         config: {
           authMode: "native-oidc",
           nodeEnv: "production",
@@ -835,7 +943,7 @@ test("native OIDC normal login stays closed before owner setup for every claim r
         upsertUser: () => {
           upsertCalls += 1;
         },
-        applyMembershipRole: (candidate) => applyMembershipRole(candidate, database)
+        applyMembershipRole: (candidate) => applyMembershipRole(candidate, persistence.query)
       });
 
       try {

@@ -33,18 +33,18 @@ import { disableLocalDevelopmentIdentityAccess } from "./services/localDevelopme
 
 await runMigrations();
 if (config.authMode !== "local") {
-  disableLocalDevelopmentIdentityAccess(db);
+  await disableLocalDevelopmentIdentityAccess(persistence);
 }
 
-const nativeOidcSessions = new OidcSessionStore();
+const nativeOidcSessions = new OidcSessionStore(persistence.query);
 const recoveryAdmin = new RecoveryAdminStore({
   enabled: config.recoveryAdminEnabled,
   username: config.recoveryAdminUsername,
   initialPasswordFile: config.recoveryAdminInitialPasswordFile,
   initialPassword: config.recoveryAdminInitialPassword,
   sessionTtlSeconds: config.recoveryAdminSessionTtlSeconds
-});
-recoveryAdmin.ensureConfigured();
+}, persistence);
+await recoveryAdmin.ensureConfigured();
 
 const app = Fastify({
   logger: {
@@ -150,8 +150,10 @@ await app.register(rateLimit, {
 
 app.decorateRequest("userEmail", "local-dev");
 app.decorateRequest("user", undefined);
+app.decorate("persistence", persistence);
 
 const apiAuthHook = createApiAuthHook(config, app.rateLimit(), {
+  database: persistence.query,
   nativeSessions: nativeOidcSessions,
   findRecoveryUserByToken: (token) => recoveryAdmin.findUserByToken(token)
 });
@@ -190,10 +192,17 @@ app.setErrorHandler((error, request, reply) => {
       message: "Zu viele Anfragen. Bitte später erneut versuchen."
     });
   }
-  if (classifyDatabaseError(normalized).kind === "constraint") {
+  const databaseError = classifyDatabaseError(normalized);
+  if (databaseError.kind === "constraint") {
     return reply.code(400).send({
-      error: "constraint_violation",
+      error: databaseError.code,
       message: "Die Eingabe verletzt eine Datenbankregel."
+    });
+  }
+  if (databaseError.kind === "unavailable") {
+    return reply.code(503).send({
+      error: databaseError.code,
+      message: "Die Datenbank ist vorübergehend nicht verfügbar."
     });
   }
   if (originDenied) {
@@ -251,28 +260,28 @@ function isSpaFallbackRequest(request: FastifyRequest): boolean {
   );
 }
 
-function hasNativeOidcBrowserSession(request: FastifyRequest): boolean {
-  const recoveryUser = recoveryAdmin.findUserByToken(
+async function hasNativeOidcBrowserSession(request: FastifyRequest): Promise<boolean> {
+  const recoveryUser = await recoveryAdmin.findUserByToken(
     cookieValue(request.headers.cookie, config.recoveryAdminSessionCookieName)
   );
   if (recoveryUser) return true;
-  const nativeSession = nativeOidcSessions.findByToken(
+  const nativeSession = await nativeOidcSessions.findByToken(
     cookieValue(request.headers.cookie, config.sessionCookieName)
   );
   const user = nativeSession
-    ? findAuthenticatedUserBySubject(nativeSession.externalSubject)
+    ? await findAuthenticatedUserBySubject(nativeSession.externalSubject, persistence.query)
     : undefined;
   return Boolean(user?.workspaceAccess);
 }
 
-function requiresNativeOidcBrowserLogin(request: FastifyRequest): boolean {
+async function requiresNativeOidcBrowserLogin(request: FastifyRequest): Promise<boolean> {
   return (
     config.authMode === "native-oidc" &&
     config.requireAuth &&
     isSpaFallbackRequest(request) &&
     !isNativeOidcOnboardingRequest(request) &&
     !publicLegalPaths.has(requestPath(request)) &&
-    !hasNativeOidcBrowserSession(request)
+    !(await hasNativeOidcBrowserSession(request))
   );
 }
 
@@ -298,8 +307,8 @@ app.get("/api/ready", readLimit, async (_request, reply) => {
 });
 
 app.get("/api/session", readLimit, async (request) => {
-  const setup = publicSetupState();
-  const recoveryUser = recoveryAdmin.findUserByToken(
+  const setup = await publicSetupState(persistence.query);
+  const recoveryUser = await recoveryAdmin.findUserByToken(
     cookieValue(request.headers.cookie, config.recoveryAdminSessionCookieName)
   );
   if (recoveryUser) {
@@ -326,11 +335,11 @@ app.get("/api/session", readLimit, async (request) => {
     };
   }
   if (config.authMode === "native-oidc") {
-    const nativeSession = nativeOidcSessions.findByToken(
+    const nativeSession = await nativeOidcSessions.findByToken(
       cookieValue(request.headers.cookie, config.sessionCookieName)
     );
     const resolvedNativeUser = nativeSession
-      ? findAuthenticatedUserBySubject(nativeSession.externalSubject)
+      ? await findAuthenticatedUserBySubject(nativeSession.externalSubject, persistence.query)
       : undefined;
     const nativeUser = resolvedNativeUser?.workspaceAccess
       ? resolvedNativeUser
@@ -383,8 +392,8 @@ app.get("/api/session", readLimit, async (request) => {
       fallbackRoleOnMissing: "readonly"
     });
     if (auth.authenticated && auth.user) {
-      upsertAuthenticatedUser(auth.user);
-      const membership = applyLegacyPreOwnerMembershipRole(auth.user);
+      await upsertAuthenticatedUser(auth.user, persistence.query);
+      const membership = await applyLegacyPreOwnerMembershipRole(auth.user, persistence.query);
       if (auth.reason !== "missing_role" || membership.membershipRole) {
         return {
           authRequired: config.requireAuth,
@@ -411,8 +420,15 @@ app.get("/api/session", readLimit, async (request) => {
 });
 
 await app.register(recoveryAdminRoutes, { config, store: recoveryAdmin });
-await app.register(nativeOidcRoutes, { config, sessions: nativeOidcSessions });
-await app.register(setupRoutes, { nativeSessions: nativeOidcSessions });
+await app.register(nativeOidcRoutes, {
+  config,
+  persistence,
+  sessions: nativeOidcSessions
+});
+await app.register(setupRoutes, {
+  nativeSessions: nativeOidcSessions,
+  persistence
+});
 await app.register(legalRoutes, { legalContentDir: config.legalContentDir });
 await registerProtectedApplicationRoutes(app);
 
@@ -429,7 +445,7 @@ void runCareConfirmationSweep().catch((error) => {
 const frontendRoot = resolve(process.cwd(), "dist");
 if (existsSync(frontendRoot)) {
   app.addHook("preHandler", async (request, reply) => {
-    if (requiresNativeOidcBrowserLogin(request)) {
+    if (await requiresNativeOidcBrowserLogin(request)) {
       return reply.redirect("/auth/login");
     }
   });
@@ -439,9 +455,9 @@ if (existsSync(frontendRoot)) {
     prefix: "/"
   });
 
-  app.setNotFoundHandler((request, reply) => {
+  app.setNotFoundHandler(async (request, reply) => {
     if (isSpaFallbackRequest(request)) {
-      if (requiresNativeOidcBrowserLogin(request)) {
+      if (await requiresNativeOidcBrowserLogin(request)) {
         return reply.redirect("/auth/login");
       }
       return reply.sendFile("index.html");

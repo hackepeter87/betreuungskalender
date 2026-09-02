@@ -1,4 +1,4 @@
-import type Database from "better-sqlite3";
+import { sql } from "kysely";
 import {
   workspacePermissionsForRole,
   workspaceRoleForLegacyRole,
@@ -6,7 +6,7 @@ import {
   type RequestUser,
   type WorkspaceRole
 } from "../auth.js";
-import { db } from "../db/connection.js";
+import type { DatabaseExecutor, PersistenceRuntime } from "../db/runtime.js";
 import { isLocalDevelopmentIdentity } from "./localDevelopmentIdentity.js";
 import { clearMembershipRole, setMembershipRole } from "./memberships.js";
 
@@ -20,17 +20,6 @@ export interface AppMember {
   lastSeenAt?: string;
   owner: boolean;
   workspaceAccess: boolean;
-}
-
-interface MemberRow {
-  id: string;
-  external_subject: string;
-  email: string | null;
-  display_name: string;
-  claim_role: AuthRole;
-  membership_role: WorkspaceRole | null;
-  membership_deleted_at: string | null;
-  last_seen_at: string | null;
 }
 
 export class MemberManagementError extends Error {
@@ -57,33 +46,37 @@ function parseSettingString(value: string | undefined): string | undefined {
   }
 }
 
-export function installationOwnerId(
-  database: Database.Database = db
-): string | undefined {
-  const row = database.prepare(`
-    SELECT value_json AS valueJson
-    FROM settings
-    WHERE key = 'setup.ownerUserId'
-      AND deleted_at IS NULL
-  `).get() as { valueJson: string } | undefined;
-  return parseSettingString(row?.valueJson);
+function isAuthRole(value: string): value is AuthRole {
+  return value === "admin" || value === "parent" || value === "readonly";
 }
 
-export function canAdministerMembers(
+function isWorkspaceRole(value: string): value is WorkspaceRole {
+  return value === "admin" || value === "editor" || value === "scheduler" || value === "viewer";
+}
+
+export async function installationOwnerId(database: DatabaseExecutor): Promise<string | undefined> {
+  const row = await database.selectFrom("settings")
+    .select("value_json")
+    .where("key", "=", "setup.ownerUserId")
+    .where("deleted_at", "is", null)
+    .executeTakeFirst();
+  return parseSettingString(row?.value_json);
+}
+
+export async function canAdministerMembers(
   actor: RequestUser | undefined,
-  database: Database.Database = db
-): boolean {
+  database: DatabaseExecutor
+): Promise<boolean> {
   if (!actor) return false;
-  const ownerId = installationOwnerId(database);
-  if (ownerId) return actor.id === ownerId;
-  return actor.role === "admin";
+  const ownerId = await installationOwnerId(database);
+  return ownerId ? actor.id === ownerId : actor.role === "admin";
 }
 
-export function assertCanAdministerMembers(
+export async function assertCanAdministerMembers(
   actor: RequestUser | undefined,
-  database: Database.Database = db
-): asserts actor is RequestUser {
-  if (!canAdministerMembers(actor, database)) {
+  database: DatabaseExecutor
+): Promise<void> {
+  if (!(await canAdministerMembers(actor, database))) {
     throw new MemberManagementError(
       "member_admin_required",
       403,
@@ -92,98 +85,100 @@ export function assertCanAdministerMembers(
   }
 }
 
-export function listMembers(
-  database: Database.Database = db,
+export async function listMembers(
+  database: DatabaseExecutor,
   options: { includeLocalDevelopmentIdentity?: boolean } = {
     includeLocalDevelopmentIdentity: true
   }
-): AppMember[] {
-  const ownerId = installationOwnerId(database);
-  const rows = database.prepare(`
-    SELECT users.id,
-      users.external_subject,
-      users.email,
-      users.display_name,
-      users.role AS claim_role,
-      users.last_seen_at,
-      memberships.role AS membership_role,
-      memberships.deleted_at AS membership_deleted_at
-    FROM app_users users
-    LEFT JOIN app_memberships memberships
-      ON memberships.id = (
-        SELECT latest.id
-        FROM app_memberships latest
-        WHERE latest.user_id = users.id
-        ORDER BY latest.updated_at DESC, latest.id DESC
-        LIMIT 1
-      )
-    WHERE users.deleted_at IS NULL
-    ORDER BY users.display_name COLLATE NOCASE, users.id
-  `).all() as MemberRow[];
-  return rows.filter((row) =>
-    options.includeLocalDevelopmentIdentity || !isLocalDevelopmentIdentity({
-      id: row.id,
-      externalSubject: row.external_subject,
-      displayName: row.display_name
-    })
-  ).map((row) => {
-    const workspaceAccess = row.membership_role !== null && row.membership_deleted_at === null;
-    return ({
-    id: row.id,
-    displayName: row.display_name,
-    claimRole: row.claim_role,
-    effectiveRole: row.membership_role ?? workspaceRoleForLegacyRole(row.claim_role),
-    ...(workspaceAccess && row.membership_role ? { membershipRole: row.membership_role } : {}),
-    ...(row.email ? { email: row.email } : {}),
-    ...(row.last_seen_at ? { lastSeenAt: row.last_seen_at } : {}),
-    owner: Boolean(ownerId && row.id === ownerId),
-    workspaceAccess: ownerId ? workspaceAccess : true
-  });
-  });
+): Promise<AppMember[]> {
+  const [ownerId, users, memberships] = await Promise.all([
+    installationOwnerId(database),
+    database.selectFrom("app_users")
+      .select(["id", "external_subject", "email", "display_name", "role", "last_seen_at"])
+      .where("deleted_at", "is", null)
+      .orderBy(sql`display_name COLLATE NOCASE`)
+      .orderBy("id")
+      .execute(),
+    database.selectFrom("app_memberships")
+      .select(["user_id", "role", "deleted_at"])
+      .orderBy("updated_at", "desc")
+      .orderBy("id", "desc")
+      .execute()
+  ]);
+  const latestMembership = new Map<string, { role: string; deletedAt: string | null }>();
+  for (const membership of memberships) {
+    if (!latestMembership.has(membership.user_id)) {
+      latestMembership.set(membership.user_id, {
+        role: membership.role,
+        deletedAt: membership.deleted_at
+      });
+    }
+  }
+  return users
+    .filter((user) => isAuthRole(user.role))
+    .filter((user) => options.includeLocalDevelopmentIdentity || !isLocalDevelopmentIdentity({
+      id: user.id,
+      externalSubject: user.external_subject,
+      displayName: user.display_name
+    }))
+    .map((user) => {
+      const membership = latestMembership.get(user.id);
+      const membershipRole = membership && isWorkspaceRole(membership.role)
+        ? membership.role
+        : undefined;
+      const workspaceAccess = Boolean(membershipRole && !membership?.deletedAt);
+      return {
+        id: user.id,
+        displayName: user.display_name,
+        claimRole: user.role as AuthRole,
+        effectiveRole: membershipRole ?? workspaceRoleForLegacyRole(user.role as AuthRole),
+        ...(workspaceAccess && membershipRole ? { membershipRole } : {}),
+        ...(user.email ? { email: user.email } : {}),
+        ...(user.last_seen_at ? { lastSeenAt: user.last_seen_at } : {}),
+        owner: Boolean(ownerId && user.id === ownerId),
+        workspaceAccess: ownerId ? workspaceAccess : true
+      };
+    });
 }
 
-function memberById(
-  userId: string,
-  database: Database.Database
-): AppMember | undefined {
-  return listMembers(database).find((member) => member.id === userId);
+async function memberById(userId: string, database: DatabaseExecutor): Promise<AppMember | undefined> {
+  return (await listMembers(database)).find((member) => member.id === userId);
 }
 
-function recordMemberAudit(
-  database: Database.Database,
+async function recordMemberAudit(
+  database: DatabaseExecutor,
   actorId: string,
   targetUserId: string,
   fieldName: string,
   oldValue: unknown,
   newValue: unknown,
   timestamp: string
-): void {
-  database.prepare(`
-    INSERT INTO audit_log (
-      timestamp, user_email, entity_type, entity_id, action, field_name,
-      old_value, new_value, created_at, updated_at
-    ) VALUES (?, ?, 'app_member', ?, 'updated', ?, ?, ?, ?, ?)
-  `).run(
+): Promise<void> {
+  await database.insertInto("audit_log").values({
     timestamp,
-    actorId,
-    targetUserId,
-    fieldName,
-    oldValue === undefined ? null : JSON.stringify(oldValue),
-    JSON.stringify(newValue),
-    timestamp,
-    timestamp
-  );
+    user_email: actorId,
+    entity_type: "app_member",
+    entity_id: targetUserId,
+    action: "updated",
+    field_name: fieldName,
+    old_value: oldValue === undefined ? null : JSON.stringify(oldValue),
+    new_value: JSON.stringify(newValue),
+    metadata_json: null,
+    created_at: timestamp,
+    updated_at: timestamp,
+    deleted_at: null
+  }).execute();
 }
 
-export function updateMemberRole(
+export async function updateMemberRole(
   actor: RequestUser,
   targetUserId: string,
   role: WorkspaceRole,
-  timestamp = new Date().toISOString(),
-  database: Database.Database = db
-): AppMember {
-  return database.transaction(() => {
-    assertCanAdministerMembers(actor, database);
+  persistence: PersistenceRuntime,
+  timestamp = new Date().toISOString()
+): Promise<AppMember> {
+  return persistence.transaction(async (database) => {
+    await assertCanAdministerMembers(actor, database);
     if (actor.id === targetUserId) {
       throw new MemberManagementError(
         "self_role_change_rejected",
@@ -191,31 +186,26 @@ export function updateMemberRole(
         "Die eigene Rolle kann nicht über die Mitgliederverwaltung geändert werden."
       );
     }
-    const before = memberById(targetUserId, database);
-    if (!before) {
-      throw new MemberManagementError(
-        "unknown_user",
-        404,
-        "Mitglied nicht gefunden."
-      );
-    }
-    setMembershipRole(targetUserId, role, actor.id, timestamp, database);
+    const before = await memberById(targetUserId, database);
+    if (!before) throw new MemberManagementError("unknown_user", 404, "Mitglied nicht gefunden.");
+    await setMembershipRole(targetUserId, role, actor.id, database, timestamp);
     const permissions = workspacePermissionsForRole(role, false);
     if (!permissions.includes("feeds:manage-own")) {
-      database.prepare(`
-        UPDATE calendar_feed_tokens
-        SET revoked_at = COALESCE(revoked_at, ?)
-        WHERE user_id = ? AND revoked_at IS NULL
-      `).run(timestamp, targetUserId);
+      await database.updateTable("calendar_feed_tokens")
+        .set({ revoked_at: timestamp })
+        .where("user_id", "=", targetUserId)
+        .where("revoked_at", "is", null)
+        .execute();
     }
     if (!permissions.includes("appointments:confirm")) {
-      database.prepare(`
-        UPDATE care_confirmation_requests
-        SET deleted_at = ?, updated_at = ?
-        WHERE user_id = ? AND deleted_at IS NULL AND answered_at IS NULL
-      `).run(timestamp, timestamp, targetUserId);
+      await database.updateTable("care_confirmation_requests")
+        .set({ deleted_at: timestamp, updated_at: timestamp })
+        .where("user_id", "=", targetUserId)
+        .where("deleted_at", "is", null)
+        .where("answered_at", "is", null)
+        .execute();
     }
-    recordMemberAudit(
+    await recordMemberAudit(
       database,
       actor.id,
       targetUserId,
@@ -224,26 +214,20 @@ export function updateMemberRole(
       role,
       timestamp
     );
-    const after = memberById(targetUserId, database);
-    if (!after) {
-      throw new MemberManagementError(
-        "unknown_user",
-        404,
-        "Mitglied nicht gefunden."
-      );
-    }
+    const after = await memberById(targetUserId, database);
+    if (!after) throw new MemberManagementError("unknown_user", 404, "Mitglied nicht gefunden.");
     return after;
-  })();
+  });
 }
 
-export function removeMember(
+export async function removeMember(
   actor: RequestUser,
   targetUserId: string,
-  timestamp = new Date().toISOString(),
-  database: Database.Database = db
-): AppMember {
-  return database.transaction(() => {
-    assertCanAdministerMembers(actor, database);
+  persistence: PersistenceRuntime,
+  timestamp = new Date().toISOString()
+): Promise<AppMember> {
+  return persistence.transaction(async (database) => {
+    await assertCanAdministerMembers(actor, database);
     if (actor.id === targetUserId) {
       throw new MemberManagementError(
         "self_remove_rejected",
@@ -251,31 +235,25 @@ export function removeMember(
         "Die eigene Mitgliedschaft kann nicht über die Mitgliederverwaltung entfernt werden."
       );
     }
-    const before = memberById(targetUserId, database);
-    if (!before) {
-      throw new MemberManagementError(
-        "unknown_user",
-        404,
-        "Mitglied nicht gefunden."
-      );
-    }
-    const removedRole = clearMembershipRole(targetUserId, actor.id, timestamp, database);
-    database.prepare(`
-      UPDATE calendar_feed_tokens
-      SET revoked_at = COALESCE(revoked_at, ?)
-      WHERE user_id = ? AND revoked_at IS NULL
-    `).run(timestamp, targetUserId);
-    database.prepare(`
-      UPDATE push_subscriptions
-      SET deleted_at = ?, updated_at = ?
-      WHERE user_id = ? AND deleted_at IS NULL
-    `).run(timestamp, timestamp, targetUserId);
-    database.prepare(`
-      UPDATE care_confirmation_requests
-      SET deleted_at = ?, updated_at = ?
-      WHERE user_id = ? AND deleted_at IS NULL
-    `).run(timestamp, timestamp, targetUserId);
-    recordMemberAudit(
+    const before = await memberById(targetUserId, database);
+    if (!before) throw new MemberManagementError("unknown_user", 404, "Mitglied nicht gefunden.");
+    const removedRole = await clearMembershipRole(targetUserId, actor.id, database, timestamp);
+    await database.updateTable("calendar_feed_tokens")
+      .set({ revoked_at: timestamp })
+      .where("user_id", "=", targetUserId)
+      .where("revoked_at", "is", null)
+      .execute();
+    await database.updateTable("push_subscriptions")
+      .set({ deleted_at: timestamp, updated_at: timestamp })
+      .where("user_id", "=", targetUserId)
+      .where("deleted_at", "is", null)
+      .execute();
+    await database.updateTable("care_confirmation_requests")
+      .set({ deleted_at: timestamp, updated_at: timestamp })
+      .where("user_id", "=", targetUserId)
+      .where("deleted_at", "is", null)
+      .execute();
+    await recordMemberAudit(
       database,
       actor.id,
       targetUserId,
@@ -284,14 +262,8 @@ export function removeMember(
       null,
       timestamp
     );
-    const after = memberById(targetUserId, database);
-    if (!after) {
-      throw new MemberManagementError(
-        "unknown_user",
-        404,
-        "Mitglied nicht gefunden."
-      );
-    }
+    const after = await memberById(targetUserId, database);
+    if (!after) throw new MemberManagementError("unknown_user", 404, "Mitglied nicht gefunden.");
     return after;
-  })();
+  });
 }

@@ -66,13 +66,15 @@ export class SqlitePersistenceRuntime implements PersistenceRuntime {
   #closed = false;
 
   constructor(
-    databasePath: string,
+    databasePath: string | Database.Database,
     private readonly migrationsDirectory?: string
   ) {
-    if (databasePath !== ":memory:") {
+    if (typeof databasePath === "string" && databasePath !== ":memory:") {
       mkdirSync(dirname(databasePath), { recursive: true });
     }
-    this.sqliteDatabase = new Database(databasePath);
+    this.sqliteDatabase = typeof databasePath === "string"
+      ? new Database(databasePath)
+      : databasePath;
     this.sqliteDatabase.pragma("journal_mode = WAL");
     this.sqliteDatabase.pragma("foreign_keys = ON");
     this.sqliteDatabase.pragma("busy_timeout = 5000");
@@ -134,7 +136,7 @@ export class SqlitePersistenceRuntime implements PersistenceRuntime {
 }
 
 export function createSqlitePersistenceRuntime(
-  databasePath: string,
+  databasePath: string | Database.Database,
   migrationsDirectory?: string
 ): SqlitePersistenceRuntime {
   return new SqlitePersistenceRuntime(databasePath, migrationsDirectory);

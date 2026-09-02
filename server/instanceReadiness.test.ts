@@ -5,17 +5,20 @@ import { join, resolve } from "node:path";
 import test from "node:test";
 import Database from "better-sqlite3";
 import { migrateDatabase } from "./db/migrationRunner.js";
+import { createSqlitePersistenceRuntime, type PersistenceRuntime } from "./db/runtime.js";
 import { buildInstanceReadiness } from "./services/instanceReadiness.js";
 
 const migrationsDirectory = resolve(process.cwd(), "server/migrations");
 
-function withDatabase(run: (database: Database.Database) => void): void {
+async function withDatabase(
+  run: (database: Database.Database, persistence: PersistenceRuntime) => Promise<void>
+): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), "betreuungskalender-readiness-"));
   const database = new Database(join(root, "app.sqlite"));
   database.pragma("foreign_keys = ON");
   try {
     migrateDatabase(database, migrationsDirectory);
-    run(database);
+    await run(database, createSqlitePersistenceRuntime(database));
   } finally {
     database.close();
     rmSync(root, { recursive: true, force: true });
@@ -34,8 +37,8 @@ const runtime = {
   webPushPublicKey: "public-vapid-key"
 };
 
-test("builds admin-safe instance readiness without exposing secrets", () => {
-  withDatabase((database) => {
+test("builds admin-safe instance readiness without exposing secrets", async () => {
+  await withDatabase(async (database, persistence) => {
     database.prepare(`
       INSERT INTO children (
         id, name, birth_month, birth_year, color, created_by, updated_by,
@@ -66,7 +69,7 @@ test("builds admin-safe instance readiness without exposing secrets", () => {
       "2026-07-05T10:00:00.000Z"
     );
 
-    const readiness = buildInstanceReadiness(database, runtime);
+    const readiness = await buildInstanceReadiness(persistence.query, runtime);
     const serialized = JSON.stringify(readiness);
 
     assert.equal(readiness.version, "9.9.9-test");
@@ -86,9 +89,9 @@ test("builds admin-safe instance readiness without exposing secrets", () => {
   });
 });
 
-test("marks setup incomplete while the instance has no child data", () => {
-  withDatabase((database) => {
-    const readiness = buildInstanceReadiness(database, {
+test("marks setup incomplete while the instance has no child data", async () => {
+  await withDatabase(async (database, persistence) => {
+    const readiness = await buildInstanceReadiness(persistence.query, {
       ...runtime,
       demoDatasetsEnabled: false,
       webPushPrivateKey: "",

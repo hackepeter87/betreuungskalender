@@ -7,7 +7,8 @@ import {
 } from "./auth.js";
 import type { config as appConfig } from "./config.js";
 import { cookieValue } from "./cookies.js";
-import { type OidcSessionRecord, type OidcSessionStore } from "./services/oidcSessions.js";
+import type { DatabaseExecutor } from "./db/runtime.js";
+import { type OidcSessionRecord } from "./services/oidcSessions.js";
 import { isTrustedProxyAddress } from "./trustedProxy.js";
 import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "./services/users.js";
 import {
@@ -36,15 +37,20 @@ type AuthConfig = Pick<
 >;
 
 interface NativeAuthOptions {
-  nativeSessions?: Pick<OidcSessionStore, "findByToken">;
-  findUserByExternalSubject?: (externalSubject: string) => RequestUser | undefined;
-  findRecoveryUserByToken?: (token: string | undefined) => RequestUser | undefined;
-  upsertAuthenticatedUser?: (user: RequestUser) => void;
+  database?: DatabaseExecutor;
+  nativeSessions?: {
+    findByToken(token: string | undefined): Awaitable<OidcSessionRecord | undefined>;
+  };
+  findUserByExternalSubject?: (externalSubject: string) => Awaitable<RequestUser | undefined>;
+  findRecoveryUserByToken?: (token: string | undefined) => Awaitable<RequestUser | undefined>;
+  upsertAuthenticatedUser?: (user: RequestUser) => Awaitable<void>;
   applyMembershipRole?: (
     user: RequestUser,
     policy?: MembershipResolutionPolicy
-  ) => MembershipResolution;
+  ) => Awaitable<MembershipResolution>;
 }
+
+type Awaitable<T> = T | Promise<T>;
 
 function httpError(code: string, statusCode: number, message: string): Error & { code: string; statusCode: number } {
   return Object.assign(new Error(message), { code, statusCode });
@@ -86,8 +92,12 @@ export function createApiAuthHook(
       request.url === "/api/session" ||
       request.url === "/api/setup/first-use"
     ) return;
+    const requiredDatabase = (): DatabaseExecutor => {
+      if (!options.database) throw new Error("Authentication persistence is not configured.");
+      return options.database;
+    };
     const recoveryUser = config.recoveryAdminEnabled
-      ? options.findRecoveryUserByToken?.(
+      ? await options.findRecoveryUserByToken?.(
           cookieValue(request.headers.cookie, config.recoveryAdminSessionCookieName)
         )
       : undefined;
@@ -106,13 +116,14 @@ export function createApiAuthHook(
     }
     if (config.authMode === "native-oidc") {
       const sessions = options.nativeSessions;
-      const session: OidcSessionRecord | undefined = sessions?.findByToken(
+      const session: OidcSessionRecord | undefined = await sessions?.findByToken(
         cookieValue(request.headers.cookie, config.sessionCookieName)
       );
       const user = session
-        ? (options.findUserByExternalSubject ?? findAuthenticatedUserBySubject)(
-            session.externalSubject
-          )
+        ? await (options.findUserByExternalSubject ?? ((externalSubject) =>
+            findAuthenticatedUserBySubject(externalSubject, requiredDatabase())))(
+          session.externalSubject
+        )
         : undefined;
       if (!session || !user) {
         throw httpError(
@@ -159,10 +170,11 @@ export function createApiAuthHook(
           : "Authentifizierung erforderlich."
         );
     }
-    (options.upsertAuthenticatedUser ?? upsertAuthenticatedUser)(auth.user);
+    await (options.upsertAuthenticatedUser ?? ((user) =>
+      upsertAuthenticatedUser(user, requiredDatabase())))(auth.user);
     const membership = options.applyMembershipRole
-      ? options.applyMembershipRole(auth.user, "legacy-pre-owner")
-      : applyLegacyPreOwnerMembershipRole(auth.user);
+      ? await options.applyMembershipRole(auth.user, "legacy-pre-owner")
+      : await applyLegacyPreOwnerMembershipRole(auth.user, requiredDatabase());
     if (auth.reason === "missing_role" && !membership.membershipRole) {
       throw httpError(
         "authorization_required",

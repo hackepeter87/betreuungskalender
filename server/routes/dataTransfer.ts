@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { config } from "../config.js";
 import { db } from "../db/connection.js";
 import { setMembershipRole } from "../services/memberships.js";
-import { installationOwnerId } from "../services/memberManagement.js";
 import { createInvitation } from "../services/invitations.js";
 import { toApiCreatedInvitation } from "../services/invitationResponses.js";
 import {
@@ -118,34 +117,56 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
     const userId = body.userId;
     const actorId = request.userEmail;
     try {
-      db.transaction(() => {
-        const actor = db.prepare("SELECT id FROM data_transfer_actors WHERE id = ?").get(request.params.id);
-        const user = db.prepare("SELECT id FROM app_users WHERE id = ? AND deleted_at IS NULL").get(userId);
+      await app.persistence.transaction(async (database) => {
+        const actor = await database.selectFrom("data_transfer_actors")
+          .select("id")
+          .where("id", "=", request.params.id)
+          .executeTakeFirst();
+        const user = await database.selectFrom("app_users")
+          .select("id")
+          .where("id", "=", userId)
+          .where("deleted_at", "is", null)
+          .executeTakeFirst();
         if (!actor || !user) throw new Error("Actor or target user was not found.");
-        const effectiveRole = userId === installationOwnerId(db) ? "admin" : role;
-        setMembershipRole(userId, effectiveRole, actorId, new Date().toISOString(), db);
+        const ownerSetting = await database.selectFrom("settings")
+          .select("value_json")
+          .where("key", "=", "setup.ownerUserId")
+          .where("deleted_at", "is", null)
+          .executeTakeFirst();
+        const ownerId = ownerSetting
+          ? JSON.parse(ownerSetting.value_json) as unknown
+          : undefined;
+        const effectiveRole = userId === ownerId ? "admin" : role;
         const timestamp = new Date().toISOString();
-        db.prepare(`
-          UPDATE data_transfer_actors
-          SET mapped_user_id = ?, updated_by = ?, updated_at = ?
-          WHERE id = ?
-        `).run(userId, actorId, timestamp, request.params.id);
-        db.prepare(`
-          UPDATE app_user_care_party_assignments
-          SET deleted_at = ?, updated_by = ?, updated_at = ?
-          WHERE user_id = ? AND deleted_at IS NULL
-        `).run(timestamp, actorId, timestamp, userId);
-        const insert = db.prepare(`
-          INSERT INTO app_user_care_party_assignments (
-            id, user_id, care_party_id, created_by, updated_by, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        `);
+        await setMembershipRole(userId, effectiveRole, actorId, database, timestamp);
+        await database.updateTable("data_transfer_actors")
+          .set({ mapped_user_id: userId, updated_by: actorId, updated_at: timestamp })
+          .where("id", "=", request.params.id)
+          .execute();
+        await database.updateTable("app_user_care_party_assignments")
+          .set({ deleted_at: timestamp, updated_by: actorId, updated_at: timestamp })
+          .where("user_id", "=", userId)
+          .where("deleted_at", "is", null)
+          .execute();
         for (const carePartyId of carePartyIds) {
-          const exists = db.prepare("SELECT 1 FROM care_parties WHERE id = ? AND deleted_at IS NULL").get(carePartyId);
+          const exists = await database.selectFrom("care_parties")
+            .select("id")
+            .where("id", "=", carePartyId)
+            .where("deleted_at", "is", null)
+            .executeTakeFirst();
           if (!exists) throw new Error("Care-party mapping is invalid.");
-          insert.run(randomUUID(), userId, carePartyId, actorId, actorId, timestamp, timestamp);
+          await database.insertInto("app_user_care_party_assignments").values({
+            id: randomUUID(),
+            user_id: userId,
+            care_party_id: carePartyId,
+            created_by: actorId,
+            updated_by: actorId,
+            created_at: timestamp,
+            updated_at: timestamp,
+            deleted_at: null
+          }).execute();
         }
-      })();
+      });
       return noStore(reply).send({ mapped: true });
     } catch (error) {
       return noStore(reply).code(400).send(errorReply(error));
@@ -161,13 +182,13 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
     const actor = db.prepare("SELECT id, email_hint AS email FROM data_transfer_actors WHERE id = ?").get(request.params.id) as { id: string; email: string | null } | undefined;
     if (!actor) return noStore(reply).code(404).send({ error: "not_found", message: "Imported actor was not found." });
     try {
-      const created = createInvitation({
+      const created = await createInvitation({
         role,
         expiresAt: body.expiresAt,
         actorId: request.userEmail,
         emailHint: typeof body.emailHint === "string" ? body.emailHint : actor.email ?? undefined,
         dataTransferActorId: actor.id
-      });
+      }, app.persistence.query);
       db.prepare("UPDATE data_transfer_actors SET invitation_id = ?, updated_by = ?, updated_at = ? WHERE id = ?")
         .run(created.invitation.id, request.userEmail, new Date().toISOString(), actor.id);
       return noStore(reply)
