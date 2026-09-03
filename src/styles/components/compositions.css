@@ -7,7 +7,6 @@
   margin-bottom: var(--section-gap);
 }
 
-.readiness-item,
 .member-invite-card,
 .member-token-card,
 .member-row,
@@ -25,7 +24,6 @@
   letter-spacing: 0;
 }
 
-.readiness-item span,
 .member-invite-card small,
 .member-token-card small {
   font-size: 0.74rem;
@@ -42,8 +40,6 @@
   padding-left: var(--panel-padding);
 }
 
-.subsection-heading,
-.panel-form,
 .rule-entry__main,
 .rule-entry,
 .holiday-row,
@@ -53,11 +49,19 @@
 }
 
 .subsection-heading {
+  min-width: 0;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
   gap: 16px;
   margin-bottom: 12px;
+}
+
+.panel-form {
+  display: grid;
+  min-width: 0;
+  gap: 16px;
+  padding: 18px;
 }
 
 .subsection-heading h3,
@@ -142,15 +146,6 @@
   line-height: 1.45;
 }
 
-.unavailable-time-fields .field {
-  min-width: 0;
-}
-
-.recurrence-builder .field {
-  min-width: 0;
-}
-
-.rule-segment-row .field,
 .rule-segment-row input,
 .rule-segment-row .icon-button {
   min-width: 0;
@@ -221,11 +216,6 @@
 
 .unavailable-toggle-card .field-help-button {
   flex: 0 0 auto;
-}
-
-.unavailable-toggle-list .field-label-text {
-  min-width: 0;
-  overflow-wrap: anywhere;
 }
 
 .field-label-row {
@@ -400,15 +390,10 @@
   margin-left: auto;
 }
 
-.status-pill,
 .child-settings-row strong,
 .holiday-row strong,
 .unavailable-row strong {
   overflow-wrap: anywhere;
-}
-
-.settings-form-grid > .field {
-  min-width: 0;
 }
 
 .settings-form-grid .field-label-row {

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import { inventoryStyles, repeatedStyleProperties } from "./style-inventory";
 import {
   findOverriddenDeclarations,
   findRawColorCounts,
@@ -27,6 +28,40 @@ const layerNames = [
   "utilities",
   "print"
 ] as const;
+
+test("inventories CSS with parser contexts and preserves fallback evidence", () => {
+  const source = '.field:is(.a, .b) { color: red; color: var(--ink); content: "a;b{}"; }\n' +
+    '@media (max-width: 767px) { .field { color: blue !important; } }\n' +
+    '@layer forms { @supports (display: grid) { .field { display: grid; } } }\n';
+  const inventory = inventoryStyles([{ path: "fixture.css", layer: "components", source }]);
+  assert.deepEqual(inventory.metrics, {
+    files: 1, lines: 3, bytes: Buffer.byteLength(source), declarations: 5, rules: 3
+  });
+  assert.deepEqual(inventory.rules[0].selectors, [".field:is(.a, .b)"]);
+  assert.deepEqual(inventory.rules[1].conditions, ["@media (max-width: 767px)"]);
+  assert.deepEqual(inventory.rules[2].conditions, ["@layer forms", "@supports (display: grid)"]);
+  assert.equal(inventory.rules[1].declarations[0].important, true);
+  assert.equal(repeatedStyleProperties(inventory.rules).length, 1);
+  assert.equal(repeatedStyleProperties(inventory.rules)[0].property, "color");
+});
+
+test("distinguishes repeated properties from different layers and conditions", () => {
+  const rules = inventoryStyles([
+    { path: "a.css", layer: "components", source: ".field { gap: 6px; }" },
+    { path: "b.css", layer: "responsive", source: ".field { gap: 8px; } @media (max-width: 767px) { .field { gap: 10px; } }" }
+  ]).rules;
+  assert.deepEqual(repeatedStyleProperties(rules), []);
+});
+
+test("keeps consolidated primitive properties unique within each context", async () => {
+  const primitives = new Set([
+    ".page", ".field", ".field input", ".field select", ".field textarea",
+    ".modal", ".modal__body", ".datetime-grid", ".form-grid", ".status-pill",
+    ".panel-form", ".subsection-heading"
+  ]);
+  const rules = inventoryStyles(await styleSources()).rules;
+  assert.deepEqual(repeatedStyleProperties(rules).filter(({ selector }) => primitives.has(selector)), []);
+});
 
 async function styleSources(): Promise<StyleSource[]> {
   const stylesRoot = new URL("../src/styles/", import.meta.url);
@@ -238,6 +273,8 @@ test("rejects declarations that are overwritten inside the same rule", () => {
       detail: "display is declared more than once in .nav"
     }
   ]);
+  assert.equal(findOverriddenDeclarations("fixture.css", ".field { gap: 2px; gap: 4px }").length, 1);
+  assert.deepEqual(findOverriddenDeclarations("fixture.css", '.field { content: "color: red; color: blue;"; --Name: 1; --name: 2 }'), []);
 });
 
 test("rejects viewport breakpoints outside responsive ownership or the approved set", () => {

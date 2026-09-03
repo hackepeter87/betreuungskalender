@@ -1,3 +1,5 @@
+import postcss from "postcss";
+
 export interface StyleSource {
   path: string;
   layer: string;
@@ -39,42 +41,8 @@ function normalizeColor(value: string): string {
 }
 
 function topLevelSelectors(source: string): string[] {
-  const css = withoutComments(source);
-  const selectors: string[] = [];
-  let depth = 0;
-  let boundary = 0;
-  let quote = "";
-  let escaped = false;
-
-  for (let index = 0; index < css.length; index += 1) {
-    const character = css[index];
-    if (quote) {
-      if (escaped) escaped = false;
-      else if (character === "\\") escaped = true;
-      else if (character === quote) quote = "";
-      continue;
-    }
-    if (character === '"' || character === "'") {
-      quote = character;
-      continue;
-    }
-    if (character === "{") {
-      const prelude = normalizeWhitespace(css.slice(boundary, index));
-      if (depth === 0 && prelude && !prelude.startsWith("@")) {
-        selectors.push(...prelude.split(",").map(normalizeWhitespace).filter(Boolean));
-      }
-      depth += 1;
-      continue;
-    }
-    if (character === "}") {
-      depth = Math.max(0, depth - 1);
-      if (depth === 0) boundary = index + 1;
-      continue;
-    }
-    if (character === ";" && depth === 0) boundary = index + 1;
-  }
-
-  return selectors;
+  return postcss.parse(source).nodes.flatMap((node) =>
+    node.type === "rule" ? node.selectors.map(normalizeWhitespace) : []);
 }
 
 export function findRawColorCounts(source: string): Record<string, number> {
@@ -88,13 +56,13 @@ export function findRawColorCounts(source: string): Record<string, number> {
 
 export function findOverriddenDeclarations(file: string, source: string): StyleGuardrailIssue[] {
   const issues: StyleGuardrailIssue[] = [];
-  for (const block of withoutComments(source).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
-    const selector = normalizeWhitespace(block[1]);
-    if (!selector || selector.startsWith("@")) continue;
+  postcss.parse(source, { from: file }).walkRules((rule) => {
+    const selector = normalizeWhitespace(rule.selector);
     const seen = new Set<string>();
     const reported = new Set<string>();
-    for (const declaration of block[2].matchAll(/([\w-]+)\s*:[^;{}]+;/g)) {
-      const property = declaration[1].toLowerCase();
+    for (const declaration of rule.nodes) {
+      if (declaration.type !== "decl") continue;
+      const property = declaration.prop.startsWith("--") ? declaration.prop : declaration.prop.toLowerCase();
       if (seen.has(property) && !reported.has(property)) {
         issues.push({
           type: "duplicate-declaration",
@@ -105,7 +73,7 @@ export function findOverriddenDeclarations(file: string, source: string): StyleG
       }
       seen.add(property);
     }
-  }
+  });
   return issues;
 }
 
