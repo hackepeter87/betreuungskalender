@@ -57,8 +57,29 @@ spec:
               value: {{ .Values.runtime.host | quote }}
             - name: PORT
               value: {{ .Values.runtime.port | quote }}
+            - name: DATABASE_DRIVER
+              value: {{ ternary "sqlite" "postgres" (eq .Values.database.type "sqlite") | quote }}
+            {{- if eq .Values.database.type "sqlite" }}
             - name: DATABASE_PATH
               value: {{ .Values.runtime.databasePath | quote }}
+            {{- else }}
+            - name: POSTGRES_HOST
+              value: {{ include "betreuungskalender.postgresHost" . | quote }}
+            - name: POSTGRES_PORT
+              value: {{ .Values.database.postgres.port | quote }}
+            - name: POSTGRES_DATABASE
+              value: {{ .Values.database.postgres.database | quote }}
+            - name: POSTGRES_USER
+              value: {{ .Values.database.postgres.user | quote }}
+            - name: POSTGRES_PASSWORD_FILE
+              value: /run/secrets/postgres/password
+            - name: POSTGRES_TLS_MODE
+              value: {{ .Values.database.postgres.tls.mode | quote }}
+            {{- if eq .Values.database.postgres.tls.mode "verify-full" }}
+            - name: POSTGRES_CA_FILE
+              value: /run/secrets/postgres-ca/ca.crt
+            {{- end }}
+            {{- end }}
             - name: BACKUP_DIR
               value: {{ .Values.runtime.backupDir | quote }}
             - name: TMPDIR
@@ -89,8 +110,19 @@ spec:
             {{- end }}
           {{- end }}
           volumeMounts:
+            {{- if eq .Values.database.type "sqlite" }}
             - name: data
               mountPath: {{ .Values.persistence.data.mountPath }}
+            {{- else }}
+            - name: postgres-password
+              mountPath: /run/secrets/postgres
+              readOnly: true
+            {{- if eq .Values.database.postgres.tls.mode "verify-full" }}
+            - name: postgres-ca
+              mountPath: /run/secrets/postgres-ca
+              readOnly: true
+            {{- end }}
+            {{- end }}
             - name: backups
               mountPath: {{ .Values.persistence.backups.mountPath }}
             - name: tmp
@@ -144,6 +176,7 @@ spec:
             successThreshold: {{ .Values.readinessProbe.successThreshold }}
           {{- end }}
       volumes:
+        {{- if eq .Values.database.type "sqlite" }}
         - name: data
           {{- if .Values.persistence.data.enabled }}
           persistentVolumeClaim:
@@ -151,6 +184,24 @@ spec:
           {{- else }}
           emptyDir: {}
           {{- end }}
+        {{- else }}
+        - name: postgres-password
+          secret:
+            secretName: {{ .Values.database.postgres.passwordSecret.name }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.database.postgres.passwordSecret.key }}
+                path: password
+        {{- if eq .Values.database.postgres.tls.mode "verify-full" }}
+        - name: postgres-ca
+          secret:
+            secretName: {{ .Values.database.postgres.tls.caSecret.name }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.database.postgres.tls.caSecret.key }}
+                path: ca.crt
+        {{- end }}
+        {{- end }}
         - name: backups
           {{- if .Values.persistence.backups.enabled }}
           persistentVolumeClaim:

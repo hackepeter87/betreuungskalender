@@ -1,14 +1,46 @@
 {{- if ne (int .Values.replicaCount) 1 }}
-{{- fail "replicaCount must be 1 because one SQLite database cannot be shared by active application replicas" }}
+{{- fail "replicaCount must remain 1 for every supported database mode" }}
 {{- end }}
 {{- if ne .Values.strategy.type "Recreate" }}
-{{- fail "strategy.type must be Recreate to prevent concurrent SQLite writers during upgrades" }}
+{{- fail "strategy.type must remain Recreate for every supported database mode" }}
 {{- end }}
-{{- if not .Values.persistence.data.enabled }}
+{{- if not (has .Values.database.type (list "sqlite" "postgres-external" "postgres-embedded-evaluation")) }}
+{{- fail "database.type must be one of sqlite, postgres-external, postgres-embedded-evaluation" }}
+{{- end }}
+{{- if and (eq .Values.database.type "sqlite") (not .Values.persistence.data.enabled) }}
 {{- fail "persistence.data.enabled must be true for a durable deployment" }}
 {{- end }}
-{{- if not (hasPrefix (printf "%s/" (trimSuffix "/" .Values.persistence.data.mountPath)) .Values.runtime.databasePath) }}
+{{- if and (eq .Values.database.type "sqlite") (not (hasPrefix (printf "%s/" (trimSuffix "/" .Values.persistence.data.mountPath)) .Values.runtime.databasePath)) }}
 {{- fail "runtime.databasePath must be located below persistence.data.mountPath" }}
+{{- end }}
+{{- if ne .Values.database.type "sqlite" }}
+  {{- if or (empty .Values.database.postgres.database) (empty .Values.database.postgres.user) (empty .Values.database.postgres.passwordSecret.name) }}
+  {{- fail "PostgreSQL modes require database.postgres.database, user, and passwordSecret.name" }}
+  {{- end }}
+  {{- if eq .Values.database.type "postgres-external" }}
+    {{- if empty .Values.database.postgres.host }}
+    {{- fail "postgres-external requires database.postgres.host" }}
+    {{- end }}
+  {{- else }}
+    {{- if not (empty .Values.database.postgres.host) }}
+    {{- fail "postgres-embedded-evaluation derives its internal host and does not accept database.postgres.host" }}
+    {{- end }}
+    {{- if ne .Values.database.postgres.tls.mode "disable" }}
+    {{- fail "postgres-embedded-evaluation requires database.postgres.tls.mode=disable on its internal transport" }}
+    {{- end }}
+    {{- if not .Values.database.embeddedEvaluation.persistence.enabled }}
+    {{- fail "postgres-embedded-evaluation requires persistent storage" }}
+    {{- end }}
+  {{- end }}
+  {{- if eq .Values.database.postgres.tls.mode "verify-full" }}
+    {{- if empty .Values.database.postgres.tls.caSecret.name }}
+    {{- fail "verify-full PostgreSQL requires database.postgres.tls.caSecret.name" }}
+    {{- end }}
+  {{- else if ne .Values.database.postgres.tls.mode "disable" }}
+    {{- fail "database.postgres.tls.mode must be disable or verify-full" }}
+  {{- else if not (empty .Values.database.postgres.tls.caSecret.name) }}
+    {{- fail "database.postgres.tls.caSecret is only valid with verify-full" }}
+  {{- end }}
 {{- end }}
 {{- if ne (trimSuffix "/" .Values.runtime.backupDir) (trimSuffix "/" .Values.persistence.backups.mountPath) }}
 {{- fail "runtime.backupDir must match persistence.backups.mountPath" }}

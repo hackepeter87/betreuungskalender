@@ -1,0 +1,144 @@
+{{- if eq .Values.database.type "postgres-embedded-evaluation" }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "betreuungskalender.postgresEvaluationName" . }}
+  labels:
+    {{- include "betreuungskalender.postgresEvaluationLabels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "betreuungskalender.postgresEvaluationSelectorLabels" . | nindent 4 }}
+  ports:
+    - name: postgres
+      port: 5432
+      targetPort: postgres
+      protocol: TCP
+---
+{{- if and .Values.database.embeddedEvaluation.persistence.enabled (not .Values.database.embeddedEvaluation.persistence.existingClaim) }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "betreuungskalender.postgresEvaluationClaimName" . }}
+  labels:
+    {{- include "betreuungskalender.postgresEvaluationLabels" . | nindent 4 }}
+  annotations:
+    {{- if .Values.database.embeddedEvaluation.persistence.retain }}
+    helm.sh/resource-policy: keep
+    {{- end }}
+    {{- with .Values.database.embeddedEvaluation.persistence.annotations }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  accessModes:
+    {{- toYaml .Values.database.embeddedEvaluation.persistence.accessModes | nindent 4 }}
+  {{- if .Values.database.embeddedEvaluation.persistence.storageClass }}
+  storageClassName: {{ .Values.database.embeddedEvaluation.persistence.storageClass | quote }}
+  {{- end }}
+  resources:
+    requests:
+      storage: {{ .Values.database.embeddedEvaluation.persistence.size }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "betreuungskalender.postgresEvaluationName" . }}
+  labels:
+    {{- include "betreuungskalender.postgresEvaluationLabels" . | nindent 4 }}
+spec:
+  replicas: 1
+  serviceName: {{ include "betreuungskalender.postgresEvaluationName" . }}
+  selector:
+    matchLabels:
+      {{- include "betreuungskalender.postgresEvaluationSelectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "betreuungskalender.postgresEvaluationSelectorLabels" . | nindent 8 }}
+      annotations:
+        betreuungskalender.app/evaluation-only: "true"
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgres
+          image: {{ printf "%s:%s" .Values.database.embeddedEvaluation.image.repository .Values.database.embeddedEvaluation.image.tag | quote }}
+          imagePullPolicy: {{ .Values.database.embeddedEvaluation.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            runAsNonRoot: true
+            runAsUser: 999
+            runAsGroup: 999
+            capabilities:
+              drop:
+                - ALL
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_DB
+              value: {{ .Values.database.postgres.database | quote }}
+            - name: POSTGRES_USER
+              value: {{ .Values.database.postgres.user | quote }}
+            - name: POSTGRES_PASSWORD_FILE
+              value: /run/secrets/postgres/password
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -ec
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 12
+          livenessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -ec
+                - pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 20
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+            - name: runtime
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+            - name: password
+              mountPath: /run/secrets/postgres
+              readOnly: true
+          resources:
+            {{- toYaml .Values.database.embeddedEvaluation.resources | nindent 12 }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "betreuungskalender.postgresEvaluationClaimName" . }}
+        - name: runtime
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        - name: password
+          secret:
+            secretName: {{ .Values.database.postgres.passwordSecret.name }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.database.postgres.passwordSecret.key }}
+                path: password
+{{- end }}

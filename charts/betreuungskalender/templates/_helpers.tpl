@@ -57,3 +57,32 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- define "betreuungskalender.backupClaimName" -}}
 {{- default (printf "%s-backups" (include "betreuungskalender.fullname" .)) .Values.persistence.backups.existingClaim }}
 {{- end }}
+
+{{- define "betreuungskalender.postgresEvaluationName" -}}
+{{- printf "%s-postgres-evaluation" (include "betreuungskalender.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{- define "betreuungskalender.postgresEvaluationClaimName" -}}
+{{- default (printf "%s-data" (include "betreuungskalender.postgresEvaluationName" .)) .Values.database.embeddedEvaluation.persistence.existingClaim }}
+{{- end }}
+
+{{- define "betreuungskalender.postgresEvaluationSelectorLabels" -}}
+app.kubernetes.io/name: {{ printf "%s-postgres-evaluation" (include "betreuungskalender.name" .) | trunc 63 | trimSuffix "-" }}
+app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
+
+{{- define "betreuungskalender.postgresEvaluationLabels" -}}
+helm.sh/chart: {{ include "betreuungskalender.chart" . }}
+{{ include "betreuungskalender.postgresEvaluationSelectorLabels" . }}
+app.kubernetes.io/managed-by: {{ .Release.Service }}
+app.kubernetes.io/version: {{ .Values.database.embeddedEvaluation.image.tag | quote }}
+app.kubernetes.io/component: database-evaluation
+{{- end }}
+
+{{- define "betreuungskalender.postgresHost" -}}
+{{- if eq .Values.database.type "postgres-embedded-evaluation" -}}
+{{- include "betreuungskalender.postgresEvaluationName" . -}}
+{{- else -}}
+{{- .Values.database.postgres.host -}}
+{{- end -}}
+{{- end }}

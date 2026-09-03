@@ -4,7 +4,13 @@
    kubectl port-forward service/{{ include "betreuungskalender.fullname" . }} 3000:{{ .Values.service.port }}
    curl http://127.0.0.1:3000/api/ready
 
-2. The release uses SQLite and must remain at one replica. Multiple independent
-   releases are supported because all names and claims are release-scoped.
+2. The release uses {{ .Values.database.type }} and must remain at one
+   application replica. Multiple independent releases are supported because
+   all names and claims are release-scoped.
+
+{{- if eq .Values.database.type "postgres-embedded-evaluation" }}
+WARNING: The embedded PostgreSQL service is an evaluation-only single instance.
+It is not a production database service and has no automatic backup or failover.
+{{- end }}
 
 3. {{- if .Values.ingress.enabled }} The configured ingress exposes the application.{{ else }} Ingress is disabled. Configure ingress.hosts and TLS before public use.{{ end }}
