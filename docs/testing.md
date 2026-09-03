@@ -64,6 +64,28 @@ Do not commit generated SQLite files or replace the fixture with exported
 installation data. A new migration may be appended without changing existing
 checksums; changing, removing or renaming a released migration fails the gate.
 
+## Cross-driver application parity
+
+CI runs the same application scenario against SQLite, PostgreSQL 16, and
+PostgreSQL 18. The scenario covers first-use setup and membership boundaries,
+invitations, recurring rules, conflicts, reports, audit pagination, personal
+calendar feeds, notification preferences, soft deletion, constraints, and
+transaction rollback. It also imports a complete portable transfer from
+SQLite to PostgreSQL and from PostgreSQL to SQLite after a mandatory dry run.
+
+The PostgreSQL jobs use an isolated service database and a temporary password
+file. With equivalent local test variables, run the database adapter and
+application parity suites together with:
+
+```bash
+npm run test:postgres-runtime
+```
+
+Without PostgreSQL test configuration, the standard `npm test` command still
+runs the SQLite application scenario and skips only the PostgreSQL comparisons.
+Fixtures are synthetic and neither database contents nor credentials may be
+written to logs or committed artifacts.
+
 ## Demo edge-case dataset
 
 Demo and staging environments can opt in to synthetic edge-case data with:
@@ -131,5 +153,7 @@ Pull requests run these relevant jobs:
 - `Validation`: dependency audit, release check, lint, build, and unit tests.
 - `End-to-end tests`: desktop, iPhone, and iPad Playwright coverage.
 - `Runtime security and CORS`: isolated HTTP assertions.
+- `PostgreSQL runtime`: PostgreSQL 16 and 18 migration, adapter, application,
+  and bidirectional transfer parity.
 - `Update and rollback workflow`: synthetic verified-update and rollback scenarios.
 - `Container / validate`: Docker startup, restart, persistence, and cleanup.
