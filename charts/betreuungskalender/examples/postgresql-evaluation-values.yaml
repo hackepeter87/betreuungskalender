@@ -1,0 +1,12 @@
+# Evaluation only. Use an operator-managed external PostgreSQL service for a
+# production PostgreSQL deployment.
+database:
+  type: postgres-embedded-evaluation
+  postgres:
+    database: betreuungskalender
+    user: betreuungskalender
+    passwordSecret:
+      name: betreuungskalender-postgres-evaluation
+      key: password
+    tls:
+      mode: disable

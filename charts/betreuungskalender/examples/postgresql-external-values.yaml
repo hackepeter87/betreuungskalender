@@ -1,0 +1,15 @@
+database:
+  type: postgres-external
+  postgres:
+    host: postgres.example.invalid
+    port: 5432
+    database: betreuungskalender
+    user: betreuungskalender
+    passwordSecret:
+      name: betreuungskalender-postgres
+      key: password
+    tls:
+      mode: verify-full
+      caSecret:
+        name: betreuungskalender-postgres-ca
+        key: ca.crt

@@ -31,6 +31,45 @@ runtime:
   backupDir: /backups
   tmpDir: /tmp
 
+# SQLite remains the default. PostgreSQL modes must be selected explicitly and
+# use existing Kubernetes Secrets; this chart never generates database
+# credentials.
+database:
+  type: sqlite
+  postgres:
+    host: ""
+    port: 5432
+    database: ""
+    user: ""
+    passwordSecret:
+      name: ""
+      key: password
+    tls:
+      mode: verify-full
+      caSecret:
+        name: ""
+        key: ca.crt
+  embeddedEvaluation:
+    image:
+      repository: postgres
+      tag: 16-bookworm
+      pullPolicy: IfNotPresent
+    persistence:
+      enabled: true
+      existingClaim: ""
+      storageClass: ""
+      accessModes:
+        - ReadWriteOnce
+      size: 5Gi
+      annotations: {}
+      retain: true
+    resources:
+      requests:
+        cpu: 100m
+        memory: 256Mi
+      limits:
+        memory: 512Mi
+
 # Non-sensitive application environment variables. See docs/configuration.md.
 # Production authentication is intentionally not selected by the chart. A
 # deployment without an explicit secure authentication configuration fails
