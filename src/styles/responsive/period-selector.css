@@ -1,0 +1,34 @@
+@media (max-width: 767px) {
+  .period-selector {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .period-selector__custom {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .period-selector__result {
+    margin: 0;
+    overflow-wrap: anywhere;
+  }
+
+  .period-selector__modes {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    width: 100%;
+  }
+
+  .period-selector__modes button {
+    min-width: 0;
+    padding-inline: 4px;
+  }
+
+  .period-selector__anchor,
+  .period-selector__custom {
+    min-width: 0;
+    width: 100%;
+  }
+}

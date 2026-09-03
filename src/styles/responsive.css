@@ -1,7 +1,12 @@
 /* Responsive ownership index. */
+@import "./responsive/tokens.css";
 @import "./responsive/shell.css";
 @import "./responsive/components.css";
-@import "./responsive/features.css";
+@import "./responsive/summaries.css";
+@import "./responsive/confirmations.css";
+@import "./responsive/care-conflicts.css";
+@import "./responsive/data-migration.css";
+@import "./responsive/period-selector.css";
 @import "./responsive/report.css";
 @import "./responsive/analytics.css";
 @import "./responsive/backup.css";

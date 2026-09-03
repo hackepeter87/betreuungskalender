@@ -1,5 +1,4 @@
-/* Ordered feature ownership. Shared residual rules migrate in the final package. */
-@import "./pages/remaining.css";
+/* Feature layouts only; shared controls belong to components. */
 @import "./pages/report.css";
 @import "./pages/analytics.css";
 @import "./pages/backup.css";

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import postcss from "postcss";
 import { inventoryStyles, repeatedStyleProperties } from "./style-inventory";
+import { extractLegalStyles, styleReductionCeilings, validateStyleReduction } from "./style-reduction-contract";
 import {
   findOverriddenDeclarations,
   findRawColorCounts,
@@ -28,6 +30,58 @@ const layerNames = [
   "utilities",
   "print"
 ] as const;
+
+const sharedStyleOwners = ["summaries", "confirmations", "care-conflicts", "data-migration", "period-selector"];
+
+test("enforces source and delivered-style reduction rather than line-count changes", () => {
+  const metrics = { files: 1, lines: 1, bytes: 100, declarations: 10, rules: 2 };
+  const build = { bytes: 80, gzipBytes: 50 };
+  const legal = { metrics, gzipBytes: 50 };
+  assert.deepEqual(validateStyleReduction(metrics, build, legal), []);
+  for (const key of ["bytes", "declarations", "rules"] as const) {
+    assert.ok(validateStyleReduction({ ...metrics, [key]: styleReductionCeilings[key] + 1 }, build, legal)
+      .some((issue) => issue.startsWith(`${key}:`)));
+  }
+  assert.ok(validateStyleReduction(metrics, { ...build, bytes: styleReductionCeilings.buildBytes + 1 }, legal).length);
+  assert.ok(validateStyleReduction(metrics, { ...build, gzipBytes: styleReductionCeilings.gzipBytes + 1 }, legal).length);
+  assert.ok(validateStyleReduction(metrics, build, { metrics: { ...metrics, bytes: 200000 }, gzipBytes: 50 }).length);
+  assert.ok(validateStyleReduction({ ...metrics, bytes: NaN }, build, legal).length);
+  assert.equal(extractLegalStyles("<style>h1 { color: red; }</style>"), "h1 { color: red; }");
+  assert.throws(() => extractLegalStyles("<style>${dynamic}</style>"));
+  assert.throws(() => extractLegalStyles("<style></style><style></style>"));
+});
+
+test("removes catch-alls and repeated same-context properties across every owner", async () => {
+  const sources = await styleSources();
+  for (const source of sources) {
+    assert.doesNotMatch(source.path, /\/(?:remaining|features|misc|legacy|overrides)\.css$/);
+    const conditions = new Set<string>();
+    postcss.parse(source.source).walkAtRules("media", (rule) => {
+      assert.ok(!conditions.has(rule.params), `${source.path}: repeated ${rule.params}`);
+      conditions.add(rule.params);
+    });
+  }
+  assert.deepEqual(repeatedStyleProperties(inventoryStyles(sources).rules), []);
+});
+
+test("loads each owned stylesheet exactly once without orphan files", async () => {
+  const sources = new Map((await styleSources()).map((source) => [source.path, source.source]));
+  sources.set("src/styles.css", await readFile(new URL("../src/styles.css", import.meta.url), "utf8"));
+  const visited = new Set<string>();
+  function visit(file: string) {
+    assert.ok(!visited.has(file), `duplicate or cyclic import: ${file}`);
+    const source = sources.get(file);
+    assert.notEqual(source, undefined, `unknown style import: ${file}`);
+    visited.add(file);
+    postcss.parse(source!).walkAtRules("import", (rule) => {
+      const imported = /^"([^\"]+)"(?:\s+layer\([\w-]+\))?$/.exec(rule.params)?.[1];
+      assert.ok(imported, `unreviewed style import: ${rule.params}`);
+      visit(path.posix.normalize(path.posix.join(path.posix.dirname(file), imported)));
+    });
+  }
+  visit("src/styles.css");
+  assert.deepEqual([...visited].sort(), [...sources.keys()].sort());
+});
 
 test("inventories CSS with parser contexts and preserves fallback evidence", () => {
   const source = '.field:is(.a, .b) { color: red; color: var(--ink); content: "a;b{}"; }\n' +
@@ -143,7 +197,8 @@ test("keeps shell and shared component ownership in ordered import-only indexes"
     "./components/structure.css",
     "./components/data-and-feedback.css",
     "./components/dialogs-and-forms.css",
-    "./components/compositions.css"
+    "./components/compositions.css",
+    ...sharedStyleOwners.map((owner) => `./components/${owner}.css`)
   ]);
   assert.deepEqual(topLevelSelectorsForTest(shell), []);
   assert.deepEqual(topLevelSelectorsForTest(components), []);
@@ -153,13 +208,14 @@ const supportingStyleOwners = [
   "report", "analytics", "backup", "documentation", "entries", "contact", "holidays", "unavailable", "audit"
 ];
 
-test("keeps responsive shell and shared component rules out of the feature catch-all", async () => {
+test("keeps responsive rules in explicit shell, component and feature owners", async () => {
   const responsive = await readFile(new URL("../src/styles/responsive.css", import.meta.url), "utf8");
 
   assert.deepEqual(styleImports(responsive), [
+    "./responsive/tokens.css",
     "./responsive/shell.css",
     "./responsive/components.css",
-    "./responsive/features.css",
+    ...sharedStyleOwners.map((owner) => `./responsive/${owner}.css`),
     ...supportingStyleOwners.map((owner) => `./responsive/${owner}.css`),
     "./responsive/settings.css",
     "./responsive/setup.css",
@@ -172,7 +228,7 @@ test("keeps responsive shell and shared component rules out of the feature catch
 test("keeps calendar and dashboard rules in their feature owners", async () => {
   const pages = await readFile(new URL("../src/styles/pages.css", import.meta.url), "utf8");
   assert.deepEqual(styleImports(pages), [
-    "./pages/remaining.css", ...supportingStyleOwners.map((owner) => `./pages/${owner}.css`),
+    ...supportingStyleOwners.map((owner) => `./pages/${owner}.css`),
     "./pages/settings.css", "./pages/setup.css", "./pages/calendar.css", "./pages/dashboard.css"
   ]);
   assert.deepEqual(topLevelSelectorsForTest(pages), []);
@@ -239,7 +295,7 @@ test("keeps shared global primitives authoritative in their owning layer", async
   assert.equal(occurrenceCount(pages, ".calendar-event {"), 1);
   assert.equal(occurrenceCount(pages, ".settings-section {"), 0, "section spacing belongs to .page > .panel");
   assert.equal(occurrenceCount(pages, ".settings-form-grid {"), 1);
-  assert.equal(occurrenceCount(pages, ".list-toolbar {"), 1);
+  assert.equal(occurrenceCount(componentSource, ".list-toolbar {"), 1);
 });
 
 test("rejects unlayered application rules", () => {
@@ -361,7 +417,7 @@ test("keeps the repository within the reviewed style contracts", async () => {
     }),
     ...validateBaselineOwnership(sources, baselineOwners),
     ...validateBreakpointOwnership(sources, approvedViewportQueries),
-    ...tokenOnlySources
+    ...sources
       .flatMap(({ path: sourcePath, source }) => findOverriddenDeclarations(sourcePath, source))
   ];
 

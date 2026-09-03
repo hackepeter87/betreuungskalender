@@ -1,0 +1,9 @@
+@media (max-width: 720px) {
+  .confirmation-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .confirmation-card__head {
+    flex-direction: column;
+  }
+}
