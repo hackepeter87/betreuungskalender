@@ -156,6 +156,8 @@ test("keeps responsive shell and shared component rules out of the feature catch
     "./responsive/shell.css",
     "./responsive/components.css",
     "./responsive/features.css",
+    "./responsive/settings.css",
+    "./responsive/setup.css",
     "./responsive/calendar.css",
     "./responsive/dashboard.css"
   ]);
@@ -165,7 +167,7 @@ test("keeps responsive shell and shared component rules out of the feature catch
 test("keeps calendar and dashboard rules in their feature owners", async () => {
   const pages = await readFile(new URL("../src/styles/pages.css", import.meta.url), "utf8");
   assert.deepEqual(styleImports(pages), [
-    "./pages/remaining.css", "./pages/calendar.css", "./pages/dashboard.css"
+    "./pages/remaining.css", "./pages/settings.css", "./pages/setup.css", "./pages/calendar.css", "./pages/dashboard.css"
   ]);
   assert.deepEqual(topLevelSelectorsForTest(pages), []);
 
@@ -174,6 +176,25 @@ test("keeps calendar and dashboard rules in their feature owners", async () => {
   for (const { path: sourcePath, source, layer } of sources) {
     if (layer === "print" || /\/(?:calendar|dashboard)\.css$/.test(sourcePath)) continue;
     assert.doesNotMatch(source, featureSelector, `${sourcePath} must not own calendar/dashboard rules`);
+  }
+});
+
+test("keeps settings and setup styles in their owners without repeated properties", async () => {
+  const sources = await styleSources();
+  const inventory = inventoryStyles(sources);
+  const settings = /^\.(?:settings-|child-settings-|child-avatar|data-actions|external-calendar-|holiday-derive-|calendar-feed-|instance-readiness-|readiness-pills|notification-preferences-|notification-rules|assignment-|member-|invitation-)/;
+  for (const rule of inventory.rules) {
+    for (const selector of rule.selectors) {
+      if (rule.layer === "print") continue;
+      const owner = /^\.setup[-\w]/.test(selector) ? "setup" : settings.test(selector) ? "settings" : undefined;
+      if (owner) assert.ok(rule.file.endsWith(`/${owner}.css`), `${selector} belongs to ${owner}, not ${rule.file}`);
+      assert.doesNotMatch(selector, /\.member-invite-accept\b|\.settings-form-grid--(?:two|three)\b/);
+    }
+  }
+  const owned = sources.filter(({ path: file }) => /\/(?:settings|setup)\.css$/.test(file));
+  assert.deepEqual(repeatedStyleProperties(inventoryStyles(owned).rules), []);
+  for (const { source, path: file } of owned) {
+    assert.deepEqual(findRawColorCounts(source), {}, `${file} uses existing semantic colors`);
   }
 });
 
@@ -193,7 +214,7 @@ test("keeps shared global primitives authoritative in their owning layer", async
   assert.equal(occurrenceCount(componentSource, ".page {"), 1);
   assert.equal(occurrenceCount(componentSource, ".panel__header {"), 1);
   assert.equal(occurrenceCount(pages, ".calendar-event {"), 1);
-  assert.equal(occurrenceCount(pages, ".settings-section {"), 1);
+  assert.equal(occurrenceCount(pages, ".settings-section {"), 0, "section spacing belongs to .page > .panel");
   assert.equal(occurrenceCount(pages, ".settings-form-grid {"), 1);
   assert.equal(occurrenceCount(pages, ".list-toolbar {"), 1);
 });

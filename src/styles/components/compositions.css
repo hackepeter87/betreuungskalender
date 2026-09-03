@@ -7,37 +7,10 @@
   margin-bottom: var(--section-gap);
 }
 
-.member-invite-card,
-.member-token-card,
-.member-row,
-.invitation-row {
-  padding: 16px;
-  border-radius: 8px;
-  background: var(--surface-soft);
-}
-
 .readiness-item small,
 .readiness-item strong,
-.readiness-item span,
-.member-invite-card small,
-.member-token-card small {
+.readiness-item span {
   letter-spacing: 0;
-}
-
-.member-invite-card small,
-.member-token-card small {
-  font-size: 0.74rem;
-}
-
-.member-management-grid,
-.member-list,
-.invitation-list,
-.child-settings-list,
-.data-actions,
-.settings-toggle-row,
-.settings-section > .field {
-  padding-right: var(--panel-padding);
-  padding-left: var(--panel-padding);
 }
 
 .rule-entry__main,
@@ -390,30 +363,15 @@
   margin-left: auto;
 }
 
-.child-settings-row strong,
 .holiday-row strong,
 .unavailable-row strong {
   overflow-wrap: anywhere;
 }
 
-.settings-form-grid .field-label-row {
-  min-height: 44px;
-  align-items: flex-start;
-  gap: 12px;
-}
-
-.settings-form-grid .field-label-row .field-help-trigger {
-  margin-top: -4px;
-}
-
 .list-toolbar .segmented-control,
 .analytics-export-actions .action-with-help,
 .backup-card .action-with-help,
-.calendar-feed-status,
-.calendar-feed-url,
 .file-picker-row,
-.external-calendar-import-grid,
-.holiday-derive-form,
 .period-selector {
   min-width: 0;
 }

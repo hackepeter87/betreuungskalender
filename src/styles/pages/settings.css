@@ -1,0 +1,460 @@
+.settings-section > .field {
+  padding: 0 var(--panel-padding) 12px;
+}
+
+.external-calendar-import-grid > .button {
+  grid-column: 3;
+  width: 100%;
+}
+
+.notification-preferences-row__channel .field-help-button {
+  width: 24px;
+  min-width: 24px;
+  height: 24px;
+  min-height: 24px;
+}
+
+.assignment-row__choices .check-row {
+  min-height: 36px;
+  margin: 0;
+  padding: 7px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+}
+
+.child-settings-row strong {
+  overflow-wrap: anywhere;
+}
+
+.settings-form-grid .field-label-row {
+  min-height: 44px;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.settings-form-grid .field-label-row .field-help-trigger {
+  margin-top: -4px;
+}
+
+.calendar-feed-status,
+.calendar-feed-url,
+.external-calendar-import-grid,
+.holiday-derive-form {
+  min-width: 0;
+}
+
+.child-settings-list {
+  padding: 0 18px;
+}
+
+.child-settings-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.child-settings-row:last-child {
+  border-bottom: 0;
+}
+
+.child-avatar {
+  display: flex;
+  width: 42px;
+  height: 42px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-weight: 800;
+}
+
+.child-avatar--neutral {
+  background: color-mix(in srgb, var(--teal) 10%, white);
+  color: var(--teal-strong);
+}
+
+.child-settings-row strong,
+.child-settings-row small {
+  display: block;
+}
+
+.child-settings-row strong {
+  font-size: 0.79rem;
+}
+
+.child-settings-row small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.65rem;
+}
+
+.child-settings-row__actions {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.settings-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 360px));
+  align-items: start;
+  justify-content: start;
+  gap: var(--field-gap);
+  padding: var(--panel-padding);
+}
+
+.settings-section--defaults .settings-form-grid {
+  grid-template-columns: repeat(3, minmax(240px, 360px));
+  max-width: 1160px;
+}
+
+.data-actions {
+  display: flex;
+  gap: 10px;
+  padding: 18px;
+}
+
+.external-calendar-import-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 2fr) 112px minmax(260px, 1fr);
+  align-items: end;
+  gap: 14px;
+  max-width: 1200px;
+  padding: 18px;
+}
+
+.external-calendar-kind-control {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.external-calendar-file-field,
+.external-calendar-url-field {
+  grid-column: 1 / 3;
+}
+
+.settings-section--external-calendar .child-settings-list {
+  max-width: 1400px;
+}
+
+.external-calendar-url-field {
+  min-width: 0;
+}
+
+.external-calendar-url-field input,
+.external-calendar-url-field small {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.holiday-derive-form {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) minmax(160px, 0.7fr) minmax(0, 1.3fr) auto;
+  align-items: end;
+  gap: 14px;
+  padding: 18px;
+}
+
+.holiday-derive-form__children {
+  margin: 0;
+}
+
+.external-calendar-color-field input[type="color"] {
+  min-height: 44px;
+  padding: 4px;
+}
+
+.calendar-feed-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 0 18px 12px;
+}
+
+.calendar-feed-content {
+  max-width: 960px;
+}
+
+.calendar-feed-scope-field {
+  padding: 0 18px;
+}
+
+.calendar-feed-status small,
+.settings-note,
+.settings-toggle-row small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.calendar-feed-url {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  padding: 0 18px 12px;
+}
+
+.calendar-feed-url input {
+  min-width: 0;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+  font-size: 0.68rem;
+}
+
+.settings-note {
+  margin: 0;
+  padding: 0 18px;
+}
+
+.settings-toggle-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+}
+
+.settings-toggle-row strong,
+.settings-toggle-row small {
+  display: block;
+}
+
+.settings-toggle-row small {
+  margin-top: 3px;
+}
+
+.instance-readiness-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr));
+  gap: var(--field-gap);
+  padding: var(--panel-padding);
+}
+
+.readiness-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.notification-preferences-table {
+  display: grid;
+  border-top: 1px solid var(--line);
+}
+
+.notification-rules {
+  display: grid;
+  gap: 8px;
+  padding: 0 18px 14px;
+  color: var(--muted);
+  font-size: 0.69rem;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.notification-rules p {
+  margin: 0;
+}
+
+.notification-rules strong {
+  color: var(--ink);
+}
+
+.notification-preferences-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 90px 90px;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--line);
+}
+
+.notification-preferences-row--head {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.notification-preferences-row__channel {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 6px;
+}
+
+.assignment-list {
+  display: grid;
+  gap: 10px;
+  padding: 14px 18px 18px;
+}
+
+.assignment-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 0.7fr) minmax(0, 1.3fr);
+  gap: 16px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--color-surface-subtle);
+}
+
+.assignment-row strong,
+.assignment-row small {
+  display: block;
+}
+
+.assignment-row small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.76rem;
+}
+
+.assignment-row__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.member-management-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--field-gap);
+  padding: 0 18px var(--panel-padding);
+}
+
+.member-management-grid--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.member-invite-card,
+.member-token-card {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--color-surface-subtle);
+}
+
+.member-invite-card strong,
+.member-token-card strong {
+  display: block;
+  color: var(--ink);
+  font-size: 0.88rem;
+}
+
+.member-invite-card small,
+.member-token-card small {
+  letter-spacing: 0;
+  display: block;
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 0.69rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.member-invite-card__row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(100px, 0.35fr);
+  gap: 10px;
+}
+
+.member-token-card textarea {
+  min-width: 0;
+  min-height: 74px;
+  resize: vertical;
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace);
+  font-size: 0.7rem;
+}
+
+.member-list,
+.invitation-list {
+  display: grid;
+  gap: 10px;
+  padding: 0 18px 18px;
+}
+
+.member-list {
+  border-top: 1px solid var(--line);
+  padding-top: 18px;
+}
+
+.invitation-list h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+
+.member-row,
+.invitation-row {
+  display: grid;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--color-surface-panel);
+}
+
+.member-row {
+  grid-template-columns: minmax(220px, 1.1fr) minmax(160px, 0.55fr) minmax(220px, 0.7fr);
+}
+
+.invitation-row {
+  grid-template-columns: minmax(0, 1fr) auto auto;
+}
+
+.member-row__identity {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+}
+
+.member-row__identity strong,
+.member-row__identity small,
+.invitation-row strong,
+.invitation-row small {
+  display: block;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.member-row__identity small,
+.invitation-row small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.member-row__actions {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.settings-form-grid input,
+.settings-form-grid select {
+  min-width: 0;
+}
+
+.child-settings-row > span {
+  min-width: 0;
+}

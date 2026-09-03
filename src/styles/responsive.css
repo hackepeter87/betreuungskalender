@@ -2,5 +2,7 @@
 @import "./responsive/shell.css";
 @import "./responsive/components.css";
 @import "./responsive/features.css";
+@import "./responsive/settings.css";
+@import "./responsive/setup.css";
 @import "./responsive/calendar.css";
 @import "./responsive/dashboard.css";

@@ -1,0 +1,43 @@
+@media (max-width: 767px) {
+  .setup-wizard__actions .button {
+    width: 100%;
+  }
+
+  .setup-wizard__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .setup-step {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 18px;
+  }
+
+  .setup-person-grid,
+  .setup-child-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .setup-add-child {
+    width: 100%;
+  }
+
+  .setup-discovery-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 430px) {
+  .setup-wizard__intro {
+    grid-template-columns: 1fr;
+  }
+
+  .setup-person-card__header {
+    grid-template-columns: 1fr;
+  }
+
+  .setup-primary-toggle {
+    justify-content: flex-start;
+  }
+}

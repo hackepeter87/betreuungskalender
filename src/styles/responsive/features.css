@@ -62,34 +62,9 @@
   }
 }
 @media (max-width: 720px) {
-  .notification-preferences-row {
-    grid-template-columns: minmax(0, 1fr) repeat(2, 56px);
-    gap: 8px;
-    padding: 12px 14px;
-  }
-
-  .notification-preferences-row--head {
-    font-size: 0.62rem;
-  }
 
   .confirmation-card__head {
     flex-direction: column;
-  }
-}
-@media (min-width: 721px) and (max-width: 1199px) {
-  .instance-readiness-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-@media (max-width: 720px) {
-
-  .member-row__actions {
-    justify-content: flex-start;
-  }
-}
-@media (max-width: 640px) {
-  .assignment-row {
-    grid-template-columns: 1fr;
   }
 }
 @media (max-width: 1199px) {
@@ -106,64 +81,6 @@
     min-width: 0;
     width: auto;
     flex: 1 1 auto;
-  }
-
-  .setup-step {
-    grid-template-columns: 1fr;
-    gap: 12px;
-    padding: 18px;
-  }
-
-  .setup-person-grid,
-  .setup-child-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .setup-add-child {
-    width: 100%;
-  }
-
-  .setup-person-card__header {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
-
-  .setup-primary-toggle {
-    justify-content: flex-end;
-  }
-
-  .setup-discovery-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .child-settings-row--external-source {
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: start;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: start;
-    gap: 10px 12px;
-    display: grid;
-    grid-template-columns: 42px minmax(0, 1fr);
-    padding: 12px 0;
-  }
-
-  .child-settings-row--external-source .child-settings-row__actions {
-    grid-column: 1 / -1;
-    display: grid;
-    width: 100%;
-    grid-template-columns: minmax(0, 1fr);
-    justify-content: stretch;
-    display: grid;
-    grid-column: 1 / -1;
-    grid-template-columns: minmax(0, 1fr) auto;
-    width: 100%;
-    padding-left: 54px;
-    justify-content: stretch;
-    display: grid;
-    grid-column: 1 / -1;
-    grid-template-columns: 1fr;
-    gap: 8px;
-    width: 100%;
-    padding-left: 0;
   }
 
   .entry-row {
@@ -248,18 +165,6 @@
   }
 }
 @media (max-width: 430px) {
-
-  .setup-wizard__intro {
-    grid-template-columns: 1fr;
-  }
-
-  .setup-person-card__header {
-    grid-template-columns: 1fr;
-  }
-
-  .setup-primary-toggle {
-    justify-content: flex-start;
-  }
 
   .button--icon-mobile span {
     display: none;
@@ -544,25 +449,6 @@
     margin-top: 12px;
   }
 
-  .calendar-feed-scope-field {
-    gap: 6px;
-    padding: 0 14px;
-    gap: 6px;
-    padding: 0 14px;
-  }
-
-  .calendar-feed-scope-field select {
-    min-height: 44px;
-  }
-
-  .settings-section--calendar-feed .settings-note {
-    margin-top: 10px;
-    padding: 0 14px;
-    font-size: 0.66rem;
-    margin-top: 10px;
-    padding: 0 14px;
-  }
-
   .summary-strip,
   .summary-strip--seven,
   .summary-strip--six,
@@ -654,11 +540,6 @@
   .unavailable-form select,
   .unavailable-form textarea {
     font-size: 16px;
-  }
-}
-@media (max-width: 720px) {
-  .instance-readiness-grid {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 767px) {
