@@ -1,0 +1,59 @@
+services:
+  betreuungskalender:
+    environment:
+      DATABASE_DRIVER: postgres
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DATABASE: ${POSTGRES_DATABASE:?Set POSTGRES_DATABASE in the private environment file}
+      POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in the private environment file}
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
+      POSTGRES_TLS_MODE: disable
+    secrets:
+      - postgres-password
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - app-runtime
+      - postgres-private
+
+  postgres:
+    image: postgres:16-bookworm
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-admin-password
+      APP_POSTGRES_DATABASE: ${POSTGRES_DATABASE:?Set POSTGRES_DATABASE in the private environment file}
+      APP_POSTGRES_USER: ${POSTGRES_USER:?Set POSTGRES_USER in the private environment file}
+      APP_POSTGRES_PASSWORD_FILE: /run/secrets/postgres-password
+    secrets:
+      - postgres-admin-password
+      - postgres-password
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U "$${APP_POSTGRES_USER}" -d "$${APP_POSTGRES_DATABASE}"
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    networks:
+      - postgres-private
+
+secrets:
+  postgres-admin-password:
+    file: ${POSTGRES_ADMIN_PASSWORD_FILE:?Set POSTGRES_ADMIN_PASSWORD_FILE to a private password file}
+  postgres-password:
+    file: ${POSTGRES_PASSWORD_FILE:?Set POSTGRES_PASSWORD_FILE to a private password file}
+
+volumes:
+  postgres-data:
+
+networks:
+  app-runtime:
+  postgres-private:
+    internal: true

@@ -34,6 +34,8 @@ const REQUIRED_ARCHIVE_PATHS = [
   "deploy/.env.oidc.example",
   "deploy/compose.yml",
   "deploy/compose.oidc.yml",
+  "deploy/compose.postgres.yml",
+  "deploy/postgres/init/001-create-application-role.sh",
   "deploy/oauth2-proxy.cfg.example",
   "dist/",
   "dist-server/",
