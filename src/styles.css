@@ -1,4 +1,6 @@
 /* Layer order is a public maintenance contract. Keep feature rules in their owning layer. */
+@layer tokens, base, shell, components, pages, responsive, utilities, print;
+
 @import "./styles/tokens.css" layer(tokens);
 @import "./styles/base.css" layer(base);
 @import "./styles/shell.css" layer(shell);
