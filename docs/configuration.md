@@ -27,6 +27,7 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `POSTGRES_DATABASE` | PostgreSQL database owned by the application role | `betreuungskalender` | Required with PostgreSQL | None | Use a dedicated database for one installation |
 | `POSTGRES_USER` | PostgreSQL application role | `betreuungskalender` | Required with PostgreSQL | None | Requires schema ownership, not superuser privileges |
 | `POSTGRES_PASSWORD_FILE` | Mounted file containing the PostgreSQL password | `/run/secrets/postgres-password` | Required with PostgreSQL | None | The password itself must not be placed in the environment |
+| `POSTGRES_ADMIN_PASSWORD_FILE` | Host file used by the optional Compose PostgreSQL service during initialization | `/srv/betreuungskalender/secrets/postgres-admin-password` | Required only with `compose.postgres.yml` | None | Keep separate from the application role password; it is not application configuration |
 | `POSTGRES_TLS_MODE` | PostgreSQL transport verification | `verify-full` | Optional with PostgreSQL | `verify-full` | Use `disable` only on an independently protected local/private transport |
 | `POSTGRES_CA_FILE` | Mounted trusted CA certificate for PostgreSQL | `/run/secrets/postgres-ca.pem` | Required with `verify-full` | None | Keep certificate material out of images and ConfigMaps |
 | `BACKUP_DIR` | Destination for SQLite backups | `/var/backups/betreuungskalender` | Recommended | `./backups` | Contains sensitive copies; use mode `0700` |

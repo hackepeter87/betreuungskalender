@@ -34,6 +34,8 @@ const REQUIRED_ARCHIVE_PATHS = [
   "deploy/.env.oidc.example",
   "deploy/compose.yml",
   "deploy/compose.oidc.yml",
+  "deploy/compose.postgres.yml",
+  "deploy/postgres/init/001-create-application-role.sh",
   "deploy/oauth2-proxy.cfg.example",
   "dist/",
   "dist-server/",
@@ -315,6 +317,12 @@ async function activeRelease(options) {
 }
 
 async function preflight(options, previous) {
+  if (parseEnv(previous.envContent).get("DATABASE_DRIVER") === "postgres") {
+    fail(
+      EXIT.PREFLIGHT,
+      "The archive update tool supports SQLite installations only. Use the documented PostgreSQL backup and update procedure."
+    );
+  }
   const composePath = resolve(options.root, previous.composeFile);
   const dataPath = resolve(options.root, "data", "app.sqlite");
   const backupsPath = resolve(options.root, "backups");

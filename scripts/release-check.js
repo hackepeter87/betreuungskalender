@@ -113,6 +113,8 @@ const CRITICAL_PROJECT_PATHS = [
   "deploy/.env.oidc.example",
   "deploy/compose.yml",
   "deploy/compose.oidc.yml",
+  "deploy/compose.postgres.yml",
+  "deploy/postgres/init/001-create-application-role.sh",
   "deploy/compose.testing.yml",
   "deploy/compose.production.yml",
   "deploy/app.env.demo.example",

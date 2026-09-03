@@ -143,6 +143,20 @@ volume, waits for `/api/health`, creates synthetic data, restarts the container,
 checks persistence and migration idempotency, then stops and removes the
 container, image, and volume. It does not publish ports or deploy anything.
 
+The optional PostgreSQL Compose path has a separate smoke test:
+
+```bash
+npm run build
+npm run test:container-postgres-smoke
+```
+
+It starts an isolated SQLite source and PostgreSQL target, performs a portable
+dry run and import, verifies rollback on a changed package, restarts both
+containers, checks persistence, and exercises unavailable-database and invalid-
+secret failures. PostgreSQL remains on an internal network without a published
+host port. All generated credentials and transfer data stay in a temporary
+directory and are removed after the run.
+
 When Docker is unavailable locally, validate the script through code review and
 run the remaining checks; GitHub-hosted CI executes the container smoke test.
 
@@ -157,3 +171,5 @@ Pull requests run these relevant jobs:
   and bidirectional transfer parity.
 - `Update and rollback workflow`: synthetic verified-update and rollback scenarios.
 - `Container / validate`: Docker startup, restart, persistence, and cleanup.
+- `Validate optional PostgreSQL Compose runtime`: opt-in Compose configuration,
+  transfer, restart, persistence, failure handling, and cleanup.

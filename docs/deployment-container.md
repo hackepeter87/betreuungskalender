@@ -84,6 +84,62 @@ release `.env`. The release Compose file intentionally fixes those values inside
 the container as `/data/app.sqlite` and `/backups`; persist them through the
 host-side `./data:/data` and `./backups:/backups` bind mounts.
 
+### Optional local PostgreSQL service
+
+SQLite remains the default for every Compose definition. To start the optional
+PostgreSQL service, place `compose.postgres.yml` and the accompanying
+`postgres/init/` directory next to the selected base Compose file. Create two
+different private password files outside the release directory:
+
+```bash
+install -d -m 0700 secrets
+openssl rand -base64 32 > secrets/postgres-admin-password
+openssl rand -base64 32 > secrets/postgres-password
+chmod 0644 secrets/postgres-*-password
+```
+
+Keep the `secrets/` directory at mode `0700`. Docker Compose implements local
+file secrets as bind mounts on Linux, so the files themselves must be readable
+by the nonroot users in the application and PostgreSQL containers. The private
+parent directory prevents other host users from reaching those `0644` files.
+Do not place them in a shared or traversable directory.
+
+Add only the file paths and non-secret database names to the private Compose
+environment file:
+
+```dotenv
+DATABASE_DRIVER=postgres
+POSTGRES_DATABASE=betreuungskalender
+POSTGRES_USER=betreuungskalender
+POSTGRES_PASSWORD_FILE=/absolute/path/to/secrets/postgres-password
+POSTGRES_ADMIN_PASSWORD_FILE=/absolute/path/to/secrets/postgres-admin-password
+```
+
+Start the selected base definition together with the opt-in overlay:
+
+```bash
+docker compose --env-file .env \
+  -f compose.yml \
+  -f compose.postgres.yml \
+  up -d
+```
+
+The database has no published host port and is reachable only from the
+application over an internal Compose network. Transport encryption is disabled
+only for this isolated container network. The application uses a dedicated
+non-superuser role; the separate database administrator credential is required
+only to initialize a new database volume. Podman Compose can use the same two
+files when its Compose provider supports health-based dependencies and Compose
+secrets.
+
+Do not run the SQLite backup command against this configuration. PostgreSQL
+requires its own logical backup and restore procedure. A portable application
+export can be used to move domain data from an existing SQLite installation,
+but it does not replace a database backup. The complete PostgreSQL operating,
+backup, update, and recovery procedure is documented with the v1.28.0 release.
+The archive update tool intentionally stops before changing a PostgreSQL-backed
+installation because its automatic backup and rollback path is SQLite-specific.
+
 ## Promoted GHCR image deployment
 
 For testing and production machines that should not build from release

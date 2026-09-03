@@ -34,6 +34,9 @@ async function createArtifact(directory, version = "0.5.0") {
   await writeFile(resolve(payload, "deploy", ".env.oidc.example"), "APP_RELEASE_VERSION=0.5.0\n");
   await writeFile(resolve(payload, "deploy", "compose.yml"), "services: {}\n");
   await writeFile(resolve(payload, "deploy", "compose.oidc.yml"), "services: {}\n");
+  await writeFile(resolve(payload, "deploy", "compose.postgres.yml"), "services: {}\n");
+  await mkdir(resolve(payload, "deploy", "postgres", "init"), { recursive: true });
+  await writeFile(resolve(payload, "deploy", "postgres", "init", "001-create-application-role.sh"), "#!/bin/sh\n");
   await writeFile(resolve(payload, "deploy", "oauth2-proxy.cfg.example"), "upstreams = [ \"http://betreuungskalender:3000\" ]\n");
   await writeFile(resolve(payload, "dist", "index.html"), "<main>test</main>");
   await writeFile(resolve(payload, "dist-server", "server.js"), "export {};\n");
@@ -154,6 +157,18 @@ test("keeps compiled release assets in the Docker build context", async () => {
   const dockerIgnore = await readFile(resolve(process.cwd(), ".dockerignore"), "utf8");
   assert.doesNotMatch(dockerIgnore, /^dist$/m);
   assert.doesNotMatch(dockerIgnore, /^dist-server$/m);
+});
+
+test("archive updates fail closed for PostgreSQL installations", async () => {
+  await withTemporaryDirectory("postgres-unsupported", async (directory) => {
+    const root = await createInstallation(directory, { env: "DATABASE_DRIVER=postgres\n" });
+    const { archive, checksumPath } = await createArtifact(directory);
+    await assert.rejects(
+      runUpdate(updateOptions(root, archive, checksumPath)),
+      /archive update tool supports SQLite installations only/
+    );
+    assert.match(await readFile(resolve(root, ".env"), "utf8"), /APP_RELEASE_VERSION=0\.4\.0/);
+  });
 });
 
 test("synthetic Compose upgrade verifies backup and records the active release", async () => {
