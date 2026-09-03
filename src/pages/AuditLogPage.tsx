@@ -4,7 +4,7 @@ import { FieldHelpButton, FieldHelpLabel } from "../components/FieldHelp";
 import { formatDateTime } from "../lib/date";
 import { api } from "../lib/api";
 import { useI18n } from "../i18n/I18nProvider";
-import { copy } from "../i18n/catalog";
+import { catalogKey, copy } from "../i18n/catalog";
 import type { AuditAction, AuditLogEntry, AuditObjectType } from "../types";
 
 const objectLabels: Record<AuditObjectType, string> = {
@@ -195,7 +195,7 @@ export function AuditLogPage() {
               disabled={isLoadingMore}
               onClick={() => void loadMore()}
             >
-              {copy(locale, "audit", isLoadingMore ? "loadingMore" : "loadMore")}
+              {copy(locale, "audit", catalogKey("audit", isLoadingMore ? "loadingMore" : "loadMore"))}
             </button>
           </div>
         ) : null}

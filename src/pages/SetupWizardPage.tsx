@@ -3,7 +3,7 @@ import { FieldHelpLabel } from "../components/FieldHelp";
 import { Icon } from "../components/Icon";
 import { CHILD_COLORS } from "../data/defaults";
 import { useI18n } from "../i18n/I18nProvider";
-import { copy, type CatalogKey } from "../i18n/catalog";
+import { catalogKey, copy } from "../i18n/catalog";
 import { api } from "../lib/api";
 import { useAppStore } from "../store/AppStore";
 import { carePartyKinds, type ApiCarePartyKind } from "../../shared/api";
@@ -21,7 +21,7 @@ function defaultBirthYear(): number {
 }
 
 function kindLabel(locale: "de" | "en", kind: ApiCarePartyKind): string {
-  return copy(locale, "settings", `carePartyKind_${kind}` as CatalogKey<"settings">);
+  return copy(locale, "settings", catalogKey("settings", `carePartyKind_${kind}`));
 }
 
 function childDraft(id: number): SetupChildDraft {

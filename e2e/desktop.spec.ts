@@ -25,10 +25,11 @@ async function deferredAsset(source: string): Promise<string> {
 }
 
 test("shows an accessible loading state for a deferred page", async ({
-  browser
+  browser,
+  baseURL
 }) => {
   const context = await browser.newContext({
-    baseURL: "http://127.0.0.1:3100",
+    baseURL,
     serviceWorkers: "block",
     viewport: { width: 1440, height: 900 }
   });
@@ -50,9 +51,9 @@ test("shows an accessible loading state for a deferred page", async ({
   }
 });
 
-test("shows a generic chunk failure and reloads the application", async ({ browser }) => {
+test("shows a generic chunk failure and reloads the application", async ({ browser, baseURL }) => {
   const context = await browser.newContext({
-    baseURL: "http://127.0.0.1:3100",
+    baseURL,
     serviceWorkers: "block",
     viewport: { width: 1440, height: 900 }
   });
@@ -1333,7 +1334,9 @@ test("creates a personal calendar feed URL from settings", async ({
   await expect(manager).toContainText("Feed aktiv seit");
 
   const feedUrl = await manager.getByTestId("calendar-feed-url").inputValue();
-  expect(feedUrl).toMatch(/^http:\/\/127\.0\.0\.1:3100\/calendar\/[A-Za-z0-9_-]+\.ics$/);
+  const parsedFeedUrl = new URL(feedUrl);
+  expect(parsedFeedUrl.origin).toBe(new URL(page.url()).origin);
+  expect(parsedFeedUrl.pathname).toMatch(/^\/calendar\/[A-Za-z0-9_-]+\.ics$/);
   const feed = await request.get(new URL(feedUrl).pathname);
   expect(feed.ok()).toBeTruthy();
   expect(feed.headers()["content-type"]).toContain("text/calendar");
@@ -1505,11 +1508,19 @@ test("persists the selected language and localizes the report surface", async ({
 }) => {
   await openApp(page);
   await navigate(page, "settings");
+  await expect(page.getByTestId("nav-settings")).toContainText("Einstellungen");
 
   const language = page.getByTestId("settings-language");
   await language.selectOption("en");
   await expect(page.locator("html")).toHaveAttribute("lang", "en");
   await expect(page.getByTestId("nav-report")).toContainText("Report");
+  await expect(page.getByTestId("nav-settings")).toContainText("Settings");
+
+  await navigate(page, "calendar");
+  await expect(page.getByTestId("page-calendar").locator(".page-header__context")).toHaveText("Calendar");
+
+  await navigate(page, "backup");
+  await expect(page.getByTestId("page-backup").getByRole("heading", { level: 1 })).toHaveText("Export & import");
 
   await navigate(page, "report");
   await expect(page.getByTestId("report-title")).toHaveText(

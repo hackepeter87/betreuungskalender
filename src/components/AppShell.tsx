@@ -5,7 +5,7 @@ import { logoutSession } from "../lib/api";
 import { useAppStore } from "../store/AppStore";
 import type { ApiSession } from "../../shared/api";
 import type { CareEntry } from "../types";
-import { copy } from "../i18n/catalog";
+import { catalogKey, copy } from "../i18n/catalog";
 import { CareConfirmationCenter } from "./CareConfirmationCenter";
 import type { IconName } from "./Icon";
 import { Icon } from "./Icon";
@@ -328,7 +328,7 @@ function NotificationBell({
           <header className="notification-center__header">
             <div>
               <strong>{copy(locale, "confirmation", "notificationCenter")}</strong>
-              <p>{copy(locale, "confirmation", count ? "notificationCenterDescription" : "empty")}</p>
+              <p>{copy(locale, "confirmation", catalogKey("confirmation", count ? "notificationCenterDescription" : "empty"))}</p>
             </div>
             <button className="icon-button" type="button" onClick={() => setOpen(false)} aria-label={copy(locale, "common", "cancel")}>
               <Icon name="close" size={18} />

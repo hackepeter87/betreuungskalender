@@ -5,7 +5,7 @@ import { EntryForm } from "./components/EntryForm";
 import { Modal } from "./components/Modal";
 import { api } from "./lib/api";
 import { useI18n } from "./i18n/I18nProvider";
-import { copy } from "./i18n/catalog";
+import { catalogKey, copy } from "./i18n/catalog";
 import {
   detectLegacyBrowserData,
   isLegacyFingerprintIgnored,
@@ -258,8 +258,8 @@ export function App() {
           <div className="notice notice--success app-onboarding-notice" role="status" data-testid="onboarding-completion-notice">
             <Icon name="check" size={18} />
             <div>
-              <strong>{copy(locale, "app", onboardingNotice === "owner-setup" ? "ownerSetupComplete" : "invitationComplete")}</strong>
-              <p>{copy(locale, "app", onboardingNotice === "owner-setup" ? "ownerSetupNext" : "invitationNext")}</p>
+              <strong>{copy(locale, "app", catalogKey("app", onboardingNotice === "owner-setup" ? "ownerSetupComplete" : "invitationComplete"))}</strong>
+              <p>{copy(locale, "app", catalogKey("app", onboardingNotice === "owner-setup" ? "ownerSetupNext" : "invitationNext"))}</p>
             </div>
             <button className="icon-button" type="button" onClick={() => setOnboardingNotice(null)} aria-label={copy(locale, "common", "close")}>
               <Icon name="close" size={17} />

@@ -6,7 +6,7 @@ import { Modal } from "../components/Modal";
 import { ExternalCalendarManager } from "../components/ExternalCalendarManager";
 import { useHelpPreferences } from "../context/HelpPreferences";
 import { useI18n } from "../i18n/I18nProvider";
-import { copy, type CatalogKey } from "../i18n/catalog";
+import { catalogKey, copy } from "../i18n/catalog";
 import { localeMetadata, supportedLocales } from "../i18n/resources";
 import { actorDisplayName } from "../lib/actors";
 import { ApiError, api } from "../lib/api";
@@ -88,7 +88,7 @@ function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
 }
 
 function carePartyKindLabel(kind: ApiCarePartyKind, locale: "de" | "en") {
-  return copy(locale, "settings", `carePartyKind_${kind}` as CatalogKey<"settings">);
+  return copy(locale, "settings", catalogKey("settings", `carePartyKind_${kind}`));
 }
 
 function notificationEventLabel(eventType: NotificationEventType, locale: "de" | "en") {
@@ -98,7 +98,7 @@ function notificationEventLabel(eventType: NotificationEventType, locale: "de" |
 }
 
 function yesNo(value: boolean, locale: "de" | "en") {
-  return copy(locale, "common", value ? "yes" : "no");
+  return copy(locale, "common", catalogKey("common", value ? "yes" : "no"));
 }
 
 function NotificationPreferencesSection() {
@@ -178,7 +178,7 @@ function NotificationPreferencesSection() {
 const memberRoles: ApiWorkspaceRole[] = ["admin", "editor", "scheduler", "viewer"];
 
 function memberRoleLabel(role: ApiWorkspaceRole, locale: "de" | "en") {
-  return copy(locale, "settings", `memberRole_${role}` as CatalogKey<"settings">);
+  return copy(locale, "settings", catalogKey("settings", `memberRole_${role}`));
 }
 
 function invitationStatus(invitation: ApiInvitation, locale: "de" | "en") {

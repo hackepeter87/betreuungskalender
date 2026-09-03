@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { useI18n } from "../i18n/I18nProvider";
-import { copy } from "../i18n/catalog";
+import { catalogKey, copy } from "../i18n/catalog";
 import {
   dismissPwaInstallPrompt,
   getPwaInstallAvailability,
@@ -39,7 +39,7 @@ export function PwaInstallPrompt() {
       </span>
       <div className="pwa-install-prompt__content">
         <strong id="pwa-install-title">{copy(locale, "pwaInstall", "title")}</strong>
-        <p>{copy(locale, "pwaInstall", isIos ? "iosDescription" : "browserDescription")}</p>
+        <p>{copy(locale, "pwaInstall", catalogKey("pwaInstall", isIos ? "iosDescription" : "browserDescription"))}</p>
       </div>
       <div className="pwa-install-prompt__actions">
         {isIos ? (

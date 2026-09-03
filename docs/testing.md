@@ -41,11 +41,19 @@ external events are present without raw ICS content or runtime secrets.
 Generated Playwright reports, databases, and downloads remain in ignored test
 output directories and must not be committed.
 
+If port `3100` is already used by a local app session, set `E2E_PORT` to a free
+local port for the Playwright run.
+
 The deterministic cross-page screenshot suite and its privacy rules are
 documented in [Visual regression testing](visual-regression-testing.md).
 
 The automated axe gate and the manual keyboard, VoiceOver, reflow, and touch
 matrix are documented in [Accessibility testing](accessibility-testing.md).
+
+Translation catalog coverage runs as part of `npm test`. It rejects missing,
+unknown, inherited, malformed, or placeholder-incompatible keys and requires
+dynamic catalog keys to use the typed marker described in
+[Internationalization and language packs](internationalization.md).
 
 ## SQLite migration and parity gate
 

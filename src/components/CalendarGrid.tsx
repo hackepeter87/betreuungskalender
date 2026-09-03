@@ -7,7 +7,7 @@ import { conflictSeverityForEntry } from "../lib/careConflictPresentation";
 import type { CareConflict, CareEntry, Child, ExternalCalendarEvent, HolidayPeriod, UnavailablePeriod } from "../types";
 import { Icon } from "./Icon";
 import { useI18n } from "../i18n/I18nProvider";
-import { copy, copyList } from "../i18n/catalog";
+import { catalogKey, copy, copyList } from "../i18n/catalog";
 import { formatDate } from "../lib/date";
 import { isoWeekNumber } from "../lib/calendar";
 import { useDialogFocus } from "../hooks/useDialogFocus";
@@ -237,7 +237,7 @@ export function CalendarGrid({
                     data-testid={`calendar-entry-${entry.id}`}
                     onClick={() => onSelectEntry(entry)}
                     title={conflictSeverity
-                      ? copy(locale, "careConflict", conflictSeverity === "unresolved_actual" ? "unresolvedActual" : "plannedWarning")
+                      ? copy(locale, "careConflict", catalogKey("careConflict", conflictSeverity === "unresolved_actual" ? "unresolvedActual" : "plannedWarning"))
                       : hasOverlap
                       ? copy(locale, "agenda", "overlap")
                       : hasHolidayOverlap

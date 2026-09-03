@@ -21,7 +21,7 @@ import {
 } from "../lib/date";
 import { statusLabels } from "../lib/labels";
 import { useI18n } from "../i18n/I18nProvider";
-import { copy, copyList } from "../i18n/catalog";
+import { catalogKey, copy, copyList } from "../i18n/catalog";
 import { contactSyncMessage } from "../i18n/contactSyncMessages";
 import { useAppStore } from "../store/AppStore";
 import type { CareEntry } from "../types";
@@ -127,7 +127,7 @@ function recurrenceBuilderFromRule(rule?: { recurrence: ContactRuleRecurrence })
 
 function ordinalLabel(locale: Parameters<typeof copy>[0], value: ContactRuleMonthlyOrdinal): string {
   if (value === -1) return copy(locale, "contact", "ordinal_last");
-  return copy(locale, "contact", `ordinal_${value}`);
+  return copy(locale, "contact", catalogKey("contact", `ordinal_${value}`));
 }
 
 function buildRRuleLine(input: {
@@ -597,7 +597,7 @@ export function ContactPage({
                           }
                           type="checkbox"
                         />
-                        {copy(locale, "contact", `weekday_${weekday}`)}
+                        {copy(locale, "contact", catalogKey("contact", `weekday_${weekday}`))}
                       </label>
                     );
                   })}

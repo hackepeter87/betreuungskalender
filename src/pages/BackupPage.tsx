@@ -14,7 +14,7 @@ import {
 } from "../lib/export";
 import { useAppStore } from "../store/AppStore";
 import { useI18n } from "../i18n/I18nProvider";
-import { copy } from "../i18n/catalog";
+import { catalogKey, copy, type CatalogKey } from "../i18n/catalog";
 import { createPrivacySafeTransferReviewReport } from "../lib/transferReview";
 import type {
   ApiImportedTransferActor,
@@ -26,6 +26,14 @@ import type {
 } from "../../shared/api";
 
 const transferRoles: ApiWorkspaceRole[] = ["admin", "editor", "scheduler", "viewer"];
+const transferStepKeys = [
+  "stepSelect",
+  "stepTest",
+  "stepReview",
+  "stepPrepare",
+  "stepReplace",
+  "stepMap"
+] as const satisfies readonly CatalogKey<"backup">[];
 
 function categoryLabel(locale: "de" | "en", category: ApiTransferCategoryCode): string {
   const keys = {
@@ -41,7 +49,7 @@ function categoryLabel(locale: "de" | "en", category: ApiTransferCategoryCode): 
     audit_records: "category_audit_records",
     month_closures: "category_month_closures"
   } as const;
-  return copy(locale, "backup", keys[category]);
+  return copy(locale, "backup", catalogKey("backup", keys[category]));
 }
 
 function checkLabel(locale: "de" | "en", code: ApiTransferCheckCode): string {
@@ -53,7 +61,7 @@ function checkLabel(locale: "de" | "en", code: ApiTransferCheckCode): string {
     sqlite_foreign_keys: "check_sqlite_foreign_keys",
     sqlite_integrity: "check_sqlite_integrity"
   } as const;
-  return copy(locale, "backup", keys[code]);
+  return copy(locale, "backup", catalogKey("backup", keys[code]));
 }
 
 function resultLabel(locale: "de" | "en", result: ApiTransferDryRunResult["result"]): string {
@@ -70,7 +78,7 @@ function skippedRuntimeLabel(locale: "de" | "en", code: string): string {
     external_urls: "skipped_external_urls"
   } as const;
   return code in keys
-    ? copy(locale, "backup", keys[code as keyof typeof keys])
+    ? copy(locale, "backup", catalogKey("backup", keys[code as keyof typeof keys]))
     : locale === "de" ? "Weitere Laufzeitdaten" : "Other runtime data";
 }
 
@@ -370,9 +378,9 @@ export function BackupPage() {
           </div>
           <div className="transfer-result__body">
             <ol className="transfer-steps" aria-label={copy(locale, "backup", "dryRunTitle")}>
-              {["stepSelect", "stepTest", "stepReview", "stepPrepare", "stepReplace", "stepMap"].map((key, index) => (
+              {transferStepKeys.map((key, index) => (
                 <li className={index <= 2 ? "is-complete" : ""} key={key}>
-                  <span>{index + 1}</span>{copy(locale, "backup", key as "stepSelect")}
+                  <span>{index + 1}</span>{copy(locale, "backup", catalogKey("backup", key))}
                 </li>
               ))}
             </ol>
@@ -420,7 +428,7 @@ export function BackupPage() {
 
             <details className="transfer-details">
               <summary>{copy(locale, "backup", "technicalChecks")}</summary>
-              <ul className="transfer-checks">{dryRun.checks.map((check) => <li key={check.code}><span>{checkLabel(locale, check.code)}</span><strong className={`check-status check-status--${check.status}`}>{copy(locale, "backup", `check_${check.status}` as "check_passed")}</strong></li>)}</ul>
+              <ul className="transfer-checks">{dryRun.checks.map((check) => <li key={check.code}><span>{checkLabel(locale, check.code)}</span><strong className={`check-status check-status--${check.status}`}>{copy(locale, "backup", catalogKey("backup", `check_${check.status}`))}</strong></li>)}</ul>
             </details>
             <details className="transfer-details">
               <summary>{copy(locale, "backup", "skippedRuntimeTitle")}</summary>
