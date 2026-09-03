@@ -149,6 +149,10 @@ test("keeps shell and shared component ownership in ordered import-only indexes"
   assert.deepEqual(topLevelSelectorsForTest(components), []);
 });
 
+const supportingStyleOwners = [
+  "report", "analytics", "backup", "documentation", "entries", "contact", "holidays", "unavailable", "audit"
+];
+
 test("keeps responsive shell and shared component rules out of the feature catch-all", async () => {
   const responsive = await readFile(new URL("../src/styles/responsive.css", import.meta.url), "utf8");
 
@@ -156,6 +160,7 @@ test("keeps responsive shell and shared component rules out of the feature catch
     "./responsive/shell.css",
     "./responsive/components.css",
     "./responsive/features.css",
+    ...supportingStyleOwners.map((owner) => `./responsive/${owner}.css`),
     "./responsive/settings.css",
     "./responsive/setup.css",
     "./responsive/calendar.css",
@@ -167,7 +172,8 @@ test("keeps responsive shell and shared component rules out of the feature catch
 test("keeps calendar and dashboard rules in their feature owners", async () => {
   const pages = await readFile(new URL("../src/styles/pages.css", import.meta.url), "utf8");
   assert.deepEqual(styleImports(pages), [
-    "./pages/remaining.css", "./pages/settings.css", "./pages/setup.css", "./pages/calendar.css", "./pages/dashboard.css"
+    "./pages/remaining.css", ...supportingStyleOwners.map((owner) => `./pages/${owner}.css`),
+    "./pages/settings.css", "./pages/setup.css", "./pages/calendar.css", "./pages/dashboard.css"
   ]);
   assert.deepEqual(topLevelSelectorsForTest(pages), []);
 
@@ -195,6 +201,23 @@ test("keeps settings and setup styles in their owners without repeated propertie
   assert.deepEqual(repeatedStyleProperties(inventoryStyles(owned).rules), []);
   for (const { source, path: file } of owned) {
     assert.deepEqual(findRawColorCounts(source), {}, `${file} uses existing semantic colors`);
+  }
+});
+
+test("keeps supporting routes in named owners and removes retired transfer presentation", async () => {
+  const sources = await styleSources();
+  const owned = sources.filter(({ path: file }) => supportingStyleOwners.some((owner) => file.endsWith(`/${owner}.css`)));
+  assert.equal(owned.length, supportingStyleOwners.length * 2);
+  assert.deepEqual(repeatedStyleProperties(inventoryStyles(owned).rules), []);
+  for (const { source } of sources) {
+    assert.doesNotMatch(source, /\.transfer-counts\b|\.transfer-result__meta\b/);
+  }
+  for (const rule of inventoryStyles(sources).rules) {
+    if (rule.layer === "print") continue;
+    if (rule.selectors.some((selector) => [".page--settings", ".page--backup", ".report-page", ".documentation-page"].includes(selector))) {
+      assert.ok(!rule.declarations.some(({ property }) => property === "width" || property === "max-width"),
+        "fluid page sizing belongs to the shared .page primitive");
+    }
   }
 });
 

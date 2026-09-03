@@ -1,0 +1,9 @@
+@media (max-width: 767px) {
+  .documentation-topic__content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .documentation-topic__content article {
+    border-right: 0;
+  }
+}

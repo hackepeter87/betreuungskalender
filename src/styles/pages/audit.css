@@ -1,0 +1,35 @@
+.audit-filter {
+  min-width: 190px;
+}
+
+.audit-table td {
+  max-width: 260px;
+  overflow-wrap: anywhere;
+  vertical-align: top;
+}
+
+.audit-table td small {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+}
+
+.audit-action {
+  display: inline-flex;
+  padding: 4px 7px;
+  border-radius: 4px;
+  background: var(--violet-soft);
+  color: #5150ad;
+  font-size: 0.61rem;
+  font-weight: 800;
+}
+
+.audit-action--created {
+  background: var(--teal-soft);
+  color: var(--teal-strong);
+}
+
+.audit-action--deleted {
+  background: var(--coral-soft);
+  color: var(--coral);
+}

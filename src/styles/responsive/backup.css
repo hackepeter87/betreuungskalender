@@ -1,0 +1,98 @@
+@media (max-width: 900px) {
+  .transfer-steps {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .transfer-package-meta,
+  .transfer-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .transfer-actor {
+    grid-template-columns: 1fr 1fr;
+    align-items: stretch;
+  }
+
+  .transfer-actor > div:first-child,
+  .transfer-actor__actions {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 767px) {
+  .backup-card .button {
+    min-width: 0;
+  }
+
+  .backup-card {
+    min-height: 0;
+    padding: 18px 16px;
+  }
+
+  .backup-card dl {
+    margin-top: 14px;
+  }
+
+  .backup-card .action-with-help {
+    width: 100%;
+  }
+
+  .backup-hero {
+    align-items: flex-start;
+    padding: 18px;
+  }
+
+  .backup-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 560px) {
+  .transfer-review-actions .button,
+  .transfer-confirm__actions .button {
+    width: 100%;
+  }
+
+  .transfer-result__body,
+  .transfer-actor-list {
+    padding: 14px;
+  }
+
+  .transfer-actor {
+    grid-template-columns: 1fr;
+  }
+
+  .transfer-steps,
+  .transfer-package-meta,
+  .transfer-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .transfer-review-actions,
+  .transfer-confirm__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .transfer-fingerprint {
+    width: 100%;
+  }
+
+  .transfer-actor > div:first-child,
+  .transfer-actor__actions,
+  .transfer-actor__link {
+    grid-column: 1;
+  }
+
+  .transfer-actor__actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 430px) {
+  .backup-card .field-help-trigger {
+    justify-self: start;
+  }
+}

@@ -119,11 +119,6 @@
   line-height: 1.45;
 }
 
-.rule-segment-row input,
-.rule-segment-row .icon-button {
-  min-width: 0;
-}
-
 .mobile-export-notice {
   display: none;
 }
@@ -181,14 +176,6 @@
   border-color: var(--color-status-unavailable-border);
   background: var(--color-status-unavailable-surface);
   color: var(--color-status-unavailable-text);
-}
-
-.unavailable-toggle-card > .field-help-trigger {
-  justify-self: end;
-}
-
-.unavailable-toggle-card .field-help-button {
-  flex: 0 0 auto;
 }
 
 .field-label-row {

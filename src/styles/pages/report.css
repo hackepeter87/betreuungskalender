@@ -1,0 +1,118 @@
+.report-history-toggle {
+  white-space: nowrap;
+}
+
+.report-document__header dd {
+  margin: 0;
+  font-weight: 700;
+  overflow-wrap: anywhere;
+}
+
+.report-document {
+  padding: 48px 50px;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: #17213a;
+  box-shadow: 0 10px 30px rgba(29, 45, 73, 0.07);
+}
+
+.report-document__header {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 300px;
+  gap: 40px;
+  padding-bottom: 24px;
+  border-bottom: 2px solid #20304d;
+}
+
+.report-document__header > div > p {
+  margin-bottom: 8px;
+  color: var(--teal-strong);
+  font-size: 0.68rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.report-document__header h1 {
+  max-width: 620px;
+  font-size: 1.8rem;
+}
+
+.report-document__header dl {
+  margin: 0;
+}
+
+.report-document__header dl div {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  gap: 12px;
+  padding: 5px 0;
+  font-size: 0.7rem;
+}
+
+.report-document__header dt {
+  color: var(--muted);
+}
+
+.report-section {
+  margin-top: 26px;
+}
+
+.report-section h2 {
+  margin-bottom: 12px;
+  font-size: 0.92rem;
+}
+
+.report-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px 30px;
+}
+
+.report-summary-grid > div {
+  break-inside: avoid;
+}
+
+.report-summary-grid .report-definition-list {
+  padding: 0;
+}
+
+.report-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.66rem;
+}
+
+.report-table th,
+.report-table td {
+  padding: 8px;
+  border: 1px solid #d6dce4;
+  text-align: right;
+  vertical-align: top;
+}
+
+.report-table th {
+  background: #eef5f4;
+  color: #294845;
+  font-size: 0.6rem;
+}
+
+.report-table th:first-child,
+.report-table td:first-child,
+.report-table--entries th,
+.report-table--entries td {
+  text-align: left;
+}
+
+.report-table--entries td {
+  line-height: 1.45;
+}
+
+.report-document__footer {
+  margin-top: 30px;
+  padding-top: 14px;
+  border-top: 1px solid #aab4c1;
+  color: #566175;
+  font-size: 0.68rem;
+  line-height: 1.5;
+}

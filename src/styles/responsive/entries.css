@@ -1,0 +1,31 @@
+@media (max-width: 1199px) {
+  .entry-row {
+    grid-template-columns: 105px minmax(170px, 1fr) minmax(130px, 0.8fr) 95px 18px;
+    gap: 12px;
+  }
+}
+
+@media (max-width: 767px) {
+  .entry-row {
+    grid-template-columns: minmax(0, 1fr) auto 16px;
+    min-height: 82px;
+    gap: 9px;
+  }
+
+  .entry-row__flags {
+    display: none;
+  }
+
+  .entry-row__date {
+    grid-column: 1;
+  }
+
+  .entry-row__children {
+    grid-column: 1;
+  }
+
+  .entry-row__chevron {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+}

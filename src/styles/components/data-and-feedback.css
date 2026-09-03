@@ -353,23 +353,6 @@
   color: var(--teal-strong);
 }
 
-.backup-card .button {
-  width: 100%;
-  margin-top: auto;
-}
-
-.backup-card .action-with-help {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  margin-top: auto;
-}
-
-.backup-card .action-with-help .button {
-  margin-top: 0;
-}
-
 .field--compact {
   min-width: 160px;
 }
