@@ -69,7 +69,7 @@ const de = {
     "Die Sprache ist eine lokale UI-Präferenz und verändert keine fachlichen Daten.",
   "settings.language.label": "Anzeigesprache",
   "settings.language.fallback":
-    "Noch nicht übersetzte Bereiche werden weiterhin auf Deutsch angezeigt.",
+    "Die gewählte Sprache gilt für alle Oberflächen. Deutsch bleibt bei technischen Fehlern die Rückfallebene.",
   "report.context": "Neutraler Bericht",
   "report.pageTitle": "Bericht & Druckansicht",
   "report.includeHistory": "Änderungshistorie aufnehmen",
@@ -85,9 +85,9 @@ const de = {
 } as const;
 
 export type TranslationKey = keyof typeof de;
-type TranslationResource = Partial<Record<TranslationKey, string>>;
+type TranslationResource = Record<TranslationKey, string>;
 
-const en: TranslationResource = {
+const en = {
   "app.name": "Care Calendar",
   "app.tagline": "Track care clearly.",
   "app.storageNotice": "Domain data is stored by the local SQLite service.",
@@ -142,7 +142,7 @@ const en: TranslationResource = {
     "Language is a local UI preference and does not change domain data.",
   "settings.language.label": "Display language",
   "settings.language.fallback":
-    "Areas not translated yet continue to be displayed in German.",
+    "The selected language applies throughout the interface. German remains the fallback if a translation cannot be loaded.",
   "report.context": "Neutral report",
   "report.pageTitle": "Report & print view",
   "report.includeHistory": "Include change history",
@@ -155,7 +155,7 @@ const en: TranslationResource = {
   "report.emptyTitle": "No report data yet",
   "report.emptyDescription": "After entries are saved, the report contains times, analytics, and documentation for the selected period.",
   "report.documentTitle": "Report on documented care periods"
-};
+} satisfies TranslationResource;
 
 export const translationResources: Record<AppLocale, TranslationResource> = {
   de,

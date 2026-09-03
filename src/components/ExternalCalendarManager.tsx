@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { api } from "../lib/api";
 import { useI18n } from "../i18n/I18nProvider";
-import { copy } from "../i18n/catalog";
+import { catalogKey, copy } from "../i18n/catalog";
 import { useAppStore } from "../store/AppStore";
 import { Icon } from "./Icon";
 import { FieldHelpButton, FieldHelpLabel } from "./FieldHelp";
@@ -152,8 +152,8 @@ export function ExternalCalendarManager() {
       >
         <Icon name={sourceKind === "file" ? "upload" : "calendar"} size={17} />
         {replacingId
-          ? copy(locale, "externalCalendar", sourceKind === "file" ? "replace" : "replaceFeed")
-          : copy(locale, "externalCalendar", sourceKind === "file" ? "import" : "addFeed")}
+          ? copy(locale, "externalCalendar", catalogKey("externalCalendar", sourceKind === "file" ? "replace" : "replaceFeed"))
+          : copy(locale, "externalCalendar", catalogKey("externalCalendar", sourceKind === "file" ? "import" : "addFeed"))}
       </button>
     </div>
     {message ? <p className="inline-message" role="status" data-testid="external-calendar-message">{message}</p> : null}
