@@ -1,0 +1,250 @@
+/* Dashboard metrics, upcoming entries, and secondary panels. */
+
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.metric-card {
+  display: flex;
+  min-height: 115px;
+  align-items: center;
+  gap: 14px;
+  padding: 18px;
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius);
+  background: var(--color-surface-panel);
+}
+
+button.metric-card {
+  width: 100%;
+  color: var(--color-text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.metric-card--button:hover,
+.metric-card--button:focus-visible {
+  border-color: var(--color-status-success-border);
+  background: var(--color-status-success-surface);
+  outline: none;
+}
+
+.metric-card__icon {
+  display: inline-flex;
+  width: 46px;
+  height: 46px;
+  flex: 0 0 46px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+}
+
+.metric-card__icon--teal {
+  background: var(--color-status-success-surface);
+  color: var(--color-action-primary);
+}
+
+.metric-card__icon--violet {
+  background: var(--color-status-info-surface);
+  color: var(--color-calendar-icon);
+}
+
+.metric-card__icon--amber {
+  background: var(--color-status-warning-surface);
+  color: var(--color-calendar-overlap);
+}
+
+.metric-card__icon--coral {
+  background: var(--color-calendar-cancelled-surface);
+  color: var(--color-calendar-danger-icon);
+}
+
+.metric-card small,
+.metric-card strong,
+.metric-card em {
+  display: block;
+}
+
+.metric-card small {
+  color: var(--color-text-navigation);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.metric-card strong {
+  margin: 2px 0;
+  font-size: 1.7rem;
+  line-height: 1.1;
+  letter-spacing: 0;
+}
+
+.metric-card em {
+  color: var(--color-text-secondary);
+  font-size: 0.65rem;
+  font-style: normal;
+}
+
+.metric-grid--mobile {
+  display: none;
+}
+
+.quality-list {
+  margin: 0;
+  padding: 8px 18px 14px;
+}
+
+.quality-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--color-border-default);
+  font-size: 0.7rem;
+}
+
+.quality-list > div:last-child {
+  border-bottom: 0;
+}
+
+.quality-list dt {
+  color: var(--color-text-secondary);
+}
+
+.quality-list dd {
+  margin: 0;
+  font-weight: 800;
+}
+
+.dashboard-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+  gap: 18px;
+}
+
+.dashboard-upcoming-panel {
+  margin-bottom: 18px;
+}
+
+.dashboard-sidebar {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.dashboard-sidebar > * {
+  align-self: start;
+}
+
+.child-stat-list {
+  padding: 4px 16px 10px;
+}
+
+.child-stat {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px 48px;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--color-border-default);
+}
+
+.child-stat:last-child {
+  border-bottom: 0;
+}
+
+.child-stat__name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.78rem;
+  font-weight: 750;
+}
+
+.child-stat > span:not(.child-stat__name) {
+  text-align: center;
+}
+
+.child-stat strong,
+.child-stat small {
+  display: block;
+}
+
+.child-stat strong {
+  font-size: 1rem;
+}
+
+.child-stat small {
+  color: var(--color-text-secondary);
+  font-size: 0.57rem;
+}
+
+.upcoming-list {
+  padding: 4px 16px 9px;
+}
+
+.upcoming-list--prominent {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0 16px;
+  padding: 4px 16px 10px;
+}
+
+.upcoming-list button {
+  display: block;
+  width: 100%;
+  padding: 12px 0;
+  border: 0;
+  border-bottom: 1px solid var(--color-border-default);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.upcoming-list button:last-child {
+  border-bottom: 0;
+}
+
+.upcoming-list button:hover strong {
+  color: var(--color-action-primary-hover);
+}
+
+.upcoming-list__date,
+.upcoming-list strong,
+.upcoming-list small {
+  display: block;
+}
+
+.upcoming-list__date {
+  margin-bottom: 3px;
+  color: var(--color-text-secondary);
+  font-size: 0.61rem;
+}
+
+.upcoming-list strong {
+  overflow: hidden;
+  font-size: 0.75rem;
+  text-overflow: ellipsis;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.upcoming-list small {
+  margin-top: 3px;
+  color: var(--color-text-secondary);
+  font-size: 0.62rem;
+}
+
+.dashboard-confirmation-panel .confirmation-list {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
+.dashboard-confirmation-panel .confirmation-center__more {
+  grid-column: 1 / -1;
+}

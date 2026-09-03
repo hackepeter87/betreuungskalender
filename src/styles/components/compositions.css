@@ -156,8 +156,6 @@
   min-width: 0;
 }
 
-.metric-grid--mobile,
-.calendar-view-toggle,
 .mobile-export-notice {
   display: none;
 }
@@ -402,8 +400,6 @@
   margin-left: auto;
 }
 
-.calendar-event__label,
-.agenda-card__topline strong,
 .status-pill,
 .child-settings-row strong,
 .holiday-row strong,
