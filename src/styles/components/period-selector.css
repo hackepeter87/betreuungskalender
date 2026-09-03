@@ -1,0 +1,32 @@
+.period-selector {
+  min-width: 0;
+  display: flex;
+  align-items: end;
+  gap: 14px;
+  margin-bottom: 18px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.period-selector__modes {
+  flex: 0 0 auto;
+}
+
+.period-selector__anchor {
+  width: 170px;
+}
+
+.period-selector__custom {
+  display: grid;
+  grid-template-columns: repeat(2, 150px);
+  gap: 10px;
+}
+
+.period-selector__result {
+  margin: 0 0 10px auto;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}

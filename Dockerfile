@@ -13,6 +13,7 @@ COPY server ./server
 COPY shared ./shared
 COPY src ./src
 COPY scripts/copy-migrations.js scripts/check-frontend-bundle.js ./scripts/
+COPY scripts/style-report.ts scripts/style-inventory.ts scripts/style-reduction-contract.ts ./scripts/
 RUN npm run build
 
 FROM build AS production-deps

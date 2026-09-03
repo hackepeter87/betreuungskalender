@@ -1,5 +1,4 @@
 /* Dashboard metrics, upcoming entries, and secondary panels. */
-
 .metric-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
@@ -247,4 +246,38 @@ button.metric-card {
 
 .dashboard-confirmation-panel .confirmation-center__more {
   grid-column: 1 / -1;
+}
+
+.onboarding-panel {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 18px;
+  padding: 16px 18px;
+  border: 1px solid var(--color-border-accent-subtle);
+  border-radius: var(--radius);
+  background: var(--teal-soft);
+}
+
+.onboarding-panel__icon {
+  display: flex;
+  width: 46px;
+  height: 46px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--teal);
+}
+
+.onboarding-panel h2 {
+  margin-bottom: 2px;
+}
+
+.onboarding-panel p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.78rem;
+  line-height: 1.45;
 }

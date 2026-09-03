@@ -1,5 +1,4 @@
 /* Shared panels, data display, empty states, and feedback. */
-
 .closure-dialog .notice ul {
   margin: 8px 0 0;
   padding-left: 18px;
@@ -353,6 +352,21 @@
   color: var(--teal-strong);
 }
 
+.app-onboarding-notice {
+  position: relative;
+  align-items: center;
+  margin: 18px clamp(20px, 4vw, 56px) 0;
+}
+
+.app-onboarding-notice > div {
+  min-width: 0;
+}
+
+.app-onboarding-notice .icon-button {
+  margin-left: auto;
+  align-self: start;
+}
+
 .field--compact {
   min-width: 160px;
 }
@@ -447,7 +461,70 @@
   min-width: 0;
 }
 
-.confirmation-actions .button {
-  min-width: 0;
-  white-space: normal;
+.closure-banner,
+.backup-status,
+.rules-intro {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  margin-bottom: 18px;
+  padding: 15px 17px;
+  border: 1px solid var(--color-banner-border);
+  border-radius: var(--radius);
+  background: var(--teal-soft);
+  color: var(--teal-strong);
+}
+
+.closure-banner--warning,
+.backup-status--warning {
+  border-color: var(--color-status-warning-border);
+  background: var(--amber-soft);
+  color: var(--color-status-warning-text);
+}
+
+.closure-banner svg,
+.backup-status svg,
+.rules-intro svg {
+  flex: 0 0 auto;
+}
+
+.closure-banner strong,
+.backup-status strong {
+  display: block;
+  font-size: 0.78rem;
+}
+
+.closure-banner p,
+.backup-status p,
+.rules-intro p {
+  margin: 3px 0 0;
+  color: var(--color-banner-detail-text);
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+.muted-copy,
+.report-note {
+  color: var(--muted);
+  font-size: 0.7rem;
+  line-height: 1.55;
+}
+
+.page-tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--muted);
+  font-size: 0.68rem;
+}
+
+.inline-message {
+  margin: 0;
+  padding: 10px 11px;
+  border-radius: 6px;
+  background: var(--teal-soft);
+  color: var(--teal-strong);
+  font-size: 0.68rem;
+  font-weight: 700;
 }

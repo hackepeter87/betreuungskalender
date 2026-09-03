@@ -63,4 +63,11 @@
     font-size: 0.66rem;
     line-height: 1.25;
   }
+
+  .unavailable-time-grid,
+  .unavailable-time-group,
+  .scope-choice-grid,
+  .external-block-fields {
+    grid-template-columns: 1fr;
+  }
 }

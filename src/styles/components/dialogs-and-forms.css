@@ -42,10 +42,6 @@
   overflow-y: auto;
 }
 
-.migration-review-grid .notice {
-  margin: 0;
-}
-
 .form-section {
   margin: 0 0 20px;
   padding: 0 0 20px;
@@ -268,4 +264,178 @@
   width: 24px;
   height: 24px;
   border-radius: 50%;
+}
+
+.toggle-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.toggle-card--compact {
+  min-height: 0;
+}
+
+.toggle-card input {
+  width: 20px;
+  height: 20px;
+}
+
+.toggle-card span {
+  min-width: 0;
+}
+
+.toggle-card strong,
+.toggle-card small {
+  display: block;
+}
+
+.toggle-card small {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: var(--color-overlay-dialog);
+  animation: fade-in 140ms ease-out;
+}
+
+.entry-form,
+.child-form {
+  padding: 20px;
+}
+
+.child-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.deviation-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.choice-card {
+  display: flex;
+  min-width: 0;
+  min-height: 44px;
+  align-items: center;
+  gap: 9px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 7px;
+  color: var(--color-text-navigation);
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.choice-card--stacked {
+  min-height: 86px;
+  align-items: flex-start;
+  flex-direction: column;
+  justify-content: center;
+  padding: 12px;
+  line-height: 1.35;
+}
+
+.choice-card--stacked strong,
+.choice-card--stacked span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.choice-card--stacked span {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+
+.choice-card--selected {
+  border-color: var(--color-border-selection);
+  background: var(--teal-soft);
+}
+
+.choice-card input {
+  position: absolute;
+  opacity: 0;
+}
+
+.deviation-details {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.datetime-grid {
+  grid-template-columns: repeat(4, 1fr);
+}
+
+.toggle-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 20px;
+  margin-top: 14px;
+}
+
+.input--warning {
+  border-color: var(--color-control-invalid-border) !important;
+  background: var(--color-control-invalid-surface) !important;
+}
+
+.inline-fieldset {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.inline-fieldset legend {
+  margin-bottom: 8px;
+  color: var(--color-text-control);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.closure-confirmation {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 13px;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  color: var(--color-text-navigation);
+  font-size: 0.76rem;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.closure-confirmation input {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 20px;
+  accent-color: var(--teal);
+}
+
+.required-mark {
+  color: var(--coral);
+  font-weight: 800;
 }

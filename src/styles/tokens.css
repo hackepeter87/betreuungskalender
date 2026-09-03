@@ -45,6 +45,15 @@
   --color-border-hover: #9da9b7;
   --color-border-accent: #a9d8d5;
   --color-border-accent-subtle: #b9deda;
+  --color-border-selection: #8fc9c6;
+  --color-banner-border: #acd8d5;
+  --color-banner-detail-text: #52606f;
+  --color-confirmation-border: rgba(13, 148, 136, 0.32);
+  --color-control-invalid-border: #e6a9af;
+  --color-control-invalid-surface: #fffafa;
+  --color-conflict-planned-border: #e5b854;
+  --color-conflict-actual-border: #d88c96;
+  --color-conflict-actual-text: #8f3340;
   --color-border-action-hover: rgba(15, 137, 128, 0.35);
   --color-focus-ring: rgba(8, 127, 123, 0.18);
   --color-focus-ring-control: rgb(22 111 103 / 18%);
@@ -81,6 +90,7 @@
   --color-notice-border: #c8d5e2;
   --color-control-track: #cfd6df;
   --color-overlay-backdrop: rgb(20 31 35 / 45%);
+  --color-overlay-dialog: rgba(18, 31, 52, 0.42);
   --color-overlay-backdrop-mobile: rgba(18, 31, 52, 0.36);
   --color-requirement-required-text: #8f3028;
   --color-requirement-required-surface: #fff0ee;
@@ -111,7 +121,7 @@
   background: var(--color-surface-canvas);
 
   /* Calendar status roles preserve the reviewed light appearance. */
-  --color-calendar-overlap: #d97706;
+  --color-calendar-overlap: var(--amber);
   --color-calendar-week-surface: #f8fafc;
   --color-calendar-entry-border: #cbdedc;
   --color-calendar-entry-surface: #f0f9f8;

@@ -12,10 +12,14 @@
 }
 
 @keyframes fade-in {
-  from { opacity: 0; }
+
+  from {
+    opacity: 0;
+  }
 }
 
 @keyframes modal-in {
+
   from {
     opacity: 0;
     transform: translateY(8px) scale(0.99);
@@ -31,4 +35,19 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+.text-danger {
+  color: var(--danger);
+}
+
+.visually-hidden-file {
+  position: absolute;
+  left: 0;
+  top: 0;
+  inline-size: 1px !important;
+  block-size: 1px !important;
+  opacity: 0;
+  overflow: hidden;
+  pointer-events: none;
 }

@@ -3,3 +3,8 @@
 @import "./components/data-and-feedback.css";
 @import "./components/dialogs-and-forms.css";
 @import "./components/compositions.css";
+@import "./components/summaries.css";
+@import "./components/confirmations.css";
+@import "./components/care-conflicts.css";
+@import "./components/data-migration.css";
+@import "./components/period-selector.css";

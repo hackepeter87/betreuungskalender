@@ -1,0 +1,121 @@
+.closure-summary > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 11px 13px;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.7rem;
+}
+
+.closure-summary > div:last-child {
+  border-bottom: 0;
+}
+
+.closure-summary dt {
+  color: var(--muted);
+}
+
+.closure-summary dd {
+  margin: 0;
+  font-weight: 800;
+}
+
+.closure-summary {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  margin: 16px 0 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.closure-summary > div:nth-child(odd) {
+  border-right: 1px solid var(--line);
+}
+
+.summary-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  margin-bottom: 18px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.summary-strip div {
+  padding: 18px 22px;
+  border-right: 1px solid var(--line);
+}
+
+.summary-strip div:last-child {
+  border-right: 0;
+}
+
+.summary-strip small,
+.summary-strip strong {
+  display: block;
+}
+
+.summary-strip small {
+  color: var(--muted);
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.summary-strip strong {
+  margin-top: 5px;
+  font-size: 1.55rem;
+}
+
+.summary-strip--five {
+  grid-template-columns: repeat(5, 1fr);
+}
+
+.key-value-list,
+.report-definition-list {
+  margin: 0;
+  padding: 8px 18px 14px;
+}
+
+.key-value-list > div,
+.report-definition-list > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.7rem;
+}
+
+.key-value-list > div:last-child,
+.report-definition-list > div:last-child {
+  border-bottom: 0;
+}
+
+.key-value-list dt,
+.report-definition-list dt {
+  color: var(--muted);
+}
+
+.key-value-list dd,
+.report-definition-list dd {
+  margin: 0;
+  font-weight: 800;
+  text-align: right;
+}
+
+.key-value-list__total {
+  color: var(--teal-strong);
+  font-weight: 800;
+}
+
+.summary-strip--six {
+  grid-template-columns: repeat(6, 1fr);
+}
+
+.summary-strip--seven {
+  grid-template-columns: repeat(7, 1fr);
+}

@@ -1,0 +1,9 @@
+@media (max-width: 767px) {
+  :root {
+    --page-gutter: 14px;
+    --page-block-end: calc(112px + env(safe-area-inset-bottom));
+    --section-gap: 14px;
+    --panel-padding: 14px;
+    --field-gap: 12px;
+  }
+}

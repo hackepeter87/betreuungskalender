@@ -1,0 +1,17 @@
+@media (max-width: 767px) {
+  .migration-actions .button {
+    width: 100%;
+  }
+
+  .migration-count-grid,
+  .migration-review-grid,
+  .migration-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .migration-actions,
+  .migration-actions .form-actions__right {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

@@ -321,6 +321,30 @@ test("uses shared section spacing and table sizing on supporting routes", async 
   }
 });
 
+test("keeps the onboarding notice aligned with its shared notice variant", async ({ page }) => {
+  await page.goto("/?onboarding=invitation");
+  await expect(page.getByTestId("app-loading")).toBeHidden();
+  const notice = page.getByTestId("onboarding-completion-notice");
+  await expect(notice).toBeVisible();
+  await expect(notice).toHaveCSS("align-items", "center");
+  await expect(notice.getByRole("button", { name: "Schließen" })).toHaveCSS("align-self", "start");
+  await expectNoDocumentHorizontalOverflow(page);
+});
+
+test("keeps public legal information readable without the application shell", async ({ page }) => {
+  for (const route of ["/impressum", "/datenschutz"]) {
+    const response = await page.goto(route);
+    expect(response?.headers()["cache-control"]).toContain("no-store");
+    await expect(page.locator("[data-legal-page]")).toBeVisible();
+    await expectNoDocumentHorizontalOverflow(page);
+    const content = page.locator(".legal-content");
+    await content.evaluate((element) => { element.textContent += "\n" + "FictionalLongReference".repeat(20); });
+    await expectNoDocumentHorizontalOverflow(page);
+    await page.getByRole("link", { name: "Betreuungskalender" }).focus();
+    await expect(page.getByRole("link", { name: "Betreuungskalender" })).toBeFocused();
+  }
+});
+
 test("keeps shared pages and navigation visually stable", async ({ page }) => {
   await openApp(page);
 
