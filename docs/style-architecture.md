@@ -93,6 +93,12 @@ and informational banners) remain shared rather than duplicating declarations
 into each page owner. The final consolidation step relocates their residual
 definitions into the authoritative component owners.
 
+The analytics section now uses the same section gap as other top-level panels:
+20px on desktop and 14px on mobile, replacing its isolated 18px rule. This is
+an intentional spacing normalization. Audit tables inherit the existing 830px
+statistics-table minimum; their old 980px declaration was superseded and must
+not become active again through ownership reordering.
+
 Calendar exceptions are intentional: the desktop grid retains its minimum cell
 size, while the mobile grid uses compact labels and a bottom day-detail drawer.
 The mobile dashboard uses its dedicated metric arrangement and agenda instead

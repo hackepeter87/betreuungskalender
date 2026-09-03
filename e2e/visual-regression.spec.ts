@@ -305,6 +305,22 @@ test("preserves the computed shared form and feedback baseline", async ({ page }
   await expectNoDocumentHorizontalOverflow(page);
 });
 
+test("uses shared section spacing and table sizing on supporting routes", async ({ page }) => {
+  await openApp(page);
+  await navigate(page, "analytics");
+  await expect(page.locator(".analytics-section")).toBeVisible();
+  const spacing = await page.locator(".analytics-section").evaluate((element) => {
+    const style = getComputedStyle(element);
+    return { actual: style.marginBottom, expected: style.getPropertyValue("--section-gap").trim() };
+  });
+  expect(spacing.actual).toBe(spacing.expected);
+  await navigate(page, "audit");
+  await expect(page.locator(".audit-table")).toBeAttached();
+  if ((page.viewportSize()?.width ?? 0) >= 768) {
+    await expect(page.locator(".audit-table")).toHaveCSS("min-width", "830px");
+  }
+});
+
 test("keeps shared pages and navigation visually stable", async ({ page }) => {
   await openApp(page);
 

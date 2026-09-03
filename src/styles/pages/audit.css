@@ -2,10 +2,6 @@
   min-width: 190px;
 }
 
-.audit-table {
-  min-width: 980px;
-}
-
 .audit-table td {
   max-width: 260px;
   overflow-wrap: anywhere;
