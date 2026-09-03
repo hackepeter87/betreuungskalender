@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { useI18n } from "../i18n/I18nProvider";
 import type { TranslationKey } from "../i18n/resources";
 import { logoutSession } from "../lib/api";
@@ -9,6 +9,7 @@ import { copy } from "../i18n/catalog";
 import { CareConfirmationCenter } from "./CareConfirmationCenter";
 import type { IconName } from "./Icon";
 import { Icon } from "./Icon";
+import { useDialogFocus } from "../hooks/useDialogFocus";
 
 export type PageId =
   | "dashboard"
@@ -365,8 +366,8 @@ export function AppShell({
   const [showMore, setShowMore] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const moreTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const moreCloseRef = useRef<HTMLButtonElement | null>(null);
-  const moreWasOpenRef = useRef(false);
+  const closeMore = useCallback(() => setShowMore(false), []);
+  const moreDialogRef = useDialogFocus<HTMLElement>(closeMore, showMore, moreTriggerRef);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     try {
       return window.localStorage.getItem(sidebarCollapsedStorageKey) === "true";
@@ -398,22 +399,6 @@ export function AppShell({
       // Local UI preference only; failure should not affect navigation.
     }
   }, [sidebarCollapsed]);
-
-  useEffect(() => {
-    if (!showMore) {
-      if (moreWasOpenRef.current) moreTriggerRef.current?.focus();
-      moreWasOpenRef.current = false;
-      return;
-    }
-
-    moreWasOpenRef.current = true;
-    moreCloseRef.current?.focus();
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setShowMore(false);
-    };
-    document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [showMore]);
 
   const logout = async () => {
     if (!session.logoutUrl) return;
@@ -630,8 +615,9 @@ export function AppShell({
       </main>
 
       {showMore && !setupMode ? (
-        <div className="mobile-more-backdrop" role="presentation" onClick={() => setShowMore(false)}>
+        <div className="mobile-more-backdrop" role="presentation" onClick={closeMore}>
           <section
+            ref={moreDialogRef}
             id="mobile-more-sheet"
             className="mobile-more-sheet"
             role="dialog"
@@ -642,7 +628,7 @@ export function AppShell({
           >
             <div className="mobile-more-sheet__header">
               <strong>{t("nav.moreAreas")}</strong>
-              <button ref={moreCloseRef} className="icon-button" type="button" onClick={() => setShowMore(false)} aria-label={t("nav.closeMenu")}>
+              <button className="icon-button" type="button" onClick={closeMore} aria-label={t("nav.closeMenu")}>
                 <Icon name="close" size={19} />
               </button>
             </div>

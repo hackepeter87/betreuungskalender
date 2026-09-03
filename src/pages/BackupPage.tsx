@@ -333,7 +333,14 @@ export function BackupPage() {
               {copy(locale, "backup", "importWarning")}
             </div>
           </div>
-          <input ref={fileInputRef} className="sr-only" type="file" accept="application/json,.json" onChange={selectTransfer} />
+          <input
+            ref={fileInputRef}
+            className="sr-only"
+            type="file"
+            aria-label={copy(locale, "backup", "chooseJson")}
+            accept="application/json,.json"
+            onChange={selectTransfer}
+          />
           <div className="transfer-actions">
             <button className="button button--secondary" type="button" onClick={chooseImport} disabled={!isOwner || !canWrite || isSaving || transferBusy}>
               <Icon name="upload" />

@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { Fragment, useCallback, useMemo, useRef, useState, type CSSProperties } from "react";
 import { createPortal } from "react-dom";
 import { unavailableForEntry } from "../lib/analytics";
 import { entryDateKeys, enumerateDateKeys, formatTime, getCalendarDays } from "../lib/date";
@@ -10,6 +10,7 @@ import { useI18n } from "../i18n/I18nProvider";
 import { copy, copyList } from "../i18n/catalog";
 import { formatDate } from "../lib/date";
 import { isoWeekNumber } from "../lib/calendar";
+import { useDialogFocus } from "../hooks/useDialogFocus";
 
 interface OpenDay {
   dateKey: string;
@@ -43,7 +44,9 @@ export function CalendarGrid({
 }) {
   const { locale, intlLocale } = useI18n();
   const [openDay, setOpenDay] = useState<OpenDay | null>(null);
-  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const dayTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const closeDay = useCallback(() => setOpenDay(null), []);
+  const dayDialogRef = useDialogFocus<HTMLElement>(closeDay, Boolean(openDay), dayTriggerRef);
   const calendarDays = useMemo(() => getCalendarDays(monthKey), [monthKey]);
   const childMap = useMemo(
     () => new Map(children.map((child) => [child.id, child])),
@@ -85,16 +88,6 @@ export function CalendarGrid({
     }
     return map;
   }, [holidayPeriods]);
-
-  useEffect(() => {
-    if (!openDay) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpenDay(null);
-    };
-    window.addEventListener("keydown", closeOnEscape);
-    closeButtonRef.current?.focus();
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [openDay]);
 
   const openDayEntries = openDay ? entriesByDate.get(openDay.dateKey) ?? [] : [];
   const openDayUnavailable = openDay ? unavailableByDate.get(openDay.dateKey) ?? [] : [];
@@ -269,7 +262,10 @@ export function CalendarGrid({
                     className="calendar-day__more"
                     type="button"
                     aria-haspopup="dialog"
-                    onClick={(event) => setOpenDay({ dateKey: day.dateKey, anchor: event.currentTarget.getBoundingClientRect() })}
+                    onClick={(event) => {
+                      dayTriggerRef.current = event.currentTarget;
+                      setOpenDay({ dateKey: day.dateKey, anchor: event.currentTarget.getBoundingClientRect() });
+                    }}
                   >
                     {copy(locale, "calendar", "more", { count: visibleCount - renderedCount })}
                   </button>
@@ -281,8 +277,9 @@ export function CalendarGrid({
         })}
       </div>
       {openDay ? createPortal(
-        <div className="calendar-day-popover-layer" role="presentation" onMouseDown={() => setOpenDay(null)}>
+        <div className="calendar-day-popover-layer" role="presentation" onMouseDown={closeDay}>
           <section
+            ref={dayDialogRef}
             className="calendar-day-popover"
             role="dialog"
             aria-modal="true"
@@ -295,7 +292,7 @@ export function CalendarGrid({
                 <span>{copy(locale, "calendar", "weekNumber")} {isoWeekNumber(openDay.dateKey)}</span>
                 <h2 id="calendar-day-popover-title">{copy(locale, "calendar", "dayOverview", { date: formatDate(openDay.dateKey, intlLocale) })}</h2>
               </div>
-              <button ref={closeButtonRef} className="icon-button" type="button" onClick={() => setOpenDay(null)} aria-label={copy(locale, "calendar", "closeDayOverview")}>
+              <button className="icon-button" type="button" onClick={closeDay} aria-label={copy(locale, "calendar", "closeDayOverview")}>
                 <Icon name="close" size={18} />
               </button>
             </header>

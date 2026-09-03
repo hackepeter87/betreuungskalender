@@ -1,10 +1,4 @@
-import {
-  useEffect,
-  useId,
-  useState,
-  type MouseEvent,
-  type ReactNode
-} from "react";
+import { useCallback, useId, useRef, useState, type MouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   getFieldHelp,
@@ -15,6 +9,7 @@ import { useHelpPreferences } from "../context/HelpPreferences";
 import { Icon } from "./Icon";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
+import { useDialogFocus } from "../hooks/useDialogFocus";
 
 function stopLabelToggle(event: MouseEvent) {
   event.preventDefault();
@@ -35,15 +30,9 @@ export function FieldHelpButton({
   const [open, setOpen] = useState(false);
   const titleId = useId();
   const help = getFieldHelp(fieldId);
-
-  useEffect(() => {
-    if (!open) return;
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setOpen(false);
-    };
-    document.addEventListener("keydown", closeOnEscape);
-    return () => document.removeEventListener("keydown", closeOnEscape);
-  }, [open]);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const closeHelp = useCallback(() => setOpen(false), []);
+  const dialogRef = useDialogFocus<HTMLElement>(closeHelp, open, triggerRef);
 
   if (!alwaysVisible && !helpIconsVisible) return null;
 
@@ -58,6 +47,7 @@ export function FieldHelpButton({
           </span>
         ) : null}
         <button
+          ref={triggerRef}
           className="field-help-button"
           type="button"
           aria-label={copy(locale, "fieldHelp", "helpFor", { label: help.label })}
@@ -66,6 +56,7 @@ export function FieldHelpButton({
           onMouseDown={stopLabelToggle}
           onClick={(event) => {
             stopLabelToggle(event);
+            event.currentTarget.focus();
             setOpen(true);
           }}
         >
@@ -78,13 +69,15 @@ export function FieldHelpButton({
             <div
               className="field-help-backdrop"
               role="presentation"
-              onMouseDown={() => setOpen(false)}
+              onMouseDown={closeHelp}
             >
               <section
+                ref={dialogRef}
                 className="field-help-dialog"
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby={titleId}
+                tabIndex={-1}
                 onMouseDown={(event) => event.stopPropagation()}
               >
                 <header className="field-help-dialog__header">
@@ -99,7 +92,7 @@ export function FieldHelpButton({
                   <button
                     className="icon-button icon-button--bordered"
                     type="button"
-                    onClick={() => setOpen(false)}
+                    onClick={closeHelp}
                     aria-label={copy(locale, "fieldHelp", "close")}
                     autoFocus
                   >

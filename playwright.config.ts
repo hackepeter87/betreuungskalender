@@ -54,7 +54,7 @@ export default defineConfig({
   projects: [
     {
       name: "desktop",
-      testMatch: [/desktop\.spec\.ts/, /external-calendar\.spec\.ts/, /workspace-permissions\.spec\.ts/],
+      testMatch: [/desktop\.spec\.ts/, /accessibility\.spec\.ts/, /external-calendar\.spec\.ts/, /workspace-permissions\.spec\.ts/],
       use: {
         ...devices["Desktop Chrome"],
         viewport: { width: 1440, height: 900 }
@@ -62,7 +62,7 @@ export default defineConfig({
     },
     {
       name: "iphone",
-      testMatch: [/iphone\.spec\.ts/, /external-calendar\.spec\.ts/, /workspace-permissions\.spec\.ts/],
+      testMatch: [/iphone\.spec\.ts/, /accessibility\.spec\.ts/, /external-calendar\.spec\.ts/, /workspace-permissions\.spec\.ts/],
       use: {
         ...devices["iPhone 15"],
         browserName: "chromium"
@@ -70,7 +70,7 @@ export default defineConfig({
     },
     {
       name: "ipad",
-      testMatch: [/ipad\.spec\.ts/, /external-calendar\.spec\.ts/, /workspace-permissions\.spec\.ts/],
+      testMatch: [/ipad\.spec\.ts/, /accessibility\.spec\.ts/, /external-calendar\.spec\.ts/, /workspace-permissions\.spec\.ts/],
       use: {
         ...devices["iPad Pro 11"],
         browserName: "chromium"

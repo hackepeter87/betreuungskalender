@@ -156,6 +156,7 @@ function NotificationPreferencesSection() {
             <label className="toggle toggle--compact">
               <input
                 type="checkbox"
+                aria-label={`${notificationEventLabel(preference.eventType, locale)}: ${copy(locale, "notifications", "push")}`}
                 checked={preference.pushEnabled}
                 disabled={!canManageNotifications || isSaving}
                 onChange={(event) => patchPreference(preference.eventType, { pushEnabled: event.target.checked })}
