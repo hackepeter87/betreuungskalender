@@ -317,6 +317,12 @@ async function activeRelease(options) {
 }
 
 async function preflight(options, previous) {
+  if (parseEnv(previous.envContent).get("DATABASE_DRIVER") === "postgres") {
+    fail(
+      EXIT.PREFLIGHT,
+      "The archive update tool supports SQLite installations only. Use the documented PostgreSQL backup and update procedure."
+    );
+  }
   const composePath = resolve(options.root, previous.composeFile);
   const dataPath = resolve(options.root, "data", "app.sqlite");
   const backupsPath = resolve(options.root, "backups");

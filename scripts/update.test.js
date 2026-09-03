@@ -159,6 +159,18 @@ test("keeps compiled release assets in the Docker build context", async () => {
   assert.doesNotMatch(dockerIgnore, /^dist-server$/m);
 });
 
+test("archive updates fail closed for PostgreSQL installations", async () => {
+  await withTemporaryDirectory("postgres-unsupported", async (directory) => {
+    const root = await createInstallation(directory, { env: "DATABASE_DRIVER=postgres\n" });
+    const { archive, checksumPath } = await createArtifact(directory);
+    await assert.rejects(
+      runUpdate(updateOptions(root, archive, checksumPath)),
+      /archive update tool supports SQLite installations only/
+    );
+    assert.match(await readFile(resolve(root, ".env"), "utf8"), /APP_RELEASE_VERSION=0\.4\.0/);
+  });
+});
+
 test("synthetic Compose upgrade verifies backup and records the active release", async () => {
   await withTemporaryDirectory("success", async (directory) => {
     const root = await createInstallation(directory);

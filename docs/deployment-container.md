@@ -131,6 +131,8 @@ requires its own logical backup and restore procedure. A portable application
 export can be used to move domain data from an existing SQLite installation,
 but it does not replace a database backup. The complete PostgreSQL operating,
 backup, update, and recovery procedure is documented with the v1.28.0 release.
+The archive update tool intentionally stops before changing a PostgreSQL-backed
+installation because its automatic backup and rollback path is SQLite-specific.
 
 ## Promoted GHCR image deployment
 
