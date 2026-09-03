@@ -80,7 +80,10 @@ chmod 0600 "$source_dir/.env"
   node -e 'process.stdout.write(require("node:crypto").randomBytes(32).toString("base64url"))'
   printf '\n'
 } >"$target_dir/secrets/postgres-password"
-chmod 0600 "$target_dir/secrets/postgres-admin-password" "$target_dir/secrets/postgres-password"
+# Compose file secrets are bind-mounted with their source mode on Linux. The
+# parent directory is private, while the files must remain readable by the
+# nonroot users inside the application and PostgreSQL containers.
+chmod 0644 "$target_dir/secrets/postgres-admin-password" "$target_dir/secrets/postgres-password"
 cp "$target_dir/secrets/postgres-password" "$work_dir/original-postgres-password"
 printf '%s\n%s\n' \
   "$(<"$target_dir/secrets/postgres-admin-password")" \

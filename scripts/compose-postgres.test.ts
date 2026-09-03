@@ -52,3 +52,12 @@ test("the embedded database creates a restricted application role", async () => 
   assert.match(content, /REVOKE ALL ON DATABASE/);
   assert.doesNotMatch(content, /--password(?:=|\s)/, "The password must not be passed as a process argument");
 });
+
+test("the Compose guide keeps file secrets reachable only through a private directory", async () => {
+  const content = await readFile("docs/deployment-container.md", "utf8");
+
+  assert.match(content, /install -d -m 0700 secrets/);
+  assert.match(content, /chmod 0644 secrets\/postgres-\*-password/);
+  assert.match(content, /nonroot users in the application and PostgreSQL containers/);
+  assert.match(content, /Do not place them in a shared or traversable directory/);
+});

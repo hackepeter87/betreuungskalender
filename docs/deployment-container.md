@@ -95,8 +95,14 @@ different private password files outside the release directory:
 install -d -m 0700 secrets
 openssl rand -base64 32 > secrets/postgres-admin-password
 openssl rand -base64 32 > secrets/postgres-password
-chmod 0600 secrets/postgres-*-password
+chmod 0644 secrets/postgres-*-password
 ```
+
+Keep the `secrets/` directory at mode `0700`. Docker Compose implements local
+file secrets as bind mounts on Linux, so the files themselves must be readable
+by the nonroot users in the application and PostgreSQL containers. The private
+parent directory prevents other host users from reaching those `0644` files.
+Do not place them in a shared or traversable directory.
 
 Add only the file paths and non-secret database names to the private Compose
 environment file:
