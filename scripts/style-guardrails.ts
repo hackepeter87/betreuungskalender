@@ -8,6 +8,7 @@ export type StyleGuardrailIssueType =
   | "layer-contract"
   | "unlayered-rule"
   | "raw-color"
+  | "duplicate-declaration"
   | "missing-baseline"
   | "duplicate-baseline"
   | "misowned-baseline"
@@ -83,6 +84,29 @@ export function findRawColorCounts(source: string): Record<string, number> {
     counts[color] = (counts[color] ?? 0) + 1;
   }
   return Object.fromEntries(Object.entries(counts).sort(([left], [right]) => left.localeCompare(right)));
+}
+
+export function findOverriddenDeclarations(file: string, source: string): StyleGuardrailIssue[] {
+  const issues: StyleGuardrailIssue[] = [];
+  for (const block of withoutComments(source).matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+    const selector = normalizeWhitespace(block[1]);
+    if (!selector || selector.startsWith("@")) continue;
+    const seen = new Set<string>();
+    const reported = new Set<string>();
+    for (const declaration of block[2].matchAll(/([\w-]+)\s*:[^;{}]+;/g)) {
+      const property = declaration[1].toLowerCase();
+      if (seen.has(property) && !reported.has(property)) {
+        issues.push({
+          type: "duplicate-declaration",
+          file,
+          detail: `${property} is declared more than once in ${selector}`
+        });
+        reported.add(property);
+      }
+      seen.add(property);
+    }
+  }
+  return issues;
 }
 
 export function validateRawColorBudget(

@@ -35,6 +35,22 @@ guardrail baseline records protected global selectors such as `.page`,
 `.panel`, `.sidebar`, and `.calendar-grid`; duplicate or misplaced definitions
 fail the standard test workflow.
 
+The `shell`, `components`, and `responsive` entry files are ordered import-only
+indexes. Their subfiles make selector ownership explicit without changing the
+cascade:
+
+- `shell/` separates navigation, session controls, notifications, and runtime
+  install or loading states;
+- `components/` separates structural primitives, data and feedback,
+  dialogs and forms, and reusable compositions;
+- `responsive/` separates shell and shared-component adaptations from the
+  remaining feature-specific rules.
+
+Declarations that are immediately overwritten in the same rule are rejected
+for shared shell and component ownership. Feature-specific responsive rules
+remain a tracked migration boundary for the calendar/dashboard and remaining
+page packages.
+
 ## Color contract
 
 Shared interface styles use semantic custom properties rather than raw colors
@@ -48,7 +64,9 @@ or palette names. The current roles cover:
   and danger states.
 
 The older palette variables remain temporarily available while feature styles
-are migrated. Existing raw colors outside `tokens.css` are an explicit,
+are migrated. Shell styles, shared component styles, and their responsive
+adaptations accept no raw colors; tests require semantic roles in those files.
+Remaining feature and print colors outside `tokens.css` are an explicit,
 counted debt inventory in `scripts/style-guardrails-baseline.ts`. A package may
 reduce those counts, but adding another raw color or increasing an existing
 count fails tests. Runtime values selected by a user, such as a calendar color,
@@ -73,6 +91,7 @@ owned exclusively by the `print` layer.
 
 Run `npm run build` after changing imports or layer ownership. Relevant page and
 responsive Playwright scenarios must accompany behavioral layout changes.
-`npm test` enforces layer order, ownership, raw-color budgets, approved
+`npm test` enforces layer order, import-only ownership indexes, raw-color
+budgets, token-only shared styles, duplicate declaration removal, approved
 breakpoints, and semantic token availability. Invalid fixtures prove that each
 guard rejects regressions instead of merely describing the current files.

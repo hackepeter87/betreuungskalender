@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
+import path from "node:path";
 import test from "node:test";
 import {
+  findOverriddenDeclarations,
   findRawColorCounts,
   validateBaselineOwnership,
   validateBreakpointOwnership,
@@ -27,13 +29,33 @@ const layerNames = [
 ] as const;
 
 async function styleSources(): Promise<StyleSource[]> {
-  return Promise.all(
-    layerNames.map(async (layer) => ({
-      path: `src/styles/${layer}.css`,
+  const stylesRoot = new URL("../src/styles/", import.meta.url);
+  const entries = await readdir(stylesRoot, { recursive: true, withFileTypes: true });
+  const files = entries
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".css"))
+    .map((entry) => path.posix.join(entry.parentPath.replace(stylesRoot.pathname, ""), entry.name))
+    .sort();
+
+  return Promise.all(files.map(async (file) => {
+    const layer = file.includes("/") ? file.split("/", 1)[0] : file.replace(/\.css$/, "");
+    return {
+      path: `src/styles/${file}`,
       layer,
-      source: await readFile(new URL(`../src/styles/${layer}.css`, import.meta.url), "utf8")
-    }))
-  );
+      source: await readFile(new URL(`../src/styles/${file}`, import.meta.url), "utf8")
+    };
+  }));
+}
+
+function styleImports(source: string): string[] {
+  return [...source.matchAll(/@import\s+"([^"]+)"\s*;/g)].map((match) => match[1]);
+}
+
+function topLevelSelectorsForTest(source: string): string[] {
+  const remainder = source
+    .replace(/\/\*[\s\S]*?\*\//g, "")
+    .replace(/@import\s+[^;]+;/g, "")
+    .trim();
+  return remainder ? [remainder] : [];
 }
 
 function occurrenceCount(source: string, value: string): number {
@@ -53,33 +75,70 @@ test("loads application style layers in the documented order", async () => {
 });
 
 test("keeps every style layer explicit and free of release-labelled overrides", async () => {
-  const sources = await Promise.all(
-    layerNames.map(async (name) => ({
-      name,
-      source: await readFile(new URL(`../src/styles/${name}.css`, import.meta.url), "utf8")
-    }))
-  );
+  const sources = await styleSources();
+  const sourceForLayer = (name: string) => sources
+    .filter(({ layer }) => layer === name)
+    .map(({ source }) => source)
+    .join("\n");
 
-  for (const { name, source } of sources) {
+  for (const name of layerNames) {
+    const source = sourceForLayer(name);
     assert.ok(source.trim().length > 0, `${name}.css must not be empty`);
     assert.doesNotMatch(source, /\/\*\s*v\d+\.\d+/i);
   }
 
-  assert.match(sources.find(({ name }) => name === "tokens")!.source, /^\/\*[^]*?:root\s*\{/);
-  assert.match(sources.find(({ name }) => name === "components")!.source, /\.panel\s*\{/);
-  assert.match(sources.find(({ name }) => name === "pages")!.source, /\.calendar-grid\s*\{/);
-  assert.match(sources.find(({ name }) => name === "responsive")!.source, /@media\s*\(/);
-  assert.match(sources.find(({ name }) => name === "print")!.source, /@media\s+print/);
+  assert.match(sourceForLayer("tokens"), /:root\s*\{/);
+  assert.match(sourceForLayer("components"), /\.panel\s*\{/);
+  assert.match(sourceForLayer("pages"), /\.calendar-grid\s*\{/);
+  assert.match(sourceForLayer("responsive"), /@media\s*\(/);
+  assert.match(sourceForLayer("print"), /@media\s+print/);
+});
+
+test("keeps shell and shared component ownership in ordered import-only indexes", async () => {
+  const shell = await readFile(new URL("../src/styles/shell.css", import.meta.url), "utf8");
+  const components = await readFile(new URL("../src/styles/components.css", import.meta.url), "utf8");
+
+  assert.deepEqual(styleImports(shell), [
+    "./shell/navigation.css",
+    "./shell/session.css",
+    "./shell/notifications.css",
+    "./shell/runtime.css"
+  ]);
+  assert.deepEqual(styleImports(components), [
+    "./components/structure.css",
+    "./components/data-and-feedback.css",
+    "./components/dialogs-and-forms.css",
+    "./components/compositions.css"
+  ]);
+  assert.deepEqual(topLevelSelectorsForTest(shell), []);
+  assert.deepEqual(topLevelSelectorsForTest(components), []);
+});
+
+test("keeps responsive shell and shared component rules out of the feature catch-all", async () => {
+  const responsive = await readFile(new URL("../src/styles/responsive.css", import.meta.url), "utf8");
+
+  assert.deepEqual(styleImports(responsive), [
+    "./responsive/shell.css",
+    "./responsive/components.css",
+    "./responsive/features.css"
+  ]);
+  assert.deepEqual(topLevelSelectorsForTest(responsive), []);
 });
 
 test("keeps shared global primitives authoritative in their owning layer", async () => {
-  const shell = await readFile(new URL("../src/styles/shell.css", import.meta.url), "utf8");
-  const components = await readFile(new URL("../src/styles/components.css", import.meta.url), "utf8");
+  const shell = await readFile(new URL("../src/styles/shell/navigation.css", import.meta.url), "utf8");
+  const components = [
+    "structure.css",
+    "data-and-feedback.css",
+    "dialogs-and-forms.css",
+    "compositions.css"
+  ].map(async (file) => readFile(new URL(`../src/styles/components/${file}`, import.meta.url), "utf8"));
   const pages = await readFile(new URL("../src/styles/pages.css", import.meta.url), "utf8");
+  const componentSource = (await Promise.all(components)).join("\n");
 
   assert.equal(occurrenceCount(shell, ".sidebar {"), 1);
-  assert.equal(occurrenceCount(components, ".page {"), 1);
-  assert.equal(occurrenceCount(components, ".panel__header {"), 1);
+  assert.equal(occurrenceCount(componentSource, ".page {"), 1);
+  assert.equal(occurrenceCount(componentSource, ".panel__header {"), 1);
   assert.equal(occurrenceCount(pages, ".calendar-event {"), 1);
   assert.equal(occurrenceCount(pages, ".settings-section {"), 1);
   assert.equal(occurrenceCount(pages, ".settings-form-grid {"), 1);
@@ -153,6 +212,16 @@ test("rejects duplicate or misplaced global baseline selectors", () => {
   );
 });
 
+test("rejects declarations that are overwritten inside the same rule", () => {
+  assert.deepEqual(findOverriddenDeclarations("fixture.css", ".nav { display: flex; display: grid; }"), [
+    {
+      type: "duplicate-declaration",
+      file: "fixture.css",
+      detail: "display is declared more than once in .nav"
+    }
+  ]);
+});
+
 test("rejects viewport breakpoints outside responsive ownership or the approved set", () => {
   const sources: StyleSource[] = [
     {
@@ -178,15 +247,28 @@ test("rejects viewport breakpoints outside responsive ownership or the approved 
 
 test("keeps the repository within the reviewed style contracts", async () => {
   const sources = await styleSources();
+  const tokenOnlySources = sources.filter(({ layer, path: sourcePath }) =>
+    layer === "shell" || layer === "components" ||
+    sourcePath.endsWith("responsive/shell.css") || sourcePath.endsWith("responsive/components.css"));
   const issues = [
-    ...sources
-      .filter(({ layer }) => layer !== "tokens")
-      .flatMap(({ path, source }) => validateRawColorBudget(path, source, rawColorBudget[path] ?? {})),
+    ...layerNames.filter((layer) => layer !== "tokens").flatMap((layer) => {
+      const budgetPath = `src/styles/${layer}.css`;
+      const source = sources
+        .filter((candidate) => candidate.layer === layer)
+        .map((candidate) => candidate.source)
+        .join("\n");
+      return validateRawColorBudget(budgetPath, source, rawColorBudget[budgetPath] ?? {});
+    }),
     ...validateBaselineOwnership(sources, baselineOwners),
-    ...validateBreakpointOwnership(sources, approvedViewportQueries)
+    ...validateBreakpointOwnership(sources, approvedViewportQueries),
+    ...tokenOnlySources
+      .flatMap(({ path: sourcePath, source }) => findOverriddenDeclarations(sourcePath, source))
   ];
 
   assert.deepEqual(issues, []);
+  for (const { path: sourcePath, source } of tokenOnlySources) {
+    assert.deepEqual(findRawColorCounts(source), {}, `${sourcePath} must use semantic color roles`);
+  }
 });
 
 test("defines the semantic color roles required by shared interface styles", async () => {
@@ -195,13 +277,23 @@ test("defines the semantic color roles required by shared interface styles", asy
     "--color-text-primary",
     "--color-text-secondary",
     "--color-text-subtle",
+    "--color-text-control",
+    "--color-text-navigation",
+    "--color-text-emphasis",
+    "--color-text-supporting",
+    "--color-text-placeholder",
     "--color-text-on-accent",
     "--color-surface-canvas",
     "--color-surface-panel",
     "--color-surface-subtle",
+    "--color-surface-raised",
+    "--color-surface-overlay",
     "--color-border-default",
     "--color-border-strong",
+    "--color-border-hover",
+    "--color-border-accent",
     "--color-focus-ring",
+    "--color-focus-ring-control",
     "--color-action-primary",
     "--color-action-primary-hover",
     "--color-status-info-text",
@@ -215,7 +307,13 @@ test("defines the semantic color roles required by shared interface styles", asy
     "--color-status-warning-border",
     "--color-status-danger-text",
     "--color-status-danger-surface",
-    "--color-status-danger-border"
+    "--color-status-danger-border",
+    "--color-status-unavailable-text",
+    "--color-status-unavailable-surface",
+    "--color-status-unavailable-border",
+    "--color-overlay-backdrop",
+    "--shadow-action-primary",
+    "--shadow-dialog"
   ];
 
   for (const token of requiredTokens) assert.match(tokens, new RegExp(`${token}:`));

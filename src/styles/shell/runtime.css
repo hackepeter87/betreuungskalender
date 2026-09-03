@@ -1,0 +1,93 @@
+/* Offline, install, and mobile overflow surfaces. */
+.offline-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--color-status-warning-border);
+  background: var(--amber-soft);
+  color: var(--color-status-warning-strong-text);
+  font-size: 0.76rem;
+  font-weight: 700;
+  text-align: center;
+}
+
+.pwa-install-prompt {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 14px;
+  margin: 18px clamp(20px, 4vw, 56px) 0;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border-accent-subtle);
+  border-radius: 8px;
+  background: var(--teal-soft);
+  color: var(--color-text-emphasis);
+}
+
+.pwa-install-prompt__icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--color-surface-panel);
+  color: var(--teal-strong);
+}
+
+.pwa-install-prompt__content {
+  min-width: 0;
+}
+
+.pwa-install-prompt__content strong {
+  display: block;
+  font-size: 0.82rem;
+}
+
+.pwa-install-prompt__content p {
+  margin: 2px 0 0;
+  color: var(--color-text-supporting);
+  font-size: 0.72rem;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.pwa-install-prompt__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pwa-install-prompt__actions .button {
+  min-height: 38px;
+  padding: 8px 13px;
+  white-space: nowrap;
+}
+
+.pwa-install-prompt__close {
+  align-self: start;
+}
+
+.offline-banner > span {
+  display: grid;
+  gap: 2px;
+}
+
+.offline-banner--readonly {
+  position: sticky;
+  top: 0;
+  z-index: 35;
+}
+
+.offline-banner__mobile-note {
+  display: none;
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.mobile-more-backdrop,
+.mobile-more-sheet {
+  display: none;
+}

@@ -1,0 +1,467 @@
+/* Shell responsive adaptations. */
+@media (max-width: 560px) {
+
+  .transfer-review-actions .button,
+  .transfer-confirm__actions .button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+
+  .notification-center__popover {
+    top: calc(70px + env(safe-area-inset-top));
+    right: 10px;
+    left: 10px;
+    width: auto;
+    max-height: calc(100dvh - 92px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+
+  .notification-center__popover .confirmation-list {
+    max-height: calc(100dvh - 172px - env(safe-area-inset-top) - env(safe-area-inset-bottom));
+  }
+}
+
+@media (max-width: 720px) {
+
+  .member-invite-accept .button,
+  .member-invite-card .button,
+  .member-token-card .button,
+  .invitation-row .button,
+  .member-row__actions .button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 767px) {
+
+  .migration-actions .button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 1199px) {
+  .sidebar {
+    width: 196px;
+  }
+
+  .main {
+    margin-left: 196px;
+  }
+
+  .app-shell--sidebar-collapsed .sidebar {
+    width: 76px;
+  }
+
+  .app-shell--sidebar-collapsed .main {
+    margin-left: 76px;
+  }
+
+  .brand small {
+    display: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .sidebar {
+    display: none;
+  }
+
+  .app-shell--sidebar-collapsed .main,
+  .main {
+    margin-left: 0;
+    padding-bottom: 66px;
+  }
+
+  .mobile-header {
+    position: sticky;
+    top: 0;
+    z-index: 40;
+    display: flex;
+    min-height: calc(60px + env(safe-area-inset-top));
+    height: auto;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: env(safe-area-inset-top) 14px 0;
+    border-bottom: 1px solid var(--line);
+    background: var(--color-surface-overlay);
+    backdrop-filter: blur(14px);
+  }
+
+  .brand--compact .brand__mark {
+    width: 38px;
+    height: 38px;
+    flex-basis: 38px;
+  }
+
+  .mobile-nav {
+    padding-bottom: env(safe-area-inset-bottom);
+    overflow-x: auto;
+    justify-content: flex-start;
+    position: fixed;
+    inset: auto 0 0;
+    z-index: 1000;
+    display: grid;
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    min-height: calc(64px + env(safe-area-inset-bottom));
+    overflow: visible;
+    padding: 0 4px env(safe-area-inset-bottom);
+    border-top: 1px solid var(--line);
+    background: var(--color-surface-overlay-strong);
+    box-shadow: var(--shadow-navigation);
+    backdrop-filter: blur(16px);
+    pointer-events: auto;
+  }
+
+  .mobile-nav button {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    border: 0;
+    background: transparent;
+    color: var(--muted);
+    font-weight: 700;
+    position: relative;
+    min-width: 0;
+    min-height: 58px;
+    z-index: 1;
+    flex: initial;
+    gap: 4px;
+    padding: 4px 2px 2px;
+    font-size: 0.59rem;
+  }
+
+  .mobile-nav button.is-active {
+    color: var(--teal-strong);
+  }
+
+  .setup-wizard__actions .button {
+    width: 100%;
+  }
+
+  .external-calendar-file-field,
+  .external-calendar-url-field,
+  .external-calendar-import-grid > .button {
+    grid-column: 1;
+  }
+
+  .child-settings-row--external-source .field--compact,
+  .child-settings-row--external-source .button {
+    width: 100%;
+  }
+
+  .external-calendar-import-grid > .button,
+  .file-picker-row .button {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@media (max-width: 767px) {
+
+  .onboarding-panel .button {
+    grid-column: 1 / -1;
+  }
+
+  .child-settings-row--external-source .button {
+    min-width: 0;
+    justify-content: center;
+  }
+
+  .form-actions__right .button {
+    flex: 1;
+  }
+
+  .form-actions > .button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 430px) {
+  .mobile-header {
+    padding: 0 12px;
+  }
+}
+
+@media (max-width: 640px) {
+
+  .historical-sync__heading .button,
+  .historical-sync__result .button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 767px) {
+
+  .subsection-heading .button {
+    width: 100%;
+  }
+
+  .mobile-rule-steps button.is-active {
+    border-color: var(--teal);
+    background: var(--teal-soft);
+    color: var(--teal-strong);
+  }
+
+  .mobile-rule-steps button.is-active span {
+    background: var(--teal);
+    color: var(--color-text-on-accent);
+  }
+
+  .mobile-rule-step-actions .button {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .page-header__actions .button,
+  .page-header__actions .month-toolbar {
+    width: 100%;
+  }
+}
+
+@media (max-width: 767px) {
+  .pwa-install-prompt {
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 10px;
+    margin: 12px 20px 0;
+    padding: 13px;
+  }
+
+  .pwa-install-prompt__actions {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    width: 100%;
+  }
+
+  .pwa-install-prompt__close {
+    grid-row: 1;
+    grid-column: 3;
+  }
+
+  .pwa-install-prompt__actions .button {
+    flex: 1 1 0;
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+
+  .sidebar {
+    width: 196px;
+    overflow: hidden;
+    padding: 18px 10px 14px;
+  }
+
+  .app-shell--sidebar-collapsed .sidebar {
+    width: 76px;
+    padding: 18px 12px 14px;
+  }
+
+  .app-shell--sidebar-collapsed .main {
+    margin-left: 76px;
+  }
+
+  .sidebar__nav {
+    min-height: 0;
+    overflow-y: auto;
+    gap: 3px;
+    margin-top: 22px;
+  }
+
+  .brand {
+    gap: 8px;
+  }
+
+  .brand__mark {
+    width: 42px;
+    height: 42px;
+    flex-basis: 42px;
+  }
+
+  .brand strong {
+    font-size: 0.7rem;
+    line-height: 1.15;
+  }
+
+  .session-card {
+    flex: 0 0 auto;
+    margin-top: 8px;
+    padding: 10px;
+  }
+
+  .sidebar__settings {
+    flex: 0 0 auto;
+    margin-top: 0;
+  }
+
+  .main {
+    min-width: 0;
+    margin-left: 196px;
+  }
+
+  .button,
+  .icon-button,
+  .field input,
+  .field select {
+    min-height: 44px;
+  }
+
+  .dashboard-confirmation-panel .confirmation-list {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .external-calendar-import-grid > .button {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .holiday-derive-form__children,
+  .holiday-derive-form > .button {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 767px) {
+
+  .main {
+    min-height: 100dvh;
+    margin-left: 0;
+    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+  }
+
+  .offline-banner {
+    align-items: flex-start;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    padding: 10px 14px;
+    text-align: left;
+  }
+
+  .offline-banner--readonly {
+    top: calc(60px + env(safe-area-inset-top));
+  }
+
+  .offline-banner > span {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .offline-banner__mobile-note {
+    display: block;
+  }
+
+  .offline-banner .button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  .mobile-more-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 55;
+    display: flex;
+    align-items: flex-end;
+    padding-bottom: calc(64px + env(safe-area-inset-bottom));
+    background: var(--color-overlay-backdrop-mobile);
+  }
+
+  .mobile-more-sheet {
+    display: block;
+    width: 100%;
+    max-height: calc(100dvh - 120px - env(safe-area-inset-top));
+    overflow-y: auto;
+    border-radius: 18px 18px 0 0;
+    background: var(--surface);
+    box-shadow: var(--shadow);
+  }
+
+  .mobile-more-sheet__grid button.is-active {
+    border-color: var(--color-status-success-border);
+    background: var(--teal-soft);
+    color: var(--teal-strong);
+  }
+
+  .page-header__actions .button,
+  .page-header__actions .month-toolbar,
+  .analytics-export-actions .button {
+    width: 100%;
+  }
+
+  .dashboard-confirmation-panel .confirmation-list {
+    grid-template-columns: 1fr;
+  }
+
+  .button,
+  .icon-button,
+  .choice-card,
+  .check-row,
+  .toggle {
+    min-height: 44px;
+  }
+
+  .button {
+    font-size: 0.83rem;
+  }
+
+  .form-actions__right .button,
+  .form-actions > .button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 767px) {
+
+  .calendar-quick-actions .button {
+    min-height: 44px;
+    padding-inline: 10px;
+  }
+}
+
+@media (max-width: 767px) {
+
+  .action-with-help--header > .button {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+}
+
+@media (min-width: 768px) {
+  .sidebar > .notification-center {
+    margin-top: 10px;
+  }
+}
+
+@media (max-width: 767px) {
+
+  .panel,
+  .notice,
+  .period-selector,
+  .summary-strip,
+  .backup-card,
+  .holiday-row,
+  .unavailable-row,
+  .agenda-day,
+  .calendar-wrap,
+  .calendar-grid,
+  .calendar-weekdays,
+  .mobile-more-sheet {
+    max-width: 100%;
+  }
+
+  .analytics-export-actions .button {
+    min-width: 0;
+    white-space: normal;
+  }
+
+  .backup-card .button {
+    min-width: 0;
+  }
+
+  .child-settings-row--external-source .toggle,
+  .child-settings-row--external-source .field--compact,
+  .child-settings-row--external-source .button {
+    width: 100%;
+  }
+}

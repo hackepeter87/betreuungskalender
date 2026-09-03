@@ -1,0 +1,125 @@
+/* Shared page structure and action primitives. */
+.page {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  padding: 34px var(--page-gutter) var(--page-block-end);
+}
+
+.page-header {
+  display: flex;
+  min-height: 62px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.page-header__context {
+  margin-bottom: 5px;
+  color: var(--muted);
+  font-size: 0.71rem;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.page-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.button,
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    transform 150ms ease;
+}
+
+.button {
+  min-height: 42px;
+  gap: 8px;
+  padding: 0 16px;
+  border-radius: 7px;
+  font-size: 0.79rem;
+  font-weight: 750;
+}
+
+.button:active,
+.icon-button:active {
+  transform: translateY(1px);
+}
+
+.button--primary {
+  background: var(--teal);
+  color: var(--color-text-on-accent);
+  box-shadow: var(--shadow-action-primary);
+}
+
+.button--primary:hover {
+  background: var(--teal-strong);
+}
+
+.button--secondary {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+}
+
+.button--secondary:hover,
+.icon-button--bordered:hover {
+  border-color: var(--color-border-hover);
+  background: var(--surface-soft);
+}
+
+.button--quiet {
+  color: var(--teal-strong);
+}
+
+.button--quiet:hover {
+  background: var(--teal-soft);
+}
+
+.button--danger-quiet {
+  color: var(--coral);
+}
+
+.button--danger-quiet:hover {
+  background: var(--coral-soft);
+}
+
+.button--danger {
+  border: 1px solid var(--coral);
+  background: var(--coral);
+  color: var(--color-text-on-accent);
+  box-shadow: var(--shadow-action-danger);
+}
+
+.button--danger:hover {
+  filter: brightness(0.92);
+}
+
+.icon-button {
+  width: 38px;
+  height: 38px;
+  flex: 0 0 38px;
+  border-radius: 7px;
+}
+
+.icon-button--bordered {
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+}
+
+.icon-button--danger {
+  color: var(--coral);
+}
