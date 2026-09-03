@@ -1,7 +1,8 @@
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { Icon } from "./Icon";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
+import { useDialogFocus } from "../hooks/useDialogFocus";
 
 export function Modal({
   title,
@@ -17,21 +18,17 @@ export function Modal({
   className?: string;
 }) {
   const { locale } = useI18n();
-  useEffect(() => {
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onClose]);
+  const dialogRef = useDialogFocus<HTMLElement>(onClose);
 
   return (
     <div className="modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section
+        ref={dialogRef}
         className={["modal", `modal--${size}`, className].filter(Boolean).join(" ")}
         role="dialog"
         aria-modal="true"
         aria-labelledby="modal-title"
+        tabIndex={-1}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <header className="modal__header">

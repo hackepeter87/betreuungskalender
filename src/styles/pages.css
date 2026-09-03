@@ -587,7 +587,7 @@
 
 .calendar-day--muted {
   background: #fafbfc;
-  color: #a5adba;
+  color: var(--muted);
 }
 
 .calendar-day--today::after {
@@ -1163,7 +1163,7 @@ button.calendar-day-popover__item:hover {
 .backup-card__number {
   position: absolute;
   inset: 20px 22px auto auto;
-  color: #c8d0da;
+  color: var(--muted);
   font-size: 0.75rem;
   font-weight: 800;
   letter-spacing: 0.12em;

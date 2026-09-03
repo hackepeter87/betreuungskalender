@@ -123,6 +123,7 @@ export function ExternalCalendarManager() {
             ref={inputRef}
             className="visually-hidden-file"
             type="file"
+            aria-label={copy(locale, "externalCalendar", "chooseFile")}
             accept=".ics,text/calendar"
             data-testid="external-calendar-file"
             onChange={(event) => {

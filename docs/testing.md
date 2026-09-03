@@ -44,6 +44,9 @@ output directories and must not be committed.
 The deterministic cross-page screenshot suite and its privacy rules are
 documented in [Visual regression testing](visual-regression-testing.md).
 
+The automated axe gate and the manual keyboard, VoiceOver, reflow, and touch
+matrix are documented in [Accessibility testing](accessibility-testing.md).
+
 ## SQLite migration and parity gate
 
 The standard unit-test command includes `server/sqliteParity.test.ts`. It
