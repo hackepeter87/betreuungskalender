@@ -676,12 +676,13 @@ test("native OIDC invitation callback rolls back every write when session creati
   const { database, cleanup } = testDatabase();
   const app = Fastify({ logger: false });
   const persistence = persistenceFor(database);
+  const now = Date.now();
   const invitation = await createInvitation({
     role: "editor",
-    expiresAt: "2026-09-03T12:00:00.000Z",
+    expiresAt: new Date(now + 60 * 60 * 1000).toISOString(),
     actorId: "local-dev",
     token: "fictional-callback-rollback-token",
-    timestamp: "2026-09-02T12:00:00.000Z"
+    timestamp: new Date(now - 60 * 1000).toISOString()
   }, persistence.query);
   database.exec(`
     CREATE TRIGGER reject_test_oidc_session
