@@ -5,7 +5,8 @@
 - Node.js 24.15 or newer in the supported LTS line
 - npm 12 or newer
 - Build tools required by `better-sqlite3` if a prebuilt binary is unavailable
-- A writable directory for SQLite and backups
+- A writable directory for SQLite and backups, or a supported PostgreSQL 16-18
+  database with a mounted password file
 
 ## Development
 
@@ -55,7 +56,8 @@ Migrations run automatically before the listener starts.
 
 ## First-use setup
 
-Fresh self-hosted installations are detected from server-side SQLite state.
+Fresh self-hosted installations are detected from the selected server-side
+database state.
 Native OIDC uses the one-time owner setup link before the app guides the initial
 owner through setup, child and care-party defaults, and calendar/feed discovery.
 Trusted-proxy and local installations use their documented first-use path.
@@ -66,8 +68,10 @@ Read the complete setup and member-administration guide:
 
 ## Important storage distinction
 
-The SQLite API is the single persistence surface for current domain data. The
-React UI uses the API for every domain read and write; browser local storage is
-limited to UI preferences. Use the JSON export as a portable additional export,
-and `npm run backup` plus `npm run restore:check` for the authoritative
-operational backup.
+The selected server-side database is the single persistence surface for current
+domain data. The React UI uses the API for every domain read and write; browser
+local storage is limited to UI preferences. SQLite uses `npm run backup` plus
+`npm run restore:check`. PostgreSQL requires an operator-managed logical backup
+and tested restore. The portable JSON transfer can move domain data between
+backends but does not replace either operational backup. See
+[database backends](database-backends.md).

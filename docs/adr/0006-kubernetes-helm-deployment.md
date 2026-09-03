@@ -58,7 +58,7 @@ management.
 
 ## Relationship to ADR 0007
 
-[ADR 0007](0007-database-persistence-drivers.md) defines a staged persistence
-boundary while preserving SQLite and this ADR's single-replica deployment
-contract for v1.27.0. It does not introduce another database driver or supersede
-this decision.
+[ADR 0007](0007-database-persistence-drivers.md) adds the optional PostgreSQL
+backend and Helm modes in v1.28.0 while preserving SQLite as the default and
+this ADR's single-application-replica, Secret-management, and rollout
+boundaries. PostgreSQL mode does not render the application SQLite claim.

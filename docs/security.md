@@ -10,9 +10,12 @@ not a multi-tenant cloud service and does not provide legal advice.
 The Helm chart runs the release image as a non-root user with a read-only root
 filesystem, dropped capabilities, disabled service-account token mounting and
 separate writable data, backup and temporary mounts. It enforces one application
-pod and a `Recreate` rollout because SQLite is a single-writer deployment
-boundary. Kubernetes Secrets must be referenced rather than copied into values
-files or ConfigMaps. Cluster-specific ingress, egress, storage encryption and
+pod and a `Recreate` rollout for every supported database mode because
+application scheduling and rate limiting remain single-instance boundaries.
+Kubernetes Secrets must be referenced rather than copied into values files or
+ConfigMaps. PostgreSQL modes do not mount the SQLite claim; external mode uses
+existing credential and CA Secrets, while the chart-provided database is
+evaluation-only. Cluster-specific ingress, egress, storage encryption and
 backup-copy policies remain deployment responsibilities. See
 [deployment-helm.md](deployment-helm.md).
 
@@ -143,6 +146,9 @@ mounted CA file is the default. Startup configuration and connection failures
 use generic error categories and do not expose credentials, file paths or
 connection values. Database and certificate files remain operator-managed
 secrets. Selecting PostgreSQL does not enable multiple application replicas.
+PostgreSQL backup, restore, update, and disaster recovery also remain operator
+responsibilities; the SQLite maintenance scripts and archive updater refuse
+that backend. See [database backends](database-backends.md).
 
 Audit history is loaded only in its protected view or as an explicitly
 requested part of a report snapshot. The normal application startup does not

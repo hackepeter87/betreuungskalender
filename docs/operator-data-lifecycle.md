@@ -8,10 +8,11 @@ erasure request.
 
 The application currently supports soft deletion for many domain records. A
 normal delete action hides a record from active views but can retain the record,
-its references, and audit history in SQLite. The application does not currently
-provide a selective GDPR erasure or anonymization workflow. That future design
-is tracked in [RFC #487](https://github.com/hackepeter87/betreuungskalender/issues/487).
-Do not describe the current delete buttons as a complete erasure mechanism.
+its references, and audit history in the selected operational database. The
+application does not currently provide a selective GDPR erasure or
+anonymization workflow. That future design is tracked in
+[RFC #487](https://github.com/hackepeter87/betreuungskalender/issues/487). Do
+not describe the current delete buttons as a complete erasure mechanism.
 
 ## Retention decision matrix
 
@@ -25,23 +26,26 @@ data no longer than the operator can justify for its documented purpose.
 
 | Data category | Purpose and legal basis | Retention trigger and period | End-of-period action | Copies and responsible owner |
 | --- | --- | --- | --- | --- |
-| Children and child attributes | `[OPERATOR: purpose and legal basis]` | `[OPERATOR: trigger, period, review date]` | `[OPERATOR: delete, anonymize, retain with reason]` | SQLite, backups, transfers, exports; `[OWNER]` |
-| Care parties and assignments | `[OPERATOR: purpose and legal basis]` | `[OPERATOR: trigger, period, review date]` | `[OPERATOR: action]` | SQLite, backups, transfers, exports; `[OWNER]` |
-| Care entries, notes, trips, and costs | `[OPERATOR: purpose and legal basis]` | `[OPERATOR: trigger, period, review date]` | `[OPERATOR: action]` | SQLite, reports, backups, transfers, exports; `[OWNER]` |
-| Rules, holidays, and unavailability | `[OPERATOR: purpose and legal basis]` | `[OPERATOR: trigger, period, review date]` | `[OPERATOR: action]` | SQLite, backups, transfers, exports; `[OWNER]` |
-| Monthly closures and generated reports | `[OPERATOR: purpose and legal basis]` | `[OPERATOR: trigger, period, review date]` | `[OPERATOR: action]` | SQLite, PDF/CSV copies, backups; `[OWNER]` |
-| Audit history and historical actor labels | `[OPERATOR: traceability purpose and legal basis]` | `[OPERATOR: trigger, period, review date]` | `[OPERATOR: action, including identity minimization]` | SQLite, reports, backups, transfers; `[OWNER]` |
-| Workspace users and identity metadata | `[OPERATOR: access-control purpose and legal basis]` | `[OPERATOR: membership end plus period]` | `[OPERATOR: revoke, delete, or detach identity]` | SQLite and identity provider; `[OWNER]` |
-| Invitations, sessions, feeds, and push subscriptions | `[OPERATOR: access or delivery purpose]` | `[OPERATOR: expiry or revocation rule]` | Revoke or expire; `[OPERATOR: additional action]` | SQLite, browser, push provider; `[OWNER]` |
-| External calendar sources and events | `[OPERATOR: purpose and legal basis]` | `[OPERATOR: source end plus period]` | Delete source or replace data; `[OPERATOR: derived records]` | SQLite, remote calendar provider, backups; `[OWNER]` |
+| Children and child attributes | `[OPERATOR: purpose and legal basis]` | `[OPERATOR: trigger, period, review date]` | `[OPERATOR: delete, anonymize, retain with reason]` | Operational database, backups, transfers, exports; `[OWNER]` |
+| Care parties and assignments | `[OPERATOR: purpose and legal basis]` | `[OPERATOR: trigger, period, review date]` | `[OPERATOR: action]` | Operational database, backups, transfers, exports; `[OWNER]` |
+| Care entries, notes, trips, and costs | `[OPERATOR: purpose and legal basis]` | `[OPERATOR: trigger, period, review date]` | `[OPERATOR: action]` | Operational database, reports, backups, transfers, exports; `[OWNER]` |
+| Rules, holidays, and unavailability | `[OPERATOR: purpose and legal basis]` | `[OPERATOR: trigger, period, review date]` | `[OPERATOR: action]` | Operational database, backups, transfers, exports; `[OWNER]` |
+| Monthly closures and generated reports | `[OPERATOR: purpose and legal basis]` | `[OPERATOR: trigger, period, review date]` | `[OPERATOR: action]` | Operational database, PDF/CSV copies, backups; `[OWNER]` |
+| Audit history and historical actor labels | `[OPERATOR: traceability purpose and legal basis]` | `[OPERATOR: trigger, period, review date]` | `[OPERATOR: action, including identity minimization]` | Operational database, reports, backups, transfers; `[OWNER]` |
+| Workspace users and identity metadata | `[OPERATOR: access-control purpose and legal basis]` | `[OPERATOR: membership end plus period]` | `[OPERATOR: revoke, delete, or detach identity]` | Operational database and identity provider; `[OWNER]` |
+| Invitations, sessions, feeds, and push subscriptions | `[OPERATOR: access or delivery purpose]` | `[OPERATOR: expiry or revocation rule]` | Revoke or expire; `[OPERATOR: additional action]` | Operational database, browser, push provider; `[OWNER]` |
+| External calendar sources and events | `[OPERATOR: purpose and legal basis]` | `[OPERATOR: source end plus period]` | Delete source or replace data; `[OPERATOR: derived records]` | Operational database, remote calendar provider, backups; `[OWNER]` |
 | Portable transfers and downloaded exports | `[OPERATOR: migration or reporting purpose]` | `[OPERATOR: deletion after verified use]` | Securely delete controlled copies | Operator devices and transfer locations; `[OWNER]` |
 | SQLite backups | `[OPERATOR: recovery purpose and legal basis]` | Local generated backups default to 14 days; `[OPERATOR: actual policy]` | Expire whole backup generations; do not promise selective mutation | Local and off-site backup locations; `[OWNER]` |
+| PostgreSQL backups | `[OPERATOR: recovery purpose and legal basis]` | `[OPERATOR: logical dump, snapshot, and point-in-time recovery periods]` | Expire whole backup generations; do not promise selective mutation | Database service and off-site backup locations; `[OWNER]` |
 | Security and operational logs | `[OPERATOR: security/operations purpose and legal basis]` | `[OPERATOR: period and rotation rule]` | Rotate and delete | Application, reverse proxy, container platform, host; `[OWNER]` |
 
 `BACKUP_RETENTION_DAYS` removes only backup files generated by the bundled
 SQLite backup script. It does not delete domain data from the live database,
 change external backup generations, or remove previously downloaded exports,
 reports, or transfer packages.
+PostgreSQL backup retention is entirely operator-managed and must be added to
+the same retention and restore-reconciliation process.
 
 ## Request workflow
 

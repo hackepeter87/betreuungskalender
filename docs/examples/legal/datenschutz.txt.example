@@ -58,8 +58,8 @@ Familien- und Betreuungsdokumentation
 
 Nachvollziehbarkeit, Berichte, Sicherungen und Übertragungen
 - Zweck: [BETREIBER: Auditierbarkeit, Bericht, Wiederherstellung, Migration]
-- Daten: [BETREIBER: Änderungen und Akteursbezeichnungen, Berichte, SQLite-
-  Sicherungen, Exporte und portable Übertragungspakete]
+- Daten: [BETREIBER: Änderungen und Akteursbezeichnungen, Berichte,
+  Datenbanksicherungen, Exporte und portable Übertragungspakete]
 - Rechtsgrundlage: [BETREIBER: einschlägige Grundlage]
 - Aufbewahrung: [BETREIBER: getrennte Fristen für Live-Daten, Audit-Historie,
   Berichte, Exporte, Transferdateien, lokale und externe Sicherungen]
