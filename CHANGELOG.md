@@ -6,6 +6,27 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.28.0] - 2026-09-03
+
+### Added
+
+- Add an optional PostgreSQL 16-18 persistence backend with an ordered schema,
+  serialized startup migrations, readiness integration, and file-backed
+  credentials.
+- Add opt-in PostgreSQL deployment paths for Docker Compose and Helm while
+  retaining SQLite as the default.
+- Add cross-driver application and portable-transfer parity tests for SQLite,
+  PostgreSQL 16, and PostgreSQL 18.
+
+### Changed
+
+- Document driver-specific backup, restore, update, rollback, TLS, and portable
+  transfer responsibilities in one operator guide.
+- Keep every database mode on one application replica and mark the
+  chart-provided PostgreSQL database as evaluation-only.
+- Make SQLite maintenance and archive-update tools refuse PostgreSQL instead of
+  implying an unsupported backup or rollback path.
+
 ## [1.27.0] - 2026-09-02
 
 ### Added
