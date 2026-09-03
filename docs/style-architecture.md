@@ -112,3 +112,42 @@ responsive Playwright scenarios must accompany behavioral layout changes.
 budgets, token-only shared styles, duplicate declaration removal, approved
 breakpoints, and semantic token availability. Invalid fixtures prove that each
 guard rejects regressions instead of merely describing the current files.
+
+## Reduction evidence
+
+Use `npm run styles:report` for source measurements and
+`npm run styles:report -- --ref <commit>` for a PR's unchanged base. The fixed
+consolidation baseline is `5c51f88`: 25 files, 8,717 lines, 159,756 bytes,
+4,207 declarations and 1,335 rule blocks. Each source file is counted once,
+including layer indexes; imports are not expanded a second time.
+
+After a fresh production build, `npm run styles:report -- --build-dir dist/assets`
+also reports each built CSS asset and aggregate raw and gzip sizes. Record the
+Node, PostCSS and build-tool versions with the comparison. The baseline build
+with Node 24.14.0, PostCSS 8.5.23 and Vite 7.3.6 is 129,651 bytes raw and
+23,731 bytes gzip. Do not attribute an old build to changed source.
+
+`--inventory` additionally reports parser-derived selectors, declarations,
+layers and enclosing conditions, plus repeated properties in identical
+contexts. This is a review inventory, not a cascade simulator: shorthand
+interactions, specificity, states and overlapping media queries must be checked
+using computed browser styles. Keep temporary inventories outside the repository.
+
+Each package must reduce source bytes, declaration count and rule count;
+production raw and gzip sizes must not grow. Report lines and file counts too,
+but splitting files or moving CSS into inline styles is not a reduction.
+Failure requires more work or an explicit new decision, not a relaxed threshold.
+
+Shared fields and labels are owned by `dialogs-and-forms.css` and
+`compositions.css`; disabled actions by `structure.css`; status and readiness
+surfaces by `data-and-feedback.css`. `panel-form` and `subsection-heading` live
+in `compositions.css`. Single-line control height and multiline textarea height
+are separate rules, without overwriting each other. Mobile entry forms retain
+their existing compact variant; this functional exception is not a new global
+baseline. Responsive tests protect the supported control sizes.
+
+The first reduction removes overwritten mobile dialog geometry, obsolete
+two-column mobile form grids and redundant inherited field/label rules. It
+preserves effective rendering, rather than changing snapshot expectations to
+hide unintended changes. Subsequent page packages must remove their replaced
+rules in the same change, and the final package removes both catch-all files.

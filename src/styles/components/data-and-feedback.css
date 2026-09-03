@@ -471,7 +471,7 @@
 
 .readiness-item {
   min-width: 0;
-  padding: 13px;
+  padding: 16px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: var(--surface-soft);
@@ -505,7 +505,7 @@
 .readiness-item span {
   margin-top: 4px;
   color: var(--muted);
-  font-size: 0.67rem;
+  font-size: 0.74rem;
   font-weight: 700;
   line-height: 1.4;
 }

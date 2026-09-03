@@ -270,6 +270,41 @@ test.beforeEach(async ({ page, request }) => {
   await stabilizeRuntimeResponses(page);
 });
 
+test("preserves the computed shared form and feedback baseline", async ({ page }) => {
+  await openApp(page);
+  const stylesheets = await page.locator('link[rel="stylesheet"]').evaluateAll((links) =>
+    links.map((link) => (link as HTMLLinkElement).href));
+  expect(stylesheets.length).toBeGreaterThan(0);
+  await page.setContent(`<main class="page page--narrow">
+    <section class="panel-form"><div class="form-grid">
+      <label class="field">Example<input></label>
+      <label class="field">Example<select><option>Example</option></select></label>
+      <label class="field">Example<textarea></textarea></label>
+    </div><button class="button button--primary" disabled>Unavailable</button></section>
+    <div class="readiness-item"><span>Example status</span></div>
+    <span class="status-pill">Example status</span>
+  </main>`);
+  for (const url of stylesheets) await page.addStyleTag({ url });
+  await stabilizeRendering(page);
+  const width = page.viewportSize()!.width;
+  const mobile = width < 768;
+  const inputHeight = mobile ? "48px" : width < 1200 ? "44px" : "40px";
+  await expect(page.locator("input")).toHaveCSS("min-height", inputHeight);
+  await expect(page.locator("select")).toHaveCSS("min-height", inputHeight);
+  await expect(page.locator("textarea")).toHaveCSS("min-height", mobile ? "96px" : "auto");
+  await expect(page.locator(".field").first()).toHaveCSS("min-width", "0px");
+  await expect(page.locator(".panel-form")).toHaveCSS("display", "grid");
+  await expect(page.locator(".panel-form")).toHaveCSS("gap", "16px");
+  await expect(page.locator(".readiness-item")).toHaveCSS("padding", "16px");
+  await expect(page.locator(".status-pill")).toHaveCSS("min-height", mobile ? "24px" : "28px");
+  await expect(page.locator("button")).toHaveCSS("pointer-events", "none");
+  await expect(page.locator("button")).toHaveCSS("opacity", "0.45");
+  const columns = await page.locator(".form-grid").evaluate((grid) =>
+    getComputedStyle(grid).gridTemplateColumns.split(" ").length);
+  expect(columns).toBe(mobile ? 1 : 3);
+  await expectNoDocumentHorizontalOverflow(page);
+});
+
 test("keeps shared pages and navigation visually stable", async ({ page }) => {
   await openApp(page);
 

@@ -33,6 +33,7 @@
     "test:container-smoke": "bash scripts/container-smoke.sh",
     "test:container-postgres-smoke": "bash scripts/container-postgres-smoke.sh",
     "test:helm": "bash scripts/helm-chart-test.sh",
+    "styles:report": "tsx scripts/style-report.ts",
     "security:check": "npm audit --audit-level=high && npm run test:security-runtime && npm run release:check",
     "release:check": "node scripts/release-check.js",
     "release:check:strict": "node scripts/release-check.js --strict --all --tag",
@@ -74,6 +75,7 @@
     "@types/react-dom": "^19.1.7",
     "@vitejs/plugin-react": "^4.6.0",
     "concurrently": "^10.0.4",
+    "postcss": "8.5.23",
     "tsx": "^4.20.6",
     "typescript": "^5.8.3",
     "vite": "^7.0.0"

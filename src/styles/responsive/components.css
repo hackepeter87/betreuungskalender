@@ -44,11 +44,8 @@
 @media (max-width: 767px) {
 
   .page {
-    padding-inline: var(--page-gutter);
-    width: 100%;
-    padding: 20px 14px 32px;
+    padding: 20px 14px calc(112px + env(safe-area-inset-bottom));
     overflow-x: hidden;
-    padding-bottom: calc(112px + env(safe-area-inset-bottom));
   }
 
   .privacy-card {
@@ -179,12 +176,6 @@
     grid-template-columns: 1fr;
   }
 
-  .modal {
-    width: 100%;
-    max-height: 94vh;
-    border-radius: 13px 13px 0 0;
-  }
-
   .modal__body {
     min-height: 0;
     max-height: none;
@@ -197,11 +188,6 @@
   .child-form {
     min-height: 100%;
     padding: 14px 14px 0;
-  }
-
-  .datetime-grid,
-  .form-grid {
-    grid-template-columns: repeat(2, 1fr);
   }
 
   .form-actions {
@@ -229,11 +215,6 @@
   .setup-wizard {
     padding-right: 14px;
     padding-left: 14px;
-  }
-
-  .datetime-grid,
-  .form-grid {
-    grid-template-columns: 1fr;
   }
 }
 @media (max-width: 767px) {
@@ -276,7 +257,6 @@
   }
 }
 @media (max-width: 767px) {
-  .line-item-grid,
   .period-selector__custom,
   .form-grid--two,
   .report-summary-grid {
@@ -459,8 +439,13 @@
   .field select,
   .field textarea,
   .search-field input {
-    min-height: 48px;
     font-size: 16px;
+  }
+
+  .field input,
+  .field select,
+  .search-field input {
+    min-height: 48px;
   }
 
   .field textarea {
@@ -577,7 +562,6 @@
   .entry-form .field textarea {
     min-height: 40px;
     padding: 7px 9px;
-    font-size: 16px;
   }
 
   .entry-form .field-label-row {
@@ -622,15 +606,6 @@
     align-items: start;
     gap: 6px;
     padding: 10px 14px 8px;
-  }
-
-  .settings-section--calendar-feed .status-pill {
-    width: fit-content;
-    max-width: 100%;
-    min-height: 24px;
-    padding: 4px 8px;
-    font-size: 0.62rem;
-    line-height: 1.2;
   }
 
   .settings-section--calendar-feed .field-help-button {
@@ -807,12 +782,6 @@
 
   .requirement-badge {
     font-size: 0.65rem;
-  }
-}
-@media (max-width: 720px) {
-
-  .readiness-item--wide {
-    grid-column: auto;
   }
 }
 @media (min-width: 768px) {
