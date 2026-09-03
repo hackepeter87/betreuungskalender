@@ -1,0 +1,53 @@
+@media (max-width: 1050px) {
+  .holiday-row {
+    grid-template-columns: 120px 1fr auto;
+  }
+
+  .holiday-row > span:nth-child(3) {
+    grid-column: 2;
+  }
+
+  .holiday-row__actions {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+}
+
+@media (max-width: 767px) {
+  .holiday-row {
+    align-items: start;
+    min-height: 0;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+    margin: 10px 0;
+    padding: 12px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+  }
+
+  .holiday-row strong,
+  .holiday-row small {
+    overflow-wrap: anywhere;
+  }
+
+  .holiday-row > span:nth-child(2),
+  .holiday-row > span:nth-child(3),
+  .holiday-row__actions {
+    grid-column: 1;
+  }
+
+  .holiday-row small {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .holiday-row__assignment {
+    justify-self: start;
+  }
+
+  .holiday-row__actions {
+    grid-row: auto;
+    justify-content: flex-start;
+  }
+}

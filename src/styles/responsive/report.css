@@ -1,0 +1,14 @@
+@media (max-width: 767px) {
+  .report-document .responsive-table {
+    font-size: 0.72rem;
+  }
+
+  .report-document {
+    padding: 20px 14px;
+  }
+
+  .report-document__header {
+    grid-template-columns: 1fr;
+    gap: 18px;
+  }
+}

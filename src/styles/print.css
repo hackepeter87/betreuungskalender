@@ -1,11 +1,5 @@
 /* Print-only report and document presentation. */
 @media print {
-  .report-page {
-    width: auto !important;
-  }
-}
-
-@media print {
   @page {
     size: A4 portrait;
     margin: 14mm;

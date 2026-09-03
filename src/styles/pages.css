@@ -1,5 +1,14 @@
-/* Ordered feature ownership. Remaining pages migrate in the next package. */
+/* Ordered feature ownership. Shared residual rules migrate in the final package. */
 @import "./pages/remaining.css";
+@import "./pages/report.css";
+@import "./pages/analytics.css";
+@import "./pages/backup.css";
+@import "./pages/documentation.css";
+@import "./pages/entries.css";
+@import "./pages/contact.css";
+@import "./pages/holidays.css";
+@import "./pages/unavailable.css";
+@import "./pages/audit.css";
 @import "./pages/settings.css";
 @import "./pages/setup.css";
 @import "./pages/calendar.css";

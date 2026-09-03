@@ -50,8 +50,12 @@ cascade:
 - `pages/settings.css` owns settings composition, membership management,
   external calendars and personal feed controls;
 - `pages/setup.css` owns the initial setup form and its person/child layout;
-- `pages/remaining.css` temporarily retains the other pages for their separate
-  consolidation package;
+- `pages/report.css`, `analytics.css`, `backup.css`, `documentation.css`,
+  `entries.css`, `contact.css`, `holidays.css`, `unavailable.css` and `audit.css`
+  own the corresponding route layouts and functional variants; backup includes
+  portable transfer review, confirmation and actor mapping;
+- `pages/remaining.css` temporarily retains cross-page compositions and shared
+  controls for the final consolidation package;
 - `responsive/` separates shell and shared-component adaptations from the
   remaining feature-specific rules. Its calendar and dashboard files adapt only
   their respective feature owners, grouped by the existing viewport boundaries.
@@ -77,6 +81,17 @@ share one definition; input heights, disabled actions and labels continue to
 come from the common primitives. A structural test prevents feature selectors
 from returning to common files and rejects repeated properties in the same
 feature/layer/media context.
+
+Supporting routes inherit fluid sizing from `.page`; duplicate route-level
+width and maximum-width resets are forbidden. Each route's responsive rules
+live under the same owner name, with existing media boundaries preserved.
+Report print rules remain exclusively in the print layer; screen layout does
+not change the PDF renderer. The former transfer-count tiles and raw metadata
+presentation are unused and removed, including their responsive rules.
+Cross-route selector groups (for example export actions, summary definitions
+and informational banners) remain shared rather than duplicating declarations
+into each page owner. The final consolidation step relocates their residual
+definitions into the authoritative component owners.
 
 Calendar exceptions are intentional: the desktop grid retains its minimum cell
 size, while the mobile grid uses compact labels and a bottom day-detail drawer.

@@ -1,0 +1,7 @@
+@media (max-width: 767px) {
+  .audit-filter {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+  }
+}

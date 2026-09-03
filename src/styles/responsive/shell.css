@@ -1,11 +1,4 @@
 /* Shell responsive adaptations. */
-@media (max-width: 560px) {
-
-  .transfer-review-actions .button,
-  .transfer-confirm__actions .button {
-    width: 100%;
-  }
-}
 
 @media (max-width: 720px) {
 
@@ -153,34 +146,10 @@
   }
 }
 
-@media (max-width: 640px) {
-
-  .historical-sync__heading .button,
-  .historical-sync__result .button {
-    width: 100%;
-  }
-}
-
 @media (max-width: 767px) {
 
   .subsection-heading .button {
     width: 100%;
-  }
-
-  .mobile-rule-steps button.is-active {
-    border-color: var(--teal);
-    background: var(--teal-soft);
-    color: var(--teal-strong);
-  }
-
-  .mobile-rule-steps button.is-active span {
-    background: var(--teal);
-    color: var(--color-text-on-accent);
-  }
-
-  .mobile-rule-step-actions .button {
-    min-width: 0;
-    flex: 1;
   }
 
   .page-header__actions .button {
@@ -383,14 +352,5 @@
   .unavailable-row,
   .mobile-more-sheet {
     max-width: 100%;
-  }
-
-  .analytics-export-actions .button {
-    min-width: 0;
-    white-space: normal;
-  }
-
-  .backup-card .button {
-    min-width: 0;
   }
 }

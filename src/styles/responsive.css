@@ -2,6 +2,15 @@
 @import "./responsive/shell.css";
 @import "./responsive/components.css";
 @import "./responsive/features.css";
+@import "./responsive/report.css";
+@import "./responsive/analytics.css";
+@import "./responsive/backup.css";
+@import "./responsive/documentation.css";
+@import "./responsive/entries.css";
+@import "./responsive/contact.css";
+@import "./responsive/holidays.css";
+@import "./responsive/unavailable.css";
+@import "./responsive/audit.css";
 @import "./responsive/settings.css";
 @import "./responsive/setup.css";
 @import "./responsive/calendar.css";
