@@ -3,19 +3,6 @@ import type { BaselineOwners, RawColorBudget } from "./style-guardrails";
 // Existing raw colors are tracked as migration debt. Counts may decrease, but
 // increases require a semantic token or an explicit contract review.
 export const rawColorBudget = {
-  "src/styles/components.css": {
-    "#344054": 1, "#3730a3": 1, "#41516b": 1, "#475467": 3, "#4d7472": 1,
-    "#554b8c": 3, "#566168": 1, "#604713": 1, "#785712": 1, "#8175bb": 1,
-    "#8f3028": 1, "#8f3540": 1, "#9a5c06": 1, "#9aa4b2": 1, "#9bcfcd": 1,
-    "#9d3945": 1, "#9da9b7": 1, "#a23845": 1, "#a23d48": 1, "#b9deda": 2,
-    "#c8d5e2": 1, "#cfd6df": 1, "#d5d9dc": 1, "#d8d1ee": 2, "#ead39a": 1,
-    "#eeeafb": 1, "#eef2ff": 1, "#efc5c9": 1, "#efd299": 1, "#f0c1ba": 1,
-    "#f3f4f5": 1, "#f4f7fa": 1, "#f7f5fd": 2, "#fafbfc": 1, "#fff": 4,
-    "#fff0ee": 1, "#fff8e7": 1, "rgb(20 31 35 / 25%)": 1,
-    "rgb(20 31 35 / 45%)": 1, "rgb(22 111 103 / 18%)": 2,
-    "rgba(196, 63, 82, 0.18)": 1, "rgba(20, 33, 61, 0.25)": 1,
-    "rgba(8, 127, 123, 0.18)": 1
-  },
   "src/styles/pages.css": {
     "#17213a": 1, "#20304d": 1, "#264653": 1, "#294845": 1, "#33245d": 1,
     "#344054": 3, "#475467": 4, "#4d7472": 1, "#514783": 1, "#5150ad": 1,
@@ -36,17 +23,11 @@ export const rawColorBudget = {
   },
   "src/styles/print.css": { "#fff": 1 },
   "src/styles/responsive.css": {
-    "#344054": 1, "#36556e": 1, "#9bcfcd": 1, "#b8ddd9": 1, "#c7dbec": 1,
-    "#eef2f6": 1, "#f2fbfa": 1, "#f3f8fc": 1, "#fff": 1,
-    "rgb(15 23 42 / 28%)": 1, "rgba(18, 31, 52, 0.36)": 1,
-    "rgba(255, 255, 255, 0.96)": 1, "rgba(255, 255, 255, 0.97)": 2,
-    "rgba(255, 255, 255, 0.98)": 3, "rgba(29, 45, 73, 0.08)": 3
-  },
-  "src/styles/shell.css": {
-    "#23324a": 1, "#344054": 1, "#516079": 1, "#80560b": 1, "#9bcfcd": 2,
-    "#a9d8d5": 1, "#b9deda": 1, "#efd299": 1, "#fff": 2,
-    "rgba(15, 137, 128, 0.35)": 1, "rgba(20, 33, 61, 0.08)": 2,
-    "rgba(29, 45, 73, 0.08)": 1
+    "#344054": 1,
+    "#b8ddd9": 1,
+    "#eef2f6": 1,
+    "#f2fbfa": 1,
+    "rgb(15 23 42 / 28%)": 1
   }
 } as const satisfies RawColorBudget;
 
