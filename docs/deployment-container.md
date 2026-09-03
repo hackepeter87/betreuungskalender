@@ -30,9 +30,10 @@ add debugging tools to the application image.
 
 GitHub Actions builds the image and starts a disposable container on relevant
 pull requests and pushes. Validation succeeds only after the container's
-`/api/health` endpoint confirms through the persistence runtime that SQLite is
-reachable. Readiness additionally requires completed migrations. CI does not
-push the image to a registry and does not require deployment secrets.
+`/api/health` endpoint confirms through the persistence runtime that the
+selected database is reachable. Readiness additionally requires completed
+migrations. CI does not push the image to a registry and does not require
+deployment secrets.
 
 Published GitHub releases from `v1.2.0` onward may also include a GHCR image
 digest asset. The archive-based update path remains supported because it
@@ -135,8 +136,8 @@ secrets.
 Do not run the SQLite backup command against this configuration. PostgreSQL
 requires its own logical backup and restore procedure. A portable application
 export can be used to move domain data from an existing SQLite installation,
-but it does not replace a database backup. The complete PostgreSQL operating,
-backup, update, and recovery procedure is documented with the v1.28.0 release.
+but it does not replace a database backup. Follow the complete
+[database backend operating procedure](database-backends.md).
 The archive update tool intentionally stops before changing a PostgreSQL-backed
 installation because its automatic backup and rollback path is SQLite-specific.
 
@@ -460,13 +461,17 @@ only on the Compose network.
 
 ## Backup
 
+For SQLite:
+
 ```bash
 docker compose exec betreuungskalender /nodejs/bin/node scripts/backup.js
 docker compose exec betreuungskalender /nodejs/bin/node scripts/restore-check.js
 ```
 
 Copy backups to protected external storage according to the container engine's
-volume procedures. Browser-local JSON exports remain a separate backup.
+volume procedures. PostgreSQL requires an operator-managed logical backup and
+tested restore; do not run these SQLite scripts in PostgreSQL mode. Portable
+JSON transfer remains separate from the operational backup for either driver.
 
 ## Update
 
@@ -476,6 +481,10 @@ runtime version, readiness, migrations, and SQLite integrity before accepting a
 new release, and restores both runtime and database on failure. Keep the prior
 release directory until the new runtime has been verified.
 
+The archive updater refuses PostgreSQL installations. Use the manual
+PostgreSQL update gate in [database backends](database-backends.md), including a
+tested pre-update logical backup.
+
 ## Rollback
 
 1. Stop the updated container without deleting its data or backup volumes.
@@ -484,7 +493,10 @@ release directory until the new runtime has been verified.
 3. Start the previously verified image or rebuild the previous tag.
 4. Confirm `/api/health`, authentication boundaries, and the UI smoke test.
 
-Never use a container rollback as a substitute for a tested database restore.
+For PostgreSQL, revert the runtime only when the migrated schema remains
+compatible. Otherwise stop the application and restore the tested pre-update
+database before starting the previous runtime. Never use a container rollback
+as a substitute for a tested database restore.
 
 ## Registry publication
 
@@ -553,8 +565,8 @@ for archive deployments:
 podman exec betreuungskalender /nodejs/bin/node scripts/runtime-verify.js --expected-version X.Y.Z
 ```
 
-The image does not remove the need for a verified SQLite backup, restore test,
-auth-boundary check, and rollback plan before production updates.
+The image does not remove the need for a verified driver-appropriate backup,
+restore test, auth-boundary check, and rollback plan before production updates.
 
 For reverse-proxy authentication, remove the public port mapping where possible
 and attach the app only to a private proxy network.

@@ -1,10 +1,11 @@
 # Updates and rollback
 
-The supported production update path is Docker Compose with immutable,
-checksummed release archives. The update tool is intentionally external to the
-running application: it verifies the archive, creates and validates a SQLite
-backup, changes the active release, waits for readiness, and rolls back both
-the runtime and the matching database backup if validation fails.
+The automated SQLite update path is Docker Compose with immutable, checksummed
+release archives. The update tool is intentionally external to the running
+application: it verifies the archive, creates and validates a SQLite backup,
+changes the active release, waits for readiness, and rolls back both the runtime
+and the matching database backup if validation fails. It refuses PostgreSQL
+installations because it cannot create or restore their operational backup.
 
 It never attempts reverse database migrations.
 
@@ -17,10 +18,31 @@ It never attempts reverse database migrations.
 | systemd/direct Node.js | Fallback and development path | Stop service, retain prior release, backup, install, validate, and restore manually |
 | Podman Compose | Tested compatibility only | Validate the equivalent commands in a non-production environment first |
 | Promoted GHCR image | Preferred image path | Pull `testing` or `production` after GitHub promotion, then perform backup, migration, verification, and rollback checks manually |
+| PostgreSQL backend | Manual database-aware path | Create and test a logical backup, retain the prior runtime, update one application instance, then verify readiness and a known workflow |
 
 The automated tool only manages the Compose layout below. Do not point it at a
 development checkout, a named-volume evaluation setup, or a live systemd
 installation.
+
+## PostgreSQL update gate
+
+PostgreSQL updates are deliberately manual:
+
+1. Verify the target release and review its database notes.
+2. Create a current logical dump and restore it into an empty isolated database.
+3. Start the current application version against that restore and verify health,
+   readiness, authentication, aggregate counts, and a known workflow.
+4. Retain the prior application image or release directory.
+5. Stop the old application and start exactly one target application instance.
+6. Wait for migrations and `/api/ready`, then verify the runtime version and a
+   known read/write workflow.
+
+Do not run old and new application versions together. Reverting the runtime does
+not reverse PostgreSQL migrations. If the previous version is not compatible
+with the migrated schema, stop the application and restore the verified
+pre-update database into an empty replacement database before starting the
+previous runtime. See [database backends](database-backends.md) for the logical
+backup and restore contract.
 
 ## Stable Compose layout
 

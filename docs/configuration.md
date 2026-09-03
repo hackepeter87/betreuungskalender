@@ -30,7 +30,7 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `POSTGRES_ADMIN_PASSWORD_FILE` | Host file used by the optional Compose PostgreSQL service during initialization | `/srv/betreuungskalender/secrets/postgres-admin-password` | Required only with `compose.postgres.yml` | None | Keep separate from the application role password; it is not application configuration |
 | `POSTGRES_TLS_MODE` | PostgreSQL transport verification | `verify-full` | Optional with PostgreSQL | `verify-full` | Use `disable` only on an independently protected local/private transport |
 | `POSTGRES_CA_FILE` | Mounted trusted CA certificate for PostgreSQL | `/run/secrets/postgres-ca.pem` | Required with `verify-full` | None | Keep certificate material out of images and ConfigMaps |
-| `BACKUP_DIR` | Destination for SQLite backups | `/var/backups/betreuungskalender` | Recommended | `./backups` | Contains sensitive copies; use mode `0700` |
+| `BACKUP_DIR` | Destination for SQLite backups | `/var/backups/betreuungskalender` | Recommended with SQLite | `./backups` | Contains sensitive copies; use mode `0700` |
 | `AUTH_MODE` | Authentication implementation mode | `trusted-proxy` | Optional | Derived from `TRUST_PROXY_AUTH` | Selects the only authentication implementation the API will accept |
 | `REQUIRE_AUTH` | Require a trusted identity for API routes | `true` | Recommended in production | `false` | Must be `true` for protected reverse-proxy operation |
 | `TRUST_PROXY_AUTH` | Legacy trusted-proxy switch and header-trust flag | `true` | Required with `AUTH_MODE=trusted-proxy` | `false` | Only valid for trusted-proxy auth; never enable when clients can directly reach the app |
@@ -108,6 +108,9 @@ SQLite's native backup action applies only to SQLite. PostgreSQL installations
 need an independently tested logical database backup and restore procedure;
 the portable transfer package is intended for controlled domain-data transfer,
 not as a replacement for an operational database backup.
+
+The complete selection, startup, backup, restore, update, and cross-backend
+transfer contract is in [database backends](database-backends.md).
 
 `deploy/compose.oidc.yml` uses the same fixed container paths. In that mode,
 `HOST_BIND_ADDRESS` and `HOST_PORT` publish oauth2-proxy only; the app service

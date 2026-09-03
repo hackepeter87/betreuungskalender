@@ -26,6 +26,8 @@ optional backend. Both implement the same logical tables and application value
 contract. The React UI uses the API for domain reads and writes. Browser local
 storage is limited to UI preferences and an optional legacy-data discovery
 source; it is not synchronized or treated as current persistence.
+Operational selection, backup, restore, update, and portable transfer are
+documented in [database backends](database-backends.md).
 
 ## Operational tables
 

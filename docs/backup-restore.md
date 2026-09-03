@@ -1,10 +1,11 @@
 # Backup and restore
 
-Betreuungskalender keeps all current domain data in SQLite. The authoritative
-operational backup is therefore `npm run backup`. The in-app JSON export is a
-portable application-data export and an additional user-facing safeguard; it
-does not replace a verified SQLite backup. Browser local storage contains only
-UI preferences and is not an operational data store.
+Betreuungskalender keeps current domain data in the selected operational
+database. SQLite uses the bundled backup and verification scripts. PostgreSQL
+requires an operator-managed logical backup and tested restore. The in-app JSON
+export is a portable application-data transfer for either backend; it does not
+replace an operational database backup. Browser local storage contains only UI
+preferences and is not an operational data store.
 
 ## SQLite backup
 
@@ -57,7 +58,7 @@ podman exec APP_CONTAINER /nodejs/bin/node scripts/backup.js
 podman exec APP_CONTAINER /nodejs/bin/node scripts/restore-check.js
 ```
 
-## Restore procedure
+## SQLite restore procedure
 
 1. Stop the application service.
 2. Create a final backup of the current database if it is readable.
@@ -74,6 +75,23 @@ podman exec APP_CONTAINER /nodejs/bin/node scripts/restore-check.js
 Test restoration periodically in an isolated environment. A successful backup
 command alone does not prove recoverability.
 
+## PostgreSQL backup and restore
+
+The SQLite scripts refuse PostgreSQL and do not create a PostgreSQL backup.
+Before application or database updates, create a logical dump with provider
+tooling or compatible `pg_dump`, protect it as sensitive personal data, and
+restore it into an empty isolated database. Start the same application version
+against the restored database and verify health, readiness, authentication,
+expected aggregate counts, and a known workflow. Do not test a restore over the
+active database.
+
+For disaster recovery, stop the application before replacing the operational
+database. Restore the last verified compatible generation into an empty
+replacement database, then start exactly one application instance and verify
+`/api/health` and `/api/ready`. Application and Helm rollbacks do not reverse
+schema migrations. The complete commands, update order, and unsupported
+operations are documented in [database backends](database-backends.md).
+
 ## Portable instance transfer
 
 The in-app transfer export is intended for moving complete domain data between
@@ -89,7 +107,7 @@ Every import follows this sequence:
 2. Select the transfer JSON file in **Export & Import**.
 3. Run **Import prüfen**. The server validates the checksum, relationships,
    limits, and current schema through the shared import core in a temporary
-   SQLite runtime without changing the target database. The result compares
+   validation database without changing the target database. The result compares
    aggregate category counts in the
    current installation with the package and the expected state after import.
    A short-lived confirmation binds the later import to this exact tested
@@ -111,7 +129,7 @@ Every import follows this sequence:
    connections on the target installation.
 
 The transfer mechanism does not merge two independent data sets. Keep the
-source SQLite backup until the target has been checked. Legacy application JSON
+source and target operational backups until the target has been checked. Legacy application JSON
 exports remain accepted, but they also require a dry run and do not contain the
 new historical actor snapshots.
 

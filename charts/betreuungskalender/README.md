@@ -102,8 +102,13 @@ production PostgreSQL installation.
 The generated PVCs have `helm.sh/resource-policy: keep` by default. Uninstalling
 the release therefore does not delete the database or backup claim. Take and
 verify a backup before every upgrade. A Helm rollback does not reverse SQLite
-migrations; restore a compatible verified backup when a downgrade requires an
-older schema.
+or PostgreSQL migrations; restore a compatible verified backup when a downgrade
+requires an older schema.
+
+SQLite uses the bundled application backup scripts. PostgreSQL requires an
+operator-managed logical backup and tested restore; the application backup PVC
+is not a PostgreSQL database backup. See
+[database backends](../../docs/database-backends.md).
 
 Do not use storage that lacks reliable POSIX locking. Validate network-backed
 storage with the storage provider before placing SQLite on it.

@@ -90,8 +90,8 @@ one process, so the existing single-replica boundary continues to apply.
   exclusive scheduled work, rolling migrations and load testing.
 - Compose and Helm continue to default to SQLite. v1.27.0 adds no environment
   variable, secret, container, chart value or deployment mode.
-- A future embedded PostgreSQL Helm workload is evaluation-only. External
-  PostgreSQL is the intended operational form of that optional driver.
+- The embedded PostgreSQL Helm workload is evaluation-only. External PostgreSQL
+  is the intended operational form of that optional driver.
 
 ## Delivery sequence
 
@@ -165,6 +165,7 @@ the compatibility run.
 
 ## Relationship to ADR 0006
 
-[ADR 0006](0006-kubernetes-helm-deployment.md) remains the operative deployment
-decision for v1.27.0. This ADR defines a future optional storage boundary while
-preserving ADR 0006's single-replica and secret-management requirements.
+[ADR 0006](0006-kubernetes-helm-deployment.md) remains the base Helm deployment
+decision. This ADR extends it with the optional PostgreSQL storage boundary
+while preserving the single-application-replica and Secret-management
+requirements.

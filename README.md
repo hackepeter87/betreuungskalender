@@ -35,7 +35,7 @@ included in repository screenshots.
 [Configuration](docs/configuration.md) · [Security](docs/security.md) ·
 [Security baseline](docs/security-baseline.md) · [Security review](docs/security-review.md) ·
 [Operator legal information](docs/legal-information.md) ·
-[Backup](docs/backup-restore.md) · [Legacy migration](docs/migration.md) ·
+[Database backends](docs/database-backends.md) · [Backup](docs/backup-restore.md) · [Legacy migration](docs/migration.md) ·
 [Calendar feed](docs/personal-calendar-feed.md) ·
 [Testing](docs/testing.md) ·
 [Internationalization](docs/internationalization.md)
@@ -54,8 +54,8 @@ included in repository screenshots.
 - Duty-related and other unavailable periods with overlap notices
 - Multiple trips and costs per care entry with period statistics
 - Monthly closure, data-quality checks, soft delete, and field-level audit log
-- Verified SQLite backups plus portable, dry-run-validated instance transfers,
-  separate CSV exports, neutral PDF reports, and A4 print view
+- Driver-specific operational backups plus portable, dry-run-validated instance
+  transfers, separate CSV exports, neutral PDF reports, and A4 print view
 - External calendar overlays from local `.ics` files or HTTPS feed URLs, with
   source visibility and optional holiday-source derivation; imported events do
   not affect care statistics or reports
@@ -105,7 +105,11 @@ replica.
 Existing data from older browser-only versions is read solely as a legacy
 migration source. The [migration assistant](docs/migration.md) previews the
 data, identifies potential duplicates and conflicts, and imports it
-transactionally into SQLite.
+transactionally into the selected operational database.
+
+The supported database choices, backup responsibilities, update boundary, and
+portable SQLite/PostgreSQL transfer are documented in
+[database backends](docs/database-backends.md).
 
 There is no cloud synchronization, analytics, or external tracking.
 
@@ -178,9 +182,10 @@ Docker and rootless Podman instructions:
 
 ## Kubernetes/Helm quick start
 
-The application chart deploys one non-root application pod with a release-scoped
-SQLite PVC, read-only root filesystem, startup/readiness/liveness probes,
-optional ingress and TLS, and configurable scheduling controls:
+The application chart deploys one non-root application pod with SQLite by
+default or an explicitly selected PostgreSQL connection, a read-only root
+filesystem, startup/readiness/liveness probes, optional ingress and TLS, and
+configurable scheduling controls:
 
 ```bash
 npm run test:helm
@@ -190,9 +195,9 @@ helm upgrade --install family-calendar charts/betreuungskalender \
 helm test family-calendar --namespace family-calendar
 ```
 
-SQLite requires exactly one application pod per release. Multiple independent
-releases are supported and receive separate resource and claim names. Complete
-configuration, storage, security and upgrade guidance:
+Every database mode currently requires exactly one application pod per release.
+Multiple independent releases are supported and receive separate resource and
+claim names. Complete configuration, storage, security and upgrade guidance:
 [docs/deployment-helm.md](docs/deployment-helm.md)
 
 ## LXC/systemd quick start
@@ -342,7 +347,7 @@ Full guide: [docs/self-hosted-onboarding.md](docs/self-hosted-onboarding.md).
 
 ## Backup and restore
 
-Create and verify an online-safe SQLite backup:
+SQLite installations create and verify an online-safe backup with:
 
 ```bash
 npm run backup
@@ -353,21 +358,22 @@ The script uses SQLite's backup API, stores restrictive files in `BACKUP_DIR`,
 and removes backups older than `BACKUP_RETENTION_DAYS` (default 14). Keep
 additional encrypted off-host generations.
 
-The in-app JSON export contains the complete domain data loaded from SQLite and
-can be restored transactionally through the API. A verified SQLite backup
-remains the authoritative operational and disaster-recovery backup. CSV and
-PDF files are reporting formats, not complete backups.
+PostgreSQL installations require an operator-managed logical backup and tested
+restore. The in-app portable transfer contains domain data from either backend
+and can replace the target data transactionally after a mandatory dry run, but
+it does not replace the operational backup. CSV and PDF files are reporting
+formats, not complete backups.
 
 Restore procedure and testing:
 [docs/backup-restore.md](docs/backup-restore.md)
 
 ## Updates
 
-The supported self-hosted production path uses a checksummed release archive
-and a Compose-first update tool. It checks preconditions, creates and verifies
-a SQLite backup, switches only to a versioned release directory, verifies
-health/readiness, version, migrations, and database integrity, and restores
-both the prior runtime and matching backup when validation fails.
+The checksummed archive update tool handles SQLite installations: it verifies a
+backup, switches to a versioned release, verifies readiness, migrations, and
+database integrity, and restores the prior runtime and backup on failure.
+PostgreSQL updates use the documented manual backup and restore gate because the
+tool deliberately refuses to operate without a SQLite rollback boundary.
 
 Run the documented `--dry-run` before every update and retain prior releases
 and verified backups. Full bootstrap, lock handling, exit codes, manual
@@ -399,7 +405,8 @@ recovery, and direct Node.js fallback guidance:
 
 ## Exports and reports
 
-- JSON: complete domain export/import of the SQLite-backed application data
+- JSON: portable domain transfer between supported database backends, with a
+  mandatory dry run before replacement
 - CSV: care entries, trips, costs, holidays, and unavailable periods
 - PDF: neutral selected-period report with report ID, data state, statistics,
   daily list, notes, cancellation reasons, and optional audit history
@@ -409,7 +416,7 @@ attach them to public GitHub issues.
 
 ## Privacy and security
 
-SQLite files, backups, exports, and reports may contain
+Database files or dumps, backups, exports, and reports may contain
 sensitive family data. The operator is responsible for:
 
 - TLS and authentication
