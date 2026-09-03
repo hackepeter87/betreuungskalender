@@ -35,7 +35,7 @@ guardrail baseline records protected global selectors such as `.page`,
 `.panel`, `.sidebar`, and `.calendar-grid`; duplicate or misplaced definitions
 fail the standard test workflow.
 
-The `shell`, `components`, and `responsive` entry files are ordered import-only
+The `shell`, `components`, `pages`, and `responsive` entry files are ordered import-only
 indexes. Their subfiles make selector ownership explicit without changing the
 cascade:
 
@@ -43,13 +43,27 @@ cascade:
   install or loading states;
 - `components/` separates structural primitives, data and feedback,
   dialogs and forms, and reusable compositions;
+- `pages/calendar.css` owns the month toolbar, grid, day popover, agenda,
+  and calendar-specific status presentation;
+- `pages/dashboard.css` owns metrics, upcoming entries, per-child summaries,
+  data quality, and dashboard confirmation placement;
+- `pages/remaining.css` temporarily retains the other pages for their separate
+  consolidation package;
 - `responsive/` separates shell and shared-component adaptations from the
-  remaining feature-specific rules.
+  remaining feature-specific rules. Its calendar and dashboard files adapt only
+  their respective feature owners, grouped by the existing viewport boundaries.
 
 Declarations that are immediately overwritten in the same rule are rejected
-for shared shell and component ownership. Feature-specific responsive rules
-remain a tracked migration boundary for the calendar/dashboard and remaining
-page packages.
+for shared shell, component, calendar, and dashboard ownership. Calendar and
+dashboard selectors are forbidden in the remaining catch-all files. Other
+feature-specific responsive rules remain a tracked migration boundary for the
+remaining-page package.
+
+Calendar exceptions are intentional: the desktop grid retains its minimum cell
+size, while the mobile grid uses compact labels and a bottom day-detail drawer.
+The mobile dashboard uses its dedicated metric arrangement and agenda instead
+of squeezing the desktop calendar. No date range, counting, filtering, or data
+loading logic belongs in these stylesheets.
 
 ## Color contract
 
@@ -65,7 +79,10 @@ or palette names. The current roles cover:
 
 The older palette variables remain temporarily available while feature styles
 are migrated. Shell styles, shared component styles, and their responsive
-adaptations accept no raw colors; tests require semantic roles in those files.
+adaptations, plus the calendar and dashboard owners, accept no raw colors;
+tests require semantic roles in those files. Calendar state roles distinguish
+planned, cancelled, partial, holiday, unavailable, and conflicting entries;
+their light values remain unchanged during this ownership refactor.
 Remaining feature and print colors outside `tokens.css` are an explicit,
 counted debt inventory in `scripts/style-guardrails-baseline.ts`. A package may
 reduce those counts, but adding another raw color or increasing an existing

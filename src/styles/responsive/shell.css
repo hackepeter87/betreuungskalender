@@ -216,8 +216,7 @@
     flex: 1;
   }
 
-  .page-header__actions .button,
-  .page-header__actions .month-toolbar {
+  .page-header__actions .button {
     width: 100%;
   }
 }
@@ -308,10 +307,6 @@
     min-height: 44px;
   }
 
-  .dashboard-confirmation-panel .confirmation-list {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
   .external-calendar-import-grid > .button {
     grid-column: 1 / -1;
     justify-self: start;
@@ -384,13 +379,8 @@
   }
 
   .page-header__actions .button,
-  .page-header__actions .month-toolbar,
   .analytics-export-actions .button {
     width: 100%;
-  }
-
-  .dashboard-confirmation-panel .confirmation-list {
-    grid-template-columns: 1fr;
   }
 
   .button,
@@ -408,14 +398,6 @@
   .form-actions__right .button,
   .form-actions > .button {
     width: 100%;
-  }
-}
-
-@media (max-width: 767px) {
-
-  .calendar-quick-actions .button {
-    min-height: 44px;
-    padding-inline: 10px;
   }
 }
 
@@ -442,10 +424,6 @@
   .backup-card,
   .holiday-row,
   .unavailable-row,
-  .agenda-day,
-  .calendar-wrap,
-  .calendar-grid,
-  .calendar-weekdays,
   .mobile-more-sheet {
     max-width: 100%;
   }

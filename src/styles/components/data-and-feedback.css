@@ -1,10 +1,4 @@
 /* Shared panels, data display, empty states, and feedback. */
-.metric-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 14px;
-  margin-bottom: 18px;
-}
 
 .closure-dialog .notice ul {
   margin: 8px 0 0;
@@ -21,86 +15,6 @@
 
 .privacy-card--warning svg {
   color: var(--amber);
-}
-
-.metric-card {
-  display: flex;
-  min-height: 115px;
-  align-items: center;
-  gap: 14px;
-  padding: 18px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--surface);
-}
-
-button.metric-card {
-  width: 100%;
-  color: var(--ink);
-  text-align: left;
-  cursor: pointer;
-}
-
-.metric-card--button:hover,
-.metric-card--button:focus-visible {
-  border-color: var(--color-status-success-border);
-  background: var(--teal-soft);
-  outline: none;
-}
-
-.metric-card__icon {
-  display: inline-flex;
-  width: 46px;
-  height: 46px;
-  flex: 0 0 46px;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-}
-
-.metric-card__icon--teal {
-  background: var(--teal-soft);
-  color: var(--teal);
-}
-
-.metric-card__icon--violet {
-  background: var(--violet-soft);
-  color: var(--violet);
-}
-
-.metric-card__icon--amber {
-  background: var(--amber-soft);
-  color: var(--amber);
-}
-
-.metric-card__icon--coral {
-  background: var(--coral-soft);
-  color: var(--coral);
-}
-
-.metric-card small,
-.metric-card strong,
-.metric-card em {
-  display: block;
-}
-
-.metric-card small {
-  color: var(--color-text-navigation);
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-
-.metric-card strong {
-  margin: 2px 0;
-  font-size: 1.7rem;
-  line-height: 1.1;
-  letter-spacing: 0;
-}
-
-.metric-card em {
-  color: var(--muted);
-  font-size: 0.65rem;
-  font-style: normal;
 }
 
 .setup-wizard .page-header {
@@ -178,10 +92,6 @@ button.metric-card {
   color: var(--muted);
   font-size: 0.78rem;
   line-height: 1.5;
-}
-
-.calendar-day-popover__footer .button {
-  width: 100%;
 }
 
 .child-dot {

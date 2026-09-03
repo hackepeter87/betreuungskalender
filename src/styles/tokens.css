@@ -109,4 +109,42 @@
   --reading-measure: 76ch;
   color: var(--color-text-primary);
   background: var(--color-surface-canvas);
+
+  /* Calendar status roles preserve the reviewed light appearance. */
+  --color-calendar-overlap: #d97706;
+  --color-calendar-week-surface: #f8fafc;
+  --color-calendar-entry-border: #cbdedc;
+  --color-calendar-entry-surface: #f0f9f8;
+  --color-calendar-entry-text: #264653;
+  --color-calendar-planned-border: #e5b24b;
+  --color-calendar-cancelled-border: #efb9be;
+  --color-calendar-partial-border: #a5b4fc;
+  --color-calendar-partial-surface: #eef2ff;
+  --color-calendar-holiday-border: #f5c56b;
+  --color-calendar-holiday-surface: #fff7e6;
+  --color-calendar-holiday-text: #7a4b00;
+  --color-calendar-exception-border: #9b8bdc;
+  --color-calendar-exception-surface: #f5f2ff;
+  --color-calendar-exception-text: #33245d;
+  --color-agenda-planned-surface: #fffdf7;
+  --color-agenda-cancelled-surface: #fffafa;
+  --color-agenda-holiday-surface: #fff8e8;
+  --color-calendar-unavailable-border: #c8c1e8;
+  --color-calendar-unavailable-surface: #f3f1fb;
+  --color-calendar-unavailable-text: #514783;
+  --color-calendar-external-block-border: #f2c98f;
+  --color-calendar-external-block-surface: #fff7e8;
+  --color-calendar-external-block-text: #8a560f;
+  --color-calendar-unavailable-icon-surface: #e3def6;
+  --color-calendar-holiday-overlap-border: #eab308;
+  --color-calendar-holiday-overlap-surface: #fffbeb;
+  --color-agenda-unavailable-surface: #fbfaff;
+  --color-agenda-neutral-surface: #f2f5f9;
+  --color-calendar-conflict-planned: #d89b23;
+  --color-calendar-conflict-actual: #c44f5d;
+  --color-calendar-popover-backdrop: rgb(15 23 42 / 28%);
+  --shadow-calendar-popover: 0 18px 44px rgb(15 23 42 / 18%);
+  --color-calendar-icon: var(--violet);
+  --color-calendar-danger-icon: var(--coral);
+  --color-calendar-cancelled-surface: var(--coral-soft);
 }

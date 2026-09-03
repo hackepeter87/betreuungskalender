@@ -120,9 +120,26 @@ test("keeps responsive shell and shared component rules out of the feature catch
   assert.deepEqual(styleImports(responsive), [
     "./responsive/shell.css",
     "./responsive/components.css",
-    "./responsive/features.css"
+    "./responsive/features.css",
+    "./responsive/calendar.css",
+    "./responsive/dashboard.css"
   ]);
   assert.deepEqual(topLevelSelectorsForTest(responsive), []);
+});
+
+test("keeps calendar and dashboard rules in their feature owners", async () => {
+  const pages = await readFile(new URL("../src/styles/pages.css", import.meta.url), "utf8");
+  assert.deepEqual(styleImports(pages), [
+    "./pages/remaining.css", "./pages/calendar.css", "./pages/dashboard.css"
+  ]);
+  assert.deepEqual(topLevelSelectorsForTest(pages), []);
+
+  const sources = await styleSources();
+  const featureSelector = /\.(?:calendar-(?!feed)[\w-]+|agenda-[\w-]+|month-toolbar[\w-]*|dashboard-[\w-]+|metric-(?:grid|card)[\w-]*|child-stat[\w-]*|upcoming-list[\w-]*|quality-list)\b/;
+  for (const { path: sourcePath, source, layer } of sources) {
+    if (layer === "print" || /\/(?:calendar|dashboard)\.css$/.test(sourcePath)) continue;
+    assert.doesNotMatch(source, featureSelector, `${sourcePath} must not own calendar/dashboard rules`);
+  }
 });
 
 test("keeps shared global primitives authoritative in their owning layer", async () => {
@@ -133,7 +150,8 @@ test("keeps shared global primitives authoritative in their owning layer", async
     "dialogs-and-forms.css",
     "compositions.css"
   ].map(async (file) => readFile(new URL(`../src/styles/components/${file}`, import.meta.url), "utf8"));
-  const pages = await readFile(new URL("../src/styles/pages.css", import.meta.url), "utf8");
+  const pages = (await styleSources()).filter(({ layer }) => layer === "pages")
+    .map(({ source }) => source).join("\n");
   const componentSource = (await Promise.all(components)).join("\n");
 
   assert.equal(occurrenceCount(shell, ".sidebar {"), 1);
@@ -249,7 +267,8 @@ test("keeps the repository within the reviewed style contracts", async () => {
   const sources = await styleSources();
   const tokenOnlySources = sources.filter(({ layer, path: sourcePath }) =>
     layer === "shell" || layer === "components" ||
-    sourcePath.endsWith("responsive/shell.css") || sourcePath.endsWith("responsive/components.css"));
+    sourcePath.endsWith("responsive/shell.css") || sourcePath.endsWith("responsive/components.css") ||
+    /\/(?:calendar|dashboard)\.css$/.test(sourcePath));
   const issues = [
     ...layerNames.filter((layer) => layer !== "tokens").flatMap((layer) => {
       const budgetPath = `src/styles/${layer}.css`;
@@ -317,4 +336,15 @@ test("defines the semantic color roles required by shared interface styles", asy
   ];
 
   for (const token of requiredTokens) assert.match(tokens, new RegExp(`${token}:`));
+});
+
+test("defines every semantic color and shadow used by calendar and dashboard", async () => {
+  const sources = await styleSources();
+  const tokens = sources.find(({ layer }) => layer === "tokens")!.source;
+  for (const { path: sourcePath, source } of sources.filter(({ path: sourcePath }) =>
+    /\/(?:calendar|dashboard)\.css$/.test(sourcePath))) {
+    for (const match of source.matchAll(/var\((--(?:color|shadow)-[\w-]+)\)/g)) {
+      assert.ok(tokens.includes(`${match[1]}:`), `${sourcePath}: undefined role ${match[1]}`);
+    }
+  }
 });
