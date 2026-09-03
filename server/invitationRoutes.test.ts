@@ -15,7 +15,9 @@ process.env.BACKUP_DIR = join(temporaryDirectory, "backups");
 process.env.INVITATION_PUBLIC_BASE_URL = "https://calendar.example.invalid";
 
 const { runMigrations } = await import("./db/migrate.js");
-const { db, persistence } = await import("./db/connection.js");
+const { persistence } = await import("./db/connection.js");
+const { requireSqlitePersistenceRuntime } = await import("./db/runtime.js");
+const db = requireSqlitePersistenceRuntime(persistence).sqliteDatabase;
 const { dataTransferRoutes } = await import("./routes/dataTransfer.js");
 const { createInvitationRoutes } = await import("./routes/invitations.js");
 const { InvitationEmailError } = await import("./services/invitationEmail.js");

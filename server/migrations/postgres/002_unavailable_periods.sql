@@ -1,0 +1,1 @@
+-- PostgreSQL support starts with the current schema baseline in 001.

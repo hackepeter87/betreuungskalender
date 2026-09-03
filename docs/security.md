@@ -30,8 +30,9 @@ Depending on use, the application may store:
 - Optional Web Push subscription endpoints for confirmation reminders
 
 The React UI reads and writes domain data only through the Fastify API and its
-SQLite database. Browser local storage is limited to non-sensitive UI
-preferences; it is not a domain-data store or backup surface.
+selected operational database. SQLite remains the default; PostgreSQL is an
+explicit optional backend. Browser local storage is limited to non-sensitive
+UI preferences; it is not a domain-data store or backup surface.
 
 ## Exports and backups
 
@@ -132,9 +133,16 @@ the bootstrap secret in the repository, and disable or rotate it after use.
 ## Application hardening
 
 The server uses CSP and common security headers, restrictive CORS, redaction of
-proxy identity headers, production-safe error responses, prepared SQLite
-statements, validation, and an unprivileged container user. It does not use
+proxy identity headers, production-safe error responses, parameterized database
+queries, validation, and an unprivileged container user. It does not use
 external analytics, tracking services, or CDN runtime dependencies.
+
+PostgreSQL credentials are accepted only through a mounted password file, not a
+connection URL or plaintext password environment variable. Verified TLS with a
+mounted CA file is the default. Startup configuration and connection failures
+use generic error categories and do not expose credentials, file paths or
+connection values. Database and certificate files remain operator-managed
+secrets. Selecting PostgreSQL does not enable multiple application replicas.
 
 Audit history is loaded only in its protected view or as an explicitly
 requested part of a report snapshot. The normal application startup does not

@@ -4,6 +4,8 @@ import { resolve } from "node:path";
 import { csvListEnv, parseTrustedProxyRules } from "./trustedProxy.js";
 
 export type AuthMode = "local" | "trusted-proxy" | "native-oidc";
+export type DatabaseDriver = "sqlite" | "postgres";
+export type PostgresTlsMode = "disable" | "verify-full";
 
 function booleanEnv(value: string | undefined, fallback = false): boolean {
   if (value === undefined) return fallback;
@@ -18,6 +20,15 @@ function numberEnv(value: string | undefined, fallback: number): number {
 function positiveNumberEnv(value: string | undefined, fallback: number): number {
   const parsed = Number(value);
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
+}
+
+function portEnv(value: string | undefined, fallback: number): number {
+  if (value === undefined || value.trim() === "") return fallback;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65_535) {
+    throw new Error("POSTGRES_PORT must be an integer between 1 and 65535.");
+  }
+  return parsed;
 }
 
 function textEnv(value: string | undefined, fallback: string): string {
@@ -49,6 +60,18 @@ function authModeEnv(
   throw new Error("AUTH_MODE must be one of local, trusted-proxy, native-oidc.");
 }
 
+function databaseDriverEnv(value: string | undefined): DatabaseDriver {
+  const normalized = value?.trim() || "sqlite";
+  if (normalized === "sqlite" || normalized === "postgres") return normalized;
+  throw new Error("DATABASE_DRIVER must be one of sqlite, postgres.");
+}
+
+function postgresTlsModeEnv(value: string | undefined): PostgresTlsMode {
+  const normalized = value?.trim() || "verify-full";
+  if (normalized === "disable" || normalized === "verify-full") return normalized;
+  throw new Error("POSTGRES_TLS_MODE must be one of disable, verify-full.");
+}
+
 export interface AuthModeValidationInput {
   nodeEnv: string;
   authMode: AuthMode;
@@ -59,6 +82,58 @@ export interface AuthModeValidationInput {
   oidcIssuerUrl?: string;
   oidcClientId?: string;
   oidcRedirectUri?: string;
+}
+
+export interface DatabaseValidationInput {
+  driver: DatabaseDriver;
+  postgresHost?: string;
+  postgresPort: number;
+  postgresPortConfigured?: boolean;
+  postgresDatabase?: string;
+  postgresUser?: string;
+  postgresPasswordFile?: string;
+  postgresTlsMode: PostgresTlsMode;
+  postgresTlsModeConfigured?: boolean;
+  postgresCaFile?: string;
+}
+
+export function validateDatabaseConfig(input: DatabaseValidationInput): void {
+  const postgresValues = [
+    input.postgresHost,
+    input.postgresDatabase,
+    input.postgresUser,
+    input.postgresPasswordFile,
+    input.postgresCaFile,
+    input.postgresPortConfigured ? String(input.postgresPort) : undefined,
+    input.postgresTlsModeConfigured ? input.postgresTlsMode : undefined
+  ];
+  if (input.driver === "sqlite") {
+    if (postgresValues.some((value) => Boolean(value?.trim()))) {
+      throw new Error("PostgreSQL settings require DATABASE_DRIVER=postgres.");
+    }
+    return;
+  }
+
+  const required = [
+    ["POSTGRES_HOST", input.postgresHost],
+    ["POSTGRES_DATABASE", input.postgresDatabase],
+    ["POSTGRES_USER", input.postgresUser],
+    ["POSTGRES_PASSWORD_FILE", input.postgresPasswordFile],
+    ...(input.postgresTlsMode === "verify-full"
+      ? [["POSTGRES_CA_FILE", input.postgresCaFile]]
+      : [])
+  ] as const;
+  const missing = required
+    .filter(([, value]) => !value?.trim())
+    .map(([name]) => name);
+  if (missing.length) {
+    throw new Error(`DATABASE_DRIVER=postgres requires ${missing.join(", ")}.`);
+  }
+  if (input.postgresTlsMode === "disable" && input.postgresCaFile?.trim()) {
+    throw new Error(
+      "POSTGRES_CA_FILE is only valid when POSTGRES_TLS_MODE=verify-full."
+    );
+  }
 }
 
 function requiredNativeOidcValues(input: AuthModeValidationInput): string[] {
@@ -128,12 +203,22 @@ const authMode = authModeEnv(
 const trustedProxyCidrs = csvListEnv(process.env.TRUSTED_PROXY_CIDRS);
 const trustedProxyRules = parseTrustedProxyRules(trustedProxyCidrs);
 const allowedOrigin = process.env.ALLOWED_ORIGIN ?? "http://localhost:5173";
+const databaseDriver = databaseDriverEnv(process.env.DATABASE_DRIVER);
+const postgresTlsMode = postgresTlsModeEnv(process.env.POSTGRES_TLS_MODE);
 
 export const config = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   host: process.env.HOST ?? "127.0.0.1",
   port: numberEnv(process.env.PORT, 3000),
+  databaseDriver,
   databasePath: resolve(process.cwd(), process.env.DATABASE_PATH ?? "./data/app.sqlite"),
+  postgresHost: process.env.POSTGRES_HOST?.trim() || undefined,
+  postgresPort: portEnv(process.env.POSTGRES_PORT, 5432),
+  postgresDatabase: process.env.POSTGRES_DATABASE?.trim() || undefined,
+  postgresUser: process.env.POSTGRES_USER?.trim() || undefined,
+  postgresPasswordFile: process.env.POSTGRES_PASSWORD_FILE?.trim() || undefined,
+  postgresTlsMode,
+  postgresCaFile: process.env.POSTGRES_CA_FILE?.trim() || undefined,
   backupDir: resolve(process.cwd(), process.env.BACKUP_DIR ?? "./backups"),
   legalContentDir: resolve(process.cwd(), process.env.LEGAL_CONTENT_DIR ?? "/run/config/legal"),
   requireAuth: booleanEnv(process.env.REQUIRE_AUTH),
@@ -208,6 +293,19 @@ export const config = {
   ]),
   version: packageVersion()
 } as const;
+
+validateDatabaseConfig({
+  driver: config.databaseDriver,
+  postgresHost: config.postgresHost,
+  postgresPort: config.postgresPort,
+  postgresPortConfigured: Boolean(process.env.POSTGRES_PORT?.trim()),
+  postgresDatabase: config.postgresDatabase,
+  postgresUser: config.postgresUser,
+  postgresPasswordFile: config.postgresPasswordFile,
+  postgresTlsMode: config.postgresTlsMode,
+  postgresTlsModeConfigured: Boolean(process.env.POSTGRES_TLS_MODE?.trim()),
+  postgresCaFile: config.postgresCaFile
+});
 
 validateAuthModeConfig({
   nodeEnv: config.nodeEnv,

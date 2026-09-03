@@ -26,6 +26,44 @@ jobs:
       - run: npm run build
       - run: npm test
 
+  postgres-runtime:
+    name: PostgreSQL ${{ matrix.postgres }} runtime
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: [16, 18]
+    services:
+      postgres:
+        image: postgres:${{ matrix.postgres }}-bookworm
+        env:
+          POSTGRES_DB: betreuungskalender_test
+          POSTGRES_PASSWORD: test-only-password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d betreuungskalender_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      TEST_POSTGRES_HOST: 127.0.0.1
+      TEST_POSTGRES_PORT: 5432
+      TEST_POSTGRES_DATABASE: betreuungskalender_test
+      TEST_POSTGRES_USER: postgres
+      TEST_POSTGRES_PASSWORD_FILE: /tmp/betreuungskalender-postgres-password
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.18.0
+          cache: npm
+      - run: npm install --global npm@12.0.1
+      - run: npm ci
+      - name: Create test-only database secret
+        run: printf '%s' 'test-only-password' > "$TEST_POSTGRES_PASSWORD_FILE"
+      - run: npm run test:postgres-runtime
+
   e2e:
     name: End-to-end tests
     needs: validation

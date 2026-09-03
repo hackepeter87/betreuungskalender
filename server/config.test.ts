@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { validateAuthModeConfig, type AuthModeValidationInput } from "./config.js";
+import {
+  validateAuthModeConfig,
+  validateDatabaseConfig,
+  type AuthModeValidationInput,
+  type DatabaseValidationInput
+} from "./config.js";
 
 function validationInput(
   overrides: Partial<AuthModeValidationInput> = {}
@@ -101,4 +106,93 @@ test("auth mode validation rejects invalid trusted proxy CIDR entries", () => {
   assert.doesNotThrow(() => validateAuthModeConfig(validationInput({
     trustedProxyCidrs: ["127.0.0.1", "10.0.0.0/24", "::1/128"]
   })));
+});
+
+function databaseValidationInput(
+  overrides: Partial<DatabaseValidationInput> = {}
+): DatabaseValidationInput {
+  return {
+    driver: "sqlite",
+    postgresPort: 5432,
+    postgresTlsMode: "verify-full",
+    ...overrides
+  };
+}
+
+test("database validation keeps SQLite as the zero-configuration default", () => {
+  assert.doesNotThrow(() => validateDatabaseConfig(databaseValidationInput()));
+});
+
+test("database validation requires complete PostgreSQL connection settings", () => {
+  assert.throws(
+    () => validateDatabaseConfig(databaseValidationInput({ driver: "postgres" })),
+    /DATABASE_DRIVER=postgres requires POSTGRES_HOST, POSTGRES_DATABASE, POSTGRES_USER, POSTGRES_PASSWORD_FILE, POSTGRES_CA_FILE/
+  );
+});
+
+test("database validation requires a CA for verified PostgreSQL TLS", () => {
+  assert.throws(
+    () => validateDatabaseConfig(databaseValidationInput({
+      driver: "postgres",
+      postgresHost: "database.example.test",
+      postgresDatabase: "betreuungskalender",
+      postgresUser: "betreuungskalender",
+      postgresPasswordFile: "/run/secrets/postgres-password"
+    })),
+    /POSTGRES_CA_FILE/
+  );
+
+  assert.doesNotThrow(() => validateDatabaseConfig(databaseValidationInput({
+    driver: "postgres",
+    postgresHost: "database.example.test",
+    postgresDatabase: "betreuungskalender",
+    postgresUser: "betreuungskalender",
+    postgresPasswordFile: "/run/secrets/postgres-password",
+    postgresCaFile: "/run/secrets/postgres-ca"
+  })));
+});
+
+test("database validation permits explicitly unencrypted PostgreSQL only without a CA", () => {
+  assert.doesNotThrow(() => validateDatabaseConfig(databaseValidationInput({
+    driver: "postgres",
+    postgresHost: "postgres",
+    postgresDatabase: "betreuungskalender",
+    postgresUser: "betreuungskalender",
+    postgresPasswordFile: "/run/secrets/postgres-password",
+    postgresTlsMode: "disable"
+  })));
+
+  assert.throws(
+    () => validateDatabaseConfig(databaseValidationInput({
+      driver: "postgres",
+      postgresHost: "postgres",
+      postgresDatabase: "betreuungskalender",
+      postgresUser: "betreuungskalender",
+      postgresPasswordFile: "/run/secrets/postgres-password",
+      postgresTlsMode: "disable",
+      postgresCaFile: "/run/secrets/postgres-ca"
+    })),
+    /POSTGRES_CA_FILE is only valid/
+  );
+});
+
+test("database validation rejects PostgreSQL settings with the SQLite driver", () => {
+  assert.throws(
+    () => validateDatabaseConfig(databaseValidationInput({
+      postgresHost: "postgres"
+    })),
+    /PostgreSQL settings require DATABASE_DRIVER=postgres/
+  );
+  assert.throws(
+    () => validateDatabaseConfig(databaseValidationInput({
+      postgresPortConfigured: true
+    })),
+    /PostgreSQL settings require DATABASE_DRIVER=postgres/
+  );
+  assert.throws(
+    () => validateDatabaseConfig(databaseValidationInput({
+      postgresTlsModeConfigured: true
+    })),
+    /PostgreSQL settings require DATABASE_DRIVER=postgres/
+  );
 });

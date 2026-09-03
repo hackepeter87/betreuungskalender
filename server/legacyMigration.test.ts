@@ -9,7 +9,9 @@ process.env.DATABASE_PATH = join(temporaryDirectory, "test.sqlite");
 process.env.BACKUP_DIR = join(temporaryDirectory, "backups");
 
 const { runMigrations } = await import("./db/migrate.js");
-const { db, persistence } = await import("./db/connection.js");
+const { persistence } = await import("./db/connection.js");
+const { requireSqlitePersistenceRuntime } = await import("./db/runtime.js");
+const db = requireSqlitePersistenceRuntime(persistence).sqliteDatabase;
 const {
   analyzeLegacyData,
   executeLegacyMigration,

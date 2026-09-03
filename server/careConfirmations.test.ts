@@ -12,7 +12,9 @@ process.env.WEB_PUSH_PUBLIC_KEY = "";
 process.env.WEB_PUSH_PRIVATE_KEY = "";
 
 const { runMigrations } = await import("./db/migrate.js");
-const { db, persistence } = await import("./db/connection.js");
+const { persistence } = await import("./db/connection.js");
+const { requireSqlitePersistenceRuntime } = await import("./db/runtime.js");
+const db = requireSqlitePersistenceRuntime(persistence).sqliteDatabase;
 const {
   answerCareConfirmation,
   createDueCareConfirmationRequests,

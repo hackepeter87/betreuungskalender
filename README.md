@@ -64,7 +64,7 @@ included in repository screenshots.
 - First-use setup, owner bootstrap, application memberships, member
   invitations, optional invitation email delivery, and admin-only instance
   readiness information
-- Fastify API with SQLite, migrations, validation, native OIDC,
+- Fastify API with SQLite by default or optional PostgreSQL, migrations, validation, native OIDC,
   trusted-proxy compatibility, health endpoints, and production security
   headers
 
@@ -78,15 +78,15 @@ React + TypeScript + Vite
         |
         +-- Fastify API
                 |
-                +-- SQLite (domain source of truth)
+                +-- SQLite (default) or PostgreSQL (explicit)
 ```
 
 The browser UI loads and stores children, care parties, care entries, holidays,
 flexible contact rules, legacy contact patterns, trips, costs, unavailable
 periods, settings, monthly closings, and audit records exclusively through the
-API in SQLite. `localStorage` is not used for current domain persistence. When
-the API is unavailable, the application displays a server error and blocks
-write actions.
+API in the selected operational database. `localStorage` is not used for
+current domain persistence. When the API is unavailable, the application
+displays a server error and blocks write actions.
 
 Shared TypeScript contracts define the settings and invitation response shapes
 used by both browser and server. Pure date, time-range, conflict, and recurring
@@ -96,9 +96,11 @@ Audit history is loaded in bounded pages only when requested and is not part of
 the normal application-start payload.
 
 Server persistence is accessed through one asynchronous, typed runtime and
-explicit transaction contexts. SQLite remains the only enabled driver;
+explicit transaction contexts. SQLite remains the zero-configuration default;
+an explicitly configured PostgreSQL backend uses the same domain contract.
 `better-sqlite3` is confined to the SQLite adapter, migrations, and native
-backup or restore operations.
+backup or restore operations. Every backend currently supports one application
+replica.
 
 Existing data from older browser-only versions is read solely as a legacy
 migration source. The [migration assistant](docs/migration.md) previews the
