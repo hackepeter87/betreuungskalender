@@ -3,28 +3,10 @@
   .csv-export-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
-
-  .settings-section--defaults .settings-form-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-@media (max-width: 767px) {
-  .settings-section--defaults .settings-form-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 @media (max-width: 720px) {
 
   .confirmation-actions {
-    grid-template-columns: 1fr;
-  }
-}
-@media (max-width: 720px) {
-  .member-invite-accept,
-  .member-management-grid,
-  .member-invite-card__row,
-  .member-row,
-  .invitation-row {
     grid-template-columns: 1fr;
   }
 }
@@ -50,31 +32,6 @@
 
   .privacy-card {
     grid-column: auto;
-  }
-
-  .settings-form-grid {
-    grid-template-columns: 1fr;
-  }
-
-  .setup-wizard__actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .external-calendar-import-grid {
-    grid-template-columns: 1fr;
-    gap: 10px;
-    padding: 14px;
-  }
-
-  .child-settings-row--external-source .icon-button {
-    justify-self: start;
-  }
-
-  .holiday-derive-form {
-    grid-template-columns: 1fr;
-    gap: 12px;
-    padding: 14px;
   }
 
   .file-picker-row {
@@ -149,33 +106,6 @@
     grid-row: 1 / span 2;
   }
 
-  .settings-section .panel__header {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
-  .child-settings-list {
-    padding: 0 14px;
-  }
-
-  .child-settings-row--external-source .toggle {
-    grid-column: 1 / -1;
-    width: 100%;
-    padding: 0 10px;
-    border: 1px solid var(--line);
-    border-radius: 7px;
-    background: var(--surface-soft);
-  }
-
-  .data-actions {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .calendar-feed-url {
-    grid-template-columns: 1fr;
-  }
-
   .modal__body {
     min-height: 0;
     max-height: none;
@@ -210,24 +140,10 @@
     grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
   }
 }
-@media (max-width: 430px) {
-
-  .setup-wizard {
-    padding-right: 14px;
-    padding-left: 14px;
-  }
-}
 @media (max-width: 767px) {
 
   .readiness-item--wide {
     grid-column: auto;
-  }
-
-  .member-management-grid,
-  .member-invite-card__row,
-  .member-row,
-  .invitation-row {
-    grid-template-columns: minmax(0, 1fr);
   }
 }
 @media (max-width: 1050px) {
@@ -365,18 +281,6 @@
     width: 44px;
     height: 44px;
     flex-basis: 44px;
-  }
-
-  .settings-form-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-
-  .external-calendar-import-grid {
-    grid-template-columns: minmax(0, 1fr) 96px minmax(0, 1fr);
-  }
-
-  .holiday-derive-form {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .privacy-card {
@@ -600,25 +504,6 @@
     justify-self: end;
   }
 
-  .calendar-feed-status {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
-    align-items: start;
-    gap: 6px;
-    padding: 10px 14px 8px;
-  }
-
-  .settings-section--calendar-feed .field-help-button {
-    width: 28px;
-    min-width: 28px;
-    height: 28px;
-    min-height: 28px;
-  }
-
-  .calendar-feed-scope-field .field-label-row {
-    min-height: 30px;
-  }
-
   .mobile-export-notice {
     display: flex;
     align-items: flex-start;
@@ -782,12 +667,6 @@
 
   .requirement-badge {
     font-size: 0.65rem;
-  }
-}
-@media (min-width: 768px) {
-
-  .settings-form-grid {
-    row-gap: 18px;
   }
 }
 @media (max-width: 767px) {

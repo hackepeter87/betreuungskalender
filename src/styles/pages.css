@@ -1,4 +1,6 @@
 /* Ordered feature ownership. Remaining pages migrate in the next package. */
 @import "./pages/remaining.css";
+@import "./pages/settings.css";
+@import "./pages/setup.css";
 @import "./pages/calendar.css";
 @import "./pages/dashboard.css";

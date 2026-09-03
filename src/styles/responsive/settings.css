@@ -1,0 +1,206 @@
+@media (min-width: 768px) {
+  .settings-form-grid {
+    row-gap: 18px;
+  }
+}
+
+@media (min-width: 721px) and (max-width: 1199px) {
+  .instance-readiness-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 768px) and (max-width: 1199px) {
+  .external-calendar-import-grid > .button {
+    grid-column: 1 / -1;
+    justify-self: start;
+  }
+
+  .holiday-derive-form__children,
+  .holiday-derive-form > .button {
+    grid-column: 1 / -1;
+  }
+
+  .settings-section--defaults .settings-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .settings-form-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .external-calendar-import-grid {
+    grid-template-columns: minmax(0, 1fr) 96px minmax(0, 1fr);
+  }
+
+  .holiday-derive-form {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .external-calendar-file-field,
+  .external-calendar-url-field,
+  .external-calendar-import-grid > .button {
+    grid-column: 1;
+  }
+
+  .external-calendar-import-grid > .button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .child-settings-row--external-source .button {
+    min-width: 0;
+    justify-content: center;
+  }
+
+  .child-settings-row--external-source .toggle,
+  .child-settings-row--external-source .field--compact,
+  .child-settings-row--external-source .button {
+    width: 100%;
+  }
+
+  .settings-section--defaults .settings-form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .settings-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .external-calendar-import-grid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .child-settings-row--external-source .icon-button {
+    justify-self: start;
+  }
+
+  .holiday-derive-form {
+    grid-template-columns: 1fr;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  .settings-section .panel__header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .child-settings-list {
+    padding: 0 14px;
+  }
+
+  .child-settings-row--external-source .toggle {
+    grid-column: 1 / -1;
+    padding: 0 10px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: var(--surface-soft);
+  }
+
+  .data-actions {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .calendar-feed-url {
+    grid-template-columns: 1fr;
+  }
+
+  .member-management-grid,
+  .member-invite-card__row,
+  .member-row,
+  .invitation-row {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .calendar-feed-status {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 6px;
+    padding: 10px 14px 8px;
+  }
+
+  .settings-section--calendar-feed .field-help-button {
+    width: 28px;
+    min-width: 28px;
+    height: 28px;
+    min-height: 28px;
+  }
+
+  .calendar-feed-scope-field .field-label-row {
+    min-height: 30px;
+  }
+
+  .child-settings-row--external-source {
+    align-items: start;
+    gap: 10px 12px;
+    display: grid;
+    grid-template-columns: 42px minmax(0, 1fr);
+    padding: 12px 0;
+  }
+
+  .child-settings-row--external-source .child-settings-row__actions {
+    justify-content: stretch;
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr;
+    gap: 8px;
+    width: 100%;
+    padding-left: 0;
+  }
+
+  .calendar-feed-scope-field {
+    gap: 6px;
+    padding: 0 14px;
+  }
+
+  .calendar-feed-scope-field select {
+    min-height: 44px;
+  }
+
+  .settings-section--calendar-feed .settings-note {
+    font-size: 0.66rem;
+    margin-top: 10px;
+    padding: 0 14px;
+  }
+}
+
+@media (max-width: 720px) {
+  .member-invite-card .button,
+  .member-token-card .button,
+  .invitation-row .button,
+  .member-row__actions .button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .notification-preferences-row {
+    grid-template-columns: minmax(0, 1fr) repeat(2, 56px);
+    gap: 8px;
+    padding: 12px 14px;
+  }
+
+  .notification-preferences-row--head {
+    font-size: 0.62rem;
+  }
+
+  .member-row__actions {
+    justify-content: flex-start;
+  }
+
+  .instance-readiness-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .assignment-row {
+    grid-template-columns: 1fr;
+  }
+}

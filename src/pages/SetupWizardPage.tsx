@@ -92,7 +92,7 @@ export function SetupWizardPage() {
   };
 
   return (
-    <div className="setup-wizard page page--narrow" data-testid="setup-wizard">
+    <div className="setup-wizard page" data-testid="setup-wizard">
       <div className="page-header">
         <div>
           <p className="page-header__context">{copy(locale, "setup", "context")}</p>

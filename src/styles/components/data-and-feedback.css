@@ -17,48 +17,6 @@
   color: var(--amber);
 }
 
-.setup-wizard .page-header {
-  margin-bottom: 18px;
-}
-
-.setup-wizard .field {
-  gap: 8px;
-}
-
-.setup-wizard .field > span:not(.field-label-row) {
-  display: flex;
-  min-height: 30px;
-  align-items: center;
-  line-height: 1.3;
-}
-
-.setup-wizard .field-label-row {
-  justify-content: flex-start;
-  min-height: 30px;
-  align-items: center;
-  gap: 8px;
-}
-
-.setup-wizard .field-label-row .field-help-trigger {
-  margin-top: 0;
-}
-
-.setup-wizard .field-help-button {
-  width: 26px;
-  min-width: 26px;
-  height: 26px;
-  min-height: 26px;
-}
-
-.setup-wizard .field input,
-.setup-wizard .field select {
-  min-height: 44px;
-}
-
-.setup-wizard__actions .button {
-  flex: 0 0 auto;
-}
-
 .panel {
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -412,15 +370,6 @@
   margin-top: 0;
 }
 
-.settings-section > .field {
-  padding: 0 18px 12px;
-}
-
-.external-calendar-import-grid > .button {
-  grid-column: 3;
-  width: 100%;
-}
-
 .field--compact {
   min-width: 160px;
 }
@@ -510,13 +459,6 @@
   line-height: 1.4;
 }
 
-.notification-preferences-row__channel .field-help-button {
-  width: 24px;
-  min-width: 24px;
-  height: 24px;
-  min-height: 24px;
-}
-
 .toggle--compact {
   justify-content: flex-start;
   min-width: 0;
@@ -525,13 +467,4 @@
 .confirmation-actions .button {
   min-width: 0;
   white-space: normal;
-}
-
-.assignment-row__choices .check-row {
-  min-height: 36px;
-  margin: 0;
-  padding: 7px 10px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  background: var(--surface);
 }

@@ -47,6 +47,9 @@ cascade:
   and calendar-specific status presentation;
 - `pages/dashboard.css` owns metrics, upcoming entries, per-child summaries,
   data quality, and dashboard confirmation placement;
+- `pages/settings.css` owns settings composition, membership management,
+  external calendars and personal feed controls;
+- `pages/setup.css` owns the initial setup form and its person/child layout;
 - `pages/remaining.css` temporarily retains the other pages for their separate
   consolidation package;
 - `responsive/` separates shell and shared-component adaptations from the
@@ -58,6 +61,22 @@ for shared shell, component, calendar, and dashboard ownership. Calendar and
 dashboard selectors are forbidden in the remaining catch-all files. Other
 feature-specific responsive rules remain a tracked migration boundary for the
 remaining-page package.
+
+Settings and setup use the same shared field, button, help and status controls
+as other pages. Their own files contain layout and functional variants only;
+responsive variants live in the matching `responsive/settings.css` and
+`responsive/setup.css`, grouped by existing conditions. Setup's compact help
+controls and settings' reserved label-row height preserve the established
+multi-column form alignment. They are explicit variants, not competing global
+baselines. Settings section spacing comes from `.page > .panel`.
+
+Retired invitation-code acceptance styling and unused numbered settings grids
+are removed. Shared member-card definitions that were overwritten by page
+styles are removed rather than copied into a second layer. Setup card surfaces
+share one definition; input heights, disabled actions and labels continue to
+come from the common primitives. A structural test prevents feature selectors
+from returning to common files and rejects repeated properties in the same
+feature/layer/media context.
 
 Calendar exceptions are intentional: the desktop grid retains its minimum cell
 size, while the mobile grid uses compact labels and a bottom day-detail drawer.

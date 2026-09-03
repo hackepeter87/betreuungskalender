@@ -45,7 +45,6 @@ export const baselineOwners = {
   ".status-pill": "components",
   ".calendar-grid": "pages",
   ".list-toolbar": "pages",
-  ".settings-section": "pages",
   ".settings-form-grid": "pages"
 } as const satisfies BaselineOwners;
 
