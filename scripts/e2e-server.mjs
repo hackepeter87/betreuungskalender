@@ -21,7 +21,7 @@ const server = createServer({
 }, (incoming, outgoing) => {
   const upstream = request({
     hostname: "127.0.0.1", port: port + 1, method: incoming.method,
-    path: incoming.url, headers: incoming.headers
+    path: incoming.url, headers: { ...incoming.headers, "x-forwarded-proto": "https" }
   }, response => {
     outgoing.writeHead(response.statusCode ?? 502, response.headers);
     response.on("error", () => outgoing.destroy());

@@ -9,7 +9,23 @@ test.beforeEach(async ({ page, request }) => {
   await stabilizeRuntimeResponses(page);
 });
 
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: "wait" });
+});
+
 async function expectAccessible(page: Page, state: string) {
+  // WebKit can resolve inherited foregrounds after the root color-scheme changes.
+  const foreground = await page.locator("body").evaluate(element => getComputedStyle(element).color);
+  for (const heading of await page.locator("h1, .panel__header h2, .modal__header h2").all()) {
+    await expect(heading).toHaveCSS("color", foreground);
+  }
+  const previousForeground = foreground === "rgb(20, 33, 61)" ? "rgb(237, 240, 242)" : "rgb(20, 33, 61)";
+  await expect.poll(() => page.locator("body *").evaluateAll((elements, previous) => elements
+    .filter(element => element instanceof HTMLElement &&
+      element.checkVisibility({ contentVisibilityAuto: true, visibilityProperty: true, opacityProperty: true }) &&
+      Array.from(element.childNodes).some(node => node.nodeType === Node.TEXT_NODE && node.textContent?.trim()) &&
+      getComputedStyle(element).color === previous)
+    .map(element => element.tagName), previousForeground), { message: `${state}: inherited text has updated` }).toEqual([]);
   const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
   expect(results.violations.filter(v => v.impact === "critical" || v.impact === "serious").map(v => ({
     id: v.id, nodes: v.nodes.map(n => ({ target: n.target, reason: n.failureSummary }))
@@ -28,6 +44,7 @@ test("applies local appearance before startup and follows explicit and system ch
   await expect(page.locator("body")).toHaveCSS("background-color", "rgb(25, 29, 32)");
   await page.unroute("**/assets/index-*.js");
   await page.reload();
+  await expect(page.getByTestId("app-shell")).toBeVisible();
   await navigate(page, "settings");
   const control = page.getByTestId("appearance-control");
   if ((page.viewportSize()?.width ?? 0) >= 768) {
@@ -39,6 +56,7 @@ test("applies local appearance before startup and follows explicit and system ch
   await control.getByRole("button", { name: "Hell", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-appearance", "light");
   await page.reload();
+  await expect(page.getByTestId("app-shell")).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("data-appearance", "light");
   const other = await context.newPage();
   await other.goto("/datenschutz");
@@ -93,11 +111,19 @@ test("keeps dark routes readable and print colors light", async ({ page }, testI
   const routes: AppPage[] = ["dashboard", "calendar", "settings", "backup", "report", "analytics", "rules", "contact", "unavailable"];
   for (const route of routes) {
     await navigate(page, route);
+    if (route === "report") {
+      await expect(page.getByTestId("page-report").locator('input[type="month"]')).toHaveValue("2026-09");
+      await expect(page.getByText("BK-20260902-VISUAL01")).toBeVisible();
+    }
     await expectNoDocumentHorizontalOverflow(page);
     await expectAccessible(page, `${route} in dark mode`);
     await page.emulateMedia({ colorScheme: "light" });
+    await expect(page.locator("html")).toHaveAttribute("data-appearance", "light");
+    await expect(page.locator("body")).toHaveCSS("color", "rgb(20, 33, 61)");
     await expectAccessible(page, `${route} in light mode`);
     await page.emulateMedia({ colorScheme: "dark" });
+    await expect(page.locator("html")).toHaveAttribute("data-appearance", "dark");
+    await expect(page.locator("body")).toHaveCSS("color", "rgb(237, 240, 242)");
     if (route === "analytics") {
       const table = page.getByRole("region", { name: "Auswertung je Kind und gemeinsam" });
       await table.scrollIntoViewIfNeeded();
@@ -112,6 +138,22 @@ test("keeps dark routes readable and print colors light", async ({ page }, testI
       await stabilizeRendering(page);
       await page.screenshot({ path: testInfo.outputPath(`dark-${route}.png`), fullPage: true, animations: "disabled" });
       if (testInfo.project.name.startsWith("visual-")) {
+        if (route === "report") {
+          // Native month labels differ between Chromium builds; use the existing annual reference state.
+          const annualSnapshot = page.waitForResponse(response => {
+            const url = new URL(response.url());
+            return url.pathname === "/api/reports/snapshot" &&
+              url.searchParams.get("startDate") === "2026-01-01" &&
+              url.searchParams.get("endDate") === "2026-12-31";
+          });
+          await page.getByTestId("page-report").getByRole("button", { name: "Jahr", exact: true }).click();
+          expect((await annualSnapshot).ok()).toBe(true);
+          await expect(page.getByTestId("page-report").locator('input[type="number"]')).toHaveValue("2026");
+          await expect(page.getByText("BK-20260902-VISUAL01")).toBeVisible();
+          await expect(page.getByTestId("page-report").getByRole("button", { name: "Drucken", exact: true })).toBeEnabled();
+          await expectAccessible(page, "annual report in dark mode");
+          await stabilizeRendering(page);
+        }
         await expect(page).toHaveScreenshot(`dark-${route}.png`, { animations: "disabled", caret: "hide" });
       }
     }
