@@ -230,7 +230,7 @@ export async function exportPdfReport(
   autoTable(doc, {
     startY: 32,
     head: [[messages.period, messages.scope, messages.category, messages.careParty, messages.children, messages.dutyRelated, messages.affects, messages.location, messages.evidenceReference, messages.note]],
-    body: unavailablePeriods.map((period) => [
+    body: unavailablePeriods.length ? unavailablePeriods.map((period) => [
       `${formatDate(period.startDateTime, intlLocale)} ${formatTime(period.startDateTime, intlLocale)}\n${messages.through} ${formatDate(period.endDateTime, intlLocale)} ${formatTime(period.endDateTime, intlLocale)}`,
       unavailableScopeLabel(period.scope, options.locale),
       unavailableCategoryLabel(period.category, options.locale),
@@ -248,7 +248,7 @@ export async function exportPdfReport(
       period.location || "–",
       period.evidenceReference || "–",
       period.notes || "–"
-    ]),
+    ]) : [[{ content: messages.noUnavailable, colSpan: 10, styles: { fontSize: 8 } }]],
     theme: "grid",
     styles: {
       font: "helvetica",
@@ -265,10 +265,6 @@ export async function exportPdfReport(
       doc.text(`${messages.page} ${pageNumber}`, 196, 289, { align: "right" });
     }
   });
-  if (!unavailablePeriods.length) {
-    doc.setFontSize(8);
-    doc.text(messages.noUnavailable, 14, 39);
-  }
 
   if (options.includeAuditHistory) {
     doc.addPage();
