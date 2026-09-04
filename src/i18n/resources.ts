@@ -23,7 +23,7 @@ const de = {
   "nav.entries": "Einträge",
   "nav.contact": "Umgang",
   "nav.holidays": "Ferien",
-  "nav.unavailable": "Nichtverfügbarkeit",
+  "nav.unavailable": "Nicht\u00adverfüg\u00adbarkeit",
   "nav.analytics": "Auswertung",
   "nav.report": "Bericht",
   "nav.backup": "Backup",

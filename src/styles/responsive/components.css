@@ -278,8 +278,7 @@
     grid-column: auto;
   }
 
-  .form-grid--two,
-  .report-summary-grid {
+  .form-grid--two {
     grid-template-columns: 1fr;
   }
 

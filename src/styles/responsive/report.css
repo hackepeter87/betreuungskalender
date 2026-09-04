@@ -1,3 +1,19 @@
+@media screen {
+  @media (min-width: 768px) {
+    .report-table :is(th, td) {
+      overflow-wrap: normal;
+    }
+  }
+
+  @media (max-width: 1199px) {
+    .report-document__header,
+    .report-summary-grid {
+      grid-template-columns: 1fr;
+      gap: 18px;
+    }
+  }
+}
+
 @media (max-width: 767px) {
   .report-document .responsive-table {
     font-size: 0.72rem;
@@ -5,10 +21,5 @@
 
   .report-document {
     padding: 20px 14px;
-  }
-
-  .report-document__header {
-    grid-template-columns: 1fr;
-    gap: 18px;
   }
 }
