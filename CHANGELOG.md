@@ -6,6 +6,31 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.29.0] - 2026-09-04
+
+### Added
+
+- Add System, Light, and Dark appearance preferences stored locally in the
+  browser, while keeping printed reports and PDFs on a light background.
+- Add automated accessibility checks, translation coverage checks, and
+  light/dark visual regression coverage for critical workflows.
+
+### Changed
+
+- Consolidate shared form, section, status, and action styles and remove
+  competing page overrides. Enforce stylesheet ownership and size limits.
+- Align settings, setup, calendar, dashboard, reporting, transfer, and supporting
+  pages with shared responsive style primitives.
+- Refresh current authentication, persistence, appearance, and screenshot
+  documentation with deterministic fictional desktop and mobile examples.
+
+### Fixed
+
+- Keep long navigation labels, report headings, and report tables readable at
+  tablet widths without changing print layout.
+- Keep empty unavailability messages below their table headers in generated
+  PDF reports.
+
 ## [1.28.0] - 2026-09-03
 
 ### Added
