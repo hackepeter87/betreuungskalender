@@ -78,7 +78,7 @@ export default defineConfig({
   projects: [
     {
       name: "desktop",
-      testMatch: [/desktop\.spec\.ts/, /accessibility\.spec\.ts/, /appearance\.spec\.ts/, /external-calendar\.spec\.ts/, /workspace-permissions\.spec\.ts/],
+      testMatch: [/desktop\.spec\.ts/, /tablet-layout\.spec\.ts/, /accessibility\.spec\.ts/, /appearance\.spec\.ts/, /external-calendar\.spec\.ts/, /workspace-permissions\.spec\.ts/],
       use: {
         ...devices["Desktop Chrome"],
         launchOptions: chromiumLaunchOptions,
@@ -105,7 +105,7 @@ export default defineConfig({
     },
     ...["iPhone 15", "iPad Pro 11"].map(device => ({
       name: device === "iPhone 15" ? "appearance-webkit-iphone" : "appearance-webkit-ipad",
-      testMatch: /appearance\.spec\.ts/,
+      testMatch: device === "iPad Pro 11" ? [/appearance\.spec\.ts/, /tablet-layout\.spec\.ts/] : /appearance\.spec\.ts/,
       use: {
         ...devices[device],
         browserName: "webkit" as const,

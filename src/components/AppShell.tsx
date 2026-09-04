@@ -443,8 +443,8 @@ export function AppShell({
                   data-testid={`nav-${item.id}`}
                   className={activePage === item.id ? "is-active" : ""}
                   onClick={() => navigate(item.id)}
-                  aria-label={t(item.labelKey)}
-                  title={sidebarCollapsed ? t(item.labelKey) : undefined}
+                  aria-label={t(item.labelKey).replaceAll("\u00ad", "")}
+                  title={sidebarCollapsed ? t(item.labelKey).replaceAll("\u00ad", "") : undefined}
                 >
                   <Icon name={item.icon} />
                   <span>{t(item.labelKey)}</span>
@@ -649,6 +649,7 @@ export function AppShell({
                     type="button"
                     key={item.id}
                     data-testid={`mobile-more-${item.id}`}
+                    aria-label={t(item.labelKey).replaceAll("\u00ad", "")}
                     className={activePage === item.id ? "is-active" : ""}
                     onClick={() => navigate(item.id)}
                   >

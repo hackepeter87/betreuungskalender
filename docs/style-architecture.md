@@ -176,6 +176,13 @@ sidebar. Reading content may constrain its inner measure; calendar, dashboard,
 table, report, settings, and backup page frames remain fluid. Print sizing is
 owned exclusively by the `print` layer.
 
+Tablet navigation keeps icon dimensions stable. Long translated labels can use
+optional soft hyphens for browsers without a language dictionary; accessible
+names and collapsed tooltips omit these formatting characters. The report
+responsive owner stacks its header and summary at the existing tablet breakpoint.
+Tablet and desktop tables preserve whole words inside
+named, keyboard-focusable scroll regions; print retains its separate A4 rules.
+
 Run `npm run build` after changing imports or layer ownership. Relevant page and
 responsive Playwright scenarios must accompany behavioral layout changes.
 `npm test` enforces layer order, import-only ownership indexes, raw-color

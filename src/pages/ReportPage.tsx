@@ -204,7 +204,7 @@ export function ReportPage() {
 
         <section className="report-section">
           <h2>{messages.childSummary}</h2>
-          <div className="table-scroll">
+          <div className="table-scroll" role="region" aria-label={messages.childSummary} tabIndex={0}>
             <table className="report-table responsive-table">
               <thead>
                 <tr>
@@ -296,7 +296,7 @@ export function ReportPage() {
           <p className="report-note">
             {messages.unavailabilityNote}
           </p>
-          <div className="table-scroll">
+          <div className="table-scroll" role="region" aria-label={messages.dutyUnavailabilityTitle} tabIndex={0}>
             <table className="report-table responsive-table">
               <thead>
                 <tr>
@@ -354,7 +354,7 @@ export function ReportPage() {
 
         <section className="report-section">
           <h2>{messages.dailyList}</h2>
-          <div className="table-scroll">
+          <div className="table-scroll" role="region" aria-label={messages.dailyList} tabIndex={0}>
             <table className="report-table report-table--entries responsive-table">
               <thead>
                 <tr>
@@ -412,7 +412,7 @@ export function ReportPage() {
           <section className="report-section">
             <h2>{messages.changeHistory}</h2>
             <p className="report-note">{messages.historyNote}</p>
-            <div className="table-scroll">
+            <div className="table-scroll" role="region" aria-label={messages.changeHistory} tabIndex={0}>
               <table className="report-table report-table--entries responsive-table">
                 <thead>
                   <tr>

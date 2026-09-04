@@ -108,6 +108,7 @@
 .sidebar__nav button,
 .sidebar__settings {
   display: flex;
+  min-width: 0;
   min-height: 44px;
   align-items: center;
   gap: 13px;
@@ -118,6 +119,8 @@
   color: var(--color-text-navigation);
   font-size: 0.88rem;
   font-weight: 600;
+  text-align: left;
+  hyphens: auto;
   cursor: pointer;
   transition: 150ms ease;
 }
@@ -126,6 +129,10 @@
 .sidebar__settings:hover {
   background: var(--surface-soft);
   color: var(--ink);
+}
+
+.sidebar__nav svg {
+  flex-shrink: 0;
 }
 
 .sidebar__nav button.is-active,
@@ -178,10 +185,6 @@
   justify-content: center;
   gap: 0;
   padding: 0;
-}
-
-.sidebar--collapsed .sidebar__nav button.is-active {
-  box-shadow: inset 3px 0 0 var(--teal);
 }
 
 .sidebar__collapsed-auth {
