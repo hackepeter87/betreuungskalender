@@ -23,7 +23,7 @@
 .care-conflict--unresolved_actual {
   border-color: var(--color-conflict-actual-border);
   background: var(--coral-soft);
-  color: var(--color-conflict-actual-text);
+  color: var(--color-status-danger-text);
 }
 
 .care-conflict--compact {

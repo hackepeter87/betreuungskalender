@@ -21,7 +21,7 @@
   gap: 18px;
   margin-bottom: 18px;
   padding: 22px;
-  border: 1px solid #b9deda;
+  border: 1px solid var(--color-border-accent-subtle);
   border-radius: var(--radius);
   background: var(--teal-soft);
 }
@@ -34,7 +34,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: #fff;
+  background: var(--surface);
   color: var(--teal);
 }
 
@@ -45,7 +45,7 @@
 .backup-hero p {
   max-width: 720px;
   margin: 0;
-  color: #4d7472;
+  color: var(--color-status-success-detail-text);
   font-size: 0.76rem;
   line-height: 1.55;
 }
@@ -114,7 +114,7 @@
   padding: 11px;
   border-radius: 6px;
   background: var(--amber-soft);
-  color: #8a560a;
+  color: var(--color-status-warning-text);
   font-size: 0.67rem;
   font-weight: 700;
 }
@@ -188,9 +188,9 @@
 }
 
 .transfer-status--warnings {
-  border-color: #d69b32;
+  border-color: var(--color-status-warning-border);
   background: var(--amber-soft);
-  color: #83530b;
+  color: var(--color-status-warning-text);
 }
 
 .transfer-status--blocked {
@@ -327,7 +327,7 @@
 }
 
 .check-status--warning {
-  color: #83530b;
+  color: var(--color-status-warning-text);
 }
 
 .check-status--failed {

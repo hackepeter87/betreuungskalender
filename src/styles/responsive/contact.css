@@ -81,7 +81,7 @@
     height: 21px;
     place-items: center;
     border-radius: 50%;
-    background: #eef2f6;
+    background: var(--color-surface-raised);
     font-size: 0.68rem;
   }
 
@@ -91,9 +91,9 @@
     align-items: center;
     gap: 9px;
     padding: 10px 11px;
-    border: 1px solid #b8ddd9;
+    border: 1px solid var(--color-status-success-border);
     border-radius: 7px;
-    background: #f2fbfa;
+    background: var(--color-status-success-surface);
     color: var(--teal-strong);
   }
 
@@ -113,7 +113,6 @@
   }
 
   .mobile-rule-live-preview small {
-    color: var(--muted);
     font-size: 0.7rem;
   }
 

@@ -50,12 +50,12 @@
 
 .holiday-row__assignment--mother {
   background: var(--violet-soft);
-  color: #5451b8;
+  color: var(--color-status-info-text);
 }
 
 .holiday-row__assignment--shared {
   background: var(--amber-soft);
-  color: #8a560a;
+  color: var(--color-status-warning-text);
 }
 
 .holiday-row__actions {

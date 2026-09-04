@@ -1,7 +1,8 @@
-const CACHE_NAME = "betreuungskalender-v5";
+const CACHE_NAME = "betreuungskalender-v6";
 const CACHE_PREFIX = "betreuungskalender-";
 const APP_SHELL = [
   "/index.html",
+  "/appearance.js",
   "/manifest.webmanifest",
   "/icons/app-icon.svg",
   "/icons/app-icon-192.png",

@@ -43,6 +43,7 @@
 }
 
 .form-section {
+  min-width: 0;
   margin: 0 0 20px;
   padding: 0 0 20px;
   border: 0;
@@ -201,7 +202,7 @@
   padding: 10px 12px;
   border-radius: 6px;
   background: var(--coral-soft);
-  color: var(--color-status-danger-detail-text);
+  color: var(--color-status-danger-text);
   font-size: 0.7rem;
   font-weight: 700;
 }

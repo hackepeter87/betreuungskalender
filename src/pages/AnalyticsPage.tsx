@@ -110,7 +110,7 @@ export function AnalyticsPage({ monthKey }: { monthKey: string }) {
           </div>
           <Icon name="chevronRight" size={18} />
         </summary>
-        <div className="table-scroll">
+        <div className="table-scroll" role="region" aria-label={copy(locale, "analytics", "byChild")} tabIndex={0}>
           <table className="stats-table stats-table--wide responsive-table">
             <thead>
               <tr>

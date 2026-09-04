@@ -33,6 +33,14 @@ const layerNames = [
 
 const sharedStyleOwners = ["summaries", "confirmations", "care-conflicts", "data-migration", "period-selector"];
 
+test("does not use filled-action background tokens for foreground text", async () => {
+  for (const source of await styleSources()) {
+    postcss.parse(source.source).walkDecls(/^(color|fill|stroke)$/, declaration => {
+      assert.doesNotMatch(declaration.value, /var\(--color-action-/, `${source.path}: ${declaration.toString()}`);
+    });
+  }
+});
+
 test("enforces source and delivered-style reduction rather than line-count changes", () => {
   const metrics = { files: 1, lines: 1, bytes: 100, declarations: 10, rules: 2 };
   const build = { bytes: 80, gzipBytes: 50 };

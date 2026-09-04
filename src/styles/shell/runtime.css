@@ -7,7 +7,7 @@
   padding: 10px 16px;
   border-bottom: 1px solid var(--color-status-warning-border);
   background: var(--amber-soft);
-  color: var(--color-status-warning-strong-text);
+  color: var(--color-status-warning-text);
   font-size: 0.76rem;
   font-weight: 700;
   text-align: center;

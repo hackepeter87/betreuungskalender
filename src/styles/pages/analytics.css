@@ -13,7 +13,7 @@
 }
 
 .stats-table th {
-  background: #fafbfc;
+  background: var(--color-surface-raised);
   color: var(--muted);
   font-size: 0.63rem;
   font-weight: 750;
@@ -72,7 +72,7 @@
 }
 
 .stats-table__total td {
-  background: #f1f7f6;
+  background: var(--color-status-success-surface);
   color: var(--teal-strong);
   font-weight: 800;
 }

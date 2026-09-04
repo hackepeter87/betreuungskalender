@@ -23,7 +23,7 @@
 }
 
 .entry-row:hover {
-  background: #fbfcfd;
+  background: var(--color-surface-subtle);
 }
 
 .entry-row__date strong,

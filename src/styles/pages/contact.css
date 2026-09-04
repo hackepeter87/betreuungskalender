@@ -72,7 +72,7 @@
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcfd;
+  background: var(--color-surface-subtle);
 }
 
 .rule-segment-row input {
@@ -91,7 +91,7 @@
   padding: 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcfd;
+  background: var(--color-surface-subtle);
 }
 
 .contact-generation-preview__summary {
@@ -126,12 +126,12 @@
 }
 
 .contact-preview-occurrence--new {
-  border-color: #a9d8d5;
+  border-color: var(--color-border-accent);
 }
 
 .contact-preview-occurrence--existing {
-  border-color: #c8c1e8;
-  background: #fbfbff;
+  border-color: var(--color-status-unavailable-border);
+  background: var(--color-status-unavailable-surface);
 }
 
 .contact-preview-occurrence__meta {
@@ -157,7 +157,7 @@
 
 .contact-preview-occurrence--existing .contact-preview-occurrence__meta span {
   background: var(--violet-soft);
-  color: #554b8c;
+  color: var(--color-status-unavailable-text);
 }
 
 .contact-preview-week {
@@ -196,7 +196,7 @@
 .contact-preview-occurrence--existing .contact-preview-day--active {
   border-color: var(--violet);
   background: var(--violet-soft);
-  color: #554b8c;
+  color: var(--color-status-unavailable-text);
 }
 
 .contact-preview-more {
@@ -293,7 +293,7 @@
 }
 
 .rule-entry__main:hover {
-  background: #fbfcfd;
+  background: var(--color-surface-subtle);
 }
 
 .rule-entry__main strong,
@@ -319,7 +319,7 @@
   padding: 8px 10px;
   border-radius: 6px;
   background: var(--amber-soft);
-  color: #80530c;
+  color: var(--color-status-warning-text);
   font-size: 0.65rem;
   font-weight: 700;
   line-height: 1.4;

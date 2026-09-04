@@ -108,8 +108,10 @@ loading logic belongs in these stylesheets.
 ## Standalone public pages
 
 The two public legal documents deliberately retain one small static stylesheet
-in `server/routes/legal.ts`. They render without the authenticated application,
-JavaScript or its font downloads. This is an explicit document owner, not a
+in `server/routes/legal.ts`. They do not load the authenticated React application
+or its font downloads. The optional same-origin appearance
+bootstrap applies the locally saved preference; content remains readable with
+JavaScript disabled. This is an explicit document owner, not a
 destination for application styles. Its CSS is inventoried and included in the
 aggregate reduction check, so it cannot conceal relocated style debt.
 
@@ -137,12 +139,24 @@ are migrated. Shell styles, shared component styles, and their responsive
 adaptations, plus the calendar and dashboard owners, accept no raw colors;
 tests require semantic roles in those files. Calendar state roles distinguish
 planned, cancelled, partial, holiday, unavailable, and conflicting entries;
-their light values remain unchanged during this ownership refactor.
+their meaning remains distinct through labels and icons. Appearance work
+normalizes equivalent calendar and feedback colors onto the shared success,
+warning, information and danger roles rather than maintaining duplicate
+calendar-only palettes.
 Remaining feature and print colors outside `tokens.css` are an explicit,
 counted debt inventory in `scripts/style-guardrails-baseline.ts`. A package may
 reduce those counts, but adding another raw color or increasing an existing
 count fails tests. Runtime values selected by a user, such as a calendar color,
 remain data and are not added to static CSS.
+
+Light/dark pairs belong in `tokens.css`, using `light-dark()` with the root
+`color-scheme`. Do not add per-page dark-mode selectors or separate component
+palettes. Accent text and filled actions have different contrast requirements:
+`--color-action-primary` and `--color-action-danger` remain dark enough for
+`--color-text-on-accent`; brighter dark-mode text accents must not replace those
+backgrounds. The print layer forces the light scheme. The standalone legal
+document owns its small equivalent palette and remains included in aggregate
+style budgets. Appearance does not relax the fixed reduction ceilings.
 
 ## Responsive contract
 

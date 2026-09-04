@@ -19,7 +19,7 @@
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcfd;
+  background: var(--color-surface-subtle);
 }
 
 .unavailable-time-group__header {
@@ -59,7 +59,7 @@
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 7px;
-  background: #fbfcfd;
+  background: var(--color-surface-subtle);
 }
 
 .unavailable-toggle-card__switch {
@@ -70,7 +70,7 @@
 
 .unavailable-toggle-card__label {
   min-width: 0;
-  color: #475467;
+  color: var(--color-text-control);
   font-size: 0.69rem;
   font-weight: 800;
 }
@@ -121,20 +121,20 @@
   gap: 6px;
   padding: 0 9px;
   border-radius: 5px;
-  background: #f2f3f6;
-  color: #586174;
+  background: var(--surface-soft);
+  color: var(--muted);
   font-size: 0.64rem;
   font-weight: 800;
 }
 
 .unavailable-row__type.is-duty {
-  background: #eeeafb;
-  color: #554b8c;
+  background: var(--color-status-unavailable-muted-surface);
+  color: var(--color-status-unavailable-text);
 }
 
 .unavailable-row__type.is-external-block {
-  background: #fff0d5;
-  color: #8a560f;
+  background: var(--color-status-warning-surface);
+  color: var(--color-status-warning-text);
 }
 
 .unavailable-row__actions {
