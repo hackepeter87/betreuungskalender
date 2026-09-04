@@ -8,6 +8,9 @@ width. Print output remains covered by separate report tests.
 ## Test data and deterministic rendering
 
 The suite creates only clearly fictional records in the isolated E2E database.
+Run it only in a disposable development checkout without operator `.env` files,
+secrets or database connection variables; it replaces test data. Do not run
+multiple E2E processes in the same checkout at once.
 It fixes browser time, locale, timezone, reduced-motion behavior, animation
 timing, runtime metadata, and generated report identifiers. Baselines must not
 contain real names, schedules, instance identifiers, URLs, exports, or secrets.
@@ -52,3 +55,6 @@ must approve the image diff together with the code change.
 
 Failure screenshots, traces, reports, downloads, and test databases remain in
 ignored output directories and are never committed.
+
+The [documentation screenshot guide](screenshots.md) reuses two reviewed Linux
+references. It does not introduce another fixture or capture pipeline.

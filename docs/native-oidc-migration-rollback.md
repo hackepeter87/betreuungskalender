@@ -15,9 +15,13 @@ path.
 - The current oauth2-proxy deployment is healthy.
 - The operator can access the deployment directory and restart the Podman
   Compose stack.
-- Keycloak can emit the configured group claim into the ID token.
-- At least one admin user is assigned to the configured admin group before the
-  switch.
+- Keycloak provides a stable `sub` for the intended owner and members.
+- Verify that native identities resolve to the existing application
+  memberships. A matching display name or email is not an identity mapping.
+  Do not switch an owner installation until its owner can retain access.
+- For an ownerless installation, prepare the mounted one-time owner secret
+  described in [self-hosted onboarding](self-hosted-onboarding.md). The owner
+  link can establish ownership without replacing existing domain data.
 
 The current trusted-proxy deployment should still validate before changing
 auth mode:
@@ -43,7 +47,8 @@ chmod 0600 config-backups/pre-native-oidc/.env \
   config-backups/pre-native-oidc/oauth2-proxy.cfg
 ```
 
-Also create and verify a SQLite backup before switching auth mode:
+Also create and verify a backup before switching auth mode. For the default
+SQLite backend:
 
 ```bash
 podman-compose --env-file .env -f compose.oidc.yml exec betreuungskalender \
@@ -51,6 +56,10 @@ podman-compose --env-file .env -f compose.oidc.yml exec betreuungskalender \
 podman-compose --env-file .env -f compose.oidc.yml exec betreuungskalender \
   /nodejs/bin/node scripts/restore-check.js
 ```
+
+For PostgreSQL, use the database backup and restore procedure in
+[database-backends.md](database-backends.md); the SQLite maintenance scripts do
+not back up PostgreSQL. Do not change database backend during this auth switch.
 
 Do not edit `oauth2-proxy.cfg` for the native rollout. Keeping it unchanged
 makes rollback faster and avoids rootless Podman ownership surprises.
@@ -69,9 +78,10 @@ For the native client:
 - Valid redirect URI: `https://app.example.net/auth/callback`
 - Web origin: `https://app.example.net`
 - Scopes: `openid email profile`
-- Group mapper claim name: `groups`
-- Full group path: enabled
-- Add groups to the ID token: enabled
+
+A `groups` mapper can retain external metadata, but native workspace access
+comes only from active app memberships. Keep any group configuration needed by
+the trusted-proxy rollback path; it is not a native onboarding mechanism.
 
 Keep the existing oauth2-proxy redirect URI
 `https://app.example.net/oauth2/callback` until native OIDC has been running
@@ -134,14 +144,16 @@ podman-compose --env-file .env -f compose.yml exec betreuungskalender \
 
 Then verify authentication from a browser:
 
-1. Open the public URL in a private browser window.
-2. Confirm the app offers the native login action.
-3. Sign in through Keycloak and confirm the callback returns to `/`.
+1. For an existing owner installation, open the public URL in a private browser
+   window. For an ownerless installation, open the prepared owner link instead.
+2. Continue through native OIDC and sign in as the intended owner.
+3. Confirm the existing app data remains available. An ownerless installation
+   with domain data must not restart the first-use wizard.
 4. Open `/api/session` and confirm the expected user, workspace access,
    workspace role, and permissions.
-5. Before owner setup, verify the configured compatibility groups and rejection
-   of users without a configured group when strict role claims are enabled.
-6. After owner setup, verify active admin, editor, scheduler, and viewer
+5. Confirm that ordinary login without an active membership grants no access,
+   including when configured provider groups are present.
+6. Verify active admin, editor, scheduler, and viewer
    memberships. Confirm that a user without an active membership has no
    workspace access and that viewer users cannot write.
 7. Confirm logout clears the app session.

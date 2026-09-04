@@ -21,7 +21,8 @@ used to ship an incomplete locale.
 
 The selected language is stored in
 `betreuungskalender:ui:locale:v1`. This is a UI preference only; it is not sent
-to the API and does not alter SQLite data, backups, or exports.
+to the API and does not alter stored domain data or backup contents. Report and
+PDF labels follow the selected language; technical export field names stay stable.
 
 ## Adding a language pack
 

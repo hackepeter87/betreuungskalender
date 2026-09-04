@@ -105,25 +105,24 @@ unintentionally.
 - Keep the host, minimal Node.js 24 runtime, npm build toolchain, proxy, Keycloak,
   and container images updated.
 
-Native OIDC is introduced as the v1.4 target architecture. The native callback
+Native OIDC handles authentication directly. The callback
 path uses Authorization Code + PKCE, server-side state/nonce/PKCE verifier
 records, and the maintained `openid-client` library for protocol validation.
 Native sessions use an opaque `HttpOnly`, `SameSite=Lax` cookie. In production
-the cookie is also `Secure`. SQLite stores only a hash of the cookie token,
-the OIDC subject, timestamps, expiry, and revocation metadata. Native mode maps
-validated OIDC claims into `app_users`, derives roles from configured groups,
-and rejects users without a matching role group by default. Keep the current
-trusted-proxy / oauth2-proxy path available as the known-good rollout and
-rollback mode until native OIDC has been verified in the live environment.
+the cookie is also `Secure`. The selected database stores only a hash of the
+cookie token, the OIDC subject, timestamps, expiry, and revocation metadata. Native mode maps
+validated OIDC identities to application users. Ordinary login requires an
+active workspace membership; provider groups do not grant workspace access.
+Only a validated owner-setup or invitation context can establish the matching
+membership during onboarding.
 Native mode rejects conflicting `TRUST_PROXY_AUTH=true` configuration and does
 not accept proxy identity headers as an API authentication bypass.
 
-Trusted-proxy authentication is a transition and rollback mode once native OIDC
-is live. Do not remove it, delete oauth2-proxy configuration, or remove the old
-Keycloak redirect URI during the first native rollout. After native login,
-claim-based roles, logout, session expiry, runtime verification, and audit
-identity have been verified in production, make a separate release decision
-whether trusted-proxy remains supported or is removed in a later milestone.
+Trusted-proxy authentication remains a supported alternative with a different
+trust boundary: only the configured proxy may supply identity headers. When
+migrating an existing installation to native OIDC, preserve its verified proxy
+configuration until login, membership access, logout and session expiry have
+been accepted. See [the migration guide](native-oidc-migration-rollback.md).
 
 Recovery admin is a disabled-by-default break-glass path for identity-provider
 outages. Enable it only through deliberate deployment configuration, preferably
@@ -349,8 +348,10 @@ configured otherwise.
 
 Initial owner setup uses a one-time bearer value from a mounted secret file.
 Only its SHA-256 hash, validity window, and consumption metadata are stored in
-SQLite. The link is accepted only while first-use setup is incomplete and the
-authenticated OIDC subject is bound to the resulting owner membership. The raw
+the selected database. The link is accepted only while no owner is established;
+the authenticated OIDC subject is bound to the resulting owner membership.
+An ownerless installation with existing data can establish its first owner
+without repeating the setup wizard or replacing domain data. The raw
 value must not be placed in environment files or logs. The mounted secret is
 validated again before the owner membership is assigned, so replacing or
 removing the file invalidates an unfinished setup flow. Setup and invitation

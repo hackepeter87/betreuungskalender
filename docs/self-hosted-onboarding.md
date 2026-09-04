@@ -11,7 +11,7 @@ your deployment environment and the security guidance in
 
 ## First-use setup
 
-A fresh installation is detected from server-side SQLite state, not from
+A fresh installation is detected from server-side database state, not from
 browser storage. Native OIDC first establishes the owner through the one-time
 owner setup link and then guides that owner through the initial setup flow.
 
