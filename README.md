@@ -12,8 +12,8 @@ travel, costs, holidays, and unavailable periods.
 ## Project status
 
 - Latest published release: [v1.28.0](docs/release-notes/v1.28.0.md)
-- Current `main`: SQLite/API domain persistence, first-use setup, application
-  memberships and invitations, optional invitation email delivery, native OIDC
+- Current `main`: SQLite by default and optional PostgreSQL persistence,
+  first-use setup, application memberships and invitations, optional invitation email delivery, native OIDC
   authentication, trusted-proxy compatibility, RRULE-compatible contact rules
   with calendar synchronization, care parties, scoped calendar feeds,
   responsive mobile support, backup/restore tooling, release archives, and GHCR
@@ -22,12 +22,17 @@ travel, costs, holidays, and unavailable periods.
 - Stability target: stable self-hosted release line with roadmap work tracked in
   GitHub milestones
 
-## Screenshot
+## Screenshots
 
 ![Betreuungskalender dashboard with fictional demo data](docs/assets/screenshots/dashboard-desktop.png)
 
-Example dashboard using fictional demonstration data. No real personal data is
-included in repository screenshots.
+Desktop dashboard and mobile calendar using the same fictional demonstration
+data. No real personal data is included in repository screenshots.
+
+<img src="docs/assets/screenshots/calendar-mobile.png" alt="Mobile calendar agenda with fictional multi-day care entries" width="390">
+
+The [screenshot guide](docs/screenshots.md) records the source fixtures and
+repeatable capture procedure.
 
 [Features](#features) · [Development](#development-quick-start) ·
 [Container](#container-quick-start) · [Helm](#kuberneteshelm-quick-start) · [Image Promotion](docs/image-promotion.md) · [Updates](docs/update.md) · [systemd/LXC](#lxcsystemd-quick-start) ·
@@ -477,12 +482,23 @@ builds the container, starts it, and verifies the API health endpoint.
 
 ## Language packs
 
-German is the default UI language. The app includes an initial English language
-pack for the application shell, settings, reports, and PDF output. Remaining
-screens fall back to German while they are migrated incrementally. Language is
-a browser UI preference and does not change API or SQLite data.
+German is the default UI language. German and English cover the application
+shell, pages, dialogs, reports and PDF output. Missing catalog keys or mismatched
+placeholders fail the test workflow; German remains a defensive runtime fallback.
+Language is a browser UI preference and does not change stored domain data.
 
 See [docs/internationalization.md](docs/internationalization.md).
+
+## Appearance and accessibility
+
+Settings offers System, Light and Dark appearance. System follows the device
+preference by default; an explicit choice is saved only in the current browser.
+Print and PDF output remain light. See [frontend loading and appearance](docs/frontend-loading.md).
+
+Shared [style ownership](docs/style-architecture.md), [visual regression checks](docs/visual-regression-testing.md)
+and [accessibility checks](docs/accessibility-testing.md) cover responsive layouts,
+keyboard operation and representative workflows. Automated checks supplement,
+but do not replace, manual device and screen-reader acceptance.
 
 ## License
 

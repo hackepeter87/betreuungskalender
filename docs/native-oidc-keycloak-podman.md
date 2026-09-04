@@ -4,9 +4,8 @@ Native OIDC lets Betreuungskalender handle the Authorization Code + PKCE login
 flow directly. It does not require oauth2-proxy, does not trust identity
 headers, and stores only an opaque server-side session cookie in the browser.
 
-Use this path for a fresh v1.4-style installation behind an existing HTTPS
-reverse proxy. Keep the oauth2-proxy trusted-proxy deployment available as the
-rollback path until native OIDC has been verified in the live environment.
+Use this path for a fresh installation behind an existing HTTPS reverse proxy.
+A fresh native installation does not need a parallel oauth2-proxy deployment.
 For existing oauth2-proxy deployments, follow
 [native-oidc-migration-rollback.md](native-oidc-migration-rollback.md)
 instead of treating the fresh-install steps as an in-place migration.
@@ -26,7 +25,7 @@ Create a dedicated OpenID Connect client for the app:
 - Scopes: `openid email profile`
 - MFA: recommended for every interactive user
 
-Create the application groups with full paths:
+Optional external group metadata can use full paths such as:
 
 ```text
 /betreuungskalender/admins
@@ -34,18 +33,16 @@ Create the application groups with full paths:
 /betreuungskalender/readers
 ```
 
-Add a group-membership mapper that emits the full group path in the ID token:
+If retaining this metadata, configure a group-membership mapper:
 
 - Token claim name: `groups`
 - Full group path: enabled
 - Add to ID token: enabled
 
-Before an installation owner exists, the app derives a compatibility role from
-the configured group values. If a user belongs to multiple configured groups,
-the effective compatibility role is `admin` before `parent` before `readonly`.
-After owner setup, application memberships are authoritative; groups continue
-to identify the external compatibility role but no longer grant workspace
-access by themselves.
+Native OIDC confirms identity; the app controls workspace access. The first
+owner must use the one-time owner link. Other users need an active membership
+or a valid invitation link. Groups never replace those requirements, including
+before the first owner exists, and do not override an invitation's role.
 
 ## Podman Compose deployment
 
@@ -200,15 +197,15 @@ After starting the stack:
      /nodejs/bin/node scripts/runtime-verify.js --expected-version X.Y.Z
    ```
 
-3. Open `https://app.example.net` in a private browser session and confirm the
-   app shows the login action.
-4. Sign in through Keycloak and confirm the browser returns to `/`.
-5. Request `/api/session` through the browser and confirm it reports the
-   expected `displayName`, workspace access, workspace role, and permissions
+3. Before creating the owner, attempt ordinary login from a private browser
+   session. Confirm that it grants no workspace access, regardless of groups.
+4. Open the valid owner link, continue through Keycloak, and complete the
+   first-use wizard. See [self-hosted onboarding](self-hosted-onboarding.md).
+5. Request `/api/session` through the authenticated browser and confirm it
+   reports the expected `displayName`, workspace access, workspace role, and permissions
    without exposing raw tokens or claims.
-6. Before owner setup, verify the configured admin, parent, and readonly group
-   mapping and rejection of users without a configured group while
-   `OIDC_REQUIRE_ROLE_CLAIM=true`.
+6. Sign out and sign in again as the owner. Confirm that the established
+   membership grants access independently of provider-side role groups.
 7. After owner setup, verify one active application membership per supported
    role: admin, editor, scheduler, and viewer. Confirm that an authenticated
    identity without an active membership receives no workspace access.
@@ -228,8 +225,9 @@ After starting the stack:
 - Logout returns to the app but immediately signs in again: verify the Keycloak
   client has `https://app.example.net/` configured as a valid post logout
   redirect URI and `OIDC_POST_LOGOUT_REDIRECT_URI` matches it.
-- User gets `403`: verify the Keycloak ID token includes the configured
-  `OIDC_GROUPS_CLAIM` with one of the full group paths.
+- User gets `403`: verify the identity has an active application membership.
+  For the first owner use the owner link; for a new member use an invitation.
+  Adding a Keycloak group does not establish a membership.
 - Session cookie is not accepted: verify the public URL uses HTTPS in
   production and the browser is on the same origin as `ALLOWED_ORIGIN`.
 - Direct app access bypasses the reverse proxy: fix listener, firewall, or

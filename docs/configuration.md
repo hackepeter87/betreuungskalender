@@ -70,11 +70,11 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `OIDC_USER_ID_HEADER` | Trusted header containing the stable OIDC subject or user ID | `x-auth-request-user` | Recommended with OIDC | `x-auth-request-user` | Must be stable across email/name changes |
 | `OIDC_EMAIL_HEADER` | Trusted header containing the OIDC email claim | `x-auth-request-email` | Optional with OIDC | `x-auth-request-email` | Stored on the internal user record when present |
 | `OIDC_DISPLAY_NAME_HEADER` | Trusted header containing the OIDC display-name claim | `x-auth-request-preferred-username` | Optional with OIDC | `x-auth-request-preferred-username` | Shown compactly in the app shell |
-| `OIDC_GROUPS_HEADER` | Trusted header containing group or role claims | `x-forwarded-groups` | Recommended with OIDC | `x-auth-request-groups` | Used for server-side authorization |
-| `OIDC_ADMIN_GROUP` | Group that grants read, write, and administrative permissions | `/betreuungskalender/admins` | Recommended with OIDC | Same | Required for imports, destructive app-data operations, and migration endpoints |
-| `OIDC_PARENT_GROUP` | Group that grants normal read and write permissions | `/betreuungskalender/parents` | Recommended with OIDC | Same | Allows ordinary app data editing |
-| `OIDC_READONLY_GROUP` | Group that grants read-only access | `/betreuungskalender/readers` | Optional with OIDC | Same | Allows viewing/export reads but blocks writes |
-| `OIDC_REQUIRE_ROLE_CLAIM` | Reject users without a matching configured group | `true` | Recommended after rollout | `false` for local/trusted-proxy, `true` for native OIDC | `false` preserves existing single-user proxy deployments during migration; native OIDC fails closed by default |
+| `OIDC_GROUPS_HEADER` | Trusted-proxy header containing group or role claims | `x-forwarded-groups` | Recommended for trusted proxy | `x-auth-request-groups` | Ignored in native OIDC; app memberships remain authoritative after owner setup |
+| `OIDC_ADMIN_GROUP` | Trusted-proxy pre-owner admin group | `/betreuungskalender/admins` | Required for trusted-proxy first use | Same | Permits trusted-proxy first-use setup; does not replace a native owner link |
+| `OIDC_PARENT_GROUP` | Trusted-proxy pre-owner read/write compatibility group | `/betreuungskalender/parents` | Optional for trusted proxy | Same | Does not permit first-use setup or establish native membership |
+| `OIDC_READONLY_GROUP` | Trusted-proxy pre-owner read-only compatibility group | `/betreuungskalender/readers` | Optional for trusted proxy | Same | Does not permit writes, first-use setup or establish native membership |
+| `OIDC_REQUIRE_ROLE_CLAIM` | Require a configured group for trusted-proxy pre-owner compatibility | `true` | Recommended for trusted proxy | `false` for local/trusted-proxy, `true` for native OIDC | Native OIDC always requires an active membership or a validated onboarding context; this setting cannot grant workspace access |
 | `ALLOWED_ORIGIN` | Single permitted browser origin for CORS | `https://betreuung.example.net` | Recommended | `http://localhost:5173` | Prevents cross-origin browser API use |
 | `LOG_LEVEL` | Fastify/Pino log level | `info` | Optional | `info` in production, `debug` otherwise | Avoid `debug` in production unless investigating |
 | `RATE_LIMIT_MAX` | Maximum API requests per client and time window | `120` | Optional | `120` | Baseline protection for every API route, including health and readiness |
@@ -209,7 +209,8 @@ After ownership is established, workspace memberships and the fixed owner,
 admin, editor, scheduler, and viewer permission model are authoritative. See
 [ADR 0005](adr/0005-workspace-permissions.md).
 
-When `OIDC_REQUIRE_ROLE_CLAIM=false`, an authenticated proxy user without a
+Before an owner exists, when `OIDC_REQUIRE_ROLE_CLAIM=false`, an authenticated
+proxy user without a
 matching configured group receives `parent` permissions for compatibility with
 existing single-user deployments. Set it to `true` after the identity provider
 emits the expected group claim.
@@ -227,11 +228,10 @@ oauth2-proxy. Do not add an app `ports:` mapping while `TRUST_PROXY_AUTH=true`.
 
 ### Native OIDC
 
-`AUTH_MODE=native-oidc` is the target architecture for the v1.4 workstream. It
-validates Authorization Code + PKCE callbacks with `openid-client`, stores
-short-lived server-side login state, and creates server-side sessions with an
+`AUTH_MODE=native-oidc` validates Authorization Code + PKCE callbacks with
+`openid-client`, stores short-lived server-side login state, and creates server-side sessions with an
 opaque browser cookie. The browser cookie contains only a random session token;
-SQLite stores only the token hash plus session metadata.
+the selected database stores only the token hash plus session metadata.
 
 Native mode requires `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, and
 `OIDC_REDIRECT_URI` at startup. In production it also requires
@@ -243,10 +243,10 @@ refresh tokens, authorization codes, state, nonce, PKCE verifiers, raw claims,
 client secrets, or session identifiers to frontend JavaScript or logs.
 
 Native OIDC maps the stable `sub` claim to `app_users.external_subject`.
-`OIDC_GROUPS_CLAIM` selects the claim used for authorization and defaults to
+`OIDC_GROUPS_CLAIM` selects the external group metadata claim and defaults to
 `groups`. Values may be emitted as an array or as comma, semicolon, or
-newline-separated strings. The same `OIDC_ADMIN_GROUP`, `OIDC_PARENT_GROUP`,
-and `OIDC_READONLY_GROUP` settings are used in trusted-proxy and native mode.
+newline-separated strings. Group metadata does not grant native workspace
+access or override the role assigned by an invitation.
 Native OIDC ordinary login requires an active workspace membership regardless
 of provider-side groups. The only onboarding exceptions are validated,
 short-lived owner-setup and invitation contexts. Those contexts may create the
@@ -263,7 +263,7 @@ For initial owner setup, mount a private random value at
 `OWNER_SETUP_TOKEN_FILE` and open `/setup?token=<one-time-value>` before
 `OWNER_SETUP_TOKEN_TTL_SECONDS` expires. The browser first shows a neutral
 landing page, then starts OIDC only after the user continues. The raw value is
-never stored in SQLite and is redacted from request logs. See
+never stored in the database and is redacted from request logs. See
 [self-hosted-onboarding.md](self-hosted-onboarding.md) for the complete flow.
 Keep the same file mounted until the authenticated owner claim has completed.
 Replacing or removing it invalidates any unfinished setup flow.
@@ -300,7 +300,7 @@ RECOVERY_ADMIN_SESSION_TTL_SECONDS=900
 ```
 
 When enabled for the first time, the app must either find an existing recovery
-credential in SQLite or read an initial password from
+credential in the selected database or read an initial password from
 `RECOVERY_ADMIN_INITIAL_PASSWORD_FILE` or `RECOVERY_ADMIN_INITIAL_PASSWORD`.
 The mounted file is preferred. The environment fallback exists for demo or
 emergency use and should not be the normal production path.

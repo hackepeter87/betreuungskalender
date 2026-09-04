@@ -115,7 +115,7 @@ only; keep the variable unset or `false` in production.
 Release image publication still starts from a GitHub release for `vX.Y.Z`.
 After the release image exists:
 
-1. Run **Promote testing image** with the release tag, for example `v1.4.0`.
+1. Run **Promote testing image** with the exact published release tag, `vX.Y.Z`.
 2. Update the testing installation and complete the technical and domain smoke
    tests.
 3. Run **Promote production image** with the same release tag. The workflow
