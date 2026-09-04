@@ -30,6 +30,7 @@ test("shows an accessible loading state for a deferred page", async ({
 }) => {
   const context = await browser.newContext({
     baseURL,
+    ignoreHTTPSErrors: true,
     serviceWorkers: "block",
     viewport: { width: 1440, height: 900 }
   });
@@ -54,6 +55,7 @@ test("shows an accessible loading state for a deferred page", async ({
 test("shows a generic chunk failure and reloads the application", async ({ browser, baseURL }) => {
   const context = await browser.newContext({
     baseURL,
+    ignoreHTTPSErrors: true,
     serviceWorkers: "block",
     viewport: { width: 1440, height: 900 }
   });
@@ -207,7 +209,7 @@ test("keeps settings forms composed on ultra-wide screens", async ({ page }) => 
   await navigate(page, "settings");
 
   const defaults = page.getByTestId("settings-defaults-grid");
-  const languageField = page.locator(".settings-form-grid").first().locator(".field");
+  const languageField = page.locator(".field").filter({ has: page.getByTestId("settings-language") });
   const externalCalendar = page.getByTestId("external-calendar-manager");
   const importGrid = externalCalendar.locator(".external-calendar-import-grid");
   const feedContent = page.getByTestId("calendar-feed-content");

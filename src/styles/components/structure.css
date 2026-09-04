@@ -66,13 +66,13 @@
 }
 
 .button--primary {
-  background: var(--teal);
+  background: var(--color-action-primary);
   color: var(--color-text-on-accent);
   box-shadow: var(--shadow-action-primary);
 }
 
 .button--primary:hover {
-  background: var(--teal-strong);
+  background: var(--color-action-primary-hover);
 }
 
 .button--secondary {
@@ -104,8 +104,8 @@
 }
 
 .button--danger {
-  border: 1px solid var(--coral);
-  background: var(--coral);
+  border: 1px solid var(--color-action-danger);
+  background: var(--color-action-danger);
   color: var(--color-text-on-accent);
   box-shadow: var(--shadow-action-danger);
 }

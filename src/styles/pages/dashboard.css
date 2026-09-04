@@ -43,12 +43,12 @@ button.metric-card {
 
 .metric-card__icon--teal {
   background: var(--color-status-success-surface);
-  color: var(--color-action-primary);
+  color: var(--color-status-success-text);
 }
 
 .metric-card__icon--violet {
   background: var(--color-status-info-surface);
-  color: var(--color-calendar-icon);
+  color: var(--violet);
 }
 
 .metric-card__icon--amber {
@@ -57,8 +57,8 @@ button.metric-card {
 }
 
 .metric-card__icon--coral {
-  background: var(--color-calendar-cancelled-surface);
-  color: var(--color-calendar-danger-icon);
+  background: var(--coral-soft);
+  color: var(--coral);
 }
 
 .metric-card small,
@@ -210,7 +210,7 @@ button.metric-card {
 }
 
 .upcoming-list button:hover strong {
-  color: var(--color-action-primary-hover);
+  color: var(--color-status-success-text);
 }
 
 .upcoming-list__date,

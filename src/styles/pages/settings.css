@@ -72,7 +72,7 @@
 }
 
 .child-avatar--neutral {
-  background: color-mix(in srgb, var(--teal) 10%, white);
+  background: var(--teal-soft);
   color: var(--teal-strong);
 }
 

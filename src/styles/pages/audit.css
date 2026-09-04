@@ -19,7 +19,7 @@
   padding: 4px 7px;
   border-radius: 4px;
   background: var(--violet-soft);
-  color: #5150ad;
+  color: var(--color-status-info-text);
   font-size: 0.61rem;
   font-weight: 800;
 }

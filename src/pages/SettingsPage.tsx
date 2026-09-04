@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { CHILD_COLORS } from "../data/defaults";
 import { Icon } from "../components/Icon";
+import { AppearanceControl } from "../components/AppearanceControl";
 import { FieldHelpButton, FieldHelpLabel } from "../components/FieldHelp";
 import { Modal } from "../components/Modal";
 import { ExternalCalendarManager } from "../components/ExternalCalendarManager";
@@ -981,6 +982,7 @@ export function SettingsPage() {
             </select>
             <small>{t("settings.language.fallback")}</small>
           </label>
+          <AppearanceControl />
         </div>
       </section>
 

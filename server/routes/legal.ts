@@ -56,19 +56,24 @@ function legalPage(title: string, content: string): string {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${escapeHtml(title)} · Betreuungskalender</title>
+  <meta name="theme-color" content="#087f7b">
+  <script src="/appearance.js"></script>
   <style>
-    :root { color-scheme: light; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #14213d; background: #f4f7f8; }
+    :root { color-scheme: light dark; font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: light-dark(#14213d, #edf0f2); background: light-dark(#f4f7f8, #191d20); }
+    :root[data-appearance="light"] { color-scheme: light; }
+    :root[data-appearance="dark"] { color-scheme: dark; }
+    @media print { :root { color-scheme: only light !important; } }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; padding: clamp(16px, 4vw, 48px); }
-    main { width: min(100%, 880px); margin: 0 auto; background: #fff; border: 1px solid #d8e0e7; border-radius: 8px; padding: clamp(24px, 5vw, 48px); box-shadow: 0 10px 30px rgba(20, 33, 61, .08); }
+    main { width: min(100%, 880px); margin: 0 auto; background: light-dark(#fff, #24292e); border: 1px solid light-dark(#d8e0e7, #59636c); border-radius: 8px; padding: clamp(24px, 5vw, 48px); box-shadow: 0 10px 30px rgba(20, 33, 61, .08); }
     .brand { display: inline-flex; align-items: center; gap: 12px; color: inherit; text-decoration: none; font-weight: 750; }
     .brand img { width: 42px; height: 42px; }
     h1 { margin: 32px 0 20px; font-size: 2.5rem; line-height: 1.15; overflow-wrap: anywhere; }
     @media (max-width: 767px) { h1 { font-size: 1.75rem; } }
     @media (max-width: 430px) { h1 { font-size: 1.375rem; } }
-    .legal-content { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.65; color: #344054; }
-    .legal-links { display: flex; flex-wrap: wrap; gap: 12px 20px; margin-top: 40px; padding-top: 20px; border-top: 1px solid #d8e0e7; }
-    .legal-links a { color: #087f7a; font-weight: 700; }
+    .legal-content { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; line-height: 1.65; color: inherit; }
+    .legal-links { display: flex; flex-wrap: wrap; gap: 12px 20px; margin-top: 40px; padding-top: 20px; border-top: 1px solid light-dark(#d8e0e7, #59636c); }
+    .legal-links a { color: light-dark(#087f7a, #73d5cc); font-weight: 700; }
   </style>
 </head>
 <body>

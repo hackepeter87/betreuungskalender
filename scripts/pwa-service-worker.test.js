@@ -93,17 +93,18 @@ test("service worker precaches a static shell without requesting the protected r
   worker.installHandler({ waitUntil(value) { installation = value; } });
   await installation;
   assert.ok(worker.precachedRequests.includes("/index.html"));
+  assert.ok(worker.precachedRequests.includes("/appearance.js"));
   assert.equal(worker.precachedRequests.includes("/"), false);
 });
 
 test("service worker activation removes only outdated application caches", async () => {
   const worker = await loadServiceWorker({
-    cacheKeys: ["betreuungskalender-v4", "betreuungskalender-v5", "unrelated-cache"]
+    cacheKeys: ["betreuungskalender-v4", "betreuungskalender-v5", "betreuungskalender-v6", "unrelated-cache"]
   });
   let activation;
   worker.activateHandler({ waitUntil(value) { activation = value; } });
   await activation;
-  assert.deepEqual(worker.deletedCaches, ["betreuungskalender-v4"]);
+  assert.deepEqual(worker.deletedCaches, ["betreuungskalender-v4", "betreuungskalender-v5"]);
 });
 
 test("service worker keeps API GET requests network-only", async () => {

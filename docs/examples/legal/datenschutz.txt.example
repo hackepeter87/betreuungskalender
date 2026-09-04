@@ -95,8 +95,10 @@ Cookie für eine angemeldete Sitzung. Wird der optionale Recovery-Admin aktivier
 und genutzt, verwendet er ein getrenntes, kurzlebiges opakes Cookie. Diese Werte
 enthalten keine Identitätsclaims oder Fachdaten.
 
-Lokaler Browser-Speicher hält Darstellungspräferenzen wie Sprache, Hilfe- und
-Navigationszustand. Optionaler Service-Worker-Cache wird erst nach bestätigter
+Lokaler Browser-Speicher hält Darstellungspräferenzen wie Sprache, Hell-/Dunkel-
+oder Systemdarstellung, Hilfe- und Navigationszustand. Die Darstellungswahl wird
+nicht an den Server übermittelt und kann in den Einstellungen geändert oder
+durch Löschen der Website-Daten zurückgesetzt werden. Optionaler Service-Worker-Cache wird erst nach bestätigter
 PWA-Installation, Standalone-Nutzung oder ausdrücklicher Push-Aktivierung aktiv.
 Push speichert zusätzlich browsergesteuerte Abonnementdaten. Die Anwendung
 enthält kein Analyse- oder Werbetracking.
