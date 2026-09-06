@@ -45,6 +45,11 @@ repeatable capture procedure.
 [Testing](docs/testing.md) ·
 [Internationalization](docs/internationalization.md)
 
+The README and the current guides directly below `docs/` describe the current
+application contract. ADRs preserve the decision context at the time they were
+accepted. Release notes, release smoke-test records, and operator reviews are
+historical evidence and are not rewritten to match later releases.
+
 ## Features
 
 - Children, planned/completed/cancelled care entries, factual cancellation

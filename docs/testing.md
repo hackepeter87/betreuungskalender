@@ -171,6 +171,21 @@ directory and are removed after the run.
 When Docker is unavailable locally, validate the script through code review and
 run the remaining checks; GitHub-hosted CI executes the container smoke test.
 
+## Documentation drift gate
+
+Run the current-documentation checks directly with:
+
+```bash
+npm run test:docs
+```
+
+The gate verifies local links, documented npm commands, runtime environment
+keys, the complete protected Fastify route inventory, and the provenance of the
+two README screenshots. `npm test` runs this check first, so the normal CI
+validation job cannot pass with documentation drift. It intentionally treats
+ADRs, release notes, release smoke-test records, and operator reviews as
+historical evidence rather than rewriting them to reflect current behavior.
+
 ## CI jobs
 
 Pull requests run these relevant jobs:

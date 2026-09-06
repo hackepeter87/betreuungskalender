@@ -11,7 +11,7 @@
 ## Development
 
 ```bash
-git clone https://github.com/example/betreuungskalender.git
+git clone https://github.com/hackepeter87/betreuungskalender.git
 cd betreuungskalender
 npm ci
 cp .env.example .env

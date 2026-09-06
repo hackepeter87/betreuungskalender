@@ -203,7 +203,8 @@ individual tasks in the authenticated in-app notification view.
 
 Care parties are domain records, not authentication principals. Optional
 app-user to care-party assignments restrict non-admin shared users once at
-least one assignment exists, but they do not replace `app_users.role`.
+least one assignment exists, but they do not replace active workspace
+membership and its role as the authorization source.
 
 ## Local security baseline checks
 

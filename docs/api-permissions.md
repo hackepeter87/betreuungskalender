@@ -82,11 +82,116 @@ writable through this route.
 | `GET /api/instance-readiness` | `instance:inspect` |
 | `GET /api/migration/legacy-summary`, all migration POST routes | `admin:destructive` |
 | `PUT/DELETE /api/app-data`, `POST /api/demo-data/edge-cases` | `admin:destructive` |
+| `GET /api/data-transfer/export`, `POST /api/data-transfer/preview`, `POST /api/data-transfer/dry-run`, `PUT /api/data-transfer/import` | `admin:destructive` |
+| `GET /api/data-transfer/actors`, `PUT /api/data-transfer/actors/:id/mapping`, `POST /api/data-transfer/actors/:id/invitation` | `admin:destructive` |
 
 Invitation-creation responses contain the complete one-time `invitationUrl`
 and invitation metadata. They do not expose the underlying bearer token as a
 separate response field. Manual invitations, optional email delivery, and
 historical-actor invitations use the same complete URL.
+
+## Machine-checked protected route inventory
+
+The following exact inventory is checked against the Fastify route metadata by
+`npm run test:docs`. Grouped tables above remain the readable explanation;
+this block is the completeness gate.
+
+<!-- BEGIN PROTECTED API ROUTES -->
+```text
+DELETE /api/app-data | admin:destructive
+DELETE /api/calendar-feed | feeds:manage-own
+DELETE /api/care-entries/:id | appointments:delete
+DELETE /api/care-parties/:id | planning:manage
+DELETE /api/children/:id | children:manage
+DELETE /api/contact-patterns/:id | planning:manage
+DELETE /api/contact-rules/:id | planning:manage
+DELETE /api/external-calendars/:id | planning:manage
+DELETE /api/holiday-periods/:id | planning:manage
+DELETE /api/invitations/:id | members:manage
+DELETE /api/members/:userId | members:manage
+DELETE /api/push-subscriptions/:id | notifications:manage-own
+DELETE /api/unavailable-periods/:id | planning:manage
+GET /api/app-users | members:manage
+GET /api/audit-log | audit:view
+GET /api/audit-log/page | audit:view
+GET /api/calendar-feed | feeds:manage-own
+GET /api/care-confirmations/open | notifications:manage-own
+GET /api/care-conflicts | notes:view
+GET /api/care-entries | notes:view
+GET /api/care-entries/:id | notes:view
+GET /api/care-entries/schedule | appointments:view
+GET /api/care-parties | planning:view
+GET /api/care-parties/summary | appointments:view
+GET /api/children | children:view-sensitive
+GET /api/children/summary | children:view-basic
+GET /api/contact-patterns | planning:view
+GET /api/contact-rules | planning:view
+GET /api/data-transfer/actors | admin:destructive
+GET /api/data-transfer/export | admin:destructive
+GET /api/external-calendar-events | planning:view
+GET /api/external-calendar-events/export | exports:run
+GET /api/external-calendars | planning:view
+GET /api/holiday-periods | planning:view
+GET /api/instance-readiness | instance:inspect
+GET /api/invitations | members:manage
+GET /api/invitations/capabilities | members:manage
+GET /api/members | members:manage
+GET /api/migration/legacy-summary | admin:destructive
+GET /api/month-closings | reports:view
+GET /api/notification-preferences | notifications:manage-own
+GET /api/reports/snapshot | reports:view
+GET /api/settings | settings:view
+GET /api/unavailable-periods | planning:view
+GET /api/user-care-party-assignments | members:manage
+PATCH /api/external-calendars/:id | planning:manage
+POST /api/actor-labels/resolve | planning:view
+POST /api/calendar-feed | feeds:manage-own
+POST /api/care-confirmations/:id/answer | appointments:confirm
+POST /api/care-confirmations/:id/remind-later | appointments:confirm
+POST /api/care-conflicts/preview | appointments:create
+POST /api/care-conflicts/resolve | appointments:edit
+POST /api/care-entries | appointments:create
+POST /api/care-parties | planning:manage
+POST /api/children | children:manage
+POST /api/contact-patterns | planning:manage
+POST /api/contact-rules | planning:manage
+POST /api/contact-rules/:id/sync | planning:manage
+POST /api/contact-rules/:id/sync-preview | planning:manage
+POST /api/data-transfer/actors/:id/invitation | admin:destructive
+POST /api/data-transfer/dry-run | admin:destructive
+POST /api/data-transfer/preview | admin:destructive
+POST /api/demo-data/edge-cases | admin:destructive
+POST /api/external-calendars/:id/derive-holidays | planning:manage
+POST /api/external-calendars/:id/refresh | planning:manage
+POST /api/external-calendars/feed | planning:manage
+POST /api/external-calendars/import | planning:manage
+POST /api/holiday-periods | planning:manage
+POST /api/invitations | members:manage
+POST /api/migration/legacy-detected | admin:destructive
+POST /api/migration/legacy-import | admin:destructive
+POST /api/migration/legacy-preview | admin:destructive
+POST /api/migration/legacy-skip | admin:destructive
+POST /api/month-closings | reports:view
+POST /api/push-subscriptions | notifications:manage-own
+POST /api/unavailable-periods | planning:manage
+PUT /api/app-data | admin:destructive
+PUT /api/care-entries/:id | appointments:edit
+PUT /api/care-parties/:id | planning:manage
+PUT /api/children/:id | children:manage
+PUT /api/contact-patterns/:id | planning:manage
+PUT /api/contact-rules/:id | planning:manage
+PUT /api/data-transfer/actors/:id/mapping | admin:destructive
+PUT /api/data-transfer/import | admin:destructive
+PUT /api/external-calendars/:id/feed | planning:manage
+PUT /api/external-calendars/:id/import | planning:manage
+PUT /api/holiday-periods/:id | planning:manage
+PUT /api/members/:userId/role | members:manage
+PUT /api/notification-preferences | notifications:manage-own
+PUT /api/settings | settings:manage
+PUT /api/unavailable-periods/:id | planning:manage
+PUT /api/user-care-party-assignments/:userId | members:manage
+```
+<!-- END PROTECTED API ROUTES -->
 
 ## Role mapping
 

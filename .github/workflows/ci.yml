@@ -22,6 +22,7 @@ jobs:
       - run: npm ci
       - run: npm audit
       - run: npm run release:check
+      - run: npm run test:docs
       - run: npm run lint
       - run: npm run build
       - run: npm test
