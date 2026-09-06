@@ -5,7 +5,7 @@
 Recommended architecture:
 
 ```text
-Browser -> HTTPS reverse proxy -> oauth2-proxy -> Betreuungskalender -> SQLite
+Browser -> HTTPS reverse proxy -> oauth2-proxy -> Betreuungskalender -> selected database
 ```
 
 The public proxy terminates TLS. oauth2-proxy authenticates the user and sets a

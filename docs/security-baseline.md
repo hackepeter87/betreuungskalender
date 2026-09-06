@@ -6,13 +6,13 @@ baseline, not a formal penetration-test report.
 
 ## Scope reviewed
 
-- Authentication modes: local development, trusted-proxy rollback, and native
+- Authentication modes: local development, trusted-proxy compatibility, and native
   OIDC with server-side sessions.
-- API authorization classes for unauthenticated, readonly, parent, and admin
-  users.
+- Public health/session boundaries, controlled first-use setup, and the Owner,
+  Admin, Editor, Scheduler, and Viewer workspace roles.
 - Shared care-context rules for app-user to care-party assignments.
-- Administrative app-data, migration, demo-data, backup, restore, and export
-  surfaces.
+- Owner-only app-data, migration, portable-transfer, membership, invitation,
+  and demo-data surfaces, plus role-scoped backup and export operations.
 - Personal iCalendar feeds and feed-token handling.
 - External calendar import and ICS parsing.
 - Confirmation reminder notification paths and Web Push endpoint handling.
@@ -28,22 +28,28 @@ reports, exports, backups, audit history, and optional push subscription
 endpoints. These records are sensitive even when they do not contain formal
 legal documents.
 
-Backups, SQLite databases, CSV exports, JSON exports, PDF reports, local
-calendar files, logs, private keys, and real environment files must stay out of
-the repository and release artifacts. Operators remain responsible for TLS,
-host hardening, encrypted storage, backup retention, access control, and
-incident response.
+Backups, SQLite database files, PostgreSQL dumps, CSV exports, JSON exports,
+PDF reports, local calendar files, logs, private keys, and real environment
+files must stay out of the repository and release artifacts. Operators remain
+responsible for TLS, host hardening, encrypted storage, backup retention,
+access control, and incident response.
 
 ## Implemented controls
 
 - Server-side authorization is enforced before protected `/api/*` route
   handlers run.
-- Readonly users can read domain data but cannot write or administer the
-  application.
-- Parent users can manage normal care documentation but cannot reset, import,
-  migrate, administer users, load demo data, or replace app data.
-- Admin-only routes cover app-data replacement, migration endpoints,
-  app-user administration, care-party assignments, and demo-data loading.
+- Viewer users receive only basic child and appointment views plus their own
+  notification preferences.
+- Scheduler users can create and edit appointments within their assigned care
+  context but cannot read sensitive notes or administer planning data.
+- Editor users can manage normal care documentation, children, and planning,
+  but cannot change settings, administer members, migrate, or replace app data.
+- Admin users can additionally manage settings, reports, exports, and
+  instance-readiness checks, but cannot administer memberships or perform
+  destructive owner operations.
+- Owner-only routes cover app-data replacement, legacy migration, portable
+  transfer and actor mapping, membership and invitation administration, and
+  demo-data loading.
 - Native OIDC uses Authorization Code + PKCE through `openid-client`,
   server-side state/nonce/verifier storage, and opaque hashed session tokens.
 - Trusted-proxy authentication remains available as a rollback mode but is not
@@ -52,8 +58,10 @@ incident response.
   short-lived server-side session, scrypt password hash, and one-time bootstrap
   password-change flow.
 - Care parties are domain records, not authentication principals. Shared
-  care-party assignments restrict non-admin users once assignments exist, but
-  `app_users.role` remains the authorization role source.
+  care-party assignments restrict non-admin users once assignments exist.
+  After an owner is established, an active `app_memberships` record and its
+  workspace role are authoritative; a missing or revoked membership grants no
+  workspace access.
 - Personal calendar feeds use bearer URLs only for the `.ics` endpoint. They do
   not authenticate general API routes and exclude notes, evidence references,
   trips, costs, audit metadata, deleted entries, and cancelled entries.

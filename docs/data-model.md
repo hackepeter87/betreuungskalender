@@ -53,7 +53,7 @@ documented in [database backends](database-backends.md).
 | `monthly_closings` | Monthly summary and post-close change marker |
 | `audit_log` | Field changes, creates, deletes, and post-close changes |
 | `app_users` | Stable users derived from trusted proxy headers or native OIDC claims |
-| `app_memberships` | Optional application-level member roles overriding identity-provider group roles |
+| `app_memberships` | Application-level workspace roles; active membership is authoritative after ownership is established |
 | `app_invitations` | App-owned invitation token hashes for assigning membership roles after login |
 | `app_user_care_party_assignments` | Optional mapping between authenticated users and domain care parties |
 | `calendar_feed_tokens` | Revocable per-user iCalendar feed token hashes |
@@ -144,7 +144,8 @@ setup flows can persist `setup.completedAt`, `setup.completedBy`, and
 instance-readiness information.
 
 The first-use API accepts an optional `children` array and stores the owner,
-care parties, settings, and every submitted child in one SQLite transaction.
+care parties, settings, and every submitted child in one transaction on the
+selected operational database.
 For one compatibility release the previous singular `child` input remains
 accepted; clients must not send both forms. The current UI sends only
 `children` and supports completing setup without a child record.
@@ -211,10 +212,10 @@ holiday frame while listing the affected child share as unresolved.
 ## Personal calendar feeds
 
 `calendar_feed_tokens` stores revocable per-user feed credentials. The raw
-token is shown only when generated; SQLite stores `token_hash`, the owning
-`app_users.id`, feed scope, creation time, optional last-use time, and optional
-revocation time. The token authorizes only the read-only `.ics` feed endpoint
-and never grants API access.
+token is shown only when generated; the selected database stores `token_hash`,
+the owning `app_users.id`, feed scope, creation time, optional last-use time,
+and optional revocation time. The token authorizes only the read-only `.ics`
+feed endpoint and never grants API access.
 
 Feed scopes are:
 
@@ -248,11 +249,12 @@ not mark first-use setup complete; the setup wizard remains the authoritative
 completion step.
 
 `native_oidc_sessions` stores server-side native OIDC sessions. Browser cookies
-contain only random opaque tokens; SQLite stores their SHA-256 hashes, the OIDC
-subject, creation time, optional last-seen time, expiry time, and optional
-revocation time. Session rows do not store OIDC tokens, authorization codes,
-raw claims, client secrets, or role decisions. Current role and permission
-decisions are read from the matching `app_users` row on each API request.
+contain only random opaque tokens; the selected database stores their SHA-256
+hashes, the OIDC subject, creation time, optional last-seen time, expiry time,
+and optional revocation time. Session rows do not store OIDC tokens,
+authorization codes, raw claims, client secrets, or role decisions. Current
+role and permission decisions are resolved from the active workspace membership
+on each API request.
 
 ## Recovery admin
 
@@ -263,13 +265,13 @@ username. The initial bootstrap password from a mounted secret file or
 environment fallback is not persisted and is ignored once a recovery credential
 exists.
 
-Recovery sessions use a separate opaque browser cookie. SQLite stores only the
-session token hash, username, creation time, optional last-seen time, expiry
-time, revocation time, and whether the session is still restricted to password
-change. A password-change-required session cannot authorize normal API
-requests. After the recovery password is set, the recovery user is represented
-as an internal admin `app_users` actor with an external subject shaped like
-`recovery:<username>`.
+Recovery sessions use a separate opaque browser cookie. The selected database
+stores only the session token hash, username, creation time, optional last-seen
+time, expiry time, revocation time, and whether the session is still restricted
+to password change. A password-change-required session cannot authorize normal
+API requests. After the recovery password is set, the recovery user is
+represented as an internal admin `app_users` actor with an external subject
+shaped like `recovery:<username>`.
 
 ## Care entries
 
