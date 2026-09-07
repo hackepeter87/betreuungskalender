@@ -79,7 +79,7 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `LOG_LEVEL` | Fastify/Pino log level | `info` | Optional | `info` in production, `debug` otherwise | Avoid `debug` in production unless investigating |
 | `RATE_LIMIT_MAX` | Maximum API requests per client and time window | `120` | Optional | `120` | Baseline protection for every API route, including health and readiness |
 | `RATE_LIMIT_WRITE_MAX` | Maximum write requests per client and time window | `20` | Optional | `20` | Restricts POST, PUT, PATCH, and DELETE operations |
-| `RATE_LIMIT_SENSITIVE_MAX` | Maximum import and migration requests per client and time window | `5` | Optional | `5` | Protects expensive or state-replacing operations |
+| `RATE_LIMIT_SENSITIVE_MAX` | Maximum sensitive requests per client and time window | `5` | Optional | `5` | Protects authentication, recovery, setup, invitation acceptance, import, and migration workflows |
 | `RATE_LIMIT_EXPORT_MAX` | Maximum export requests per client and time window | `15` | Optional | `15` | Restricts potentially expensive export generation |
 | `RATE_LIMIT_WINDOW_MS` | Shared rate-limit window in milliseconds | `60000` | Optional | `60000` | Keep a bounded window; values must be positive integers |
 | `DEMO_DATASETS_ENABLED` | Enable admin-only synthetic demo dataset loaders | `true` on demo only | Optional for demo/staging | `false` | Never enable on production; loading a dataset replaces domain data |

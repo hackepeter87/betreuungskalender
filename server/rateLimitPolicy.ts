@@ -47,6 +47,8 @@ export function installRateLimitPolicy(
   config: RateLimitPolicyConfig
 ): void {
   app.addHook("onRoute", (routeOptions) => {
+    if (routeOptions.config?.rateLimit !== undefined) return;
+
     if (routeOptions.url.startsWith("/calendar/")) {
       routeOptions.config = {
         ...routeOptions.config,

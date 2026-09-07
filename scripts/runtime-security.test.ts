@@ -1701,7 +1701,7 @@ test("production runtime applies central and stricter API rate limits", async (t
         ALLOWED_ORIGIN: "https://allowed.example.test",
         LOG_LEVEL: "warn",
         RATE_LIMIT_MAX: "2",
-        RATE_LIMIT_WRITE_MAX: "1",
+        RATE_LIMIT_WRITE_MAX: "2",
         RATE_LIMIT_SENSITIVE_MAX: "1",
         RATE_LIMIT_EXPORT_MAX: "1",
         RATE_LIMIT_WINDOW_MS: "60000"
@@ -1751,17 +1751,36 @@ test("production runtime applies central and stricter API rate limits", async (t
     headers: { "content-type": "application/json" },
     body: JSON.stringify(childInput)
   })).status, 201);
+  assert.equal((await request("/api/children", "198.51.100.2", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ ...childInput, name: "Second Rate Limit Child" })
+  })).status, 201);
   const writeExceeded = await request("/api/children", "198.51.100.2", {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(childInput)
   });
   assert.equal(writeExceeded.status, 429);
-  assert.equal(writeExceeded.headers.get("x-ratelimit-limit"), "1");
+  assert.equal(writeExceeded.headers.get("x-ratelimit-limit"), "2");
+
+  const setupRequest = () => request("/api/setup/first-use", "198.51.100.5", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: "{}"
+  });
+  assert.equal((await setupRequest()).status, 400);
+  const setupExceeded = await setupRequest();
+  assert.equal(setupExceeded.status, 429);
+  assert.equal(setupExceeded.headers.get("x-ratelimit-limit"), "1");
 
   assert.equal((await request("/api/migration/legacy-summary", "198.51.100.3")).status, 200);
   assert.equal((await request("/api/migration/legacy-summary", "198.51.100.3")).status, 429);
 
   assert.equal((await request("/api/external-calendar-events/export", "198.51.100.4")).status, 200);
   assert.equal((await request("/api/external-calendar-events/export", "198.51.100.4")).status, 429);
+
+  assert.equal((await request("/datenschutz", "198.51.100.6")).status, 404);
+  assert.equal((await request("/datenschutz", "198.51.100.6")).status, 404);
+  assert.equal((await request("/datenschutz", "198.51.100.6")).status, 404);
 });

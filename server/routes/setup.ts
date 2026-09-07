@@ -13,8 +13,8 @@ import { isTrustedProxyAddress } from "../trustedProxy.js";
 import { setupFirstUseInputSchema } from "../validation/schemas.js";
 import type { OidcSessionRecord } from "../services/oidcSessions.js";
 
-const writeLimit = {
-  config: { rateLimit: { max: config.rateLimitWriteMax, timeWindow: config.rateLimitWindowMs } }
+const sensitiveLimit = {
+  config: { rateLimit: { max: config.rateLimitSensitiveMax, timeWindow: config.rateLimitWindowMs } }
 };
 
 interface SetupRouteOptions {
@@ -123,7 +123,7 @@ export async function setupRoutes(
   app: FastifyInstance,
   options: SetupRouteOptions
 ): Promise<void> {
-  app.post("/api/setup/first-use", writeLimit, async (request, reply) => {
+  app.post("/api/setup/first-use", sensitiveLimit, async (request, reply) => {
     const parsed = setupFirstUseInputSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
