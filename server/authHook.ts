@@ -16,6 +16,8 @@ import {
   type MembershipResolutionPolicy,
   type MembershipResolution
 } from "./services/memberships.js";
+import { isPreAuthenticationApiRoute } from "./apiRoutePolicy.js";
+import { canAdministerMembers } from "./services/memberManagement.js";
 
 type AuthConfig = Pick<
   typeof appConfig,
@@ -48,6 +50,7 @@ interface NativeAuthOptions {
     user: RequestUser,
     policy?: MembershipResolutionPolicy
   ) => Awaitable<MembershipResolution>;
+  canPerformOwnerOperation?: (user: RequestUser) => Awaitable<boolean>;
 }
 
 type Awaitable<T> = T | Promise<T>;
@@ -69,13 +72,29 @@ function requiredWorkspacePermission(request: Parameters<preHandlerAsyncHookHand
 }
 
 function assertWorkspacePermission(user: RequestUser, request: Parameters<preHandlerAsyncHookHandler>[0]): void {
-  if (!hasWorkspacePermission(user, requiredWorkspacePermission(request))) {
+  const permission = requiredWorkspacePermission(request);
+  if (!hasWorkspacePermission(user, permission)) {
     throw httpError(
       "forbidden",
       403,
       "Für diese Aktion fehlt die erforderliche Berechtigung."
     );
   }
+}
+
+function requestPath(request: Parameters<preHandlerAsyncHookHandler>[0]): string {
+  const registeredRoute = request.routeOptions?.url;
+  if (registeredRoute) return registeredRoute;
+  try {
+    return new URL(request.url, "http://localhost").pathname;
+  } catch {
+    return request.url.split("?")[0] ?? request.url;
+  }
+}
+
+function isProtectedApiRequest(request: Parameters<preHandlerAsyncHookHandler>[0]): boolean {
+  const path = requestPath(request);
+  return path.startsWith("/api/") && !isPreAuthenticationApiRoute(request.method, path);
 }
 
 export function createApiAuthHook(
@@ -85,16 +104,25 @@ export function createApiAuthHook(
 ): preHandlerAsyncHookHandler {
   return async (request, reply) => {
     if (rateLimitFirst) await rateLimitFirst.call(reply.server, request, reply);
-    if (
-      !request.url.startsWith("/api/") ||
-      request.url === "/api/health" ||
-      request.url === "/api/ready" ||
-      request.url === "/api/session" ||
-      request.url === "/api/setup/first-use"
-    ) return;
+    if (!isProtectedApiRequest(request)) return;
     const requiredDatabase = (): DatabaseExecutor => {
       if (!options.database) throw new Error("Authentication persistence is not configured.");
       return options.database;
+    };
+    const assertRequestPermission = async (user: RequestUser): Promise<void> => {
+      assertWorkspacePermission(user, request);
+      if (
+        requiredWorkspacePermission(request) === "admin:destructive" &&
+        !user.isOwner &&
+        !(await (options.canPerformOwnerOperation ?? ((actor) =>
+          canAdministerMembers(actor, requiredDatabase())))(user))
+      ) {
+        throw httpError(
+          "forbidden",
+          403,
+          "Für diese Aktion fehlt die erforderliche Berechtigung."
+        );
+      }
     };
     const recoveryUser = config.recoveryAdminEnabled
       ? await options.findRecoveryUserByToken?.(
@@ -109,7 +137,7 @@ export function createApiAuthHook(
         workspacePermissions: workspacePermissionsForRole("admin", true),
         isOwner: true
       };
-      assertWorkspacePermission(privilegedRecoveryUser, request);
+      await assertRequestPermission(privilegedRecoveryUser);
       request.user = privilegedRecoveryUser;
       request.userEmail = recoveryUser.id;
       return;
@@ -132,7 +160,7 @@ export function createApiAuthHook(
           "Authentifizierung erforderlich."
         );
       }
-      assertWorkspacePermission(user, request);
+      await assertRequestPermission(user);
       request.user = user;
       request.userEmail = user.id;
       return;
@@ -183,7 +211,7 @@ export function createApiAuthHook(
       );
     }
     const user = membership.user;
-    assertWorkspacePermission(user, request);
+    await assertRequestPermission(user);
     request.user = user;
     request.userEmail = user.id;
   };

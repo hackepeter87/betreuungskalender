@@ -2,7 +2,8 @@
 
 This inventory implements [ADR 0005](adr/0005-workspace-permissions.md). Every
 protected `/api` route must declare the listed permission in Fastify route
-metadata. Unclassified protected routes are denied.
+metadata. The registered route pattern and HTTP method determine the policy;
+the raw request target does not. Unclassified protected routes are denied.
 
 ## Public and controlled onboarding routes
 
@@ -84,6 +85,11 @@ writable through this route.
 | `PUT/DELETE /api/app-data`, `POST /api/demo-data/edge-cases` | `admin:destructive` |
 | `GET /api/data-transfer/export`, `POST /api/data-transfer/preview`, `POST /api/data-transfer/dry-run`, `PUT /api/data-transfer/import` | `admin:destructive` |
 | `GET /api/data-transfer/actors`, `PUT /api/data-transfer/actors/:id/mapping`, `POST /api/data-transfer/actors/:id/invitation` | `admin:destructive` |
+
+`admin:destructive` additionally requires the authenticated installation
+owner. Possession of an admin role or a permission-shaped client value cannot
+replace that server-side owner check. Before an owner has been established,
+the documented trusted first-use admin compatibility remains available.
 
 Invitation-creation responses contain the complete one-time `invitationUrl`
 and invitation metadata. They do not expose the underlying bearer token as a

@@ -37,7 +37,8 @@ access control, and incident response.
 ## Implemented controls
 
 - Server-side authorization is enforced before protected `/api/*` route
-  handlers run.
+  handlers run. The registered Fastify route and HTTP method select the policy,
+  independent of the incoming request-target representation.
 - Viewer users receive only basic child and appointment views plus their own
   notification preferences.
 - Scheduler users can create and edit appointments within their assigned care
@@ -49,7 +50,8 @@ access control, and incident response.
   destructive owner operations.
 - Owner-only routes cover app-data replacement, legacy migration, portable
   transfer and actor mapping, membership and invitation administration, and
-  demo-data loading.
+  demo-data loading. Destructive route authorization also checks the persisted
+  owner identity explicitly once ownership has been established.
 - Native OIDC uses Authorization Code + PKCE through `openid-client`,
   server-side state/nonce/verifier storage, and opaque hashed session tokens.
 - Trusted-proxy authentication remains available as a rollback mode but is not

@@ -3,8 +3,11 @@ import test from "node:test";
 import Fastify, { type FastifyPluginAsync, type RouteOptions } from "fastify";
 import { workspacePermissionValues, type WorkspacePermission } from "./auth.js";
 import {
+  isPreAuthenticationApiRoute,
+  preAuthenticationApiRouteKeys
+} from "./apiRoutePolicy.js";
+import {
   assertApplicationApiRouteAuthorization,
-  preAuthenticationApiRouteKeys,
   protectedApplicationRoutePlugins,
   type ProtectedApplicationRoutePlugin
 } from "./applicationRoutes.js";
@@ -62,6 +65,10 @@ test("pre-authentication API exceptions stay explicit and bounded", () => {
     "GET /api/session",
     "POST /api/setup/first-use"
   ]);
+  assert.equal(isPreAuthenticationApiRoute("GET", "/api/session"), true);
+  assert.equal(isPreAuthenticationApiRoute("get", "/api/health"), true);
+  assert.equal(isPreAuthenticationApiRoute("POST", "/api/session"), false);
+  assert.equal(isPreAuthenticationApiRoute("GET", "/api/session/extra"), false);
 });
 
 test("production route guard rejects unclassified API routes", () => {

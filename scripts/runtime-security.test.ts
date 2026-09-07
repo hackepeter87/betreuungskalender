@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { once } from "node:events";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, utimes, writeFile } from "node:fs/promises";
-import { createServer } from "node:net";
+import { createConnection, createServer } from "node:net";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
@@ -57,6 +57,23 @@ async function waitForHealth(url: string, logs: () => string): Promise<Response>
     await new Promise((resolveDelay) => setTimeout(resolveDelay, 150));
   }
   throw new Error(`Runtime did not become healthy: ${latestError}\n${logs()}`);
+}
+
+async function rawHttpStatus(port: number, requestTarget: string): Promise<number> {
+  const socket = createConnection({ host: "127.0.0.1", port });
+  let response = "";
+  socket.setEncoding("utf8");
+  socket.on("data", (chunk) => { response += chunk; });
+  await once(socket, "connect");
+  socket.end(
+    `GET ${requestTarget} HTTP/1.1\r\n` +
+    `Host: 127.0.0.1:${port}\r\n` +
+    "Connection: close\r\n\r\n"
+  );
+  await once(socket, "close");
+  const status = Number(response.match(/^HTTP\/1\.1 (\d{3})/m)?.[1]);
+  assert(Number.isInteger(status), "raw HTTP response did not contain a status code");
+  return status;
 }
 
 async function stop(process: ChildProcessWithoutNullStreams): Promise<void> {
@@ -1022,6 +1039,7 @@ test("production runtime preserves token-bound native OIDC onboarding routes", a
 
   const baseUrl = `http://127.0.0.1:${port}`;
   await waitForHealth(`${baseUrl}/api/health`, () => logs);
+  assert.equal(await rawHttpStatus(port, `${baseUrl}/api/children`), 401);
   const manualGet = (path: string, headers?: Record<string, string>) => fetch(
     `${baseUrl}${path}`,
     { headers, redirect: "manual" }
