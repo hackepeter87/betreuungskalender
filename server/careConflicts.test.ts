@@ -336,7 +336,12 @@ test("care-entry API serializes actual writes and returns generic conflicts", as
   assert.equal((await rejectedPlanned.json() as { error: string }).error, "planned_care_conflict_confirmation_required");
   const preview = await jsonRequest<ApiCareConflictPreview>(baseUrl, "/api/care-conflicts/preview", {
     method: "POST",
-    body: JSON.stringify({ ...baseInput, status: "planned" })
+    body: JSON.stringify({
+      startDateTime: baseInput.startDateTime,
+      endDateTime: baseInput.endDateTime,
+      childIds: baseInput.childIds,
+      responsiblePartyId: baseInput.responsiblePartyId
+    })
   });
   assert.equal(preview.items.length, 1);
   const planned = await jsonRequest<ApiCareEntry>(baseUrl, "/api/care-entries", {

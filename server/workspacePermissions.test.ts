@@ -7,7 +7,13 @@ import { join, resolve } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import test from "node:test";
 import Database from "better-sqlite3";
-import type { ApiCareParty, ApiChild, ApiScheduleEntry, ApiSession } from "../shared/api.js";
+import type {
+  ApiCareConflictPreview,
+  ApiCareParty,
+  ApiChild,
+  ApiScheduleEntry,
+  ApiSession
+} from "../shared/api.js";
 
 const projectRoot = resolve(process.cwd());
 const ownerHeaders = identityHeaders("subject-owner", "/betreuungskalender/admins");
@@ -233,6 +239,86 @@ test("workspace roles enforce restricted projections and scheduler writes", asyn
     body: JSON.stringify({ ...input, startDateTime: "2030-07-04T17:00:00.000Z", endDateTime: "2030-07-04T19:00:00.000Z" })
   })).status, 200);
   assert.equal((await request(baseUrl, `/api/care-entries/${created.id}`, schedulerHeaders, { method: "DELETE" })).status, 403);
+
+  const sensitiveConflict = await jsonRequest<{ id: string }>(baseUrl, "/api/care-entries", ownerHeaders, {
+    method: "POST",
+    body: JSON.stringify({
+      ...input,
+      startDateTime: "2030-07-06T16:00:00.000Z",
+      endDateTime: "2030-07-06T18:00:00.000Z",
+      status: "planned",
+      notes: "Private note",
+      hasEvidence: true,
+      evidenceReference: "Private reference"
+    })
+  });
+  const schedulerPreview = await jsonRequest<ApiCareConflictPreview>(
+    baseUrl,
+    "/api/care-conflicts/preview",
+    schedulerHeaders,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        startDateTime: "2030-07-06T17:00:00.000Z",
+        endDateTime: "2030-07-06T19:00:00.000Z",
+        childIds: [child.id],
+        responsiblePartyId: assignedParty.id
+      })
+    }
+  );
+  assert.equal(schedulerPreview.items.length, 1);
+  assert.equal(schedulerPreview.items[0]?.entry.id, sensitiveConflict.id);
+  assert.deepEqual(Object.keys(schedulerPreview.items[0]?.entry ?? {}).sort(), [
+    "childIds",
+    "endDateTime",
+    "id",
+    "responsiblePartyId",
+    "startDateTime",
+    "status"
+  ]);
+  assert.equal("notes" in (schedulerPreview.items[0]?.entry ?? {}), false);
+  assert.equal("evidenceReference" in (schedulerPreview.items[0]?.entry ?? {}), false);
+  assert.equal("createdBy" in (schedulerPreview.items[0]?.entry ?? {}), false);
+
+  await jsonRequest(baseUrl, "/api/care-entries", ownerHeaders, {
+    method: "POST",
+    body: JSON.stringify({
+      ...input,
+      startDateTime: "2030-07-07T16:00:00.000Z",
+      endDateTime: "2030-07-07T18:00:00.000Z",
+      responsiblePartyId: unassignedParty.id,
+      status: "planned"
+    })
+  });
+  const unrelatedPreview = await request(baseUrl, "/api/care-conflicts/preview", schedulerHeaders, {
+    method: "POST",
+    body: JSON.stringify({
+      startDateTime: "2030-07-07T17:00:00.000Z",
+      endDateTime: "2030-07-07T19:00:00.000Z",
+      childIds: [child.id],
+      responsiblePartyId: assignedParty.id
+    })
+  });
+  assert.equal(unrelatedPreview.status, 403);
+  assert.equal((await unrelatedPreview.json() as { error?: string }).error, "forbidden");
+
+  assert.equal((await request(baseUrl, "/api/care-conflicts/preview", schedulerHeaders, {
+    method: "POST",
+    body: JSON.stringify({
+      startDateTime: "2020-07-04T16:00:00.000Z",
+      endDateTime: "2020-07-04T18:00:00.000Z",
+      childIds: [child.id],
+      responsiblePartyId: assignedParty.id
+    })
+  })).status, 403);
+  assert.equal((await request(baseUrl, "/api/care-conflicts/resolve", schedulerHeaders, {
+    method: "POST",
+    body: JSON.stringify({
+      conflictId: "conflict-not-visible",
+      entryId: sensitiveConflict.id,
+      action: "replace_rule_occurrence"
+    })
+  })).status, 403);
 
   assert.equal((await request(baseUrl, "/api/care-entries", viewerHeaders, {
     method: "POST",

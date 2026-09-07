@@ -207,6 +207,16 @@ export const schedulerCareEntryInputSchema = z.object({
   { path: ["endDateTime"], message: "Das Ende muss nach dem Beginn liegen." }
 );
 
+export const careConflictPreviewInputSchema = z.object({
+  startDateTime: isoDateTime,
+  endDateTime: isoDateTime,
+  childIds,
+  responsiblePartyId: z.string().trim().min(1).max(200).optional()
+}).strict().refine(
+  (entry) => Date.parse(entry.endDateTime) > Date.parse(entry.startDateTime),
+  { path: ["endDateTime"], message: "Das Ende muss nach dem Beginn liegen." }
+);
+
 export const holidayInputSchema = z
   .object({
     name: z.string().trim().min(1).max(200),

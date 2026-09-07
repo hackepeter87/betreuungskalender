@@ -42,7 +42,8 @@ access control, and incident response.
 - Viewer users receive only basic child and appointment views plus their own
   notification preferences.
 - Scheduler users can create and edit appointments within their assigned care
-  context but cannot read sensitive notes or administer planning data.
+  context but cannot read sensitive notes, inspect conflicts involving other
+  care parties, cancel rule occurrences, or administer planning data.
 - Editor users can manage normal care documentation, children, and planning,
   but cannot change settings, administer members, migrate, or replace app data.
 - Admin users can additionally manage settings, reports, exports, and

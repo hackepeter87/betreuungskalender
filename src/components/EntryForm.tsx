@@ -417,7 +417,7 @@ export function EntryForm({
                 <DateTimeRange startDateTime={item.entry.startDateTime} endDateTime={item.entry.endDateTime} />
                 <small>{data.careParties.find((party) => party.id === item.entry.responsiblePartyId)?.name ?? copy(locale, "common", "notAvailable")}</small>
               </div>
-              {entry?.contactRuleId && entry.status === "planned" ? (
+              {entry?.contactRuleId && entry.status === "planned" && session.permissions?.includes("appointments:delete") ? (
                 <button className="button button--danger-quiet" type="button" onClick={() => void resolveRuleConflict(item.conflict.id)}>
                   <Icon name="repeat" size={16} />
                   {copy(locale, "careConflict", "replaceOccurrence")}
