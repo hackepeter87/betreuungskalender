@@ -323,6 +323,15 @@ function entryPayload(entry: CareEntryWriteInput) {
   };
 }
 
+function conflictPreviewPayload(entry: CareEntryWriteInput) {
+  return {
+    startDateTime: entry.startDateTime,
+    endDateTime: entry.endDateTime,
+    childIds: entry.childIds,
+    responsiblePartyId: entry.responsiblePartyId
+  };
+}
+
 const objectTypeMap: Record<string, AuditObjectType> = {
   care_entry: "careEntry",
   trip: "trip",
@@ -544,7 +553,7 @@ export const api = {
     const query = entryId ? `?entryId=${encodeURIComponent(entryId)}` : "";
     return request<ApiCareConflictPreview>(`/api/care-conflicts/preview${query}`, {
       method: "POST",
-      body: JSON.stringify(entryPayload(input))
+      body: JSON.stringify(conflictPreviewPayload(input))
     });
   },
   resolveCareConflict(input: ApiCareConflictResolutionInput) {

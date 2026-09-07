@@ -244,6 +244,7 @@ the request method.
 | --- | --- | --- | --- | --- | --- |
 | Appointment and basic child view | Allowed | Allowed | Allowed | Reduced response | Reduced response |
 | Normal appointment writes | Allowed | Allowed | Allowed | Future assigned planning only | `403` |
+| Replace a conflicting rule occurrence | Allowed | Allowed | Allowed | `403` | `403` |
 | Sensitive child data and notes | Allowed | Allowed | Allowed | `403` | `403` |
 | Settings and exports | Allowed | Allowed | `403` | `403` | `403` |
 | Member and destructive administration | Allowed | `403` | `403` | `403` | `403` |

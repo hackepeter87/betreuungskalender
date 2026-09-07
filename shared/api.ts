@@ -239,9 +239,18 @@ export interface ApiCareConflictList {
   complete: boolean;
 }
 
+export interface ApiCareConflictPreviewEntry {
+  id: string;
+  childIds: string[];
+  responsiblePartyId?: string;
+  startDateTime: string;
+  endDateTime: string;
+  status: ApiEntryStatus;
+}
+
 export interface ApiCareConflictPreviewItem {
   conflict: ApiCareConflict;
-  entry: ApiCareEntry;
+  entry: ApiCareConflictPreviewEntry;
 }
 
 export interface ApiCareConflictPreview {

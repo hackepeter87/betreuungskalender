@@ -1801,7 +1801,11 @@ test("shows planned care conflicts consistently across care views", async ({
     endDateTime: `${date}T19:00`
   };
   const previewResponse = await request.post("/api/care-conflicts/preview", {
-    data: secondEntry
+    data: {
+      startDateTime: secondEntry.startDateTime,
+      endDateTime: secondEntry.endDateTime,
+      childIds: secondEntry.childIds
+    }
   });
   expect(previewResponse.ok()).toBeTruthy();
   const preview = await previewResponse.json() as { fingerprint: string };

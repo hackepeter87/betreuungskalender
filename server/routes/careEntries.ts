@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import type {
   ApiCareConflictList,
   ApiCareConflictPreview,
+  ApiCareConflictPreviewEntry,
   ApiCareConflictResolutionInput,
   ApiCareEntry,
   ApiCost,
@@ -33,7 +34,11 @@ import {
   listCareConflicts
 } from "../services/careConflicts.js";
 import { bool, makeId, nowIso } from "../services/common.js";
-import { careEntryInputSchema, schedulerCareEntryInputSchema } from "../validation/schemas.js";
+import {
+  careConflictPreviewInputSchema,
+  careEntryInputSchema,
+  schedulerCareEntryInputSchema
+} from "../validation/schemas.js";
 
 const readLimit = {
   config: { permission: "notes:view" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
@@ -260,6 +265,38 @@ async function getEntry(database: DatabaseExecutor, id: string): Promise<ApiCare
     .where("deleted_at", "is", null)
     .executeTakeFirst() as EntryRow | undefined;
   return row ? mapEntry(database, row) : undefined;
+}
+
+async function getConflictPreviewEntry(
+  database: DatabaseExecutor,
+  id: string
+): Promise<ApiCareConflictPreviewEntry | undefined> {
+  const row = await database.selectFrom("care_entries")
+    .select([
+      "id",
+      "responsible_party_id as responsiblePartyId",
+      "start_datetime as startDateTime",
+      "end_datetime as endDateTime",
+      "status"
+    ])
+    .where("id", "=", id)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst();
+  if (!row) return undefined;
+  const childRows = await database.selectFrom("care_entry_children")
+    .select("child_id as childId")
+    .where("care_entry_id", "=", id)
+    .where("deleted_at", "is", null)
+    .orderBy("child_id")
+    .execute();
+  return {
+    id: row.id,
+    childIds: childRows.map(({ childId }) => childId),
+    ...(row.responsiblePartyId ? { responsiblePartyId: row.responsiblePartyId } : {}),
+    startDateTime: row.startDateTime,
+    endDateTime: row.endDateTime,
+    status: row.status as ApiCareEntry["status"]
+  };
 }
 
 async function getScheduleEntry(database: DatabaseExecutor, id: string): Promise<ApiScheduleEntry | undefined> {
@@ -753,27 +790,46 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
     "/api/care-conflicts/preview",
     createLimit,
     async (request, reply): Promise<ApiCareConflictPreview | unknown> => {
-      const parsed = careEntryInputSchema.safeParse(request.body);
+      const parsed = careConflictPreviewInputSchema.safeParse(request.body);
       if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
       const input = parsed.data;
+      const existing = request.query.entryId
+        ? await getEntry(app.persistence.query, request.query.entryId)
+        : undefined;
+      if (request.query.entryId && !existing) return reply.code(404).send({ error: "not_found" });
+      if (request.user?.workspaceRole === "scheduler") {
+        if (!input.responsiblePartyId || !(await schedulerWriteAllowed(
+          app.persistence.query,
+          request.user,
+          input.responsiblePartyId,
+          input.startDateTime,
+          existing
+        ))) return schedulerForbidden(reply);
+      }
       const preview = await previewPlannedCareConflicts({
-        status: input.status,
+        status: "planned",
         startDateTime: input.startDateTime,
         endDateTime: input.endDateTime,
         childIds: input.childIds
       }, app.persistence.query, request.query.entryId);
+      const assignedPartyIds = request.user?.workspaceRole === "scheduler"
+        ? new Set(await assignedPersistedCarePartyIds(app.persistence.query, request.user.id))
+        : undefined;
       const items = (await Promise.all(preview.conflicts.map(async (conflict) => {
         const conflictingId = conflict.entryIds.find((id) => id !== "__care_conflict_candidate__");
-        const entry = conflictingId ? await getEntry(app.persistence.query, conflictingId) : undefined;
+        const entry = conflictingId ? await getConflictPreviewEntry(app.persistence.query, conflictingId) : undefined;
         return entry ? [{ conflict, entry }] : [];
       }))).flat();
+      if (assignedPartyIds && items.some(({ entry }) =>
+        !entry.responsiblePartyId || !assignedPartyIds.has(entry.responsiblePartyId)
+      )) return schedulerForbidden(reply);
       return { fingerprint: preview.fingerprint, items };
     }
   );
 
   app.post(
     "/api/care-conflicts/resolve",
-    editLimit,
+    deleteLimit,
     async (request, reply) => {
       const input = request.body as Partial<ApiCareConflictResolutionInput> | null;
       if (

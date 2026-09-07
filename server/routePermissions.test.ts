@@ -44,6 +44,14 @@ test("every protected API route declares a known workspace permission", async ()
   );
 });
 
+test("care conflict replacement requires cancellation permission", async () => {
+  const routes = await collectApiRoutes(protectedApplicationRoutePlugins);
+  const resolution = routes.find(({ method, url }) =>
+    method === "POST" && url === "/api/care-conflicts/resolve"
+  );
+  assert.equal(resolution?.permission, "appointments:delete");
+});
+
 test("new protected route plugins without permission metadata fail completeness", async () => {
   const missingPermissionPlugin: FastifyPluginAsync = async (app) => {
     app.get("/api/missing-permission", async () => ({ ok: true }));

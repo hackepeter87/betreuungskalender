@@ -22,9 +22,9 @@ token.
 | --- | --- |
 | `GET /api/care-entries`, `GET /api/care-entries/:id`, `GET /api/care-conflicts` | `notes:view` |
 | `GET /api/care-entries/schedule` | `appointments:view` |
-| `POST /api/care-entries`, `POST /api/care-conflicts/preview`, `POST /api/care-conflicts/resolve` | `appointments:create` |
+| `POST /api/care-entries`, `POST /api/care-conflicts/preview` | `appointments:create` |
 | `PUT /api/care-entries/:id` | `appointments:edit` |
-| `DELETE /api/care-entries/:id` | `appointments:delete` |
+| `DELETE /api/care-entries/:id`, `POST /api/care-conflicts/resolve` | `appointments:delete` |
 | `GET /api/care-confirmations/open` | `notifications:manage-own` |
 | `POST /api/care-confirmations/:id/answer`, `POST /api/care-confirmations/:id/remind-later` | `appointments:confirm` |
 | `GET/PUT /api/notification-preferences`, `POST /api/push-subscriptions`, `DELETE /api/push-subscriptions/:id` | `notifications:manage-own` |
@@ -155,7 +155,7 @@ POST /api/calendar-feed | feeds:manage-own
 POST /api/care-confirmations/:id/answer | appointments:confirm
 POST /api/care-confirmations/:id/remind-later | appointments:confirm
 POST /api/care-conflicts/preview | appointments:create
-POST /api/care-conflicts/resolve | appointments:edit
+POST /api/care-conflicts/resolve | appointments:delete
 POST /api/care-entries | appointments:create
 POST /api/care-parties | planning:manage
 POST /api/children | children:manage
@@ -205,6 +205,7 @@ PUT /api/user-care-party-assignments/:userId | members:manage
 | --- | --- | --- | --- | --- | --- |
 | Appointment view and basic child summaries | Yes | Yes | Yes | Yes | Yes |
 | Appointment create/edit/delete | Yes | Yes | Yes | Limited create/edit | No |
+| Conflict preview/occurrence replacement | Yes | Yes | Yes | Assigned future preview only / No | No |
 | Sensitive children, notes, planning, reports | Yes | Yes | Yes | No | No |
 | Settings and exports | Yes | Yes | No | No | No |
 | Member administration and destructive operations | Yes | No | No | No | No |
