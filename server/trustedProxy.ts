@@ -54,7 +54,7 @@ export function isTrustedProxyAddress(
   remoteAddress: string | undefined,
   rules: readonly TrustedProxyRule[]
 ): boolean {
-  if (rules.length === 0) return true;
+  if (rules.length === 0) return false;
   const address = normalizeRemoteAddress(remoteAddress);
   const family = address ? addressFamily(address) : undefined;
   if (!address || !family) return false;

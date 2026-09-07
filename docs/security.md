@@ -94,7 +94,10 @@ unintentionally.
 - Set `TRUSTED_PROXY_CIDRS` to the actual proxy source address or private proxy
   network so identity headers are ignored from unexpected socket sources. Use
   IP addresses or CIDR ranges only; container or DNS names are not trusted
-  identity boundaries.
+  identity boundaries. Trusted-proxy mode fails startup when this allowlist is
+  empty.
+- Configure `OIDC_USER_ID_HEADER` for a stable, non-empty subject. Mutable email,
+  display-name, role, and group attributes never substitute for that identity.
 - Block all direct access that could bypass oauth2-proxy.
 - In oauth2-proxy, set `trusted_ips` only to the actual upstream reverse proxy
   IP/CIDR. Never trust all client networks.

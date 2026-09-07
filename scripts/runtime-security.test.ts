@@ -263,6 +263,7 @@ test("runtime exposes compact session metadata for trusted proxy auth", async (t
         BACKUP_DIR: join(root, "backups"),
         REQUIRE_AUTH: "true",
         TRUST_PROXY_AUTH: "true",
+        TRUSTED_PROXY_CIDRS: "127.0.0.1/32",
         AUTH_LOGOUT_URL: "/oauth2/sign_out",
         OIDC_REQUIRE_ROLE_CLAIM: "true",
         ALLOWED_ORIGIN: "https://allowed.example.test",
@@ -292,6 +293,25 @@ test("runtime exposes compact session metadata for trusted proxy auth", async (t
       required: true
     }
   });
+
+  const mutableIdentityOnly = await fetch(`${baseUrl}/api/session`, {
+    headers: {
+      "x-auth-request-email": "mutable@example.test",
+      "x-forwarded-user": "mutable-fallback",
+      "x-auth-request-groups": "/betreuungskalender/admins"
+    }
+  });
+  assert.equal(mutableIdentityOnly.status, 200);
+  assert.equal((await mutableIdentityOnly.json() as ApiSession).authenticated, false);
+
+  const protectedMutableIdentityOnly = await fetch(`${baseUrl}/api/children/summary`, {
+    headers: {
+      "x-auth-request-email": "mutable@example.test",
+      "x-forwarded-user": "mutable-fallback",
+      "x-auth-request-groups": "/betreuungskalender/admins"
+    }
+  });
+  assert.equal(protectedMutableIdentityOnly.status, 401);
 
   const session = await fetch(`${baseUrl}/api/session`, {
     headers: {
@@ -393,6 +413,7 @@ test("runtime enforces the OIDC authorization matrix across endpoint classes", a
         BACKUP_DIR: join(root, "backups"),
         REQUIRE_AUTH: "true",
         TRUST_PROXY_AUTH: "true",
+        TRUSTED_PROXY_CIDRS: "127.0.0.1/32",
         AUTH_LOGOUT_URL: "/oauth2/sign_out",
         OIDC_REQUIRE_ROLE_CLAIM: "false",
         ALLOWED_ORIGIN: "https://allowed.example.test",
@@ -614,6 +635,7 @@ test("runtime rejects users without matching OIDC groups when strict role claims
         BACKUP_DIR: join(root, "backups"),
         REQUIRE_AUTH: "true",
         TRUST_PROXY_AUTH: "true",
+        TRUSTED_PROXY_CIDRS: "127.0.0.1/32",
         OIDC_REQUIRE_ROLE_CLAIM: "true",
         ALLOWED_ORIGIN: "https://allowed.example.test",
         LOG_LEVEL: "warn",
@@ -1326,6 +1348,7 @@ test("runtime serves revocable personal iCalendar feeds without broader token ac
         BACKUP_DIR: join(root, "backups"),
         REQUIRE_AUTH: "true",
         TRUST_PROXY_AUTH: "true",
+        TRUSTED_PROXY_CIDRS: "127.0.0.1/32",
         OIDC_REQUIRE_ROLE_CLAIM: "true",
         ALLOWED_ORIGIN: "https://allowed.example.test",
         LOG_LEVEL: "info",
@@ -1673,6 +1696,7 @@ test("production runtime applies central and stricter API rate limits", async (t
         AUTH_MODE: "trusted-proxy",
         REQUIRE_AUTH: "true",
         TRUST_PROXY_AUTH: "true",
+        TRUSTED_PROXY_CIDRS: "127.0.0.1/32",
         OIDC_REQUIRE_ROLE_CLAIM: "true",
         ALLOWED_ORIGIN: "https://allowed.example.test",
         LOG_LEVEL: "warn",

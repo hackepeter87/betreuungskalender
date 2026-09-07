@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   displayNameForIdentity,
-  requestIdentity,
   resolveRequestUser,
   roleFromGroups,
   sessionInfo,
@@ -10,19 +9,12 @@ import {
   userFromClaims
 } from "./auth.js";
 
-test("reads supported proxy identity headers in priority order", () => {
-  assert.equal(
-    requestIdentity({
-      "x-auth-request-email": " user@example.net ",
-      "x-forwarded-user": "fallback"
-    }),
-    "user@example.net"
-  );
-});
-
-test("keeps local development open even when proxy IP trust is enabled", () => {
+test("requires the configured stable subject when proxy auth is enabled", () => {
   const auth = resolveRequestUser(
-    {},
+    {
+      "x-auth-request-email": "mutable@example.test",
+      "x-forwarded-user": "mutable-fallback"
+    },
     {
       requireAuth: false,
       trustProxyAuth: true,
@@ -36,9 +28,9 @@ test("keeps local development open even when proxy IP trust is enabled", () => {
       requireRoleClaim: true
     }
   );
-  assert.equal(auth.authenticated, true);
-  assert.equal(auth.user?.id, "local-dev");
-  assert.equal(auth.user?.role, "admin");
+  assert.equal(auth.authenticated, false);
+  assert.equal(auth.reason, "missing_identity");
+  assert.equal(auth.user, undefined);
 });
 
 test("derives compact display names without exposing extra identity details", () => {
@@ -50,7 +42,10 @@ test("derives compact display names without exposing extra identity details", ()
 test("reports authenticated session metadata only when proxy identity is trusted", () => {
   assert.deepEqual(
     sessionInfo(
-      { "x-auth-request-email": "parent@example.net" },
+      {
+        "x-auth-request-user": "subject-123",
+        "x-auth-request-email": "parent@example.net"
+      },
       {
         requireAuth: true,
         trustProxyAuth: true,
@@ -61,7 +56,7 @@ test("reports authenticated session metadata only when proxy identity is trusted
       authRequired: true,
       authenticated: true,
       user: {
-        id: "user_01b9145fc4d17eb1e251b5e9",
+        id: "user_e8725703d28a2972830e5502",
         displayName: "parent",
         role: "parent",
         email: "parent@example.net"

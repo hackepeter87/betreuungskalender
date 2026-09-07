@@ -282,6 +282,7 @@ ALLOWED_ORIGIN=https://app.example.net
 AUTH_MODE=trusted-proxy
 REQUIRE_AUTH=true
 TRUST_PROXY_AUTH=true
+TRUSTED_PROXY_CIDRS=127.0.0.1/32
 ```
 
 The app service uses `expose: 3000` for Compose networking and has no host
@@ -289,6 +290,11 @@ The app service uses `expose: 3000` for Compose networking and has no host
 `http://betreuungskalender:3000` over the private Compose network. This is the
 safe shape when `TRUST_PROXY_AUTH=true`, because direct client access to the app
 would allow forged identity headers.
+
+Replace the loopback example with the actual source address or narrow private
+network from which oauth2-proxy reaches the app container. Trusted-proxy mode
+does not start with an empty allowlist. Verify the observed source before the
+upgrade; do not use a client-controlled forwarded address as this value.
 
 For an external TLS reverse proxy, point the backend to the Compose host and
 oauth2-proxy port, for example `app-host.example.net:8080` or

@@ -108,6 +108,17 @@ test("auth mode validation rejects invalid trusted proxy CIDR entries", () => {
   })));
 });
 
+test("auth mode validation requires an explicit trusted proxy allowlist", () => {
+  assert.throws(
+    () => validateAuthModeConfig(validationInput()),
+    /AUTH_MODE=trusted-proxy requires at least one TRUSTED_PROXY_CIDRS/
+  );
+
+  assert.doesNotThrow(() => validateAuthModeConfig(validationInput({
+    trustedProxyCidrs: ["127.0.0.1/32"]
+  })));
+});
+
 function databaseValidationInput(
   overrides: Partial<DatabaseValidationInput> = {}
 ): DatabaseValidationInput {

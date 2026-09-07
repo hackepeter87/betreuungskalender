@@ -130,7 +130,25 @@ certificates.
 Native OIDC does not trust identity headers from the ingress. If trusted-proxy
 authentication is deliberately selected, direct access to the Service must be
 restricted and `TRUSTED_PROXY_CIDRS` must match the actual source addresses
-observed by the application.
+observed by the application. The application does not start in trusted-proxy
+mode with an empty allowlist. The configured `OIDC_USER_ID_HEADER` must also
+arrive with a stable, non-empty subject on every authenticated request; other
+identity attributes do not replace it.
+
+Render these values before applying them and verify that the resulting
+ConfigMap contains the intended source boundary and subject-header name:
+
+```yaml
+config:
+  AUTH_MODE: trusted-proxy
+  REQUIRE_AUTH: "true"
+  TRUST_PROXY_AUTH: "true"
+  TRUSTED_PROXY_CIDRS: 192.0.2.1/32
+  OIDC_USER_ID_HEADER: x-auth-request-user
+```
+
+The address above is documentation-only and must be replaced with the observed
+proxy source. Keep the Service private while validating the rendered chart.
 
 ## Backups and upgrades
 

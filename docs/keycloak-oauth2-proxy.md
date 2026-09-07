@@ -129,7 +129,8 @@ that HAProxy source IP/CIDR instead.
 The user ID header must contain a stable subject value that does not change
 when an email address or display name changes. The app maps that subject to an
 internal `app_users` row and refreshes display name, email, and group data on
-each request.
+each request. Trusted-proxy mode fails startup without `TRUSTED_PROXY_CIDRS`,
+and a request without the configured user ID header remains unauthenticated.
 
 Permissions are derived from the configured group values and enforced by the
 Fastify API:
