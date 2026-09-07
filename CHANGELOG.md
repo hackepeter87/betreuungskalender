@@ -6,6 +6,19 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.29.1] - 2026-09-08
+
+### Security
+
+- Enforce registered API authorization metadata consistently for all supported
+  request-target forms.
+- Align care-conflict changes with the same workspace permissions as the
+  affected care entries.
+- Require explicit trusted-proxy source boundaries and a stable configured
+  identity subject.
+- Preserve route-specific request budgets for authentication, onboarding,
+  recovery, import, export, and ordinary API workflows.
+
 ## [1.29.0] - 2026-09-04
 
 ### Added
