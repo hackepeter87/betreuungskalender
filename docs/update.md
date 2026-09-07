@@ -75,6 +75,7 @@ HOST_PORT=3000
 AUTH_MODE=trusted-proxy
 REQUIRE_AUTH=true
 TRUST_PROXY_AUTH=true
+TRUSTED_PROXY_CIDRS=127.0.0.1/32
 ALLOWED_ORIGIN=https://betreuung.example.net
 LOG_LEVEL=info
 RATE_LIMIT_MAX=120
@@ -84,6 +85,12 @@ RATE_LIMIT_EXPORT_MAX=15
 RATE_LIMIT_WINDOW_MS=60000
 BACKUP_RETENTION_DAYS=14
 ```
+
+For trusted-proxy installations, replace the loopback example with the actual
+socket source of the authentication proxy before starting the new release.
+The application rejects an empty allowlist and requests without the configured
+stable `OIDC_USER_ID_HEADER`. Validate both values against the running proxy
+topology before switching the active release.
 
 When using `compose.oidc.yml`, also set:
 

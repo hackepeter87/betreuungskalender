@@ -1,16 +1,5 @@
 import { createHash } from "node:crypto";
 
-export const proxyIdentityHeaders = [
-  "x-auth-request-email",
-  "x-forwarded-email",
-  "x-auth-request-user",
-  "x-forwarded-user",
-  "x-auth-request-preferred-username",
-  "x-forwarded-preferred-username",
-  "x-auth-request-groups",
-  "x-forwarded-groups"
-] as const;
-
 export type AuthRole = "admin" | "parent" | "readonly";
 export type AuthPermission = "read" | "write" | "admin";
 export type WorkspaceRole = "admin" | "editor" | "scheduler" | "viewer";
@@ -73,14 +62,6 @@ export interface SessionInfo {
 function firstHeader(value: string | string[] | undefined): string | undefined {
   if (Array.isArray(value)) return value[0];
   return value;
-}
-
-export function requestIdentity(
-  headers: Record<string, string | string[] | undefined>
-): string | undefined {
-  return proxyIdentityHeaders
-    .map((name) => firstHeader(headers[name])?.trim())
-    .find(Boolean);
 }
 
 function headerValue(
@@ -278,9 +259,8 @@ export function resolveRequestUser(
     return { authenticated: true, user: localDevUser() };
   }
 
-  const subject = headerValue(headers, options.userIdHeader) ?? requestIdentity(headers);
+  const subject = headerValue(headers, options.userIdHeader);
   if (!subject) {
-    if (!options.requireAuth) return { authenticated: true, user: localDevUser() };
     return { authenticated: false, reason: "missing_identity" };
   }
 

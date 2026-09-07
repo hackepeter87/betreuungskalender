@@ -180,6 +180,11 @@ export function validateAuthModeConfig(input: AuthModeValidationInput): void {
       );
     }
   }
+  if (input.authMode === "trusted-proxy" && input.trustedProxyCidrs.length === 0) {
+    throw new Error(
+      "AUTH_MODE=trusted-proxy requires at least one TRUSTED_PROXY_CIDRS address or CIDR."
+    );
+  }
   parseTrustedProxyRules(input.trustedProxyCidrs);
 }
 

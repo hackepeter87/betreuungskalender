@@ -34,7 +34,7 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `AUTH_MODE` | Authentication implementation mode | `trusted-proxy` | Optional | Derived from `TRUST_PROXY_AUTH` | Selects the only authentication implementation the API will accept |
 | `REQUIRE_AUTH` | Require a trusted identity for API routes | `true` | Recommended in production | `false` | Must be `true` for protected reverse-proxy operation |
 | `TRUST_PROXY_AUTH` | Legacy trusted-proxy switch and header-trust flag | `true` | Required with `AUTH_MODE=trusted-proxy` | `false` | Only valid for trusted-proxy auth; never enable when clients can directly reach the app |
-| `TRUSTED_PROXY_CIDRS` | Optional comma-separated trusted source IPs or CIDRs for trusted-proxy identity headers | `127.0.0.1,10.88.0.0/16` | Recommended with `AUTH_MODE=trusted-proxy` | Empty | When set, proxy identity headers are accepted only from matching socket source addresses |
+| `TRUSTED_PROXY_CIDRS` | Comma-separated trusted source IPs or CIDRs for trusted-proxy identity headers | `127.0.0.1/32,10.88.0.0/16` | Required with `AUTH_MODE=trusted-proxy` | Empty | Trusted-proxy mode fails startup when no source boundary is configured |
 | `AUTH_LOGOUT_URL` | Optional browser logout path shown in the app shell | `/oauth2/sign_out` | Optional with external auth | None | Keep same-origin or reviewed by the operator |
 | `OIDC_ISSUER_URL` | Native OIDC issuer URL | `https://idp.example.net/realms/family` | Required for `AUTH_MODE=native-oidc` | None | Must match the provider issuer exactly |
 | `OIDC_CLIENT_ID` | Native OIDC client ID | `betreuungskalender` | Required for `AUTH_MODE=native-oidc` | None | Register the exact redirect URI with this client |
@@ -162,24 +162,19 @@ TRUST_PROXY_AUTH=true
 TRUSTED_PROXY_CIDRS=127.0.0.1,10.88.0.0/16
 ```
 
-The app accepts the first non-empty value from:
+The header configured by `OIDC_USER_ID_HEADER` is the required stable subject.
+Email, display name, roles, and groups are optional attributes and never replace
+that subject. These headers are authentication assertions, not user input.
+Direct client access to the app must be blocked by binding to loopback,
+container networking, or firewall policy.
 
-- `X-Auth-Request-Email`
-- `X-Forwarded-Email`
-- `X-Auth-Request-User`
-- `X-Forwarded-User`
-
-These headers are authentication assertions, not user input. Direct client
-access to the app must be blocked by binding to loopback, container networking,
-or firewall policy.
-
-`TRUSTED_PROXY_CIDRS` adds an application-side source-address check for these
-identity headers. Use the actual socket source address of the trusted proxy or
-proxy network, for example loopback for a same-host reverse proxy or the
-private Podman/Docker network used by oauth2-proxy. Values may be exact IP
-addresses or CIDR ranges. When unset, existing trusted-proxy deployments keep
-their previous network-boundary behavior; setting it is recommended for new or
-hardened deployments.
+`TRUSTED_PROXY_CIDRS` defines the mandatory application-side source-address
+check for these identity headers. Use the actual socket source address of the
+trusted proxy or proxy network, for example loopback for a same-host reverse
+proxy or the private Podman/Docker network used by oauth2-proxy. Values may be
+exact IP addresses or CIDR ranges. Trusted-proxy mode does not start while this
+setting is empty. Requests without the configured stable subject are
+unauthenticated.
 
 `TRUSTED_PROXY_CIDRS` intentionally accepts only IP addresses and CIDR ranges,
 not DNS names or Compose service names such as `nginx` or `oauth2-proxy`. The

@@ -283,6 +283,7 @@ boundary:
 ```dotenv
 REQUIRE_AUTH=true
 TRUST_PROXY_AUTH=true
+TRUSTED_PROXY_CIDRS=127.0.0.1/32
 AUTH_LOGOUT_URL=/oauth2/sign_out
 OIDC_USER_ID_HEADER=x-auth-request-user
 OIDC_EMAIL_HEADER=x-auth-request-email
@@ -293,6 +294,11 @@ OIDC_PARENT_GROUP=/betreuungskalender/parents
 OIDC_READONLY_GROUP=/betreuungskalender/readers
 OIDC_REQUIRE_ROLE_CLAIM=false
 ```
+
+Replace the loopback allowlist example with the actual socket source of the
+authentication proxy. Trusted-proxy mode requires a non-empty allowlist and a
+stable subject in the configured `OIDC_USER_ID_HEADER`; mutable profile and
+group attributes do not replace that subject.
 
 The API maps the stable OIDC subject to an internal app user. Native OIDC uses
 active workspace memberships for application access; the initial owner is
