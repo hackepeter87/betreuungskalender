@@ -103,7 +103,9 @@ export function createApiAuthHook(
   options: NativeAuthOptions = {}
 ): preHandlerAsyncHookHandler {
   return async (request, reply) => {
-    if (rateLimitFirst) await rateLimitFirst.call(reply.server, request, reply);
+    if (rateLimitFirst && request.routeOptions.config.rateLimit !== false) {
+      await rateLimitFirst.call(reply.server, request, reply);
+    }
     if (!isProtectedApiRequest(request)) return;
     const requiredDatabase = (): DatabaseExecutor => {
       if (!options.database) throw new Error("Authentication persistence is not configured.");
