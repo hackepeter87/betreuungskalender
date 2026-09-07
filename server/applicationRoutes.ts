@@ -1,5 +1,6 @@
 import type { FastifyInstance, FastifyPluginAsync, RouteOptions } from "fastify";
 import { workspacePermissionValues } from "./auth.js";
+import { isPreAuthenticationApiRoute } from "./apiRoutePolicy.js";
 import { appDataRoutes } from "./routes/appData.js";
 import { appUserRoutes } from "./routes/appUsers.js";
 import { auditRoutes } from "./routes/audit.js";
@@ -51,15 +52,6 @@ export const protectedApplicationRoutePlugins: readonly ProtectedApplicationRout
   { name: "demoDataRoutes", plugin: demoDataRoutes }
 ]);
 
-export const preAuthenticationApiRouteKeys: readonly string[] = Object.freeze([
-  "GET /api/health",
-  "GET /api/ready",
-  "GET /api/session",
-  "POST /api/setup/first-use"
-]);
-
-const preAuthenticationApiRoutes = new Set(preAuthenticationApiRouteKeys);
-
 export function assertApplicationApiRouteAuthorization(route: RouteOptions): void {
   if (!route.url.startsWith("/api/")) return;
   const methods = Array.isArray(route.method) ? route.method : [route.method];
@@ -68,7 +60,7 @@ export function assertApplicationApiRouteAuthorization(route: RouteOptions): voi
     const routeKey = `${method} ${route.url}`;
     const permission = route.config?.permission;
     if (permission && workspacePermissionValues.includes(permission)) continue;
-    if (preAuthenticationApiRoutes.has(routeKey)) continue;
+    if (isPreAuthenticationApiRoute(method, route.url)) continue;
     throw new Error(`API route authorization metadata is missing for ${routeKey}.`);
   }
 }

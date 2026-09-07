@@ -76,7 +76,7 @@ const app = Fastify({
     : config.trustProxyAuth
 });
 
-app.addHook("onRoute", assertApplicationApiRouteAuthorization);
+app.addHook("onRoute", assertApplicationApiRouteAuthorization); // codeql[js/missing-rate-limiting]: This hook validates static route metadata during registration; requests are rate-limited in the preHandler below.
 
 function workspaceSession(user: RequestUser) {
   return {

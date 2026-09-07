@@ -65,8 +65,98 @@ function user(role: RequestUser["role"]): RequestUser {
 }
 
 function route(permission: WorkspacePermission) {
-  return { routeOptions: { config: { permission } } };
+  return { routeOptions: { url: "/api/test", config: { permission } } };
 }
+
+test("registered API routes keep their policy for absolute request targets", async () => {
+  const hook = createApiAuthHook(authConfig(), undefined, {
+    nativeSessions: { findByToken: () => undefined }
+  });
+
+  await assert.rejects(
+    () => hook.call(
+      {} as never,
+      {
+        method: "GET",
+        url: "http://example.invalid/api/session",
+        routeOptions: {
+          url: "/api/children",
+          config: { permission: "children:view-sensitive" }
+        },
+        headers: {}
+      } as never,
+      {} as never
+    ),
+    (error) => {
+      const normalized = error as Error & { code?: string; statusCode?: number };
+      assert.equal(normalized.code, "authentication_required");
+      assert.equal(normalized.statusCode, 401);
+      return true;
+    }
+  );
+});
+
+test("pre-authentication routes are exact and method-aware", async () => {
+  const hook = createApiAuthHook(authConfig(), undefined, {
+    nativeSessions: { findByToken: () => undefined }
+  });
+
+  await assert.doesNotReject(() => hook.call(
+    {} as never,
+    {
+      method: "GET",
+      url: "/api/session?refresh=1",
+      routeOptions: { url: "/api/session", config: {} },
+      headers: {}
+    } as never,
+    {} as never
+  ));
+
+  await assert.rejects(() => hook.call(
+    {} as never,
+    {
+      method: "POST",
+      url: "/api/session",
+      routeOptions: { url: "/api/session", config: {} },
+      headers: {}
+    } as never,
+    {} as never
+  ));
+});
+
+test("destructive permissions also require the persisted installation owner", async () => {
+  const admin = { ...user("admin"), isOwner: false };
+  const owner = { ...admin, isOwner: true };
+  const session = {
+    id: "session-1",
+    externalSubject: "subject-admin",
+    createdAt: "2026-07-01T00:00:00.000Z",
+    expiresAt: "2026-07-02T00:00:00.000Z"
+  };
+  const request = {
+    ...route("admin:destructive"),
+    method: "DELETE",
+    url: "/api/app-data",
+    headers: { cookie: "betreuungskalender_session=valid" }
+  } as never;
+
+  const adminHook = createApiAuthHook(authConfig(), undefined, {
+    nativeSessions: { findByToken: () => session },
+    findUserByExternalSubject: () => admin,
+    canPerformOwnerOperation: () => false
+  });
+  await assert.rejects(
+    () => adminHook.call({} as never, request, {} as never),
+    (error) => (error as { code?: string }).code === "forbidden"
+  );
+
+  const ownerHook = createApiAuthHook(authConfig(), undefined, {
+    nativeSessions: { findByToken: () => session },
+    findUserByExternalSubject: () => owner,
+    canPerformOwnerOperation: () => false
+  });
+  await assert.doesNotReject(() => ownerHook.call({} as never, request, {} as never));
+});
 
 test("native OIDC mode rejects trusted proxy headers as API authentication", async () => {
   const hook = createApiAuthHook(authConfig({
@@ -264,8 +354,9 @@ test("native OIDC API authentication uses server-side sessions and persisted use
         : undefined
     },
     findUserByExternalSubject: (subject) => subject === "subject-admin"
-      ? user("admin")
-      : undefined
+      ? { ...user("admin"), isOwner: true }
+      : undefined,
+    canPerformOwnerOperation: () => true
   });
   const request = {
     ...route("admin:destructive"),
