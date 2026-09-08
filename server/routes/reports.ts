@@ -1,14 +1,18 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { isValidDateKey } from "../../shared/temporal.js";
+import { isInclusiveDateRangeWithinDays, MAX_DOMAIN_RANGE_DAYS } from "../../shared/temporal.js";
 import { config } from "../config.js";
+import { DomainExportLimitError } from "../services/dataTransfer.js";
 import { createReportSnapshot } from "../services/reportSnapshots.js";
 
 const querySchema = z.object({
-  startDate: z.string().refine(isValidDateKey),
-  endDate: z.string().refine(isValidDateKey),
+  startDate: z.string(),
+  endDate: z.string(),
   includeAuditHistory: z.enum(["true", "false"]).default("false")
-}).refine((value) => value.endDate >= value.startDate, { message: "invalid_date_range" });
+}).refine(
+  (value) => isInclusiveDateRangeWithinDays(value.startDate, value.endDate, MAX_DOMAIN_RANGE_DAYS),
+  { message: "invalid_date_range" }
+);
 
 const readLimit = {
   config: { permission: "reports:view" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
@@ -23,11 +27,18 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
       return reply.code(403).send({ error: "forbidden" });
     }
     reply.header("Cache-Control", "no-store");
-    return createReportSnapshot({
-      persistence: app.persistence,
-      startDate: parsed.data.startDate,
-      endDate: parsed.data.endDate,
-      includeAuditHistory
-    });
+    try {
+      return await createReportSnapshot({
+        persistence: app.persistence,
+        startDate: parsed.data.startDate,
+        endDate: parsed.data.endDate,
+        includeAuditHistory
+      });
+    } catch (error) {
+      if (error instanceof DomainExportLimitError) {
+        return reply.code(400).send({ error: "report_limit" });
+      }
+      throw error;
+    }
   });
 }

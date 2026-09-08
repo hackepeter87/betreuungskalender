@@ -79,6 +79,30 @@ test("enforces calendar file size and event count limits", () => {
   assertExternalCalendarError(() => parseIcs(calendar(manyEvents)), "external_calendar_limit");
 });
 
+test("bounds individual and aggregate external calendar event lifetimes", () => {
+  assertExternalCalendarError(
+    () => parseIcs(calendar([
+      "BEGIN:VEVENT",
+      "UID:too-long",
+      "SUMMARY:Long event",
+      "DTSTART;VALUE=DATE:20260101",
+      "DTEND;VALUE=DATE:20270103",
+      "END:VEVENT"
+    ].join("\r\n"))),
+    "external_calendar_limit"
+  );
+
+  const denseCalendar = Array.from({ length: 101 }, (_, index) => [
+    "BEGIN:VEVENT",
+    `UID:dense-${index}`,
+    "SUMMARY:Bounded event",
+    "DTSTART;VALUE=DATE:20260101",
+    "DTEND;VALUE=DATE:20260721",
+    "END:VEVENT"
+  ].join("\r\n")).join("\r\n");
+  assertExternalCalendarError(() => parseIcs(calendar(denseCalendar)), "external_calendar_limit");
+});
+
 test("rejects invalid event dates and excessive text fields with generic errors", () => {
   const rawMarker = "RAW_PRIVATE_MARKER_DO_NOT_LEAK";
   assert.throws(

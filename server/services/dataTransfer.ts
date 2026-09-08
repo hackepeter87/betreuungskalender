@@ -17,10 +17,24 @@ const MAX_STRUCTURE_DEPTH = 24;
 const MAX_STRING_LENGTH = 250_000;
 const MAX_OBJECT_KEYS = 2_000;
 const DRY_RUN_RECEIPT_TTL_MS = 15 * 60 * 1000;
+const MAX_REPORT_CATEGORY_RECORDS = 10_000;
+const MAX_REPORT_RELATED_RECORDS = 50_000;
+const REPORT_QUERY_CHUNK_SIZE = 500;
 const dryRunReceiptSecret = randomBytes(32);
 
 type DataRecord = Record<string, unknown>;
 type ImportData = ReturnType<typeof appDataImportSchema.parse>;
+
+interface ReportExportRange {
+  startDate: string;
+  endDate: string;
+}
+
+interface ExportDomainDataOptions {
+  reportRange?: ReportExportRange;
+}
+
+export class DomainExportLimitError extends Error {}
 
 export interface PortableActor {
   sourceRef: string;
@@ -203,13 +217,73 @@ type ActiveDomainTable =
 
 async function activeRows(
   database: DatabaseExecutor,
-  table: ActiveDomainTable
+  table: ActiveDomainTable,
+  limit?: number
 ): Promise<DataRecord[]> {
-  const rows = await database.selectFrom(table)
+  let query = database.selectFrom(table)
     .selectAll()
-    .where("deleted_at", "is", null)
-    .execute();
+    .where("deleted_at", "is", null);
+  if (limit) query = query.limit(limit + 1);
+  const rows = await query.execute();
+  assertRecordLimit(rows, limit);
   return (rows as DataRecord[]).map(camelRecord);
+}
+
+function assertRecordLimit(records: readonly unknown[], limit?: number): void {
+  if (limit && records.length > limit) {
+    throw new DomainExportLimitError("Report data exceeds the supported record budget.");
+  }
+}
+
+function chunks<T>(items: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let index = 0; index < items.length; index += size) result.push(items.slice(index, index + size));
+  return result;
+}
+
+async function activeEntryRows(
+  database: DatabaseExecutor,
+  range?: ReportExportRange
+): Promise<DataRecord[]> {
+  let query = database.selectFrom("care_entries")
+    .selectAll()
+    .where("deleted_at", "is", null);
+  if (range) {
+    query = query
+      .where("start_datetime", "<", startOfFollowingDay(range.endDate))
+      .where("end_datetime", ">", `${range.startDate}T00:00:00.000Z`);
+    query = query.limit(MAX_REPORT_CATEGORY_RECORDS + 1);
+  }
+  const rows = await query.execute() as DataRecord[];
+  assertRecordLimit(rows, range ? MAX_REPORT_CATEGORY_RECORDS : undefined);
+  return rows.map(camelRecord);
+}
+
+async function activeNestedRows(
+  database: DatabaseExecutor,
+  table: "trips" | "costs",
+  entryIds?: string[]
+): Promise<DataRecord[]> {
+  if (entryIds && entryIds.length === 0) return [];
+  if (!entryIds) return activeRows(database, table);
+  const rows: DataRecord[] = [];
+  for (const entryIdChunk of chunks(entryIds, REPORT_QUERY_CHUNK_SIZE)) {
+    const chunkRows = await database.selectFrom(table)
+      .selectAll()
+      .where("deleted_at", "is", null)
+      .where("care_entry_id", "in", entryIdChunk)
+      .limit(MAX_REPORT_RELATED_RECORDS + 1)
+      .execute() as DataRecord[];
+    rows.push(...chunkRows);
+    assertRecordLimit(rows, MAX_REPORT_RELATED_RECORDS);
+  }
+  return rows.map(camelRecord);
+}
+
+function startOfFollowingDay(dateKey: string): string {
+  const date = new Date(`${dateKey}T12:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + 1);
+  return `${date.toISOString().slice(0, 10)}T00:00:00.000Z`;
 }
 
 type ChildJunction =
@@ -222,17 +296,31 @@ type ChildJunction =
 
 async function junctionMap(
   database: DatabaseExecutor,
-  junction: ChildJunction
+  junction: ChildJunction,
+  parentIds?: string[]
 ): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>();
-  const rows = await database.selectFrom(junction.table)
+  if (parentIds && parentIds.length === 0) return result;
+  const queryFor = (ids?: string[]) => {
+    let query = database.selectFrom(junction.table)
     .select([
       sql.ref(junction.parentColumn).as("parentId"),
       "child_id as childId"
     ])
     .where("deleted_at", "is", null)
-    .orderBy("child_id")
-    .execute() as Array<{ parentId: string; childId: string }>;
+    .orderBy("child_id");
+    if (ids) query = query.where(sql.ref(junction.parentColumn), "in", ids);
+    return query;
+  };
+  const rows: Array<{ parentId: string; childId: string }> = [];
+  if (parentIds) {
+    for (const parentIdChunk of chunks(parentIds, REPORT_QUERY_CHUNK_SIZE)) {
+      rows.push(...await queryFor(parentIdChunk).limit(MAX_REPORT_RELATED_RECORDS + 1).execute() as Array<{ parentId: string; childId: string }>);
+      assertRecordLimit(rows, MAX_REPORT_RELATED_RECORDS);
+    }
+  } else {
+    rows.push(...await queryFor().execute() as Array<{ parentId: string; childId: string }>);
+  }
   for (const row of rows) result.set(row.parentId, [...(result.get(row.parentId) ?? []), row.childId]);
   return result;
 }
@@ -256,8 +344,41 @@ async function exportedSettings(database: DatabaseExecutor): Promise<Record<stri
 }
 
 export async function exportDomainData(
-  database: DatabaseExecutor
+  database: DatabaseExecutor,
+  options: ExportDomainDataOptions = {}
 ): Promise<ImportData> {
+  const reportRange = options.reportRange;
+  const entryRows = await activeEntryRows(database, reportRange);
+  const entryIds = reportRange ? entryRows.map((entry) => String(entry.id)) : undefined;
+  const holidayRowsPromise = reportRange
+    ? database.selectFrom("holiday_periods")
+      .selectAll()
+      .where("deleted_at", "is", null)
+      .where("start_date", "<=", reportRange.endDate)
+      .where("end_date", ">=", reportRange.startDate)
+      .limit(MAX_REPORT_CATEGORY_RECORDS + 1)
+      .execute()
+    : activeRows(database, "holiday_periods");
+  const unavailableRowsPromise = reportRange
+    ? database.selectFrom("unavailable_periods")
+      .selectAll()
+      .where("deleted_at", "is", null)
+      .where("start_datetime", "<", startOfFollowingDay(reportRange.endDate))
+      .where("end_datetime", ">", `${reportRange.startDate}T00:00:00.000Z`)
+      .limit(MAX_REPORT_CATEGORY_RECORDS + 1)
+      .execute()
+    : activeRows(database, "unavailable_periods");
+  const [holidayRowsRaw, unavailableRowsRaw] = await Promise.all([
+    holidayRowsPromise,
+    unavailableRowsPromise
+  ]);
+  const holidayRows = (holidayRowsRaw as DataRecord[]).map(camelRecord);
+  const unavailableRows = (unavailableRowsRaw as DataRecord[]).map(camelRecord);
+  assertRecordLimit(holidayRows, reportRange ? MAX_REPORT_CATEGORY_RECORDS : undefined);
+  assertRecordLimit(unavailableRows, reportRange ? MAX_REPORT_CATEGORY_RECORDS : undefined);
+  const holidayIds = reportRange ? holidayRows.map((row) => String(row.id)) : undefined;
+  const unavailableIds = reportRange ? unavailableRows.map((row) => String(row.id)) : undefined;
+
   const [
     entryChildren,
     actualChildren,
@@ -266,29 +387,29 @@ export async function exportDomainData(
     ruleChildren,
     unavailableChildren
   ] = await Promise.all([
-    junctionMap(database, { table: "care_entry_children", parentColumn: "care_entry_id" }),
-    junctionMap(database, { table: "care_entry_actual_children", parentColumn: "care_entry_id" }),
-    junctionMap(database, { table: "holiday_period_children", parentColumn: "holiday_period_id" }),
-    junctionMap(database, { table: "contact_pattern_children", parentColumn: "contact_pattern_id" }),
-    junctionMap(database, { table: "contact_rule_children", parentColumn: "contact_rule_id" }),
-    junctionMap(database, { table: "unavailable_period_children", parentColumn: "unavailable_period_id" })
+    junctionMap(database, { table: "care_entry_children", parentColumn: "care_entry_id" }, entryIds),
+    junctionMap(database, { table: "care_entry_actual_children", parentColumn: "care_entry_id" }, entryIds),
+    junctionMap(database, { table: "holiday_period_children", parentColumn: "holiday_period_id" }, holidayIds),
+    reportRange ? Promise.resolve(new Map<string, string[]>()) : junctionMap(database, { table: "contact_pattern_children", parentColumn: "contact_pattern_id" }),
+    reportRange ? Promise.resolve(new Map<string, string[]>()) : junctionMap(database, { table: "contact_rule_children", parentColumn: "contact_rule_id" }),
+    junctionMap(database, { table: "unavailable_period_children", parentColumn: "unavailable_period_id" }, unavailableIds)
   ]);
 
   const tripsByEntry = new Map<string, DataRecord[]>();
-  for (const trip of await activeRows(database, "trips")) {
+  for (const trip of await activeNestedRows(database, "trips", entryIds)) {
     const entryId = String(trip.careEntryId ?? "");
     delete trip.careEntryId;
     boolFields(trip, ["ownCar", "reimbursed"]);
     tripsByEntry.set(entryId, [...(tripsByEntry.get(entryId) ?? []), trip]);
   }
   const costsByEntry = new Map<string, DataRecord[]>();
-  for (const cost of await activeRows(database, "costs")) {
+  for (const cost of await activeNestedRows(database, "costs", entryIds)) {
     const entryId = String(cost.careEntryId ?? "");
     delete cost.careEntryId;
     costsByEntry.set(entryId, [...(costsByEntry.get(entryId) ?? []), cost]);
   }
 
-  const entries = (await activeRows(database, "care_entries")).map((entry) => {
+  const entries = entryRows.map((entry) => {
     const id = String(entry.id);
     return {
       ...boolFields(entry, [
@@ -323,11 +444,11 @@ export async function exportDomainData(
     auditRows,
     closingRows
   ] = await Promise.all([
-    activeRows(database, "children"),
-    activeRows(database, "care_parties"),
-    activeRows(database, "holiday_periods"),
-    activeRows(database, "unavailable_periods"),
-    database.selectFrom("external_calendar_sources")
+    activeRows(database, "children", reportRange ? MAX_REPORT_CATEGORY_RECORDS : undefined),
+    activeRows(database, "care_parties", reportRange ? MAX_REPORT_CATEGORY_RECORDS : undefined),
+    Promise.resolve(holidayRows),
+    Promise.resolve(unavailableRows),
+    reportRange ? Promise.resolve([]) : database.selectFrom("external_calendar_sources")
       .select([
         "id", "name", "color", "visible", "source_type", "source_kind",
         "last_imported_at", "last_refresh_at", "last_refresh_error", "created_at", "updated_at"
@@ -335,7 +456,7 @@ export async function exportDomainData(
       .orderBy("created_at")
       .orderBy("id")
       .execute(),
-    database.selectFrom("external_calendar_events")
+    reportRange ? Promise.resolve([]) : database.selectFrom("external_calendar_events")
       .select([
         "id", "source_id", "ical_uid", "recurrence_id", "title", "description",
         "start_datetime", "end_datetime", "all_day", "location", "raw_hash", "created_at", "updated_at"
@@ -343,9 +464,9 @@ export async function exportDomainData(
       .orderBy("start_datetime")
       .orderBy("id")
       .execute(),
-    activeRows(database, "contact_patterns"),
-    activeRows(database, "contact_rules"),
-    database.selectFrom("audit_log as audit")
+    reportRange ? Promise.resolve([]) : activeRows(database, "contact_patterns"),
+    reportRange ? Promise.resolve([]) : activeRows(database, "contact_rules"),
+    reportRange ? Promise.resolve([]) : database.selectFrom("audit_log as audit")
       .leftJoin("app_users as users", "users.id", "audit.user_email")
       .leftJoin("data_transfer_actors as actors", "actors.id", "audit.user_email")
       .select([
@@ -365,6 +486,9 @@ export async function exportDomainData(
         "changed_after_close_at", "updated_by", "updated_at"
       ])
       .where("deleted_at", "is", null)
+      .$if(Boolean(reportRange), (query) => query
+        .where("month_key", ">=", reportRange!.startDate.slice(0, 7))
+        .where("month_key", "<=", reportRange!.endDate.slice(0, 7)))
       .orderBy("month_key")
       .execute()
   ]);
