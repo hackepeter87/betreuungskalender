@@ -48,6 +48,11 @@ export function CalendarGrid({
   const closeDay = useCallback(() => setOpenDay(null), []);
   const dayDialogRef = useDialogFocus<HTMLElement>(closeDay, Boolean(openDay), dayTriggerRef);
   const calendarDays = useMemo(() => getCalendarDays(monthKey), [monthKey]);
+  const visibleDateRange = useMemo(() => ({
+    clipStart: calendarDays[0]?.dateKey ?? `${monthKey}-01`,
+    clipEnd: calendarDays.at(-1)?.dateKey ?? `${monthKey}-01`,
+    maximumDays: 42
+  }), [calendarDays, monthKey]);
   const childMap = useMemo(
     () => new Map(children.map((child) => [child.id, child])),
     [children]
@@ -55,39 +60,39 @@ export function CalendarGrid({
   const entriesByDate = useMemo(() => {
     const map = new Map<string, CareEntry[]>();
     for (const entry of entries) {
-      for (const dateKey of entryDateKeys(entry.startDateTime, entry.endDateTime)) {
+      for (const dateKey of entryDateKeys(entry.startDateTime, entry.endDateTime, visibleDateRange)) {
         const current = map.get(dateKey) ?? [];
         current.push(entry);
         map.set(dateKey, current);
       }
     }
     return map;
-  }, [entries]);
+  }, [entries, visibleDateRange]);
   const unavailableByDate = useMemo(() => {
     const map = new Map<string, UnavailablePeriod[]>();
     for (const period of unavailablePeriods) {
       if (period.deletedAt) continue;
-      for (const dateKey of entryDateKeys(period.startDateTime, period.endDateTime)) {
+      for (const dateKey of entryDateKeys(period.startDateTime, period.endDateTime, visibleDateRange)) {
         map.set(dateKey, [...(map.get(dateKey) ?? []), period]);
       }
     }
     return map;
-  }, [unavailablePeriods]);
+  }, [unavailablePeriods, visibleDateRange]);
   const externalByDate = useMemo(() => {
     const map = new Map<string, ExternalCalendarEvent[]>();
-    for (const event of externalEvents) for (const dateKey of entryDateKeys(event.startDateTime, event.endDateTime)) map.set(dateKey, [...(map.get(dateKey) ?? []), event]);
+    for (const event of externalEvents) for (const dateKey of entryDateKeys(event.startDateTime, event.endDateTime, visibleDateRange)) map.set(dateKey, [...(map.get(dateKey) ?? []), event]);
     return map;
-  }, [externalEvents]);
+  }, [externalEvents, visibleDateRange]);
   const holidaysByDate = useMemo(() => {
     const map = new Map<string, HolidayPeriod[]>();
     for (const period of holidayPeriods) {
       if (period.deletedAt) continue;
-      for (const dateKey of enumerateDateKeys(period.startDate, period.endDate)) {
+      for (const dateKey of enumerateDateKeys(period.startDate, period.endDate, visibleDateRange)) {
         map.set(dateKey, [...(map.get(dateKey) ?? []), period]);
       }
     }
     return map;
-  }, [holidayPeriods]);
+  }, [holidayPeriods, visibleDateRange]);
 
   const openDayEntries = openDay ? entriesByDate.get(openDay.dateKey) ?? [] : [];
   const openDayUnavailable = openDay ? unavailableByDate.get(openDay.dateKey) ?? [] : [];

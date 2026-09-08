@@ -1,3 +1,9 @@
+import {
+  dateKeysForInclusiveRange,
+  dateKeysForTimedRange,
+  type DateRangeEnumerationOptions
+} from "../../shared/temporal";
+
 export function localDate(value: string | Date): Date {
   if (value instanceof Date) return new Date(value);
   if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return new Date(`${value}T12:00:00`);
@@ -71,19 +77,12 @@ export function daysInMonth(monthKey: string): number {
   return new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 }
 
-export function enumerateDateKeys(start: string | Date, end: string | Date): string[] {
-  const cursor = localDate(start);
-  cursor.setHours(12, 0, 0, 0);
-  const last = localDate(end);
-  last.setHours(12, 0, 0, 0);
-  const dates: string[] = [];
-
-  while (cursor <= last) {
-    dates.push(toDateKey(cursor));
-    cursor.setDate(cursor.getDate() + 1);
-  }
-
-  return dates;
+export function enumerateDateKeys(
+  start: string | Date,
+  end: string | Date,
+  options?: DateRangeEnumerationOptions
+): string[] {
+  return dateKeysForInclusiveRange(toDateKey(localDate(start)), toDateKey(localDate(end)), options);
 }
 
 export function addDays(dateKey: string, amount: number): string {
@@ -158,8 +157,12 @@ export function getCalendarDays(monthKey: string): Array<{
   });
 }
 
-export function entryDateKeys(startDateTime: string, endDateTime: string): string[] {
-  return dateKeysForTimedRange(startDateTime, endDateTime);
+export function entryDateKeys(
+  startDateTime: string,
+  endDateTime: string,
+  options?: DateRangeEnumerationOptions
+): string[] {
+  return dateKeysForTimedRange(startDateTime, endDateTime, options);
 }
 
 export function isWeekendDate(dateKey: string): boolean {
@@ -199,4 +202,3 @@ function dateFormatter(
   formatterCache.set(key, formatter);
   return formatter;
 }
-import { dateKeysForTimedRange } from "../../shared/temporal";

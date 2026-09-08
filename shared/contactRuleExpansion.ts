@@ -12,6 +12,8 @@ const rruleExports = rrule as typeof rrule & {
 };
 const { RRule } = rruleExports.default ?? rruleExports.rrule ?? rruleExports;
 
+export const MAX_CONTACT_RULE_EXPANDED_ENTRIES = 5_000;
+
 const weekdayIndexes: Record<ContactRuleWeekday, number> = {
   SU: 0,
   MO: 1,
@@ -222,6 +224,9 @@ export function expandContactRule(input: ContactRuleExpansionInput): ExpandedCon
       const startDate = addDays(occurrence.date, segment.startDayOffset);
       const endDate = addDays(occurrence.date, segment.endDayOffset);
       if (endDate < input.rangeStart || startDate > input.rangeEnd) continue;
+      if (entries.length >= MAX_CONTACT_RULE_EXPANDED_ENTRIES) {
+        throw new RangeError("contact_rule_expansion_limit_exceeded");
+      }
       entries.push({
         occurrenceDate: occurrence.date,
         occurrenceKey: input.recurrence.kind === "rrule"

@@ -7,7 +7,14 @@ import {
   handoverParties,
   unavailableCategories
 } from "../../shared/api.js";
-import { isValidDateKey } from "../../shared/temporal.js";
+import {
+  MAX_DOMAIN_RANGE_DAYS,
+  isInclusiveDateRangeWithinDays,
+  isSupportedDateKey,
+  isTimedRangeWithinDays,
+  isValidDateKey
+} from "../../shared/temporal.js";
+import { expandContactRule } from "../../shared/contactRuleExpansion.js";
 
 const rruleExports = rrule as typeof rrule & {
   default?: typeof rrule;
@@ -19,9 +26,21 @@ const isoDateTime = z.string().refine((value) => !Number.isNaN(Date.parse(value)
   message: "Ungültiges Datum oder ungültige Uhrzeit."
 });
 
-const dateKey = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, {
-  message: "Datum muss im Format JJJJ-MM-TT angegeben werden."
+const domainDateTime = isoDateTime.refine((value) => isSupportedDateKey(value.slice(0, 10)), {
+  message: "Das Datum liegt außerhalb des unterstützten Bereichs."
 });
+
+const dateKey = z.string().refine(isValidDateKey, {
+  message: "Datum muss gültig sein."
+});
+
+const domainDateKey = dateKey.refine(isSupportedDateKey, {
+  message: "Das Datum liegt außerhalb des unterstützten Bereichs."
+});
+
+function timedRangeWithinDomainLimit(startDateTime: string, endDateTime: string): boolean {
+  return isTimedRangeWithinDays(startDateTime, endDateTime, MAX_DOMAIN_RANGE_DAYS);
+}
 
 const childIds = z.array(z.string().min(1)).min(1, "Mindestens ein Kind ist erforderlich.");
 const careDeviationTypeSchema = z.enum([
@@ -114,17 +133,17 @@ export const costInputSchema = z.object({
 
 export const careEntryInputSchema = z
   .object({
-    startDateTime: isoDateTime,
-    endDateTime: isoDateTime,
-    plannedStartDateTime: isoDateTime.optional(),
-    plannedEndDateTime: isoDateTime.optional(),
-    actualStartDateTime: isoDateTime.optional(),
-    actualEndDateTime: isoDateTime.optional(),
+    startDateTime: domainDateTime,
+    endDateTime: domainDateTime,
+    plannedStartDateTime: domainDateTime.optional(),
+    plannedEndDateTime: domainDateTime.optional(),
+    actualStartDateTime: domainDateTime.optional(),
+    actualEndDateTime: domainDateTime.optional(),
     actualChildIds: z.array(z.string().trim().min(1)).optional(),
     actualResponsiblePartyId: z.string().trim().min(1).max(200).optional(),
     childIds,
     generatedByPatternId: z.string().trim().min(1).max(200).optional(),
-    ruleOccurrenceDate: dateKey.optional(),
+    ruleOccurrenceDate: domainDateKey.optional(),
     contactRuleId: z.string().trim().min(1).max(200).optional(),
     contactRuleSegmentId: z.string().trim().min(1).max(200).optional(),
     contactRuleOccurrenceKey: z.string().trim().min(1).max(200).optional(),
@@ -162,6 +181,13 @@ export const careEntryInputSchema = z
         message: "Das Ende muss nach dem Beginn liegen."
       });
     }
+    if (end > start && !timedRangeWithinDomainLimit(entry.startDateTime, entry.endDateTime)) {
+      context.addIssue({
+        code: "custom",
+        path: ["endDateTime"],
+        message: "Der Zeitraum darf höchstens 366 Tage umfassen."
+      });
+    }
     if (entry.status === "cancelled" && !entry.cancellationReason?.trim()) {
       context.addIssue({
         code: "custom",
@@ -174,6 +200,14 @@ export const careEntryInputSchema = z
         code: "custom",
         path: ["plannedEndDateTime"],
         message: "Das ursprüngliche Soll-Ende muss nach dem Soll-Beginn liegen."
+      });
+    }
+    if (entry.plannedStartDateTime && entry.plannedEndDateTime &&
+      !timedRangeWithinDomainLimit(entry.plannedStartDateTime, entry.plannedEndDateTime)) {
+      context.addIssue({
+        code: "custom",
+        path: ["plannedEndDateTime"],
+        message: "Der ursprüngliche Soll-Zeitraum darf höchstens 366 Tage umfassen."
       });
     }
     if (entry.status === "partial") {
@@ -191,12 +225,20 @@ export const careEntryInputSchema = z
           message: "Das tatsächliche Ende muss nach dem tatsächlichen Beginn liegen."
         });
       }
+      if (entry.actualStartDateTime && entry.actualEndDateTime &&
+        !timedRangeWithinDomainLimit(entry.actualStartDateTime, entry.actualEndDateTime)) {
+        context.addIssue({
+          code: "custom",
+          path: ["actualEndDateTime"],
+          message: "Der tatsächliche Zeitraum darf höchstens 366 Tage umfassen."
+        });
+      }
     }
   });
 
 export const schedulerCareEntryInputSchema = z.object({
-  startDateTime: isoDateTime,
-  endDateTime: isoDateTime,
+  startDateTime: domainDateTime,
+  endDateTime: domainDateTime,
   childIds,
   responsiblePartyId: z.string().trim().min(1).max(200),
   location: z.enum(["commuterApartment", "mainResidence", "mother", "school", "ogs"]).optional(),
@@ -205,23 +247,29 @@ export const schedulerCareEntryInputSchema = z.object({
 }).strict().refine(
   (entry) => Date.parse(entry.endDateTime) > Date.parse(entry.startDateTime),
   { path: ["endDateTime"], message: "Das Ende muss nach dem Beginn liegen." }
+).refine(
+  (entry) => timedRangeWithinDomainLimit(entry.startDateTime, entry.endDateTime),
+  { path: ["endDateTime"], message: "Der Zeitraum darf höchstens 366 Tage umfassen." }
 );
 
 export const careConflictPreviewInputSchema = z.object({
-  startDateTime: isoDateTime,
-  endDateTime: isoDateTime,
+  startDateTime: domainDateTime,
+  endDateTime: domainDateTime,
   childIds,
   responsiblePartyId: z.string().trim().min(1).max(200).optional()
 }).strict().refine(
   (entry) => Date.parse(entry.endDateTime) > Date.parse(entry.startDateTime),
   { path: ["endDateTime"], message: "Das Ende muss nach dem Beginn liegen." }
+).refine(
+  (entry) => timedRangeWithinDomainLimit(entry.startDateTime, entry.endDateTime),
+  { path: ["endDateTime"], message: "Der Zeitraum darf höchstens 366 Tage umfassen." }
 );
 
 export const holidayInputSchema = z
   .object({
     name: z.string().trim().min(1).max(200),
-    startDate: dateKey,
-    endDate: dateKey,
+    startDate: domainDateKey,
+    endDate: domainDateKey,
     childIds,
     assignedTo: z.enum(["father", "mother", "shared"]),
     notes: z.string().trim().max(4000).optional()
@@ -229,12 +277,16 @@ export const holidayInputSchema = z
   .refine((period) => period.endDate >= period.startDate, {
     path: ["endDate"],
     message: "Das Ende darf nicht vor dem Beginn liegen."
+  })
+  .refine((period) => isInclusiveDateRangeWithinDays(period.startDate, period.endDate, MAX_DOMAIN_RANGE_DAYS), {
+    path: ["endDate"],
+    message: "Der Zeitraum darf höchstens 366 Tage umfassen."
   });
 
 export const contactPatternInputSchema = z
   .object({
     name: z.string().trim().min(1).max(200),
-    startDate: dateKey,
+    startDate: domainDateKey,
     frequency: z.literal("biweekly").default("biweekly"),
     fridayStartTime: z.string().regex(/^\d{2}:\d{2}$/),
     sundayEndTime: z.string().regex(/^\d{2}:\d{2}$/),
@@ -349,11 +401,18 @@ function contactRuleRangeWithinMonths(startDate: string, endDate: string, months
   return endDate < exclusiveEnd.toISOString().slice(0, 10);
 }
 
+function contactRuleDefaultRangeEnd(startDate: string, months: number): string {
+  const [year = 0, month = 1, day = 1] = startDate.split("-").map(Number);
+  const end = new Date(Date.UTC(year, month - 1 + months, day, 12));
+  end.setUTCDate(end.getUTCDate() - 1);
+  return end.toISOString().slice(0, 10);
+}
+
 export const contactRuleInputSchema = z
   .object({
     name: z.string().trim().min(1).max(200),
-    startDate: dateKey,
-    endDate: dateKey.optional(),
+    startDate: domainDateKey,
+    endDate: domainDateKey.optional(),
     timezone: z.literal("Europe/Berlin").default("Europe/Berlin"),
     recurrence: contactRuleRecurrenceSchema,
     segments: z.array(contactRuleSegmentSchema).min(1).max(8),
@@ -372,7 +431,26 @@ export const contactRuleInputSchema = z
       path: ["endDate"],
       message: "Der vollständige Regelzeitraum darf höchstens 36 Monate umfassen."
     }
-  );
+  )
+  .superRefine((rule, context) => {
+    if (!rule.active) return;
+    const rangeEnd = rule.endDate ?? contactRuleDefaultRangeEnd(rule.startDate, rule.syncHorizonMonths);
+    try {
+      expandContactRule({
+        ...rule,
+        rangeStart: rule.startDate,
+        rangeEnd
+      });
+    } catch (error) {
+      if (error instanceof RangeError && error.message === "contact_rule_expansion_limit_exceeded") {
+        context.addIssue({
+          code: "custom",
+          path: ["recurrence"],
+          message: "Die Regel erzeugt zu viele Termine für einen Synchronisierungslauf."
+        });
+      }
+    }
+  });
 
 export const settingsInputSchema = z.object({
   kilometerRate: z.number().finite().nonnegative().optional(),
@@ -390,8 +468,8 @@ export const careConfirmationAnswerSchema = z
     status: z.enum(["completed", "cancelled", "partial"]),
     note: z.string().trim().max(4000).optional(),
     cancellationReason: z.string().trim().max(4000).optional(),
-    actualStartDateTime: isoDateTime.optional(),
-    actualEndDateTime: isoDateTime.optional(),
+    actualStartDateTime: domainDateTime.optional(),
+    actualEndDateTime: domainDateTime.optional(),
     actualChildIds: z.array(z.string().trim().min(1)).optional(),
     actualResponsiblePartyId: z.string().trim().min(1).max(200).optional()
   })
@@ -489,8 +567,8 @@ export const appDataImportSchema = z.object({
 
 export const unavailablePeriodInputSchema = z
   .object({
-    startDateTime: isoDateTime,
-    endDateTime: isoDateTime,
+    startDateTime: domainDateTime,
+    endDateTime: domainDateTime,
     scope: z.enum(["own_unavailability", "external_contact_block"]).default("own_unavailability"),
     responsiblePartyId: z.string().trim().min(1).optional(),
     childIds: z.array(z.string().trim().min(1)).default([]),
@@ -508,6 +586,13 @@ export const unavailablePeriodInputSchema = z
     {
       path: ["endDateTime"],
       message: "Das Ende muss nach dem Beginn liegen."
+    }
+  )
+  .refine(
+    (period) => timedRangeWithinDomainLimit(period.startDateTime, period.endDateTime),
+    {
+      path: ["endDateTime"],
+      message: "Der Zeitraum darf höchstens 366 Tage umfassen."
     }
   )
   .transform((period) => ({

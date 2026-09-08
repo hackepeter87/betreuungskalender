@@ -4,15 +4,19 @@ export interface FormattedDateTimeRange {
   sameDay: boolean;
 }
 
-function localDateKey(value: Date): string {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+export const SUPPORTED_DATE_MIN = "1900-01-01";
+export const SUPPORTED_DATE_MAX = "2200-12-31";
+export const MAX_DOMAIN_RANGE_DAYS = 366;
+export const MAX_ENUMERATED_DATE_KEYS = 3_660;
+
+export interface DateRangeEnumerationOptions {
+  clipStart?: string;
+  clipEnd?: string;
+  maximumDays?: number;
 }
 
 function dateFromKey(value: string): Date {
-  return new Date(`${value}T12:00:00`);
+  return new Date(`${value}T12:00:00Z`);
 }
 
 interface CivilDateTimeParts {
@@ -56,16 +60,50 @@ export function isValidDateKey(value: string): boolean {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month! - 1 && date.getUTCDate() === day;
 }
 
-export function dateKeysForInclusiveRange(startDate: string, endDate: string): string[] {
+export function isSupportedDateKey(value: string): boolean {
+  return isValidDateKey(value) && value >= SUPPORTED_DATE_MIN && value <= SUPPORTED_DATE_MAX;
+}
+
+function inclusiveDayCount(startDate: string, endDate: string): number {
+  return Math.floor((dateFromKey(endDate).getTime() - dateFromKey(startDate).getTime()) / 86_400_000) + 1;
+}
+
+export function isInclusiveDateRangeWithinDays(startDate: string, endDate: string, maximumDays: number): boolean {
+  return isSupportedDateKey(startDate) && isSupportedDateKey(endDate) &&
+    startDate <= endDate && inclusiveDayCount(startDate, endDate) <= maximumDays;
+}
+
+export function isTimedRangeWithinDays(startDateTime: string, endDateTime: string, maximumDays: number): boolean {
+  const range = occupiedDateRangeForTimedRange(startDateTime, endDateTime);
+  return Boolean(range && isInclusiveDateRangeWithinDays(range.startDate, range.endDate, maximumDays));
+}
+
+export function dateKeysForInclusiveRange(
+  startDate: string,
+  endDate: string,
+  options: DateRangeEnumerationOptions = {}
+): string[] {
   if (!isValidDateKey(startDate) || !isValidDateKey(endDate)) return [];
-  const cursor = dateFromKey(startDate);
-  const end = dateFromKey(endDate);
+  if (options.clipStart && !isValidDateKey(options.clipStart)) return [];
+  if (options.clipEnd && !isValidDateKey(options.clipEnd)) return [];
+  const boundedStart = options.clipStart && options.clipStart > startDate ? options.clipStart : startDate;
+  const boundedEnd = options.clipEnd && options.clipEnd < endDate ? options.clipEnd : endDate;
+  const cursor = dateFromKey(boundedStart);
+  const end = dateFromKey(boundedEnd);
   if (!Number.isFinite(cursor.getTime()) || !Number.isFinite(end.getTime()) || cursor > end) return [];
+
+  const maximumDays = options.maximumDays ?? MAX_ENUMERATED_DATE_KEYS;
+  if (!Number.isInteger(maximumDays) || maximumDays < 1) {
+    throw new RangeError("Date enumeration requires a positive integer budget.");
+  }
+  if (inclusiveDayCount(boundedStart, boundedEnd) > maximumDays) {
+    throw new RangeError(`Date range exceeds the processing budget of ${maximumDays} days.`);
+  }
 
   const result: string[] = [];
   while (cursor <= end) {
-    result.push(localDateKey(cursor));
-    cursor.setDate(cursor.getDate() + 1);
+    result.push(cursor.toISOString().slice(0, 10));
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return result;
 }
@@ -76,15 +114,28 @@ export function isValidTimedRange(startDateTime: string, endDateTime: string): b
   return Number.isFinite(start) && Number.isFinite(end) && end > start;
 }
 
-export function dateKeysForTimedRange(startDateTime: string, endDateTime: string): string[] {
-  if (!isValidTimedRange(startDateTime, endDateTime)) return [];
+export function occupiedDateRangeForTimedRange(
+  startDateTime: string,
+  endDateTime: string
+): { startDate: string; endDate: string } | null {
+  if (!isValidTimedRange(startDateTime, endDateTime)) return null;
   const start = civilDateTimeParts(startDateTime);
   const end = civilDateTimeParts(endDateTime);
-  if (!start || !end) return [];
+  if (!start || !end) return null;
   const lastDateKey = end.hour === 0 && end.minute === 0
     ? previousDateKey(end.dateKey)
     : end.dateKey;
-  return dateKeysForInclusiveRange(start.dateKey, lastDateKey);
+  if (lastDateKey < start.dateKey) return null;
+  return { startDate: start.dateKey, endDate: lastDateKey };
+}
+
+export function dateKeysForTimedRange(
+  startDateTime: string,
+  endDateTime: string,
+  options: DateRangeEnumerationOptions = {}
+): string[] {
+  const range = occupiedDateRangeForTimedRange(startDateTime, endDateTime);
+  return range ? dateKeysForInclusiveRange(range.startDate, range.endDate, options) : [];
 }
 
 export function timedRangesOverlap(
