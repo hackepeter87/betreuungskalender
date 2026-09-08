@@ -95,3 +95,45 @@ test("report snapshot responses are not cached", async () => {
     await runtime.close();
   }
 });
+
+test("report routes reject unsupported and oversized reporting periods", async () => {
+  const runtime = await database();
+  const app = Fastify();
+  app.decorate("persistence", runtime);
+  await reportRoutes(app);
+  try {
+    for (const url of [
+      "/api/reports/snapshot?startDate=1899-12-31&endDate=1900-01-01",
+      "/api/reports/snapshot?startDate=2026-01-01&endDate=2027-01-02"
+    ]) {
+      const response = await app.inject({ method: "GET", url });
+      assert.equal(response.statusCode, 400);
+      assert.deepEqual(response.json(), { error: "validation_error" });
+    }
+  } finally {
+    await app.close();
+    await runtime.close();
+  }
+});
+
+test("report snapshots filter stored lifetimes before date enumeration", async () => {
+  const runtime = await database();
+  try {
+    await runtime.transaction((database) => importData(createEdgeCaseDemoData(), "fixture-actor", database));
+    await runtime.query.updateTable("care_entries").set({
+      start_datetime: "1900-01-01T00:00:00.000Z",
+      end_datetime: "2200-12-31T00:00:00.000Z"
+    }).where("id", "=", "demo-entry-short-contact").execute();
+
+    const snapshot = await createReportSnapshot({
+      persistence: runtime,
+      startDate: "2026-07-01",
+      endDate: "2026-07-31",
+      includeAuditHistory: false
+    });
+
+    assert.equal(snapshot.data.entries.some((entry) => entry.id === "demo-entry-short-contact"), true);
+  } finally {
+    await runtime.close();
+  }
+});

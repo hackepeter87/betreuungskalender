@@ -46,7 +46,10 @@ generic refresh error.
 
 ## Limits and exclusions
 
-Files and fetched feeds are limited to 1 MB and 2,000 events. Feed downloads
+Files and fetched feeds are limited to 1 MB and 2,000 events. A single imported
+event may cover at most 366 occupied calendar days, and one import or refresh
+may cover at most 20,000 occupied event days in total. Calendar queries return
+at most 10,000 matching external events. Feed downloads
 allow at most five redirects and use one timeout for DNS resolution, redirects,
 transfer, and body processing. Both transferred and decompressed content are
 size-limited. Recurrence rules (`RRULE`) are rejected rather than silently

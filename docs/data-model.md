@@ -125,6 +125,12 @@ by timestamp and ID; audit history is no longer part of the application's
 general startup payload. Report snapshots continue to read their optional
 history inside the report transaction.
 
+Report periods cover at most 366 calendar days. Entries, unavailable periods,
+holiday periods, related child links, trips, costs, and monthly closings are
+filtered by interval in the database before the snapshot is materialized. A
+snapshot supports up to 10,000 records per top-level report category and up to
+50,000 related child links, trips, or costs per related collection.
+
 Audit history remains in the same operational database and can contain
 historical identifiers or values needed for traceability. The current
 application does not selectively anonymize those records. Retention and any

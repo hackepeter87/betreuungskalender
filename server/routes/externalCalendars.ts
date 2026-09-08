@@ -87,6 +87,10 @@ export async function externalCalendarRoutes(app: FastifyInstance): Promise<void
     if (!from || !to || Number.isNaN(Date.parse(from)) || Number.isNaN(Date.parse(to)) || Date.parse(to) <= Date.parse(from) || Date.parse(to) - Date.parse(from) > 370 * 86_400_000) {
       return reply.code(400).send({ error: "external_calendar_invalid" });
     }
-    return visibleExternalCalendarEvents(app.persistence.query, from, to);
+    try {
+      return await visibleExternalCalendarEvents(app.persistence.query, from, to);
+    } catch (error) {
+      return errorReply(reply, error);
+    }
   });
 }

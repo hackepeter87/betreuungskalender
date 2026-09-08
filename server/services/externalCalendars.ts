@@ -7,6 +7,11 @@ import { createBrotliDecompress, createGunzip, createInflate } from "node:zlib";
 import ICAL from "ical.js";
 import ipaddr from "ipaddr.js";
 import type { ApiExternalCalendarSourceKind, ApiExternalCalendarSourceType } from "../../shared/api.js";
+import {
+  isTimedRangeWithinDays,
+  MAX_DOMAIN_RANGE_DAYS,
+  occupiedDateRangeForTimedRange
+} from "../../shared/temporal.js";
 import type { DatabaseExecutor, PersistenceRuntime } from "../db/runtime.js";
 import { makeId, nowIso } from "./common.js";
 import {
@@ -18,6 +23,8 @@ import {
 
 const MAX_ICS_BYTES = 1_000_000;
 const MAX_ICS_EVENTS = 2_000;
+const MAX_ICS_TOTAL_OCCUPIED_DAYS = 20_000;
+const MAX_VISIBLE_EXTERNAL_EVENTS = 10_000;
 const MAX_TEXT_LENGTH = 10_000;
 const MAX_FEED_URL_LENGTH = 2_048;
 const FEED_FETCH_TIMEOUT_MS = 10_000;
@@ -97,6 +104,7 @@ export function parseIcs(content: string): ParsedExternalCalendarEvent[] {
   if (component.name !== "vcalendar") throw new ExternalCalendarError("external_calendar_invalid", "Calendar must contain VCALENDAR.");
   const events = component.getAllSubcomponents("vevent");
   if (events.length > MAX_ICS_EVENTS) throw new ExternalCalendarError("external_calendar_limit", "Calendar contains too many events.");
+  let occupiedDaysTotal = 0;
   return events.map((eventComponent) => {
     if (eventComponent.hasProperty("rrule")) throw new ExternalCalendarError("external_calendar_recurrence_unsupported", "Recurring event rules are not supported.");
     const uid = text(eventComponent.getFirstPropertyValue("uid"));
@@ -107,6 +115,18 @@ export function parseIcs(content: string): ParsedExternalCalendarEvent[] {
     const startDateTime = iso(start);
     const endDateTime = iso(end);
     if (Date.parse(endDateTime) <= Date.parse(startDateTime)) throw new ExternalCalendarError("external_calendar_invalid", "Event end must be after its start.");
+    if (!isTimedRangeWithinDays(startDateTime, endDateTime, MAX_DOMAIN_RANGE_DAYS)) {
+      throw new ExternalCalendarError("external_calendar_limit", "Calendar event exceeds the supported date range.");
+    }
+    const occupiedRange = occupiedDateRangeForTimedRange(startDateTime, endDateTime);
+    if (!occupiedRange) throw new ExternalCalendarError("external_calendar_invalid", "Calendar contains an invalid date.");
+    occupiedDaysTotal += Math.floor(
+      (Date.parse(`${occupiedRange.endDate}T12:00:00.000Z`) -
+        Date.parse(`${occupiedRange.startDate}T12:00:00.000Z`)) / 86_400_000
+    ) + 1;
+    if (occupiedDaysTotal > MAX_ICS_TOTAL_OCCUPIED_DAYS) {
+      throw new ExternalCalendarError("external_calendar_limit", "Calendar exceeds the supported event range budget.");
+    }
     const recurrence = eventComponent.getFirstPropertyValue("recurrence-id") as ICAL.Time | null;
     const title = text(eventComponent.getFirstPropertyValue("summary"), 500) ?? "Untitled event";
     const description = text(eventComponent.getFirstPropertyValue("description"));
@@ -478,6 +498,13 @@ async function writeEvents(
   events: ParsedExternalCalendarEvent[],
   timestamp: string
 ): Promise<void> {
+  const existingCount = await database.selectFrom("external_calendar_events")
+    .select(({ fn }) => fn.countAll<number>().as("count"))
+    .where("source_id", "=", sourceId)
+    .executeTakeFirst();
+  if (Number(existingCount?.count ?? 0) > MAX_ICS_EVENTS) {
+    throw new ExternalCalendarError("external_calendar_limit", "Calendar source contains too many stored events.");
+  }
   const retained = new Set(events.map((event) => `${event.icalUid}\u0000${event.recurrenceId}`));
   for (const event of events) {
     await database.insertInto("external_calendar_events").values({
@@ -674,7 +701,7 @@ export async function deleteExternalCalendarSource(database: DatabaseExecutor, i
 }
 
 export async function visibleExternalCalendarEvents(database: DatabaseExecutor, from: string, to: string) {
-  return database.selectFrom("external_calendar_events as event")
+  const events = await database.selectFrom("external_calendar_events as event")
     .innerJoin("external_calendar_sources as source", "source.id", "event.source_id")
     .select([
       "event.id",
@@ -693,7 +720,12 @@ export async function visibleExternalCalendarEvents(database: DatabaseExecutor, 
     .where("event.end_datetime", ">", from)
     .orderBy("event.start_datetime")
     .orderBy("event.title")
+    .limit(MAX_VISIBLE_EXTERNAL_EVENTS + 1)
     .execute();
+  if (events.length > MAX_VISIBLE_EXTERNAL_EVENTS) {
+    throw new ExternalCalendarError("external_calendar_limit", "Calendar query contains too many events.");
+  }
+  return events;
 }
 
 export async function deriveHolidayPeriodsFromExternalCalendar(
@@ -717,7 +749,11 @@ export async function deriveHolidayPeriodsFromExternalCalendar(
       .where("source_id", "=", sourceId)
       .orderBy("start_datetime")
       .orderBy("title")
+      .limit(MAX_ICS_EVENTS + 1)
       .execute();
+    if (events.length > MAX_ICS_EVENTS) {
+      throw new ExternalCalendarError("external_calendar_limit", "Calendar source contains too many events.");
+    }
     const existingRows = await database.selectFrom("holiday_periods")
       .select("source_external_calendar_event_id")
       .where("source_external_calendar_source_id", "=", sourceId)

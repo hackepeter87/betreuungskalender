@@ -9,19 +9,9 @@ import type {
   ApiReportSnapshot,
   ApiUnavailablePeriod
 } from "../../shared/api.js";
-import { dateKeysForTimedRange } from "../../shared/temporal.js";
 import type { DatabaseExecutor, PersistenceRuntime } from "../db/runtime.js";
 import { exportDomainData } from "./dataTransfer.js";
 import { normalizeClientSettings } from "./settings.js";
-
-type DataRecord = Record<string, unknown>;
-
-function touchesDateRange(startDateTime: unknown, endDateTime: unknown, startDate: string, endDate: string): boolean {
-  if (typeof startDateTime !== "string" || typeof endDateTime !== "string") return false;
-  return dateKeysForTimedRange(startDateTime, endDateTime).some(
-    (dateKey) => dateKey >= startDate && dateKey <= endDate
-  );
-}
 
 async function auditEntries(
   database: DatabaseExecutor,
@@ -72,22 +62,9 @@ export async function createReportSnapshot(input: {
   includeAuditHistory: boolean;
 }): Promise<ApiReportSnapshot> {
   return input.persistence.transaction(async (database) => {
-    const exported = await exportDomainData(database);
-    const entries = (exported.entries as DataRecord[]).filter((entry) =>
-      touchesDateRange(entry.startDateTime, entry.endDateTime, input.startDate, input.endDate)
-    );
-    const unavailablePeriods = (exported.unavailablePeriods as DataRecord[]).filter((period) =>
-      touchesDateRange(period.startDateTime, period.endDateTime, input.startDate, input.endDate)
-    );
-    const holidayPeriods = (exported.holidayPeriods as DataRecord[]).filter((period) =>
-      typeof period.startDate === "string" && typeof period.endDate === "string" &&
-      period.startDate <= input.endDate && period.endDate >= input.startDate
-    );
-    const monthClosures = (exported.monthClosures as DataRecord[]).filter((closing) =>
-      typeof closing.monthKey === "string" &&
-      closing.monthKey >= input.startDate.slice(0, 7) &&
-      closing.monthKey <= input.endDate.slice(0, 7)
-    );
+    const exported = await exportDomainData(database, {
+      reportRange: { startDate: input.startDate, endDate: input.endDate }
+    });
     const generatedAt = new Date().toISOString();
 
     return {
@@ -100,14 +77,14 @@ export async function createReportSnapshot(input: {
         schemaVersion: exported.schemaVersion,
         children: exported.children as unknown as ApiChild[],
         careParties: exported.careParties as unknown as ApiCareParty[],
-        entries: entries as unknown as ApiCareEntry[],
-        holidayPeriods: holidayPeriods as unknown as ApiHolidayPeriod[],
-        unavailablePeriods: unavailablePeriods as unknown as ApiUnavailablePeriod[],
+        entries: exported.entries as unknown as ApiCareEntry[],
+        holidayPeriods: exported.holidayPeriods as unknown as ApiHolidayPeriod[],
+        unavailablePeriods: exported.unavailablePeriods as unknown as ApiUnavailablePeriod[],
         settings: await normalizeClientSettings(exported.settings, database),
         auditLog: input.includeAuditHistory
           ? await auditEntries(database, input.startDate, input.endDate)
           : [],
-        monthClosures: monthClosures as unknown as ApiMonthlyClosing[]
+        monthClosures: exported.monthClosures as unknown as ApiMonthlyClosing[]
       }
     };
   });
