@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  MAX_ENUMERATED_DATE_KEYS,
   dateKeysForInclusiveRange,
   dateKeysForTimedRange,
   formatCivilTime,
@@ -29,6 +30,35 @@ test("date-only ranges include their declared end date", () => {
     "2026-08-08",
     "2026-08-09"
   ]);
+});
+
+test("date enumeration clips existing oversized ranges before allocating results", () => {
+  assert.deepEqual(
+    dateKeysForInclusiveRange("1900-01-01", "2200-12-31", {
+      clipStart: "2026-07-27",
+      clipEnd: "2026-09-06",
+      maximumDays: 42
+    }),
+    dateKeysForInclusiveRange("2026-07-27", "2026-09-06")
+  );
+});
+
+test("date enumeration rejects work above its explicit budget", () => {
+  assert.throws(
+    () => dateKeysForInclusiveRange("2000-01-01", "2200-12-31"),
+    (error: unknown) => error instanceof RangeError && error.message.includes(String(MAX_ENUMERATED_DATE_KEYS))
+  );
+});
+
+test("timed ranges can be clipped to the visible calendar window", () => {
+  assert.deepEqual(
+    dateKeysForTimedRange("1900-01-01T12:00", "2200-12-31T18:00", {
+      clipStart: "2026-08-01",
+      clipEnd: "2026-08-31",
+      maximumDays: 31
+    }),
+    dateKeysForInclusiveRange("2026-08-01", "2026-08-31")
+  );
 });
 
 test("date keys reject normalized and impossible calendar dates", () => {

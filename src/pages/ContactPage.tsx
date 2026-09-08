@@ -295,24 +295,29 @@ export function ContactPage({
   const previewEntries = useMemo(
     () => {
       if (!recurrenceSelectionComplete) return [];
-      return expandContactRule({
-        startDate,
-        endDate: endDate || undefined,
-        recurrence,
-        segments,
-        active,
-        childIds,
-        rangeStart: generationStart,
-        rangeEnd: generationEnd
-      }).filter((entry) =>
-        ruleId
-          ? !data.entries.some((existing) =>
-              existing.contactRuleId === ruleId &&
-              existing.contactRuleOccurrenceKey === entry.occurrenceKey &&
-              !existing.deletedAt
-            )
-          : true
-      );
+      try {
+        return expandContactRule({
+          startDate,
+          endDate: endDate || undefined,
+          recurrence,
+          segments,
+          active,
+          childIds,
+          rangeStart: generationStart,
+          rangeEnd: generationEnd
+        }).filter((entry) =>
+          ruleId
+            ? !data.entries.some((existing) =>
+                existing.contactRuleId === ruleId &&
+                existing.contactRuleOccurrenceKey === entry.occurrenceKey &&
+                !existing.deletedAt
+              )
+            : true
+        );
+      } catch (error) {
+        if (error instanceof RangeError && error.message === "contact_rule_expansion_limit_exceeded") return [];
+        throw error;
+      }
     },
     [active, childIds, data.entries, endDate, generationEnd, generationStart, recurrence, recurrenceSelectionComplete, ruleId, segments, startDate]
   );

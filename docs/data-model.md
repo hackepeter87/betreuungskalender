@@ -18,6 +18,19 @@ recurring contact rules or generated care entries. A care entry inside a holiday
 period remains a normal care entry and is counted once through the care-entry
 model.
 
+## Supported planning ranges
+
+New care entries, holiday periods, and unavailable periods use valid calendar
+dates from 1900 through 2200 and may cover at most 366 occupied days. Flexible
+contact rules and explicit synchronization windows may cover at most 36 months;
+rules that would generate an excessive number of entries in one run are rejected
+before domain changes are committed.
+
+Existing data outside these limits remains readable. Calendar and agenda views
+intersect each record with the visible date window before expanding it into
+individual days. The application does not rewrite or delete older records merely
+because a current write limit is narrower.
+
 ## Persistence surfaces
 
 The Fastify API and the selected operational database are the single source of

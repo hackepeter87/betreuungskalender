@@ -16,7 +16,14 @@ import {
 } from "./services/contactRules.js";
 import { expandContactRule as expandContactRuleInClient } from "../src/lib/contactRules.js";
 import { expandContactRule } from "../shared/contactRuleExpansion.js";
-import { contactRuleInputSchema } from "./validation/schemas.js";
+import {
+  careConflictPreviewInputSchema,
+  careEntryInputSchema,
+  contactRuleInputSchema,
+  holidayInputSchema,
+  schedulerCareEntryInputSchema,
+  unavailablePeriodInputSchema
+} from "./validation/schemas.js";
 
 const migrationsDirectory = resolve(process.cwd(), "server/migrations");
 const timestamp = "2026-07-01T10:00:00.000Z";
@@ -193,6 +200,71 @@ test("shared contact-rule expansion rejects invalid segment offsets", () => {
     }),
     RangeError
   );
+});
+
+test("shared contact-rule expansion rejects output above its processing budget", () => {
+  const input = {
+      startDate: "2026-01-01",
+      endDate: "2028-12-31",
+      active: true,
+      childIds: ["child-a"],
+      rangeStart: "2026-01-01",
+      rangeEnd: "2028-12-31",
+      recurrence: { kind: "rrule" as const, rrules: ["FREQ=DAILY"] },
+      segments: Array.from({ length: 8 }, (_, index) => ({
+        id: `segment-${index}`,
+        startDayOffset: 0,
+        startTime: `${String(index + 8).padStart(2, "0")}:00`,
+        endDayOffset: 0,
+        endTime: `${String(index + 9).padStart(2, "0")}:00`
+      }))
+    };
+  assert.throws(
+    () => expandContactRule(input),
+    (error: unknown) => error instanceof RangeError && error.message === "contact_rule_expansion_limit_exceeded"
+  );
+  assert.equal(contactRuleInputSchema.safeParse({
+    name: "Zu dichte Testregel",
+    timezone: "Europe/Berlin",
+    syncHorizonMonths: 36,
+    ...input
+  }).success, false);
+});
+
+test("planning inputs reject unsupported dates and ranges longer than one year", () => {
+  const timed = {
+    startDateTime: "2026-01-01T10:00:00.000Z",
+    endDateTime: "2027-01-03T10:00:00.000Z",
+    childIds: ["child-a"]
+  };
+  const care = {
+    ...timed,
+    status: "planned" as const,
+    careScope: "hourly" as const
+  };
+
+  assert.equal(careEntryInputSchema.safeParse(care).success, false);
+  assert.equal(schedulerCareEntryInputSchema.safeParse({ ...timed, responsiblePartyId: "party-a" }).success, false);
+  assert.equal(careConflictPreviewInputSchema.safeParse(timed).success, false);
+  assert.equal(unavailablePeriodInputSchema.safeParse({
+    ...timed,
+    category: "other",
+    scope: "own_unavailability"
+  }).success, false);
+  assert.equal(holidayInputSchema.safeParse({
+    name: "Testferien",
+    startDate: "2026-01-01",
+    endDate: "2027-01-02",
+    childIds: ["child-a"],
+    assignedTo: "shared"
+  }).success, false);
+  assert.equal(holidayInputSchema.safeParse({
+    name: "Testferien",
+    startDate: "2026-02-30",
+    endDate: "2026-03-02",
+    childIds: ["child-a"],
+    assignedTo: "shared"
+  }).success, false);
 });
 
 test("expands weekly recurrence with multiple weekdays and local time segments", () => {

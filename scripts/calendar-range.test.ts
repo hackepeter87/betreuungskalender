@@ -95,3 +95,15 @@ test("agenda ranges exclude a midnight end date", () => {
   assert.equal(agendaDayPhase(start, end, "2026-08-07"), "single");
   assert.equal(agendaDayPhase(start, end, "2026-08-08"), null);
 });
+
+test("agenda clips oversized historical ranges before enumerating days", () => {
+  assert.deepEqual(
+    agendaDateKeys(
+      "1900-01-01T12:00:00.000Z",
+      "2200-12-31T18:00:00.000Z",
+      "2026-08-01",
+      "2026-08-31"
+    ),
+    Array.from({ length: 31 }, (_, index) => `2026-08-${String(index + 1).padStart(2, "0")}`)
+  );
+});

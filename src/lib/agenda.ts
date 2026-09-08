@@ -1,3 +1,4 @@
+import { occupiedDateRangeForTimedRange } from "../../shared/temporal";
 import { entryDateKeys } from "./date";
 
 export type AgendaDayPhase = "single" | "start" | "middle" | "end";
@@ -8,9 +9,11 @@ export function agendaDateKeys(
   visibleStartDate: string,
   visibleEndDate: string
 ): string[] {
-  return entryDateKeys(startDateTime, endDateTime).filter(
-    (dateKey) => dateKey >= visibleStartDate && dateKey <= visibleEndDate
-  );
+  return entryDateKeys(startDateTime, endDateTime, {
+    clipStart: visibleStartDate,
+    clipEnd: visibleEndDate,
+    maximumDays: 366
+  });
 }
 
 export function agendaDayPhase(
@@ -18,11 +21,10 @@ export function agendaDayPhase(
   endDateTime: string,
   dateKey: string
 ): AgendaDayPhase | null {
-  const dateKeys = entryDateKeys(startDateTime, endDateTime);
-  const index = dateKeys.indexOf(dateKey);
-  if (index < 0) return null;
-  if (dateKeys.length === 1) return "single";
-  if (index === 0) return "start";
-  if (index === dateKeys.length - 1) return "end";
+  const range = occupiedDateRangeForTimedRange(startDateTime, endDateTime);
+  if (!range || dateKey < range.startDate || dateKey > range.endDate) return null;
+  if (range.startDate === range.endDate) return "single";
+  if (dateKey === range.startDate) return "start";
+  if (dateKey === range.endDate) return "end";
   return "middle";
 }
