@@ -319,6 +319,34 @@ test("care-entry API serializes actual writes and returns generic conflicts", as
     costs: []
   };
 
+  const databaseBeforeOversizedWrite = new Database(join(root, "app.sqlite"));
+  const beforeOversizedWrite = {
+    entries: (databaseBeforeOversizedWrite.prepare("SELECT COUNT(*) AS count FROM care_entries").get() as { count: number }).count,
+    audit: (databaseBeforeOversizedWrite.prepare("SELECT COUNT(*) AS count FROM audit_log").get() as { count: number }).count
+  };
+  databaseBeforeOversizedWrite.close();
+  const oversizedWrite = await fetch(`${baseUrl}/api/care-entries`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      ...baseInput,
+      trips: Array.from({ length: 101 }, (_, index) => ({
+        purpose: `Trip ${index}`,
+        km: 1,
+        ownCar: true,
+        reimbursed: false
+      }))
+    })
+  });
+  assert.equal(oversizedWrite.status, 400);
+  assert.equal((await oversizedWrite.json() as { error: string }).error, "validation_error");
+  const databaseAfterOversizedWrite = new Database(join(root, "app.sqlite"));
+  assert.deepEqual({
+    entries: (databaseAfterOversizedWrite.prepare("SELECT COUNT(*) AS count FROM care_entries").get() as { count: number }).count,
+    audit: (databaseAfterOversizedWrite.prepare("SELECT COUNT(*) AS count FROM audit_log").get() as { count: number }).count
+  }, beforeOversizedWrite);
+  databaseAfterOversizedWrite.close();
+
   const concurrent = await Promise.all([
     fetch(`${baseUrl}/api/care-entries`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(baseInput) }),
     fetch(`${baseUrl}/api/care-entries`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(baseInput) })

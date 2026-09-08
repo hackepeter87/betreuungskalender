@@ -11,6 +11,7 @@ import {
   listTransferActors
 } from "../services/dataTransfer.js";
 import type { WorkspaceRole } from "../auth.js";
+import { MAX_CHILD_RELATIONS_PER_RECORD } from "../validation/processingLimits.js";
 
 const sensitive = {
   bodyLimit: config.dataTransferMaxBytes,
@@ -109,8 +110,12 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
   app.put<{ Params: { id: string } }>("/api/data-transfer/actors/:id/mapping", sensitive, async (request, reply) => {
     const body = request.body as { userId?: unknown; role?: unknown; carePartyIds?: unknown };
     const role = workspaceRole(body?.role);
+    const submittedCarePartyIds = Array.isArray(body?.carePartyIds) ? body.carePartyIds : [];
+    if (submittedCarePartyIds.length > MAX_CHILD_RELATIONS_PER_RECORD) {
+      return noStore(reply).code(400).send({ error: "validation_error", message: "Actor mapping is invalid." });
+    }
     const carePartyIds = Array.isArray(body?.carePartyIds)
-      ? body.carePartyIds.filter((value): value is string => typeof value === "string")
+      ? [...new Set(body.carePartyIds.filter((value): value is string => typeof value === "string"))]
       : [];
     if (typeof body?.userId !== "string" || !role) {
       return noStore(reply).code(400).send({ error: "validation_error", message: "Mapping request is incomplete." });

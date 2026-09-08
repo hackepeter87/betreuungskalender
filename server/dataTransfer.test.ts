@@ -70,6 +70,75 @@ test("portable transfer rejects excessive nesting and oversized text before impo
   }
 });
 
+test("dry run and import reject aggregate nested records without target writes", async () => {
+  const target = await database();
+  const data = createEdgeCaseDemoData();
+  data.entries[0]!.trips = Array.from({ length: 101 }, (_, index) => ({
+    id: `trip-${index}`,
+    purpose: `Transfer trip ${index}`,
+    km: 1,
+    ownCar: true,
+    reimbursed: false
+  }));
+  const before = target.sqliteDatabase.serialize();
+  try {
+    await assert.rejects(
+      dryRunPortableTransfer(data, target),
+      /nested records/
+    );
+    await assert.rejects(
+      importPortableTransfer({
+        package: data,
+        fingerprint: "0".repeat(64),
+        dryRunReceipt: "invalid",
+        confirmWarnings: false,
+        actorId: "target-owner"
+      }, target),
+      /nested records/
+    );
+    assert.deepEqual(target.sqliteDatabase.serialize(), before);
+  } finally {
+    await target.close();
+  }
+});
+
+test("portable transfer enforces per-collection and aggregate record budgets", async () => {
+  const target = await database();
+  try {
+    const oversizedCollection = createEdgeCaseDemoData();
+    oversizedCollection.children = Array.from({ length: 50_001 }, () => ({}));
+    await assert.rejects(dryRunPortableTransfer(oversizedCollection, target));
+
+    const aggregate = createEdgeCaseDemoData();
+    const childIds = Array.from({ length: 100 }, (_, index) => `child-${index}`);
+    const trips = Array.from({ length: 100 }, (_, index) => ({
+      id: `trip-${index}`,
+      purpose: `Transfer trip ${index}`,
+      km: 1,
+      ownCar: true,
+      reimbursed: false
+    }));
+    const costs = Array.from({ length: 100 }, (_, index) => ({
+      id: `cost-${index}`,
+      category: "other",
+      amount: 1,
+      paidBy: "care-party"
+    }));
+    aggregate.entries = Array.from({ length: 400 }, (_, index) => ({
+      id: `entry-${index}`,
+      childIds,
+      trips,
+      costs
+    }));
+    await assert.rejects(
+      dryRunPortableTransfer(aggregate, target),
+      /too many records/
+    );
+  } finally {
+    await target.close();
+  }
+});
+
 test("portable import requires the exact dry-run fingerprint and preserves target owner", async () => {
   const source = await database();
   const target = await database();
@@ -221,6 +290,42 @@ test("portable transfer export and dry-run responses are not cached", async () =
     });
     assert.equal(dryRun.statusCode, 200);
     assert.match(dryRun.headers["cache-control"] ?? "", /no-store/);
+
+    const oversized = createEdgeCaseDemoData();
+    oversized.entries[0]!.costs = Array.from({ length: 101 }, (_, index) => ({
+      id: `cost-${index}`,
+      category: "PRIVATE_MARKER_MUST_NOT_LEAK",
+      amount: 1,
+      paidBy: "care-party"
+    }));
+    const rejected = await app.inject({
+      method: "POST",
+      url: "/api/data-transfer/dry-run",
+      payload: oversized
+    });
+    assert.equal(rejected.statusCode, 400);
+    assert.deepEqual(rejected.json(), {
+      error: "data_transfer_failed",
+      message: "Data transfer could not be completed. Review the package and dry-run result."
+    });
+    assert.equal(rejected.body.includes("PRIVATE_MARKER_MUST_NOT_LEAK"), false);
+    assert.match(rejected.headers["cache-control"] ?? "", /no-store/);
+
+    const rejectedMapping = await app.inject({
+      method: "PUT",
+      url: "/api/data-transfer/actors/unknown/mapping",
+      payload: {
+        userId: "target-user",
+        role: "viewer",
+        carePartyIds: Array.from({ length: 101 }, (_, index) => `party-${index}`)
+      }
+    });
+    assert.equal(rejectedMapping.statusCode, 400);
+    assert.deepEqual(rejectedMapping.json(), {
+      error: "validation_error",
+      message: "Actor mapping is invalid."
+    });
+    assert.match(rejectedMapping.headers["cache-control"] ?? "", /no-store/);
   } finally {
     await app.close();
     await runtime.close();

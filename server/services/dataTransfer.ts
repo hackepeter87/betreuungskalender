@@ -7,12 +7,20 @@ import {
   type PersistenceRuntime
 } from "../db/runtime.js";
 import { appDataImportSchema } from "../validation/schemas.js";
+import {
+  MAX_CARE_ENTRY_COSTS,
+  MAX_CARE_ENTRY_TRIPS,
+  MAX_CHILD_RELATIONS_PER_RECORD,
+  MAX_TRANSFER_ACTORS,
+  MAX_TRANSFER_ACTOR_RELATIONS,
+  MAX_TRANSFER_COLLECTION_RECORDS,
+  MAX_TRANSFER_TOTAL_RECORDS
+} from "../validation/processingLimits.js";
 import { importData } from "../routes/appData.js";
 import type { WorkspaceRole } from "../auth.js";
 import { getClientSettings } from "./settings.js";
 
 const FORMAT_VERSION = 1;
-const MAX_RECORDS = 100_000;
 const MAX_STRUCTURE_DEPTH = 24;
 const MAX_STRING_LENGTH = 250_000;
 const MAX_OBJECT_KEYS = 2_000;
@@ -252,10 +260,11 @@ async function activeEntryRows(
     query = query
       .where("start_datetime", "<", startOfFollowingDay(range.endDate))
       .where("end_datetime", ">", `${range.startDate}T00:00:00.000Z`);
-    query = query.limit(MAX_REPORT_CATEGORY_RECORDS + 1);
   }
+  const limit = range ? MAX_REPORT_CATEGORY_RECORDS : MAX_TRANSFER_COLLECTION_RECORDS;
+  query = query.limit(limit + 1);
   const rows = await query.execute() as DataRecord[];
-  assertRecordLimit(rows, range ? MAX_REPORT_CATEGORY_RECORDS : undefined);
+  assertRecordLimit(rows, limit);
   return rows.map(camelRecord);
 }
 
@@ -265,7 +274,7 @@ async function activeNestedRows(
   entryIds?: string[]
 ): Promise<DataRecord[]> {
   if (entryIds && entryIds.length === 0) return [];
-  if (!entryIds) return activeRows(database, table);
+  if (!entryIds) return activeRows(database, table, MAX_TRANSFER_COLLECTION_RECORDS);
   const rows: DataRecord[] = [];
   for (const entryIdChunk of chunks(entryIds, REPORT_QUERY_CHUNK_SIZE)) {
     const chunkRows = await database.selectFrom(table)
@@ -319,7 +328,8 @@ async function junctionMap(
       assertRecordLimit(rows, MAX_REPORT_RELATED_RECORDS);
     }
   } else {
-    rows.push(...await queryFor().execute() as Array<{ parentId: string; childId: string }>);
+    rows.push(...await queryFor().limit(MAX_TRANSFER_COLLECTION_RECORDS + 1).execute() as Array<{ parentId: string; childId: string }>);
+    assertRecordLimit(rows, MAX_TRANSFER_COLLECTION_RECORDS);
   }
   for (const row of rows) result.set(row.parentId, [...(result.get(row.parentId) ?? []), row.childId]);
   return result;
@@ -358,7 +368,7 @@ export async function exportDomainData(
       .where("end_date", ">=", reportRange.startDate)
       .limit(MAX_REPORT_CATEGORY_RECORDS + 1)
       .execute()
-    : activeRows(database, "holiday_periods");
+    : activeRows(database, "holiday_periods", MAX_TRANSFER_COLLECTION_RECORDS);
   const unavailableRowsPromise = reportRange
     ? database.selectFrom("unavailable_periods")
       .selectAll()
@@ -367,7 +377,7 @@ export async function exportDomainData(
       .where("end_datetime", ">", `${reportRange.startDate}T00:00:00.000Z`)
       .limit(MAX_REPORT_CATEGORY_RECORDS + 1)
       .execute()
-    : activeRows(database, "unavailable_periods");
+    : activeRows(database, "unavailable_periods", MAX_TRANSFER_COLLECTION_RECORDS);
   const [holidayRowsRaw, unavailableRowsRaw] = await Promise.all([
     holidayRowsPromise,
     unavailableRowsPromise
@@ -444,8 +454,8 @@ export async function exportDomainData(
     auditRows,
     closingRows
   ] = await Promise.all([
-    activeRows(database, "children", reportRange ? MAX_REPORT_CATEGORY_RECORDS : undefined),
-    activeRows(database, "care_parties", reportRange ? MAX_REPORT_CATEGORY_RECORDS : undefined),
+    activeRows(database, "children", reportRange ? MAX_REPORT_CATEGORY_RECORDS : MAX_TRANSFER_COLLECTION_RECORDS),
+    activeRows(database, "care_parties", reportRange ? MAX_REPORT_CATEGORY_RECORDS : MAX_TRANSFER_COLLECTION_RECORDS),
     Promise.resolve(holidayRows),
     Promise.resolve(unavailableRows),
     reportRange ? Promise.resolve([]) : database.selectFrom("external_calendar_sources")
@@ -455,6 +465,7 @@ export async function exportDomainData(
       ])
       .orderBy("created_at")
       .orderBy("id")
+      .limit(MAX_TRANSFER_COLLECTION_RECORDS + 1)
       .execute(),
     reportRange ? Promise.resolve([]) : database.selectFrom("external_calendar_events")
       .select([
@@ -463,9 +474,10 @@ export async function exportDomainData(
       ])
       .orderBy("start_datetime")
       .orderBy("id")
+      .limit(MAX_TRANSFER_COLLECTION_RECORDS + 1)
       .execute(),
-    reportRange ? Promise.resolve([]) : activeRows(database, "contact_patterns"),
-    reportRange ? Promise.resolve([]) : activeRows(database, "contact_rules"),
+    reportRange ? Promise.resolve([]) : activeRows(database, "contact_patterns", MAX_TRANSFER_COLLECTION_RECORDS),
+    reportRange ? Promise.resolve([]) : activeRows(database, "contact_rules", MAX_TRANSFER_COLLECTION_RECORDS),
     reportRange ? Promise.resolve([]) : database.selectFrom("audit_log as audit")
       .leftJoin("app_users as users", "users.id", "audit.user_email")
       .leftJoin("data_transfer_actors as actors", "actors.id", "audit.user_email")
@@ -479,6 +491,7 @@ export async function exportDomainData(
       .where("audit.deleted_at", "is", null)
       .orderBy("audit.timestamp")
       .orderBy("audit.id")
+      .limit(MAX_TRANSFER_COLLECTION_RECORDS + 1)
       .execute(),
     database.selectFrom("monthly_closings")
       .select([
@@ -490,8 +503,12 @@ export async function exportDomainData(
         .where("month_key", ">=", reportRange!.startDate.slice(0, 7))
         .where("month_key", "<=", reportRange!.endDate.slice(0, 7)))
       .orderBy("month_key")
+      .limit((reportRange ? MAX_REPORT_CATEGORY_RECORDS : MAX_TRANSFER_COLLECTION_RECORDS) + 1)
       .execute()
   ]);
+  for (const rows of [externalCalendarSources, externalCalendarEvents, auditRows, closingRows]) {
+    assertRecordLimit(rows, reportRange ? MAX_REPORT_CATEGORY_RECORDS : MAX_TRANSFER_COLLECTION_RECORDS);
+  }
 
   return appDataImportSchema.parse({
     schemaVersion: 6,
@@ -586,37 +603,69 @@ async function exportActors(
   data: ImportData,
   database: DatabaseExecutor
 ): Promise<PortableActor[]> {
-  const actors: PortableActor[] = [];
-  for (const sourceRef of referencedActorIds(data)) {
-    const [row, assignments] = await Promise.all([
+  const sourceRefs = [...referencedActorIds(data)].sort();
+  if (sourceRefs.length > MAX_TRANSFER_ACTORS) {
+    throw new Error("Transfer package contains too many actor records.");
+  }
+
+  const actorRows: Array<{
+    sourceRef: string;
+    displayName: string | null;
+    email: string | null;
+    role: string | null;
+  }> = [];
+  const assignmentRows: Array<{ sourceRef: string; carePartyId: string }> = [];
+  for (const sourceRefChunk of chunks(sourceRefs, REPORT_QUERY_CHUNK_SIZE)) {
+    const [chunkActors, chunkAssignments] = await Promise.all([
       database.selectFrom("app_users as users")
         .leftJoin("app_memberships as memberships", (join) => join
           .onRef("memberships.user_id", "=", "users.id")
           .on("memberships.deleted_at", "is", null))
         .select([
+          "users.id as sourceRef",
           "users.display_name as displayName",
           "users.email",
           "memberships.role"
         ])
-        .where("users.id", "=", sourceRef)
-        .executeTakeFirst(),
+        .where("users.id", "in", sourceRefChunk)
+        .execute(),
       database.selectFrom("app_user_care_party_assignments")
-        .select("care_party_id as carePartyId")
-        .where("user_id", "=", sourceRef)
+        .select(["user_id as sourceRef", "care_party_id as carePartyId"])
+        .where("user_id", "in", sourceRefChunk)
         .where("deleted_at", "is", null)
+        .orderBy("user_id")
         .orderBy("care_party_id")
         .execute()
     ]);
+    actorRows.push(...chunkActors);
+    assignmentRows.push(...chunkAssignments);
+    if (assignmentRows.length > MAX_TRANSFER_ACTOR_RELATIONS) {
+      throw new Error("Transfer package contains too many actor relations.");
+    }
+  }
+
+  const actorsBySourceRef = new Map(actorRows.map((row) => [row.sourceRef, row]));
+  const carePartyIdsBySourceRef = new Map<string, string[]>();
+  for (const assignment of assignmentRows) {
+    const carePartyIds = carePartyIdsBySourceRef.get(assignment.sourceRef) ?? [];
+    if (carePartyIds.length >= MAX_CHILD_RELATIONS_PER_RECORD) {
+      throw new Error("Transfer package contains too many actor relations.");
+    }
+    carePartyIds.push(assignment.carePartyId);
+    carePartyIdsBySourceRef.set(assignment.sourceRef, carePartyIds);
+  }
+
+  return sourceRefs.map((sourceRef) => {
+    const row = actorsBySourceRef.get(sourceRef);
     const role = row?.role as WorkspaceRole | null | undefined;
-    actors.push({
+    return {
       sourceRef,
       displayName: row?.displayName ?? sourceRef,
       ...(row?.email ? { email: row.email } : {}),
       ...(role ? { suggestedRole: role } : {}),
-      carePartyIds: assignments.map((item) => item.carePartyId)
-    });
-  }
-  return actors.sort((left, right) => left.sourceRef.localeCompare(right.sourceRef));
+      carePartyIds: carePartyIdsBySourceRef.get(sourceRef) ?? []
+    };
+  });
 }
 
 export async function createPortableTransfer(
@@ -631,7 +680,9 @@ export async function createPortableTransfer(
       data: await exportDomainData(database),
       actors: [] as PortableActor[]
     };
+    assertTransferRecordBudgets(withoutChecksum.data, []);
     withoutChecksum.actors = await exportActors(withoutChecksum.data, database);
+    assertTransferRecordBudgets(withoutChecksum.data, withoutChecksum.actors);
     return { ...withoutChecksum, checksum: sha256(envelopePayload(withoutChecksum)) };
   });
 }
@@ -652,6 +703,57 @@ function countRecords(data: ImportData): TransferCounts {
   };
 }
 
+const nestedArrayLimits = {
+  childIds: MAX_CHILD_RELATIONS_PER_RECORD,
+  actualChildIds: MAX_CHILD_RELATIONS_PER_RECORD,
+  trips: MAX_CARE_ENTRY_TRIPS,
+  costs: MAX_CARE_ENTRY_COSTS,
+  segments: MAX_CHILD_RELATIONS_PER_RECORD
+} as const;
+
+function assertTransferRecordBudgets(data: ImportData, actors: PortableActor[]): void {
+  const topLevelCount = Object.values(countRecords(data)).reduce((sum, count) => sum + count, 0);
+  let nestedCount = 0;
+  const nestedCounts = new Map<string, number>();
+  for (const collection of [
+    data.entries,
+    data.holidayPeriods,
+    data.unavailablePeriods,
+    data.contactPatterns,
+    data.contactRules
+  ]) {
+    for (const record of collection) {
+      for (const [key, limit] of Object.entries(nestedArrayLimits)) {
+        const nested = record[key];
+        if (!Array.isArray(nested)) continue;
+        if (nested.length > limit) throw new Error("Transfer package contains too many nested records.");
+        const collectionCount = (nestedCounts.get(key) ?? 0) + nested.length;
+        if (collectionCount > MAX_TRANSFER_COLLECTION_RECORDS) {
+          throw new Error("Transfer package contains too many nested records.");
+        }
+        nestedCounts.set(key, collectionCount);
+        nestedCount += nested.length;
+      }
+    }
+  }
+  if (actors.length > MAX_TRANSFER_ACTORS) {
+    throw new Error("Transfer package contains too many actor records.");
+  }
+  let actorRelationCount = 0;
+  for (const actor of actors) {
+    if (actor.carePartyIds.length > MAX_CHILD_RELATIONS_PER_RECORD) {
+      throw new Error("Transfer package contains too many actor relations.");
+    }
+    actorRelationCount += actor.carePartyIds.length;
+  }
+  if (actorRelationCount > MAX_TRANSFER_ACTOR_RELATIONS) {
+    throw new Error("Transfer package contains too many actor relations.");
+  }
+  if (topLevelCount + nestedCount + actors.length + actorRelationCount > MAX_TRANSFER_TOTAL_RECORDS) {
+    throw new Error("Transfer package contains too many records.");
+  }
+}
+
 function normalizeTransfer(input: unknown): NormalizedTransfer {
   validateStructure(input);
   const serialized = JSON.stringify(input);
@@ -666,6 +768,9 @@ function normalizeTransfer(input: unknown): NormalizedTransfer {
     const expected = sha256(envelopePayload(withoutChecksum as Omit<PortableTransferEnvelope, "checksum">));
     if (checksum !== expected) throw new Error("Transfer package checksum is invalid.");
     const data = appDataImportSchema.parse(record.data);
+    if (Array.isArray(record.actors) && record.actors.length > MAX_TRANSFER_ACTORS) {
+      throw new Error("Transfer package contains too many actor records.");
+    }
     const actors = Array.isArray(record.actors)
       ? record.actors.map((actor) => {
           if (!actor || typeof actor !== "object") throw new Error("Transfer actor is invalid.");
@@ -674,6 +779,12 @@ function normalizeTransfer(input: unknown): NormalizedTransfer {
           const displayName = String(item.displayName ?? "").trim();
           if (!sourceRef || !displayName) throw new Error("Transfer actor is incomplete.");
           const role = item.suggestedRole;
+          const carePartyIds = Array.isArray(item.carePartyIds)
+            ? item.carePartyIds.filter((value): value is string => typeof value === "string")
+            : [];
+          if (carePartyIds.length > MAX_CHILD_RELATIONS_PER_RECORD) {
+            throw new Error("Transfer package contains too many actor relations.");
+          }
           return {
             sourceRef,
             displayName,
@@ -681,9 +792,7 @@ function normalizeTransfer(input: unknown): NormalizedTransfer {
             ...(role === "admin" || role === "editor" || role === "scheduler" || role === "viewer"
               ? { suggestedRole: role }
               : {}),
-            carePartyIds: Array.isArray(item.carePartyIds)
-              ? item.carePartyIds.filter((value): value is string => typeof value === "string")
-              : []
+            carePartyIds
           } satisfies PortableActor;
         })
       : [];
@@ -799,14 +908,12 @@ export async function dryRunPortableTransfer(
   targetRuntime: PersistenceRuntime
 ): Promise<TransferDryRunResult> {
   const normalized = normalizeTransfer(input);
+  assertTransferRecordBudgets(normalized.data, normalized.actors);
   const counts = countRecords(normalized.data);
   const currentData = await targetRuntime.transaction((database) => exportDomainData(database));
   const currentCounts = countRecords(currentData);
   const comparison = transferComparison(counts, currentCounts);
   const checks = baseChecks(normalized);
-  if (Object.values(counts).reduce((sum, count) => sum + count, 0) > MAX_RECORDS) {
-    throw new Error("Transfer package contains too many records.");
-  }
   const references = missingReferences(normalized.data);
   if (references.length) {
     checks.find((check) => check.code === "references")!.status = "failed";

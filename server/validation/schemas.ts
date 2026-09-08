@@ -15,6 +15,12 @@ import {
   isValidDateKey
 } from "../../shared/temporal.js";
 import { expandContactRule } from "../../shared/contactRuleExpansion.js";
+import {
+  MAX_CARE_ENTRY_COSTS,
+  MAX_CARE_ENTRY_TRIPS,
+  MAX_CHILD_RELATIONS_PER_RECORD,
+  MAX_TRANSFER_COLLECTION_RECORDS
+} from "./processingLimits.js";
 
 const rruleExports = rrule as typeof rrule & {
   default?: typeof rrule;
@@ -42,7 +48,9 @@ function timedRangeWithinDomainLimit(startDateTime: string, endDateTime: string)
   return isTimedRangeWithinDays(startDateTime, endDateTime, MAX_DOMAIN_RANGE_DAYS);
 }
 
-const childIds = z.array(z.string().min(1)).min(1, "Mindestens ein Kind ist erforderlich.");
+const childIds = z.array(z.string().min(1))
+  .min(1, "Mindestens ein Kind ist erforderlich.")
+  .max(MAX_CHILD_RELATIONS_PER_RECORD, "Zu viele Kinderzuordnungen.");
 const careDeviationTypeSchema = z.enum([
   "cancelled",
   "partial",
@@ -139,7 +147,7 @@ export const careEntryInputSchema = z
     plannedEndDateTime: domainDateTime.optional(),
     actualStartDateTime: domainDateTime.optional(),
     actualEndDateTime: domainDateTime.optional(),
-    actualChildIds: z.array(z.string().trim().min(1)).optional(),
+    actualChildIds: z.array(z.string().trim().min(1)).max(MAX_CHILD_RELATIONS_PER_RECORD).optional(),
     actualResponsiblePartyId: z.string().trim().min(1).max(200).optional(),
     childIds,
     generatedByPatternId: z.string().trim().min(1).max(200).optional(),
@@ -166,8 +174,8 @@ export const careEntryInputSchema = z
     notes: z.string().trim().max(10000).optional(),
     evidenceReference: z.string().trim().max(2000).optional(),
     hasEvidence: z.boolean().default(false),
-    trips: z.array(tripInputSchema).default([]),
-    costs: z.array(costInputSchema).default([]),
+    trips: z.array(tripInputSchema).max(MAX_CARE_ENTRY_TRIPS, "Zu viele Fahrten.").default([]),
+    costs: z.array(costInputSchema).max(MAX_CARE_ENTRY_COSTS, "Zu viele Kostenpositionen.").default([]),
     confirmPlannedConflict: z.boolean().default(false),
     conflictFingerprint: z.string().regex(/^[a-f0-9]{64}$/).optional()
   })
@@ -549,17 +557,17 @@ export const monthlyClosingInputSchema = z.object({
 
 export const appDataImportSchema = z.object({
   schemaVersion: z.number().int(),
-  children: z.array(z.record(z.string(), z.unknown())),
-  entries: z.array(z.record(z.string(), z.unknown())),
-  holidayPeriods: z.array(z.record(z.string(), z.unknown())).default([]),
-  unavailablePeriods: z.array(z.record(z.string(), z.unknown())).default([]),
-  externalCalendarSources: z.array(z.record(z.string(), z.unknown())).default([]),
-  externalCalendarEvents: z.array(z.record(z.string(), z.unknown())).default([]),
-  careParties: z.array(z.record(z.string(), z.unknown())).default([]),
-  contactPatterns: z.array(z.record(z.string(), z.unknown())).default([]),
-  contactRules: z.array(z.record(z.string(), z.unknown())).default([]),
-  auditLog: z.array(z.record(z.string(), z.unknown())).default([]),
-  monthClosures: z.array(z.record(z.string(), z.unknown())).default([]),
+  children: z.array(z.record(z.string(), z.unknown())).max(MAX_TRANSFER_COLLECTION_RECORDS),
+  entries: z.array(z.record(z.string(), z.unknown())).max(MAX_TRANSFER_COLLECTION_RECORDS),
+  holidayPeriods: z.array(z.record(z.string(), z.unknown())).max(MAX_TRANSFER_COLLECTION_RECORDS).default([]),
+  unavailablePeriods: z.array(z.record(z.string(), z.unknown())).max(MAX_TRANSFER_COLLECTION_RECORDS).default([]),
+  externalCalendarSources: z.array(z.record(z.string(), z.unknown())).max(MAX_TRANSFER_COLLECTION_RECORDS).default([]),
+  externalCalendarEvents: z.array(z.record(z.string(), z.unknown())).max(MAX_TRANSFER_COLLECTION_RECORDS).default([]),
+  careParties: z.array(z.record(z.string(), z.unknown())).max(MAX_TRANSFER_COLLECTION_RECORDS).default([]),
+  contactPatterns: z.array(z.record(z.string(), z.unknown())).max(MAX_TRANSFER_COLLECTION_RECORDS).default([]),
+  contactRules: z.array(z.record(z.string(), z.unknown())).max(MAX_TRANSFER_COLLECTION_RECORDS).default([]),
+  auditLog: z.array(z.record(z.string(), z.unknown())).max(MAX_TRANSFER_COLLECTION_RECORDS).default([]),
+  monthClosures: z.array(z.record(z.string(), z.unknown())).max(MAX_TRANSFER_COLLECTION_RECORDS).default([]),
   lastJsonBackupAt: z.string().optional(),
   settings: z.record(z.string(), z.unknown()),
   updatedAt: isoDateTime
