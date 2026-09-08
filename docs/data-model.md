@@ -450,6 +450,14 @@ replaces domain data in one transaction only after revalidation of the exact
 tested fingerprint. Existing legacy JSON exports remain supported as format
 version 0, without historical actor snapshots.
 
+Transfer validation accepts at most 50,000 records in any one top-level
+category and at most 100,000 records across top-level and nested collections.
+The aggregate includes child relations, trips, costs, rule segments,
+historical actor snapshots, and proposed actor assignments. One care entry may
+contain at most 100 child relations, 100 trips, and 100 costs. Oversized
+packages are rejected before the target database is read or changed; the same
+limits apply to dry runs and real imports.
+
 The detailed review result is browser-local and is not stored as transfer
 history. The successful import replaces any previous `data_transfer_runs`
 state, retaining only the current run needed for historical actor mapping.
