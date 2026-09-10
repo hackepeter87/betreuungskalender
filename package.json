@@ -57,7 +57,7 @@
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "kysely": "^0.28.17",
-    "nodemailer": "^9.0.5",
+    "nodemailer": "^9.1.1",
     "openid-client": "^6.8.6",
     "pg": "^8.23.0",
     "react": "^19.1.1",
