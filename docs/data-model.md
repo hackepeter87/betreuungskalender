@@ -205,8 +205,10 @@ during migration `012_care_parties` when such data exists.
 active assignment exists, the installation remains in solo mode and users with
 write permission can manage all care parties. Once at least one assignment is
 configured, non-admin users must write care entries and contact rules for one
-of their assigned care parties. Admin users remain unrestricted so they can
-repair assignments and data.
+of their assigned care parties. This scope also applies to legacy contact
+patterns and reduced schedule projections. Conflict indicators in those
+projections are derived only from entries in the same visible scope. Admin
+users remain unrestricted so they can repair assignments and data.
 
 ## Derived care conflicts
 

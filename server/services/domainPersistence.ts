@@ -295,29 +295,56 @@ export async function assignedPersistedCarePartyIds(
   return rows.map((row) => row.care_party_id);
 }
 
+export class CarePartyAccessError extends Error {
+  readonly code = "forbidden";
+  readonly statusCode = 403;
+
+  constructor() {
+    super("Diese betreuende Person ist für deinen Benutzer nicht freigegeben.");
+    this.name = "CarePartyAccessError";
+  }
+}
+
+export function isCarePartyAccessError(error: unknown): error is CarePartyAccessError {
+  return error instanceof CarePartyAccessError ||
+    (error instanceof Error && (error as { code?: string }).code === "forbidden");
+}
+
+export async function scopedPersistedCarePartyIds(
+  database: DatabaseExecutor,
+  user: RequestUser | undefined
+): Promise<string[] | undefined> {
+  if (
+    !user ||
+    user.isOwner ||
+    user.workspaceRole === "admin" ||
+    (!user.workspaceRole && user.role === "admin")
+  ) {
+    return undefined;
+  }
+  const assignmentCount = await database.selectFrom("app_user_care_party_assignments")
+    .select(({ fn }) => fn.count<number>("id").as("count"))
+    .where("deleted_at", "is", null)
+    .executeTakeFirst();
+  if (Number(assignmentCount?.count ?? 0) === 0) return undefined;
+  return assignedPersistedCarePartyIds(database, user.id);
+}
+
 export async function assertCanUsePersistedCareParty(
   database: DatabaseExecutor,
   user: RequestUser | undefined,
   carePartyId: string | undefined
 ): Promise<void> {
-  const assignmentCount = await database.selectFrom("app_user_care_party_assignments")
-    .select(({ fn }) => fn.count<number>("id").as("count"))
-    .where("deleted_at", "is", null)
-    .executeTakeFirst();
-  const sharedMode = Number(assignmentCount?.count ?? 0) > 0;
+  const scopedPartyIds = await scopedPersistedCarePartyIds(database, user);
   if (!carePartyId) {
-    if (user && user.role !== "admin" && sharedMode) {
-      throw new Error("Eine zugeordnete betreuende Person ist erforderlich.");
-    }
+    if (scopedPartyIds) throw new CarePartyAccessError();
     return;
   }
   if (!(await getPersistedCareParty(database, carePartyId))) {
-    throw new Error("Diese betreuende Person ist für deinen Benutzer nicht freigegeben.");
+    throw new CarePartyAccessError();
   }
-  if (!user || user.role === "admin" || !sharedMode) return;
-  const assigned = await assignedPersistedCarePartyIds(database, user.id);
-  if (!assigned.includes(carePartyId)) {
-    throw new Error("Diese betreuende Person ist für deinen Benutzer nicht freigegeben.");
+  if (scopedPartyIds && !scopedPartyIds.includes(carePartyId)) {
+    throw new CarePartyAccessError();
   }
 }
 

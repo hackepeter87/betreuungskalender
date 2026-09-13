@@ -2,10 +2,13 @@ import type { FastifyInstance } from "fastify";
 import { config } from "../config.js";
 import type { DatabaseExecutor } from "../db/runtime.js";
 import {
+  assertCanUsePersistedCareParty,
   assertPersistedChildren,
   getPersistedDefaultResponsiblePartyId,
+  isCarePartyAccessError,
   recordDomainAudit,
   recordDomainFieldChanges,
+  scopedPersistedCarePartyIds,
   syncPersistedChildJunction
 } from "../services/domainPersistence.js";
 import { bool, makeId, nowIso } from "../services/common.js";
@@ -95,15 +98,44 @@ async function getPattern(database: DatabaseExecutor, id: string): Promise<Mappe
   return row ? mapPattern(database, row) : undefined;
 }
 
+async function patternResponsiblePartyId(
+  database: DatabaseExecutor,
+  patternId: string
+): Promise<string | undefined> {
+  const row = await database.selectFrom("contact_rules")
+    .select("responsible_party_id")
+    .where("source_contact_pattern_id", "=", patternId)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst();
+  return row?.responsible_party_id ?? undefined;
+}
+
 export async function contactPatternRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/contact-patterns", readLimit, async () => {
+  app.get("/api/contact-patterns", readLimit, async (request) => {
+    const scopedPartyIds = await scopedPersistedCarePartyIds(app.persistence.query, request.user);
+    if (scopedPartyIds?.length === 0) return [];
     const rows = await app.persistence.query.selectFrom("contact_patterns")
       .selectAll()
       .where("deleted_at", "is", null)
       .orderBy("start_date")
       .orderBy("name")
       .execute() as PatternRow[];
-    return Promise.all(rows.map((row) => mapPattern(app.persistence.query, row)));
+    if (!scopedPartyIds) {
+      return Promise.all(rows.map((row) => mapPattern(app.persistence.query, row)));
+    }
+    const visiblePatternRows = await app.persistence.query.selectFrom("contact_rules")
+      .select("source_contact_pattern_id")
+      .where("deleted_at", "is", null)
+      .where("responsible_party_id", "in", scopedPartyIds)
+      .where("source_contact_pattern_id", "is not", null)
+      .execute();
+    const visiblePatternIds = new Set(
+      visiblePatternRows.flatMap((row) => row.source_contact_pattern_id ?? [])
+    );
+    return Promise.all(
+      rows.filter((row) => visiblePatternIds.has(row.id))
+        .map((row) => mapPattern(app.persistence.query, row))
+    );
   });
 
   app.post("/api/contact-patterns", writeLimit, async (request, reply) => {
@@ -114,6 +146,8 @@ export async function contactPatternRoutes(app: FastifyInstance): Promise<void> 
     try {
       const result = await app.persistence.transaction(async (database) => {
         await assertPersistedChildren(database, parsed.data.childIds);
+        const responsiblePartyId = await getPersistedDefaultResponsiblePartyId(database);
+        await assertCanUsePersistedCareParty(database, request.user, responsiblePartyId);
         await database.insertInto("contact_patterns").values({
           id,
           name: parsed.data.name,
@@ -145,7 +179,7 @@ export async function contactPatternRoutes(app: FastifyInstance): Promise<void> 
           newValue: saved
         });
         await upsertContactRuleFromPattern(
-          patternInputFromRow(saved, await getPersistedDefaultResponsiblePartyId(database)),
+          patternInputFromRow(saved, responsiblePartyId),
           database
         );
         const syncSummary = await syncContactRule(saved.id, {
@@ -157,6 +191,9 @@ export async function contactPatternRoutes(app: FastifyInstance): Promise<void> 
       });
       return reply.code(201).send(result);
     } catch (error) {
+      if (isCarePartyAccessError(error)) {
+        return reply.code(403).send({ error: "forbidden" });
+      }
       return reply.code(400).send({ error: "invalid_relation", message: error instanceof Error ? error.message : String(error) });
     }
   });
@@ -170,6 +207,9 @@ export async function contactPatternRoutes(app: FastifyInstance): Promise<void> 
     try {
       return await app.persistence.transaction(async (database) => {
         await assertPersistedChildren(database, parsed.data.childIds);
+        const responsiblePartyId = await patternResponsiblePartyId(database, request.params.id) ??
+          await getPersistedDefaultResponsiblePartyId(database);
+        await assertCanUsePersistedCareParty(database, request.user, responsiblePartyId);
         await database.updateTable("contact_patterns").set({
           name: parsed.data.name,
           start_date: parsed.data.startDate,
@@ -200,7 +240,7 @@ export async function contactPatternRoutes(app: FastifyInstance): Promise<void> 
           ["updatedAt", "updatedBy"]
         );
         await upsertContactRuleFromPattern(
-          patternInputFromRow(after, await getPersistedDefaultResponsiblePartyId(database)),
+          patternInputFromRow(after, responsiblePartyId),
           database
         );
         const syncSummary = await syncContactRule(after.id, {
@@ -211,6 +251,9 @@ export async function contactPatternRoutes(app: FastifyInstance): Promise<void> 
         return { ...after, syncSummary };
       });
     } catch (error) {
+      if (isCarePartyAccessError(error)) {
+        return reply.code(403).send({ error: "forbidden" });
+      }
       return reply.code(400).send({ error: "invalid_relation", message: error instanceof Error ? error.message : String(error) });
     }
   });
@@ -219,34 +262,46 @@ export async function contactPatternRoutes(app: FastifyInstance): Promise<void> 
     const before = await getPattern(app.persistence.query, request.params.id);
     if (!before) return reply.code(404).send({ error: "not_found" });
     const timestamp = nowIso();
-    await app.persistence.transaction(async (database) => {
-      await database.updateTable("contact_patterns")
-        .set({ deleted_at: timestamp, updated_by: request.userEmail, updated_at: timestamp })
-        .where("id", "=", request.params.id)
-        .execute();
-      await database.updateTable("contact_pattern_children")
-        .set({ deleted_at: timestamp, updated_at: timestamp })
-        .where("contact_pattern_id", "=", request.params.id)
-        .where("deleted_at", "is", null)
-        .execute();
-      await database.updateTable("contact_rules")
-        .set({ deleted_at: timestamp, updated_by: request.userEmail, updated_at: timestamp })
-        .where("source_contact_pattern_id", "=", request.params.id)
-        .where("deleted_at", "is", null)
-        .execute();
-      await database.updateTable("contact_rule_children")
-        .set({ deleted_at: timestamp, updated_at: timestamp })
-        .where("contact_rule_id", "=", request.params.id)
-        .where("deleted_at", "is", null)
-        .execute();
-      await recordDomainAudit(database, {
-        userEmail: request.userEmail,
-        entityType: "contact_pattern",
-        entityId: request.params.id,
-        action: "deleted",
-        oldValue: before
+    try {
+      await app.persistence.transaction(async (database) => {
+        await assertCanUsePersistedCareParty(
+          database,
+          request.user,
+          await patternResponsiblePartyId(database, request.params.id)
+        );
+        await database.updateTable("contact_patterns")
+          .set({ deleted_at: timestamp, updated_by: request.userEmail, updated_at: timestamp })
+          .where("id", "=", request.params.id)
+          .execute();
+        await database.updateTable("contact_pattern_children")
+          .set({ deleted_at: timestamp, updated_at: timestamp })
+          .where("contact_pattern_id", "=", request.params.id)
+          .where("deleted_at", "is", null)
+          .execute();
+        await database.updateTable("contact_rules")
+          .set({ deleted_at: timestamp, updated_by: request.userEmail, updated_at: timestamp })
+          .where("source_contact_pattern_id", "=", request.params.id)
+          .where("deleted_at", "is", null)
+          .execute();
+        await database.updateTable("contact_rule_children")
+          .set({ deleted_at: timestamp, updated_at: timestamp })
+          .where("contact_rule_id", "=", request.params.id)
+          .where("deleted_at", "is", null)
+          .execute();
+        await recordDomainAudit(database, {
+          userEmail: request.userEmail,
+          entityType: "contact_pattern",
+          entityId: request.params.id,
+          action: "deleted",
+          oldValue: before
+        });
       });
-    });
-    return reply.code(204).send();
+      return reply.code(204).send();
+    } catch (error) {
+      if (isCarePartyAccessError(error)) {
+        return reply.code(403).send({ error: "forbidden" });
+      }
+      throw error;
+    }
   });
 }

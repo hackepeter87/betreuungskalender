@@ -31,3 +31,6 @@ control, reverse-proxy configuration, and protected backups. See
 Workspace membership is the authorization source for native OIDC users.
 Removing a membership also invalidates that identity's active application
 sessions; restoring membership requires a new login.
+
+When shared care-party assignments are enabled, non-admin planning and reduced
+schedule access is limited to the user's assigned care parties.

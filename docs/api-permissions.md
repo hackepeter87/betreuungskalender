@@ -29,6 +29,10 @@ token.
 | `POST /api/care-confirmations/:id/answer`, `POST /api/care-confirmations/:id/remind-later` | `appointments:confirm` |
 | `GET/PUT /api/notification-preferences`, `POST /api/push-subscriptions`, `DELETE /api/push-subscriptions/:id` | `notifications:manage-own` |
 
+When shared care-party assignments are active, reduced schedule responses are
+limited to the authenticated user's assigned care parties. Their conflict
+indicators are calculated from that same authorized result set.
+
 ## Children, care parties, and planning
 
 | Routes | Permission |

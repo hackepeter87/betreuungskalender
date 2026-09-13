@@ -69,6 +69,7 @@ interface CareConflictEntryQuery {
   excludeId?: string;
   maxChildLinks?: number;
   maxEntries?: number;
+  responsiblePartyIds?: string[];
   startBefore?: string;
 }
 
@@ -119,6 +120,11 @@ export async function listCareConflictEntries(
     .select(["id", "status", "start_datetime", "end_datetime", "actual_start_datetime", "actual_end_datetime"])
     .where("deleted_at", "is", null)
     .where("status", "!=", "cancelled");
+  if (options.responsiblePartyIds) {
+    const responsiblePartyIds = [...new Set(options.responsiblePartyIds)];
+    if (!responsiblePartyIds.length) return [];
+    query = query.where("responsible_party_id", "in", responsiblePartyIds);
+  }
   if (options.actualOnly) query = query.where("status", "in", ["completed", "partial"]);
   if (options.excludeId) {
     query = query.where("id", "!=", options.excludeId);
@@ -227,9 +233,10 @@ export async function listCareConflictEntries(
 }
 
 export async function listCareConflicts(
-  database: DatabaseExecutor
+  database: DatabaseExecutor,
+  options: Pick<CareConflictEntryQuery, "responsiblePartyIds"> = {}
 ): Promise<ApiCareConflict[]> {
-  return detectCareConflicts(await listCareConflictEntries(database), {
+  return detectCareConflicts(await listCareConflictEntries(database, options), {
     maxConflicts: MAX_CARE_CONFLICT_RESULTS
   });
 }
@@ -239,7 +246,8 @@ const previewCandidateId = "__care_conflict_candidate__";
 export async function previewPlannedCareConflicts(
   candidate: Omit<CareConflictEntry, "id">,
   database: DatabaseExecutor,
-  excludeId?: string
+  excludeId?: string,
+  responsiblePartyIds?: string[]
 ): Promise<{ conflicts: ApiCareConflict[]; fingerprint: string }> {
   if (candidate.status !== "planned") {
     return { conflicts: [], fingerprint: createHash("sha256").update("no-planned-conflict").digest("hex") };
@@ -250,6 +258,7 @@ export async function previewPlannedCareConflicts(
     excludeId,
     maxChildLinks: MAX_ACTUAL_CONFLICT_CHILD_LINKS,
     maxEntries: MAX_ACTUAL_CONFLICT_CANDIDATES,
+    ...(responsiblePartyIds ? { responsiblePartyIds } : {}),
     startBefore: candidate.endDateTime
   });
   const conflicts = detectCareConflicts([
