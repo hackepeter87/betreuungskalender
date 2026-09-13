@@ -107,8 +107,9 @@ relationship for each installation.
 
 Opaque session cookies are used only for authentication modes that establish
 an application session. A separate recovery cookie is used only when the
-recovery-admin feature is enabled and invoked. Local interface storage keeps
-presentation preferences.
+recovery-admin feature is enabled and invoked. Native OIDC additionally uses a
+short-lived, callback-scoped cookie to bind a login transaction to the browser
+that started it. Local interface storage keeps presentation preferences.
 Optional service-worker cache storage starts only after accepted installation,
 standalone use, or explicit push activation. No analytics or advertising
 storage is included.

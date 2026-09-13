@@ -1,4 +1,5 @@
 import * as oidc from "openid-client";
+import { createHash, randomBytes } from "node:crypto";
 import type { AuthenticatedClaims } from "./auth.js";
 import {
   OidcLoginStateStore,
@@ -20,6 +21,11 @@ export interface NativeOidcConfig {
 export type NativeOidcClaims = AuthenticatedClaims & {
   loginContext: OidcLoginContext;
 };
+
+export interface NativeOidcLoginRedirect {
+  redirectUrl: URL;
+  browserMarker: string;
+}
 
 interface TokenResponseWithClaims {
   claims(): Record<string, unknown> | undefined;
@@ -117,12 +123,15 @@ export class NativeOidcService {
     this.#library = options.library ?? openidClientLibrary;
   }
 
-  async createLoginRedirect(context: OidcLoginContext = { type: "normal" }): Promise<URL> {
+  async createLoginRedirect(
+    context: OidcLoginContext = { type: "normal" }
+  ): Promise<NativeOidcLoginRedirect> {
     const configuration = await this.#configuration();
     const codeVerifier = this.#library.randomPKCECodeVerifier();
     const codeChallenge = await this.#library.calculatePKCECodeChallenge(codeVerifier);
     const state = this.#library.randomState();
     const nonce = this.#library.randomNonce();
+    const browserMarker = randomBytes(32).toString("base64url");
     const redirectUri = this.#required("redirectUri", this.#config.redirectUri);
 
     await this.#loginStates.create(
@@ -130,13 +139,14 @@ export class NativeOidcService {
         state,
         nonce,
         pkceVerifier: codeVerifier,
+        browserMarkerHash: createHash("sha256").update(browserMarker).digest("hex"),
         redirectUri,
         context
       },
       this.#config.loginStateTtlSeconds
     );
 
-    return this.#library.buildAuthorizationUrl(configuration, {
+    const redirectUrl = this.#library.buildAuthorizationUrl(configuration, {
       redirect_uri: redirectUri,
       scope: this.#config.scopes,
       response_type: "code",
@@ -145,6 +155,7 @@ export class NativeOidcService {
       state,
       nonce
     });
+    return { redirectUrl, browserMarker };
   }
 
   async createLogoutRedirect(): Promise<URL> {
@@ -155,7 +166,7 @@ export class NativeOidcService {
     });
   }
 
-  async validateCallback(requestUrl: string): Promise<NativeOidcClaims> {
+  async validateCallback(requestUrl: string, browserMarker: string): Promise<NativeOidcClaims> {
     const callbackUrl = this.#callbackUrl(requestUrl);
     const state = callbackUrl.searchParams.get("state")?.trim();
     if (!state) {
@@ -166,7 +177,8 @@ export class NativeOidcService {
       );
     }
 
-    const loginState = await this.#loginStates.consume(state);
+    const browserMarkerHash = createHash("sha256").update(browserMarker).digest("hex");
+    const loginState = await this.#loginStates.consume(state, browserMarkerHash);
     if (!loginState) {
       throw new NativeOidcError(
         "native_oidc_invalid_state",

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import { userFromClaims, type RequestUser } from "../auth.js";
 import type { config as appConfig } from "../config.js";
@@ -92,6 +93,57 @@ interface NativeOidcRoutesOptions {
 }
 
 type Awaitable<T> = T | Promise<T>;
+
+const oidcBrowserMarkerPrefix = "bk_oidc_";
+const oidcCallbackPath = "/auth/callback";
+
+function oidcState(requestUrl: string | URL): string | undefined {
+  const url = requestUrl instanceof URL
+    ? requestUrl
+    : new URL(requestUrl, "http://localhost");
+  return url.searchParams.get("state")?.trim() || undefined;
+}
+
+function oidcBrowserMarkerName(state: string): string {
+  const nameDigest = createHash("sha256")
+    .update("oidc-browser-cookie-name\0")
+    .update(state)
+    .digest("hex")
+    .slice(0, 32);
+  return `${oidcBrowserMarkerPrefix}${nameDigest}`;
+}
+
+function serializeOidcBrowserMarker(
+  state: string,
+  value: string,
+  maxAgeSeconds: number,
+  secure: boolean
+): string {
+  return [
+    `${oidcBrowserMarkerName(state)}=${value}`,
+    `Path=${oidcCallbackPath}`,
+    `Max-Age=${maxAgeSeconds}`,
+    "HttpOnly",
+    "SameSite=Lax",
+    ...(secure ? ["Secure"] : [])
+  ].join("; ");
+}
+
+function clearOidcBrowserMarker(state: string, secure: boolean): string {
+  return [
+    `${oidcBrowserMarkerName(state)}=`,
+    `Path=${oidcCallbackPath}`,
+    "Max-Age=0",
+    "Expires=Thu, 01 Jan 1970 00:00:00 GMT",
+    "HttpOnly",
+    "SameSite=Lax",
+    ...(secure ? ["Secure"] : [])
+  ].join("; ");
+}
+
+function oidcBrowserMarker(cookieHeader: string | undefined, state: string): string | undefined {
+  return cookieValue(cookieHeader, oidcBrowserMarkerName(state));
+}
 
 function notFound(reply: FastifyReply) {
   return reply.code(404).send({
@@ -267,6 +319,29 @@ export async function nativeOidcRoutes(
     ) => acceptInvitationByHashInTransaction(tokenHash, user, database)
   };
 
+  const redirectToProvider = (
+    reply: FastifyReply,
+    login: { redirectUrl: URL; browserMarker: string }
+  ) => {
+    const { redirectUrl, browserMarker } = login;
+    const state = oidcState(redirectUrl);
+    if (!state) {
+      throw new NativeOidcError(
+        "native_oidc_request_failed",
+        500,
+        "Native OIDC request failed."
+      );
+    }
+    return reply
+      .header("set-cookie", serializeOidcBrowserMarker(
+        state,
+        browserMarker,
+        options.config.oidcLoginStateTtlSeconds,
+        secureCookie
+      ))
+      .redirect(redirectUrl.href);
+  };
+
   const providerLogoutUrl = async (
     log: FastifyInstance["log"]
   ): Promise<string | undefined> => {
@@ -285,8 +360,8 @@ export async function nativeOidcRoutes(
   app.get("/auth/login", authRateLimit, async (_request, reply) => {
     if (options.config.authMode !== "native-oidc") return notFound(reply);
     try {
-      const redirectUrl = await service.createLoginRedirect();
-      return reply.redirect(redirectUrl.href);
+      const login = await service.createLoginRedirect();
+      return redirectToProvider(reply, login);
     } catch (error) {
       const normalized = sanitizedError(error);
       return reply.code(normalized.statusCode).send({
@@ -331,8 +406,8 @@ export async function nativeOidcRoutes(
         throw new NativeOidcError("owner_setup_invalid", 400, "Der Owner-Setup-Link ist ungültig.");
       }
       const tokenHash = await ownerSetupTokens.begin(token);
-      const redirectUrl = await service.createLoginRedirect({ type: "owner_setup", tokenHash });
-      return onboardingReply.redirect(redirectUrl.href);
+      const login = await service.createLoginRedirect({ type: "owner_setup", tokenHash });
+      return redirectToProvider(onboardingReply, login);
     } catch (error) {
       const normalized = sanitizedError(error);
       return onboardingReply
@@ -373,8 +448,8 @@ export async function nativeOidcRoutes(
         throw new NativeOidcError("invalid_invitation", 400, "Die Einladung ist ungültig.");
       }
       const tokenHash = await invitationFlow.begin(token);
-      const redirectUrl = await service.createLoginRedirect({ type: "invitation", tokenHash });
-      return onboardingReply.redirect(redirectUrl.href);
+      const login = await service.createLoginRedirect({ type: "invitation", tokenHash });
+      return redirectToProvider(onboardingReply, login);
     } catch (error) {
       const normalized = sanitizedError(error);
       return onboardingReply
@@ -386,8 +461,21 @@ export async function nativeOidcRoutes(
 
   app.get("/auth/callback", authRateLimit, async (request, reply) => {
     if (options.config.authMode !== "native-oidc") return notFound(reply);
+    const callbackReply = preventOnboardingCache(reply);
+    const state = oidcState(request.url);
+    const clearedMarker = state ? clearOidcBrowserMarker(state, secureCookie) : undefined;
     try {
-      const claims = await service.validateCallback(request.url);
+      const browserMarker = state
+        ? oidcBrowserMarker(request.headers.cookie, state)
+        : undefined;
+      if (!state || !browserMarker) {
+        throw new NativeOidcError(
+          "native_oidc_invalid_transaction",
+          400,
+          "Die OIDC-Anmeldung ist ungültig oder abgelaufen."
+        );
+      }
+      const claims = await service.validateCallback(request.url, browserMarker);
       const auth = userFromClaims(claims, {
         adminGroup: options.config.oidcAdminGroup,
         parentGroup: options.config.oidcParentGroup,
@@ -463,13 +551,16 @@ export async function nativeOidcRoutes(
         membership.user.externalSubject,
         options.config.sessionTtlSeconds
       );
-      return reply
-        .header("set-cookie", serializeSessionCookie({
-          name: options.config.sessionCookieName,
-          value: session.token,
-          maxAgeSeconds: options.config.sessionTtlSeconds,
-          secure: secureCookie
-        }))
+      return callbackReply
+        .header("set-cookie", [
+          clearOidcBrowserMarker(state, secureCookie),
+          serializeSessionCookie({
+            name: options.config.sessionCookieName,
+            value: session.token,
+            maxAgeSeconds: options.config.sessionTtlSeconds,
+            secure: secureCookie
+          })
+        ])
         .redirect(completionPath);
     } catch (error) {
       const normalized = sanitizedError(error);
@@ -481,13 +572,17 @@ export async function nativeOidcRoutes(
         await sessions.revokeByToken(
           cookieValue(request.headers.cookie, options.config.sessionCookieName)
         );
-        return preventOnboardingCache(reply)
-          .header("set-cookie", clearSessionCookie(options.config.sessionCookieName, secureCookie))
+        return callbackReply
+          .header("set-cookie", [
+            ...(clearedMarker ? [clearedMarker] : []),
+            clearSessionCookie(options.config.sessionCookieName, secureCookie)
+          ])
           .code(403)
           .type("text/html; charset=utf-8")
           .send(accessDeniedPage());
       }
-      return reply.code(normalized.statusCode).send({
+      if (clearedMarker) callbackReply.header("set-cookie", clearedMarker);
+      return callbackReply.code(normalized.statusCode).send({
         error: normalized.code,
         message: normalized.message
       });

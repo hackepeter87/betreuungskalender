@@ -224,9 +224,12 @@ oauth2-proxy. Do not add an app `ports:` mapping while `TRUST_PROXY_AUTH=true`.
 ### Native OIDC
 
 `AUTH_MODE=native-oidc` validates Authorization Code + PKCE callbacks with
-`openid-client`, stores short-lived server-side login state, and creates server-side sessions with an
-opaque browser cookie. The browser cookie contains only a random session token;
-the selected database stores only the token hash plus session metadata.
+`openid-client`, stores short-lived server-side login state, and binds each
+callback to the browser that initiated it with a short-lived `HttpOnly` cookie.
+The marker is scoped to `/auth/callback` and expires with the login state.
+Successful login creates a server-side session with a separate opaque browser
+cookie. The session cookie contains only a random token; the selected database
+stores only the token hash plus session metadata.
 
 Native mode requires `OIDC_ISSUER_URL`, `OIDC_CLIENT_ID`, and
 `OIDC_REDIRECT_URI` at startup. In production it also requires

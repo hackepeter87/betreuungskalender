@@ -320,6 +320,7 @@ interface NativeOidcLoginStatesTable {
   state: string;
   nonce: string;
   pkce_verifier: string;
+  browser_marker_hash: string;
   redirect_uri: string;
   created_at: string;
   expires_at: string;
