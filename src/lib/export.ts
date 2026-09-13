@@ -12,7 +12,9 @@ import {
 } from "./labels";
 import type { AppData } from "../types";
 
-function csvCell(value: unknown): string {
+const spreadsheetFormulaPrefix = /^[\u0000-\u0020]*[=+\-@]/u;
+
+export function encodeCsvCell(value: unknown): string {
   const normalized =
     value === undefined || value === null
       ? ""
@@ -21,11 +23,14 @@ function csvCell(value: unknown): string {
           ? "ja"
           : "nein"
         : String(value);
-  return `"${normalized.replaceAll('"', '""')}"`;
+  const inert = typeof value === "string" && spreadsheetFormulaPrefix.test(normalized)
+    ? `'${normalized}`
+    : normalized;
+  return `"${inert.replaceAll('"', '""')}"`;
 }
 
-function csv(rows: unknown[][]): string {
-  return `\uFEFF${rows.map((row) => row.map(csvCell).join(";")).join("\r\n")}`;
+export function encodeCsvRows(rows: unknown[][]): string {
+  return `\uFEFF${rows.map((row) => row.map(encodeCsvCell).join(";")).join("\r\n")}`;
 }
 
 export function downloadText(
@@ -121,7 +126,7 @@ export function exportEntriesCsv(data: AppData): void {
     ]);
   }
 
-  downloadText("betreuungseintraege.csv", csv(rows));
+  downloadText("betreuungseintraege.csv", encodeCsvRows(rows));
 }
 
 export function exportTripsCsv(data: AppData): void {
@@ -159,7 +164,7 @@ export function exportTripsCsv(data: AppData): void {
       ]);
     }
   }
-  downloadText("fahrten.csv", csv(rows));
+  downloadText("fahrten.csv", encodeCsvRows(rows));
 }
 
 export function exportCostsCsv(data: AppData): void {
@@ -193,7 +198,7 @@ export function exportCostsCsv(data: AppData): void {
       ]);
     }
   }
-  downloadText("kosten.csv", csv(rows));
+  downloadText("kosten.csv", encodeCsvRows(rows));
 }
 
 export function exportHolidaysCsv(data: AppData): void {
@@ -212,7 +217,7 @@ export function exportHolidaysCsv(data: AppData): void {
       period.deletedAt
     ]);
   }
-  downloadText("ferien.csv", csv(rows));
+  downloadText("ferien.csv", encodeCsvRows(rows));
 }
 
 export function exportUnavailablePeriodsCsv(data: AppData): void {
@@ -262,5 +267,5 @@ export function exportUnavailablePeriodsCsv(data: AppData): void {
       period.deletedAt
     ]);
   }
-  downloadText("nichtverfuegbarkeiten.csv", csv(rows));
+  downloadText("nichtverfuegbarkeiten.csv", encodeCsvRows(rows));
 }

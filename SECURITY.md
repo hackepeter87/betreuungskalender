@@ -37,3 +37,6 @@ schedule access is limited to the user's assigned care parties.
 
 Actual care ranges submitted through confirmation workflows use the same
 supported-date and maximum-duration limits as regular care entries.
+
+CSV exports encode stored text as inert spreadsheet content. They can still
+contain sensitive domain data and require the same protection as other exports.
