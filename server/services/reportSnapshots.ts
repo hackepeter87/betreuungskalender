@@ -10,8 +10,10 @@ import type {
   ApiUnavailablePeriod
 } from "../../shared/api.js";
 import type { DatabaseExecutor, PersistenceRuntime } from "../db/runtime.js";
-import { exportDomainData } from "./dataTransfer.js";
+import { DomainExportLimitError, exportDomainData } from "./dataTransfer.js";
 import { normalizeClientSettings } from "./settings.js";
+
+export const MAX_REPORT_AUDIT_ENTRIES = 50_000;
 
 async function auditEntries(
   database: DatabaseExecutor,
@@ -37,8 +39,11 @@ async function auditEntries(
     .where("audit_log.timestamp", "<=", `${endDate}T23:59:59.999Z`)
     .orderBy("audit_log.timestamp")
     .orderBy("audit_log.id")
-    .limit(50_000)
+    .limit(MAX_REPORT_AUDIT_ENTRIES + 1)
     .execute();
+  if (rows.length > MAX_REPORT_AUDIT_ENTRIES) {
+    throw new DomainExportLimitError();
+  }
   return rows.map((row) => ({
     id: row.id,
     timestamp: row.timestamp,
