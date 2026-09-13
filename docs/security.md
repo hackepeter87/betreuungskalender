@@ -43,6 +43,9 @@ SQLite databases, JSON backups, CSV exports, and PDF reports may contain highly
 sensitive family data. Protect them with disk encryption, restrictive file
 permissions, access-controlled backup storage, and a tested deletion policy.
 Do not send them unencrypted or upload them to public issue trackers.
+CSV text cells are neutralized before download when spreadsheet applications
+could otherwise interpret stored text as a formula. This does not reduce the
+confidentiality requirements for the exported data.
 
 Administrative data-replacement paths are intentionally narrower than normal
 domain editing. `/api/app-data`, `/api/migration/*`, member administration,
