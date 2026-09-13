@@ -13,6 +13,19 @@ function hashSessionToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
 
+export async function revokeOidcSessionsByExternalSubject(
+  externalSubject: string,
+  database: DatabaseExecutor,
+  revokedAt = new Date().toISOString()
+): Promise<number> {
+  const result = await database.updateTable("native_oidc_sessions")
+    .set({ revoked_at: revokedAt })
+    .where("external_subject", "=", externalSubject)
+    .where("revoked_at", "is", null)
+    .executeTakeFirst();
+  return Number(result.numUpdatedRows);
+}
+
 export class OidcSessionStore {
   constructor(private readonly database: DatabaseExecutor) {}
 

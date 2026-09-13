@@ -15,6 +15,7 @@ import {
   updateMemberRole
 } from "./services/memberManagement.js";
 import { membershipRoleForUser } from "./services/memberships.js";
+import { OidcSessionStore } from "./services/oidcSessions.js";
 import { listAppUsers } from "./services/users.js";
 
 const timestamp = "2026-07-05T10:00:00.000Z";
@@ -210,6 +211,11 @@ test("owner can remove another member app role without deleting the user", async
     insertUser(database, target);
     setOwner(database, owner.id);
     await updateMemberRole(owner, target.id, "editor", persistence, timestamp);
+    const sessions = new OidcSessionStore(persistence.query);
+    const sessionStart = new Date("2026-07-05T11:00:00.000Z");
+    const firstTargetSession = await sessions.create(target.externalSubject, 86_400, sessionStart);
+    const secondTargetSession = await sessions.create(target.externalSubject, 86_400, sessionStart);
+    const ownerSession = await sessions.create(owner.externalSubject, 86_400, sessionStart);
     database.prepare(`
       INSERT INTO calendar_feed_tokens (
         id, user_id, token_hash, created_at, scope_type
@@ -242,6 +248,13 @@ test("owner can remove another member app role without deleting the user", async
     assert.equal(updated.effectiveRole, "editor");
     assert.equal(updated.workspaceAccess, false);
     assert.equal(await membershipRoleForUser(target.id, persistence.query), undefined);
+    const afterRemoval = new Date("2026-07-05T12:01:00.000Z");
+    assert.equal(await sessions.findByToken(firstTargetSession.token, afterRemoval), undefined);
+    assert.equal(await sessions.findByToken(secondTargetSession.token, afterRemoval), undefined);
+    assert.equal(
+      (await sessions.findByToken(ownerSession.token, afterRemoval))?.externalSubject,
+      owner.externalSubject
+    );
     const remainingUser = database.prepare(
       "SELECT COUNT(*) AS count FROM app_users WHERE id = ?"
     ).get(target.id) as { count: number };
@@ -272,6 +285,62 @@ test("owner can remove another member app role without deleting the user", async
       oldValue: "\"editor\"",
       newValue: "null"
     });
+
+    await updateMemberRole(owner, target.id, "viewer", persistence, "2026-07-05T12:02:00.000Z");
+    assert.equal(
+      await sessions.findByToken(firstTargetSession.token, new Date("2026-07-05T12:03:00.000Z")),
+      undefined
+    );
+    const freshTargetSession = await sessions.create(
+      target.externalSubject,
+      86_400,
+      new Date("2026-07-05T12:04:00.000Z")
+    );
+    assert.equal(
+      (await sessions.findByToken(
+        freshTargetSession.token,
+        new Date("2026-07-05T12:05:00.000Z")
+      ))?.externalSubject,
+      target.externalSubject
+    );
+  });
+});
+
+test("member removal rolls back session revocation with the membership change", async () => {
+  await withDatabase(async (database, persistence) => {
+    const owner = user("user_owner", "admin");
+    const target = user("user_target", "readonly");
+    insertUser(database, owner);
+    insertUser(database, target);
+    setOwner(database, owner.id);
+    await updateMemberRole(owner, target.id, "editor", persistence, timestamp);
+    const sessions = new OidcSessionStore(persistence.query);
+    const session = await sessions.create(
+      target.externalSubject,
+      86_400,
+      new Date("2026-07-05T11:00:00.000Z")
+    );
+    database.exec(`
+      CREATE TRIGGER reject_member_removal_audit
+      BEFORE INSERT ON audit_log
+      WHEN NEW.entity_type = 'app_member' AND NEW.new_value = 'null'
+      BEGIN
+        SELECT RAISE(ABORT, 'forced member audit failure');
+      END
+    `);
+
+    await assert.rejects(
+      removeMember(owner, target.id, persistence, "2026-07-05T12:00:00.000Z")
+    );
+
+    assert.equal(await membershipRoleForUser(target.id, persistence.query), "editor");
+    assert.equal(
+      (await sessions.findByToken(
+        session.token,
+        new Date("2026-07-05T12:01:00.000Z")
+      ))?.externalSubject,
+      target.externalSubject
+    );
   });
 });
 
