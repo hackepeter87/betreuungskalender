@@ -216,6 +216,12 @@ reduced schedule responses. Hidden records do not contribute conflict markers
 to a scoped schedule response. Access failures use a generic response without
 record details.
 
+Partial confirmation updates validate the resolved actual care range before
+any write. Explicit values and values defaulted from the planned entry are
+subject to the same supported-date and maximum-duration limits as normal care
+entries. Invalid ranges return an abstract error code without echoing submitted
+care data.
+
 ## Local security baseline checks
 
 Run the local security baseline before security-sensitive changes and

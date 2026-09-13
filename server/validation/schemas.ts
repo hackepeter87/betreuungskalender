@@ -504,6 +504,14 @@ export const careConfirmationAnswerSchema = z
           message: "Das tatsächliche Ende muss nach dem tatsächlichen Beginn liegen."
         });
       }
+      if (answer.actualStartDateTime && answer.actualEndDateTime &&
+        !timedRangeWithinDomainLimit(answer.actualStartDateTime, answer.actualEndDateTime)) {
+        context.addIssue({
+          code: "custom",
+          path: ["actualEndDateTime"],
+          message: "Der tatsächliche Zeitraum darf höchstens 366 Tage umfassen."
+        });
+      }
     }
   });
 
