@@ -278,7 +278,9 @@ hashes, the OIDC subject, creation time, optional last-seen time, expiry time,
 and optional revocation time. Session rows do not store OIDC tokens,
 authorization codes, raw claims, client secrets, or role decisions. Current
 role and permission decisions are resolved from the active workspace membership
-on each API request.
+on each API request. Removing a workspace membership marks every active native
+OIDC session for that subject as revoked in the same transaction. A later
+membership assignment does not reactivate those sessions.
 
 ## Recovery admin
 

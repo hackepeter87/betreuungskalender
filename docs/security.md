@@ -267,6 +267,11 @@ record is authoritative in every production auth mode: an active membership
 grants its workspace role, a deleted membership revokes access, and a missing
 membership grants no workspace access.
 
+Removing a member also revokes all active native OIDC application sessions for
+that identity within the membership transaction. Restoring access later
+requires a new login; previously revoked sessions remain invalid. Sessions for
+other members are not affected.
+
 Trusted-proxy first-use setup requires the configured admin group while no
 owner exists. Parent, viewer, and missing-role fallback identities cannot
 establish the owner. Once ownership is established, an unfinished first-use

@@ -27,3 +27,7 @@ Betreuungskalender is intended for private, self-hosted use. The operator is
 responsible for TLS, host updates, firewall rules, disk encryption, access
 control, reverse-proxy configuration, and protected backups. See
 [`docs/security.md`](docs/security.md).
+
+Workspace membership is the authorization source for native OIDC users.
+Removing a membership also invalidates that identity's active application
+sessions; restoring membership requires a new login.

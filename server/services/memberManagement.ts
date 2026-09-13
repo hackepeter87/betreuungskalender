@@ -9,6 +9,7 @@ import {
 import type { DatabaseExecutor, PersistenceRuntime } from "../db/runtime.js";
 import { isLocalDevelopmentIdentity } from "./localDevelopmentIdentity.js";
 import { clearMembershipRole, setMembershipRole } from "./memberships.js";
+import { revokeOidcSessionsByExternalSubject } from "./oidcSessions.js";
 
 export interface AppMember {
   id: string;
@@ -237,7 +238,16 @@ export async function removeMember(
     }
     const before = await memberById(targetUserId, database);
     if (!before) throw new MemberManagementError("unknown_user", 404, "Mitglied nicht gefunden.");
+    const targetUser = await database.selectFrom("app_users")
+      .select("external_subject")
+      .where("id", "=", targetUserId)
+      .where("deleted_at", "is", null)
+      .executeTakeFirst();
+    if (!targetUser) {
+      throw new MemberManagementError("unknown_user", 404, "Mitglied nicht gefunden.");
+    }
     const removedRole = await clearMembershipRole(targetUserId, actor.id, database, timestamp);
+    await revokeOidcSessionsByExternalSubject(targetUser.external_subject, database, timestamp);
     await database.updateTable("calendar_feed_tokens")
       .set({ revoked_at: timestamp })
       .where("user_id", "=", targetUserId)
