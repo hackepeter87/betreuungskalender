@@ -8,7 +8,7 @@ import {
   isTrustedProxySetupAdmin
 } from "../services/setupAuthorization.js";
 import { completeFirstUseSetup, SetupBootstrapError } from "../services/setupBootstrap.js";
-import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "../services/users.js";
+import { findAuthenticatedUserBySubject } from "../services/users.js";
 import { isTrustedProxyAddress } from "../trustedProxy.js";
 import { setupFirstUseInputSchema } from "../validation/schemas.js";
 import type { OidcSessionRecord } from "../services/oidcSessions.js";
@@ -75,7 +75,6 @@ async function setupUserFromTrustedProxy(
       statusCode: 403
     });
   }
-  await upsertAuthenticatedUser(auth.user, persistence.query);
   return auth.user;
 }
 
@@ -124,6 +123,7 @@ export async function setupRoutes(
   options: SetupRouteOptions
 ): Promise<void> {
   app.post("/api/setup/first-use", sensitiveLimit, async (request, reply) => {
+    reply.header("cache-control", "no-store, max-age=0");
     const parsed = setupFirstUseInputSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });

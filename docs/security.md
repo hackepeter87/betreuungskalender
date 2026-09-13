@@ -264,8 +264,10 @@ record is authoritative in every production auth mode: an active membership
 grants its workspace role, a deleted membership revokes access, and a missing
 membership grants no workspace access.
 
-Trusted-proxy first-use setup requires the configured admin group. Parent,
-viewer, and missing-role fallback identities cannot establish the owner.
+Trusted-proxy first-use setup requires the configured admin group while no
+owner exists. Parent, viewer, and missing-role fallback identities cannot
+establish the owner. Once ownership is established, an unfinished first-use
+setup remains bound to that same active owner and cannot assign a replacement.
 
 Member administration is owner-scoped. Once `setup.ownerUserId` exists, only
 that app user can create or revoke invitations and change application

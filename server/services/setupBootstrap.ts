@@ -4,14 +4,60 @@ import type { DatabaseExecutor, PersistenceRuntime } from "../db/runtime.js";
 import { makeId } from "./common.js";
 import { setMembershipRole } from "./memberships.js";
 import { buildSetupState, publicSetupState } from "./setupState.js";
+import { upsertAuthenticatedUser } from "./users.js";
 
 export class SetupBootstrapError extends Error {
   constructor(
-    public readonly code: "setup_already_complete" | "unknown_user",
+    public readonly code: "setup_already_complete" | "setup_conflict" | "unknown_user",
     public readonly statusCode: number,
     message: string
   ) {
     super(message);
+  }
+}
+
+function ownerId(value: string): string | undefined {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return typeof parsed === "string" && parsed.trim() ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function claimOrAssertOwner(
+  database: DatabaseExecutor,
+  userId: string,
+  timestamp: string
+): Promise<void> {
+  const setting = {
+    value_json: JSON.stringify(userId),
+    updated_by: userId,
+    updated_at: timestamp,
+    deleted_at: null
+  };
+  await database.updateTable("settings")
+    .set(setting)
+    .where("key", "=", "setup.ownerUserId")
+    .where("deleted_at", "is not", null)
+    .execute();
+  await database.insertInto("settings").values({
+    key: "setup.ownerUserId",
+    ...setting,
+    created_by: userId,
+    created_at: timestamp
+  }).onConflict((conflict) => conflict.column("key").doNothing()).execute();
+  const current = await database.selectFrom("settings")
+    .select("value_json")
+    .where("key", "=", "setup.ownerUserId")
+    .where("deleted_at", "is", null)
+    .executeTakeFirst();
+  if (!current || ownerId(current.value_json) !== userId) {
+    throw new SetupBootstrapError(
+      "setup_conflict",
+      409,
+      "Die Einrichtung konnte nicht abgeschlossen werden. Bitte lade den aktuellen Stand neu."
+    );
   }
 }
 
@@ -79,7 +125,6 @@ async function recordSetupComplete(
   timestamp: string
 ) {
   await setMembershipRole(user.id, "admin", user.id, database, timestamp);
-  await upsertSetting(database, "setup.ownerUserId", user.id, user.id, timestamp);
   await upsertSetting(database, "setup.completedAt", timestamp, user.id, timestamp);
   await upsertSetting(database, "setup.completedBy", user.id, user.id, timestamp);
   await recordBootstrapAudit(database, user.id, "owner_bootstrap", { userId: user.id, role: "admin" }, timestamp);
@@ -147,7 +192,9 @@ export async function completeFirstUseSetup(
         "Die Installation wurde bereits eingerichtet."
       );
     }
+    await upsertAuthenticatedUser(user, database, timestamp);
     await assertKnownUser(user.id, database);
+    await claimOrAssertOwner(database, user.id, timestamp);
     const carePartyId = await createCareParty(
       database, user.id, timestamp, input.careParty, "care_party_created"
     );
