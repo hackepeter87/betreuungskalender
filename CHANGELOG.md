@@ -6,6 +6,28 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.29.2] - 2026-09-13
+
+### Security
+
+- Bound calendar, planning, reporting, external-calendar, transfer, and related
+  processing before large result sets are materialized.
+- Preserve established ownership during first-use completion and bind native
+  OIDC login completion and session validity to the current browser and active
+  workspace membership.
+- Apply care-party access consistently to compatibility planning routes and
+  reduced schedule views.
+- Validate confirmation ranges with the same supported-date and duration
+  contract as regular care entries.
+- Encode exported CSV text as inert spreadsheet content and reject report audit
+  selections that cannot be returned completely.
+- Update the supported mail transport dependency.
+
+### Changed
+
+- Keep limit and authorization failures generic, non-cacheable where sensitive,
+  and free of domain values.
+
 ## [1.29.1] - 2026-09-08
 
 ### Security
