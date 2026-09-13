@@ -98,6 +98,10 @@ Application authorization is then resolved in this order:
    compatibility source before an owner exists.
 4. A missing or deleted membership grants no native-OIDC workspace access.
 
+Each native-OIDC login is also bound to the initiating browser through a
+short-lived `HttpOnly` cookie scoped to the callback route. The cookie expires
+with the login transaction and is removed after callback handling.
+
 Trusted-proxy first-use setup requires the configured admin group. Parent,
 viewer, and missing-role fallback identities cannot complete it. Local mode
 retains its development-oriented first-use behavior.

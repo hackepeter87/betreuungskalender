@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import Database from "better-sqlite3";
-import Fastify from "fastify";
+import Fastify, { type FastifyInstance } from "fastify";
 import type { Configuration } from "openid-client";
 import { migrateDatabase } from "./db/migrationRunner.js";
 import { createSqlitePersistenceRuntime } from "./db/runtime.js";
@@ -36,6 +37,18 @@ function testDatabase() {
 
 function persistenceFor(database: Database.Database) {
   return createSqlitePersistenceRuntime(database);
+}
+
+async function beginNativeLogin(app: FastifyInstance): Promise<string> {
+  const response = await app.inject({ method: "GET", url: "/auth/login" });
+  assert.equal(response.statusCode, 302);
+  const responseCookies = Array.isArray(response.headers["set-cookie"])
+    ? response.headers["set-cookie"]
+    : response.headers["set-cookie"] ? [response.headers["set-cookie"]] : [];
+  const markerCookie = responseCookies.find((value) => value.startsWith("bk_oidc_"));
+  assert.ok(markerCookie);
+  assert.match(markerCookie, /^bk_oidc_[0-9a-f]+=[^;]+;/);
+  return markerCookie.split(";")[0]!;
 }
 
 function fakeLibrary(
@@ -107,7 +120,7 @@ test("native OIDC login stores server-side state and redirects with PKCE and non
       library: fakeLibrary()
     });
 
-    const redirect = await service.createLoginRedirect();
+    const { redirectUrl: redirect, browserMarker } = await service.createLoginRedirect();
 
     assert.equal(redirect.origin, "https://idp.example.test");
     assert.equal(redirect.searchParams.get("redirect_uri"), "https://bk.example.test/auth/callback");
@@ -119,13 +132,14 @@ test("native OIDC login stores server-side state and redirects with PKCE and non
     assert.equal(redirect.searchParams.get("nonce"), "nonce-123");
 
     const row = database.prepare(`
-      SELECT state, nonce, pkce_verifier, redirect_uri, context_type,
+      SELECT state, nonce, pkce_verifier, browser_marker_hash, redirect_uri, context_type,
              context_token_hash, consumed_at
       FROM native_oidc_login_states
     `).get() as {
       state: string;
       nonce: string;
       pkce_verifier: string;
+      browser_marker_hash: string;
       redirect_uri: string;
       context_type: string;
       context_token_hash: string | null;
@@ -135,11 +149,13 @@ test("native OIDC login stores server-side state and redirects with PKCE and non
       state: "state-123",
       nonce: "nonce-123",
       pkce_verifier: "verifier-123",
+      browser_marker_hash: createHash("sha256").update(browserMarker).digest("hex"),
       redirect_uri: "https://bk.example.test/auth/callback",
       context_type: "normal",
       context_token_hash: null,
       consumed_at: null
     });
+    assert.notEqual(row.browser_marker_hash, browserMarker);
   } finally {
     cleanup();
   }
@@ -155,7 +171,10 @@ test("native OIDC login stores only hashed onboarding context", async () => {
       library: fakeLibrary()
     });
 
-    await service.createLoginRedirect({ type: "invitation", tokenHash });
+    const { browserMarker } = await service.createLoginRedirect({
+      type: "invitation",
+      tokenHash
+    });
 
     const row = database.prepare(`
       SELECT context_type, context_token_hash
@@ -166,7 +185,8 @@ test("native OIDC login stores only hashed onboarding context", async () => {
       context_token_hash: tokenHash
     });
     const result = await service.validateCallback(
-      "/auth/callback?code=code-123&state=state-123"
+      "/auth/callback?code=code-123&state=state-123",
+      browserMarker
     );
     assert.deepEqual(result.loginContext, { type: "invitation", tokenHash });
   } finally {
@@ -263,8 +283,11 @@ test("native OIDC callback validates state nonce and PKCE through the client lib
       library: fakeLibrary({}, grantCalls)
     });
 
-    await service.createLoginRedirect();
-    const result = await service.validateCallback("/auth/callback?code=code-123&state=state-123");
+    const { browserMarker } = await service.createLoginRedirect();
+    const result = await service.validateCallback(
+      "/auth/callback?code=code-123&state=state-123",
+      browserMarker
+    );
 
     assert.deepEqual(result, {
       subject: "subject-123",
@@ -282,7 +305,10 @@ test("native OIDC callback validates state nonce and PKCE through the client lib
     });
 
     await assert.rejects(
-      () => service.validateCallback("/auth/callback?code=code-123&state=state-123"),
+      () => service.validateCallback(
+        "/auth/callback?code=code-123&state=state-123",
+        browserMarker
+      ),
       (error) =>
         error instanceof NativeOidcError &&
         error.code === "native_oidc_invalid_state" &&
@@ -310,8 +336,11 @@ test("native OIDC can use a configurable display claim without changing the subj
         })
       })
     });
-    await service.createLoginRedirect();
-    const result = await service.validateCallback("/auth/callback?code=code-123&state=state-123");
+    const { browserMarker } = await service.createLoginRedirect();
+    const result = await service.validateCallback(
+      "/auth/callback?code=code-123&state=state-123",
+      browserMarker
+    );
     assert.equal(result.subject, "stable-subject");
     assert.equal(result.displayName, "Current display name");
   } finally {
@@ -336,10 +365,64 @@ test("native OIDC callback rejects state mismatches before token exchange", asyn
       library: fakeLibrary({}, grantCalls)
     });
 
-    await service.createLoginRedirect();
+    const { browserMarker } = await service.createLoginRedirect();
 
     await assert.rejects(
-      () => service.validateCallback("/auth/callback?code=code-123&state=wrong-state"),
+      () => service.validateCallback(
+        "/auth/callback?code=code-123&state=wrong-state",
+        browserMarker
+      ),
+      (error) =>
+        error instanceof NativeOidcError &&
+        error.code === "native_oidc_invalid_state" &&
+        error.statusCode === 400
+    );
+    assert.equal(grantCalls.length, 0);
+  } finally {
+    cleanup();
+  }
+});
+
+test("native OIDC callback rejects mismatched and expired browser markers", async () => {
+  const { database, cleanup } = testDatabase();
+  try {
+    const grantCalls: Array<{
+      currentUrl: URL;
+      checks: {
+        pkceCodeVerifier: string;
+        expectedState: string;
+        expectedNonce: string;
+      };
+    }> = [];
+    const service = new NativeOidcService({
+      config: nativeConfig(),
+      loginStates: new OidcLoginStateStore(persistenceFor(database)),
+      library: fakeLibrary({}, grantCalls)
+    });
+
+    const mismatched = await service.createLoginRedirect();
+    await assert.rejects(
+      () => service.validateCallback(
+        "/auth/callback?code=code-123&state=state-123",
+        "different-browser-marker"
+      ),
+      (error) =>
+        error instanceof NativeOidcError &&
+        error.code === "native_oidc_invalid_state" &&
+        error.statusCode === 400
+    );
+    assert.equal(grantCalls.length, 0);
+
+    database.prepare(`
+      UPDATE native_oidc_login_states
+      SET expires_at = ?
+      WHERE state = ?
+    `).run("2000-01-01T00:00:00.000Z", "state-123");
+    await assert.rejects(
+      () => service.validateCallback(
+        "/auth/callback?code=code-123&state=state-123",
+        mismatched.browserMarker
+      ),
       (error) =>
         error instanceof NativeOidcError &&
         error.code === "native_oidc_invalid_state" &&
@@ -371,10 +454,13 @@ for (const validationCase of [
         })
       });
 
-      await service.createLoginRedirect();
+      const { browserMarker } = await service.createLoginRedirect();
 
       await assert.rejects(
-        () => service.validateCallback("/auth/callback?code=code-123&state=state-123"),
+        () => service.validateCallback(
+          "/auth/callback?code=code-123&state=state-123",
+          browserMarker
+        ),
         (error) =>
           error instanceof NativeOidcError &&
           error.code === "native_oidc_callback_rejected" &&
@@ -400,10 +486,13 @@ test("native OIDC callback rejects missing subjects without exposing token detai
       })
     });
 
-    await service.createLoginRedirect();
+    const { browserMarker } = await service.createLoginRedirect();
 
     await assert.rejects(
-      () => service.validateCallback("/auth/callback?code=code-123&state=state-123"),
+      () => service.validateCallback(
+        "/auth/callback?code=code-123&state=state-123",
+        browserMarker
+      ),
       (error) =>
         error instanceof NativeOidcError &&
         error.code === "native_oidc_missing_subject" &&
@@ -424,6 +513,9 @@ test("native OIDC routes redirect login and keep callback responses token-free",
   const loginContexts: unknown[] = [];
   const ownerClaims: Array<{ tokenHash: string; userId: string }> = [];
   const invitationClaims: Array<{ tokenHash: string; userId: string }> = [];
+  const browserMarkers = new Map<string, string>();
+  let callbackValidationCalls = 0;
+  let redirectCount = 0;
   let callbackContext: { type: "owner_setup" | "invitation"; tokenHash: string } = {
     type: "owner_setup",
     tokenHash: ownerHash
@@ -453,17 +545,35 @@ test("native OIDC routes redirect login and keep callback responses token-free",
     service: {
       createLoginRedirect: async (context = { type: "normal" as const }) => {
         loginContexts.push(context);
-        return new URL("https://idp.example.test/auth?state=state-123");
+        redirectCount += 1;
+        const state = `state-${redirectCount}`;
+        const browserMarker = `browser-marker-${redirectCount}`;
+        browserMarkers.set(state, browserMarker);
+        return {
+          redirectUrl: new URL(`https://idp.example.test/auth?state=${state}`),
+          browserMarker
+        };
       },
       createLogoutRedirect: async () =>
         new URL("https://idp.example.test/logout?client_id=betreuungskalender"),
-      validateCallback: async () => ({
-        subject: "subject-123",
-        email: "parent@example.net",
-        displayName: "Example Parent",
-        groups: ["/betreuungskalender/parents"],
-        loginContext: callbackContext
-      })
+      validateCallback: async (requestUrl, browserMarker) => {
+        callbackValidationCalls += 1;
+        const state = new URL(requestUrl, "https://bk.example.test").searchParams.get("state");
+        if (!state || browserMarkers.get(state) !== browserMarker) {
+          throw new NativeOidcError(
+            "native_oidc_invalid_state",
+            400,
+            "OIDC callback state is invalid or expired."
+          );
+        }
+        return {
+          subject: "subject-123",
+          email: "parent@example.net",
+          displayName: "Example Parent",
+          groups: ["/betreuungskalender/parents"],
+          loginContext: callbackContext
+        };
+      }
     },
     ownerSetupTokens: {
       begin: (token) => {
@@ -507,7 +617,13 @@ test("native OIDC routes redirect login and keep callback responses token-free",
   try {
     const login = await app.inject({ method: "GET", url: "/auth/login" });
     assert.equal(login.statusCode, 302);
-    assert.equal(login.headers.location, "https://idp.example.test/auth?state=state-123");
+    assert.equal(login.headers.location, "https://idp.example.test/auth?state=state-1");
+    assert.match(String(login.headers["set-cookie"]), /^bk_oidc_[0-9a-f]+=[^;]+;/);
+    assert.match(String(login.headers["set-cookie"]), /HttpOnly/);
+    assert.match(String(login.headers["set-cookie"]), /SameSite=Lax/);
+    assert.match(String(login.headers["set-cookie"]), /Secure/);
+    assert.match(String(login.headers["set-cookie"]), /Path=\/auth\/callback/);
+    assert.match(String(login.headers["set-cookie"]), /Max-Age=600/);
 
     const setup = await app.inject({
       method: "GET",
@@ -526,7 +642,8 @@ test("native OIDC routes redirect login and keep callback responses token-free",
       url: "/setup/continue?token=fictional-owner-token"
     });
     assert.equal(setupContinue.statusCode, 302);
-    assert.equal(setupContinue.headers.location, "https://idp.example.test/auth?state=state-123");
+    assert.equal(setupContinue.headers.location, "https://idp.example.test/auth?state=state-2");
+    const setupMarkerCookie = String(setupContinue.headers["set-cookie"]).split(";")[0];
     assert.deepEqual(loginContexts, [
       { type: "normal" },
       { type: "owner_setup", tokenHash: ownerHash }
@@ -548,6 +665,9 @@ test("native OIDC routes redirect login and keep callback responses token-free",
     });
     assert.equal(invitationContinue.statusCode, 302);
     assert.equal(String(invitationContinue.headers.location).includes("fictional-invitation-token"), false);
+    const invitationMarkerCookie = String(invitationContinue.headers["set-cookie"]).split(";")[0];
+    assert.ok(invitationMarkerCookie);
+    assert.notEqual(invitationMarkerCookie, setupMarkerCookie);
     assert.deepEqual(loginContexts.at(-1), {
       type: "invitation",
       tokenHash: invitationHash
@@ -595,9 +715,39 @@ test("native OIDC routes redirect login and keep callback responses token-free",
       assert.equal(onboardingResponse.headers.expires, "0");
     }
 
+    const missingMarkerCallback = await app.inject({
+      method: "GET",
+      url: "/auth/callback?code=code-123&state=state-2"
+    });
+    assert.equal(missingMarkerCallback.statusCode, 400);
+    assert.equal(missingMarkerCallback.headers["cache-control"], "no-store, max-age=0");
+    assert.match(String(missingMarkerCallback.headers["set-cookie"]), /^bk_oidc_[0-9a-f]+=;/);
+    assert.equal(missingMarkerCallback.payload.includes("state-2"), false);
+    assert.equal(missingMarkerCallback.payload.includes("code-123"), false);
+    assert.equal(callbackValidationCalls, 0);
+
+    const mismatchedMarkerCallback = await app.inject({
+      method: "GET",
+      url: "/auth/callback?code=code-123&state=state-3",
+      headers: { cookie: `${invitationMarkerCookie.split("=")[0]}=tampered` }
+    });
+    assert.equal(mismatchedMarkerCallback.statusCode, 400);
+    assert.match(String(mismatchedMarkerCallback.headers["set-cookie"]), /^bk_oidc_[0-9a-f]+=;/);
+    assert.equal(callbackValidationCalls, 1);
+
+    const missingStateCallback = await app.inject({
+      method: "GET",
+      url: "/auth/callback?code=code-123",
+      headers: { cookie: setupMarkerCookie }
+    });
+    assert.equal(missingStateCallback.statusCode, 400);
+    assert.equal(missingStateCallback.headers["cache-control"], "no-store, max-age=0");
+    assert.equal(callbackValidationCalls, 1);
+
     const callback = await app.inject({
       method: "GET",
-      url: "/auth/callback?code=code-123&state=state-123"
+      url: "/auth/callback?code=code-123&state=state-2",
+      headers: { cookie: setupMarkerCookie }
     });
     assert.equal(callback.statusCode, 302);
     assert.equal(callback.headers.location, "/?onboarding=owner-setup");
@@ -607,7 +757,8 @@ test("native OIDC routes redirect login and keep callback responses token-free",
     callbackContext = { type: "invitation", tokenHash: invitationHash };
     const invitationCallback = await app.inject({
       method: "GET",
-      url: "/auth/callback?code=code-456&state=state-456"
+      url: "/auth/callback?code=code-456&state=state-3",
+      headers: { cookie: invitationMarkerCookie }
     });
     assert.equal(invitationCallback.statusCode, 302);
     assert.equal(invitationCallback.headers.location, "/?onboarding=invitation");
@@ -615,12 +766,19 @@ test("native OIDC routes redirect login and keep callback responses token-free",
       tokenHash: invitationHash,
       userId: "user_e8725703d28a2972830e5502"
     }]);
-    const setCookie = String(callback.headers["set-cookie"]);
+    const callbackCookies = Array.isArray(callback.headers["set-cookie"])
+      ? callback.headers["set-cookie"]
+      : [String(callback.headers["set-cookie"])];
+    const setCookie = callbackCookies.find((value) =>
+      value.startsWith("betreuungskalender_session=")
+    );
+    assert.ok(setCookie);
     assert.match(setCookie, /^betreuungskalender_session=[^;]+;/);
     assert.match(setCookie, /HttpOnly/);
     assert.match(setCookie, /SameSite=Lax/);
     assert.match(setCookie, /Secure/);
     assert.match(setCookie, /Max-Age=3600/);
+    assert.ok(callbackCookies.some((value) => /^bk_oidc_[0-9a-f]+=;/.test(value)));
     const cookieHeader = setCookie.split(";")[0];
     const sessionToken = cookieHeader?.split("=")[1];
     assert.equal(Boolean(sessionToken), true);
@@ -714,7 +872,10 @@ test("native OIDC invitation callback rolls back every write when session creati
       rateLimitWindowMs: 60_000
     },
     service: {
-      createLoginRedirect: async () => new URL("https://idp.example.test/auth"),
+      createLoginRedirect: async () => ({
+        redirectUrl: new URL("https://idp.example.test/auth?state=state-rollback"),
+        browserMarker: "browser-marker-rollback"
+      }),
       createLogoutRedirect: async () => new URL("https://idp.example.test/logout"),
       validateCallback: async () => ({
         subject: "subject-session-rollback",
@@ -730,13 +891,16 @@ test("native OIDC invitation callback rolls back every write when session creati
   });
 
   try {
+    const markerCookie = await beginNativeLogin(app);
     const callback = await app.inject({
       method: "GET",
-      url: "/auth/callback?code=code-rollback&state=state-rollback"
+      url: "/auth/callback?code=code-rollback&state=state-rollback",
+      headers: { cookie: markerCookie }
     });
 
     assert.equal(callback.statusCode, 500);
-    assert.equal(callback.headers["set-cookie"], undefined);
+    assert.match(String(callback.headers["set-cookie"]), /^bk_oidc_[0-9a-f]+=;/);
+    assert.doesNotMatch(String(callback.headers["set-cookie"]), /betreuungskalender_session=/);
     const counts = database.prepare(`
       SELECT
         (SELECT COUNT(*) FROM app_users WHERE external_subject = 'subject-session-rollback') AS users,
@@ -785,7 +949,10 @@ test("native OIDC callback rejects normal login without workspace membership", a
       rateLimitWindowMs: 60_000
     },
     service: {
-      createLoginRedirect: async () => new URL("https://idp.example.test/auth?state=state-123"),
+      createLoginRedirect: async () => ({
+        redirectUrl: new URL("https://idp.example.test/auth?state=state-123"),
+        browserMarker: "browser-marker-123"
+      }),
       createLogoutRedirect: async () => new URL("https://idp.example.test/logout"),
       validateCallback: async () => ({
         subject: "subject-123",
@@ -801,11 +968,12 @@ test("native OIDC callback rejects normal login without workspace membership", a
   });
 
   try {
+    const markerCookie = await beginNativeLogin(app);
     const callback = await app.inject({
       method: "GET",
       url: "/auth/callback?code=code-123&state=state-123",
       headers: {
-        cookie: `betreuungskalender_session=${staleSession.token}`
+        cookie: `${markerCookie}; betreuungskalender_session=${staleSession.token}`
       }
     });
     assert.equal(callback.statusCode, 403);
@@ -851,7 +1019,10 @@ test("native OIDC callback accepts users with app membership without role groups
       rateLimitWindowMs: 60_000
     },
     service: {
-      createLoginRedirect: async () => new URL("https://idp.example.test/auth?state=state-123"),
+      createLoginRedirect: async () => ({
+        redirectUrl: new URL("https://idp.example.test/auth?state=state-123"),
+        browserMarker: "browser-marker-123"
+      }),
       createLogoutRedirect: async () => new URL("https://idp.example.test/logout"),
       validateCallback: async () => ({
         subject: "subject-member",
@@ -876,15 +1047,22 @@ test("native OIDC callback accepts users with app membership without role groups
   });
 
   try {
+    const markerCookie = await beginNativeLogin(app);
     const callback = await app.inject({
       method: "GET",
-      url: "/auth/callback?code=code-123&state=state-123"
+      url: "/auth/callback?code=code-123&state=state-123",
+      headers: { cookie: markerCookie }
     });
 
     assert.equal(callback.statusCode, 302);
     assert.equal(callback.headers.location, "/");
-    const setCookie = String(callback.headers["set-cookie"]);
-    const sessionToken = setCookie.split(";")[0]?.split("=")[1];
+    const responseCookies = Array.isArray(callback.headers["set-cookie"])
+      ? callback.headers["set-cookie"]
+      : [String(callback.headers["set-cookie"])];
+    const sessionCookie = responseCookies.find((value) =>
+      value.startsWith("betreuungskalender_session=")
+    );
+    const sessionToken = sessionCookie?.split(";")[0]?.split("=")[1];
     assert.equal(Boolean(sessionToken), true);
     assert.equal((await sessions.findByToken(sessionToken))?.externalSubject, "subject-member");
   } finally {
@@ -931,7 +1109,10 @@ test("native OIDC normal login stays closed before owner setup for every claim r
           rateLimitWindowMs: 60_000
         },
         service: {
-          createLoginRedirect: async () => new URL("https://idp.example.test/auth?state=state-123"),
+          createLoginRedirect: async () => ({
+            redirectUrl: new URL("https://idp.example.test/auth?state=state-123"),
+            browserMarker: "browser-marker-123"
+          }),
           createLogoutRedirect: async () => new URL("https://idp.example.test/logout"),
           validateCallback: async () => ({
             subject: `subject-${label}`,
@@ -948,9 +1129,11 @@ test("native OIDC normal login stays closed before owner setup for every claim r
       });
 
       try {
+        const markerCookie = await beginNativeLogin(app);
         const callback = await app.inject({
           method: "GET",
-          url: "/auth/callback?code=code-123&state=state-123"
+          url: "/auth/callback?code=code-123&state=state-123",
+          headers: { cookie: markerCookie }
         });
 
         assert.equal(callback.statusCode, 403);

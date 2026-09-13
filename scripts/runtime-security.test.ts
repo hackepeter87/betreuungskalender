@@ -1130,13 +1130,22 @@ test("production runtime preserves token-bound native OIDC onboarding routes", a
     const nonce = providerUrl.searchParams.get("nonce");
     assert(state);
     assert(nonce);
+    const markerCookie = redirect.headers.getSetCookie().find((value) =>
+      value.startsWith("bk_oidc_")
+    );
+    assert(markerCookie);
+    assert.match(markerCookie, /Path=\/auth\/callback/);
+    assert.match(markerCookie, /HttpOnly/);
+    assert.match(markerCookie, /SameSite=Lax/);
+    assert.match(markerCookie, /Max-Age=600/);
     const code = Buffer.from(JSON.stringify({ subject, nonce })).toString("base64url");
+    const callbackPath = `/auth/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`;
     return {
+      callbackPath,
+      markerCookie: markerCookie.split(";")[0]!,
       state,
       nonce,
-      response: await manualGet(
-        `/auth/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`
-      )
+      response: await manualGet(callbackPath, { cookie: markerCookie.split(";")[0]! })
     };
   };
 
@@ -1192,7 +1201,13 @@ test("production runtime preserves token-bound native OIDC onboarding routes", a
   const ownerCallback = await callbackFor(setupContinue, "runtime-owner");
   assert.equal(ownerCallback.response.status, 302);
   assert.equal(ownerCallback.response.headers.get("location"), "/?onboarding=owner-setup");
-  const ownerCookie = (ownerCallback.response.headers.get("set-cookie") ?? "").split(";")[0];
+  assert.equal(ownerCallback.response.headers.get("cache-control"), "no-store, max-age=0");
+  assert(ownerCallback.response.headers.getSetCookie().some((value) =>
+    /^bk_oidc_[0-9a-f]+=;/.test(value)
+  ));
+  const ownerCookie = ownerCallback.response.headers.getSetCookie()
+    .find((value) => value.startsWith("betreuungskalender_session="))
+    ?.split(";")[0] ?? "";
   assert.match(ownerCookie, /^betreuungskalender_session=.+/);
   const ownerDatabase = new Database(databasePath, { readonly: true });
   const owner = ownerDatabase.prepare(`
@@ -1217,6 +1232,13 @@ test("production runtime preserves token-bound native OIDC onboarding routes", a
   assert.notEqual(owner.consumed_at, null);
   assert.equal(sessionCount(), 1);
   assert.notEqual(loginState(ownerCallback.state)?.consumed_at, null);
+  const replayedOwnerCallback = await manualGet(ownerCallback.callbackPath, {
+    cookie: ownerCallback.markerCookie
+  });
+  assert.equal(replayedOwnerCallback.status, 400);
+  assert.equal(replayedOwnerCallback.headers.get("cache-control"), "no-store, max-age=0");
+  assert.match(replayedOwnerCallback.headers.get("set-cookie") ?? "", /^bk_oidc_[0-9a-f]+=;/);
+  assert.equal(sessionCount(), 1);
   const ownerSpa = await manualGet("/?onboarding=owner-setup", { cookie: ownerCookie });
   assert.equal(ownerSpa.status, 200);
   assert.match(await ownerSpa.text(), /<div id="root">/);
@@ -1282,8 +1304,9 @@ test("production runtime preserves token-bound native OIDC onboarding routes", a
   const invitationCallback = await callbackFor(invitationContinue, "runtime-invitee");
   assert.equal(invitationCallback.response.status, 302);
   assert.equal(invitationCallback.response.headers.get("location"), "/?onboarding=invitation");
-  const invitationCookie = (invitationCallback.response.headers.get("set-cookie") ?? "")
-    .split(";")[0];
+  const invitationCookie = invitationCallback.response.headers.getSetCookie()
+    .find((value) => value.startsWith("betreuungskalender_session="))
+    ?.split(";")[0] ?? "";
   assert.match(invitationCookie, /^betreuungskalender_session=.+/);
   const invitationDatabase = new Database(databasePath, { readonly: true });
   const invitedMembership = invitationDatabase.prepare(`
@@ -1322,8 +1345,10 @@ test("production runtime preserves token-bound native OIDC onboarding routes", a
     "fictional-unknown-path-token",
     ownerCallback.state,
     ownerCallback.nonce,
+    ownerCallback.markerCookie,
     invitationCallback.state,
     invitationCallback.nonce,
+    invitationCallback.markerCookie,
     legalContentMarker
   ]) {
     assert.doesNotMatch(logs, new RegExp(secret.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));

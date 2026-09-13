@@ -110,7 +110,10 @@ unintentionally.
 
 Native OIDC handles authentication directly. The callback
 path uses Authorization Code + PKCE, server-side state/nonce/PKCE verifier
-records, and the maintained `openid-client` library for protocol validation.
+records, a short-lived browser-bound callback marker, and the maintained
+`openid-client` library for protocol validation. The marker is carried only in
+an `HttpOnly`, `SameSite=Lax` cookie scoped to the callback path and is cleared
+when the matching callback completes or is rejected.
 Native sessions use an opaque `HttpOnly`, `SameSite=Lax` cookie. In production
 the cookie is also `Secure`. The selected database stores only a hash of the
 cookie token, the OIDC subject, timestamps, expiry, and revocation metadata. Native mode maps
@@ -369,7 +372,7 @@ groups for its documented compatibility role. Native OIDC always requires an
 active app membership for normal login. Only a validated owner-setup or
 invitation context may establish the matching membership. Rejected login,
 setup, and invitation responses are returned without caching, and rejected
-callbacks clear any existing app session cookie.
+callbacks clear the callback marker and any existing app session cookie.
 
 ## Operator responsibility
 

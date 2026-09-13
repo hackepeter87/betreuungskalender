@@ -258,12 +258,13 @@ clients. Existing feed URLs and token scopes remain unchanged.
 
 `native_oidc_login_states` stores short-lived, single-use login transaction
 records for native OIDC. It contains the random `state`, matching `nonce`,
-server-side PKCE verifier, redirect URI, a constrained login context, creation
+server-side PKCE verifier, a hash of the browser transaction marker, redirect
+URI, a constrained login context, creation
 timestamp, expiry timestamp, and optional consumption timestamp. Login context
 distinguishes normal login, initial owner setup, and invitation acceptance.
 Onboarding contexts may contain only a SHA-256 token hash. The table never
-stores raw onboarding tokens, ID tokens, access tokens, refresh tokens, client
-secrets, or browser session identifiers.
+stores raw onboarding tokens, browser markers, ID tokens, access tokens,
+refresh tokens, client secrets, or browser session identifiers.
 
 `owner_setup_tokens` stores only the SHA-256 hash, validity window, and optional
 single-use consumption metadata for an initial owner setup link. Claiming a

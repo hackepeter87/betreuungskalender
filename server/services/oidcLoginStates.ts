@@ -9,6 +9,7 @@ export interface OidcLoginStateRecord {
   state: string;
   nonce: string;
   pkceVerifier: string;
+  browserMarkerHash: string;
   redirectUri: string;
   context: OidcLoginContext;
   createdAt: string;
@@ -19,7 +20,10 @@ export class OidcLoginStateStore {
   constructor(private readonly persistence: PersistenceRuntime) {}
 
   async create(
-    record: Pick<OidcLoginStateRecord, "state" | "nonce" | "pkceVerifier" | "redirectUri"> & {
+    record: Pick<
+      OidcLoginStateRecord,
+      "state" | "nonce" | "pkceVerifier" | "browserMarkerHash" | "redirectUri"
+    > & {
       context?: OidcLoginContext;
     },
     ttlSeconds: number,
@@ -30,6 +34,9 @@ export class OidcLoginStateStore {
     const expiresAt = new Date(now.getTime() + ttlSeconds * 1000).toISOString();
     const context = record.context ?? { type: "normal" as const };
     const tokenHash = context.type === "normal" ? null : context.tokenHash;
+    if (!/^[0-9a-f]{64}$/.test(record.browserMarkerHash)) {
+      throw new Error("OIDC browser marker hash must be a SHA-256 hex digest.");
+    }
     if (tokenHash !== null && !/^[0-9a-f]{64}$/.test(tokenHash)) {
       throw new Error("OIDC login context token hash must be a SHA-256 hex digest.");
     }
@@ -37,6 +44,7 @@ export class OidcLoginStateStore {
       state: record.state,
       nonce: record.nonce,
       pkce_verifier: record.pkceVerifier,
+      browser_marker_hash: record.browserMarkerHash,
       redirect_uri: record.redirectUri,
       context_type: context.type,
       context_token_hash: tokenHash,
@@ -47,15 +55,20 @@ export class OidcLoginStateStore {
     return { ...record, context, createdAt, expiresAt };
   }
 
-  async consume(state: string, now = new Date()): Promise<OidcLoginStateRecord | undefined> {
+  async consume(
+    state: string,
+    browserMarkerHash: string,
+    now = new Date()
+  ): Promise<OidcLoginStateRecord | undefined> {
     return this.persistence.transaction(async (database) => {
       const nowIso = now.toISOString();
       const row = await database.selectFrom("native_oidc_login_states")
         .select([
-          "state", "nonce", "pkce_verifier", "redirect_uri", "context_type",
+          "state", "nonce", "pkce_verifier", "browser_marker_hash", "redirect_uri", "context_type",
           "context_token_hash", "created_at", "expires_at"
         ])
         .where("state", "=", state)
+        .where("browser_marker_hash", "=", browserMarkerHash)
         .where("consumed_at", "is", null)
         .where("expires_at", ">", nowIso)
         .executeTakeFirst();
@@ -73,6 +86,7 @@ export class OidcLoginStateStore {
         state: row.state,
         nonce: row.nonce,
         pkceVerifier: row.pkce_verifier,
+        browserMarkerHash: row.browser_marker_hash,
         redirectUri: row.redirect_uri,
         context,
         createdAt: row.created_at,
