@@ -94,6 +94,15 @@ function setupUser(): RequestUser {
   };
 }
 
+function alternateSetupUser(): RequestUser {
+  return {
+    ...setupUser(),
+    id: "alternate-owner",
+    externalSubject: "alternate-owner",
+    displayName: "alternate-owner"
+  };
+}
+
 test("detects a fresh installation without browser state", async () => {
   await withDatabase(async (_database, persistence) => {
     const setup = await buildSetupState(persistence.query);
@@ -465,6 +474,86 @@ test("completes first-use setup with owner, care parties, multiple children, and
     assert.equal(result.created.primaryCarePartyId, result.created.secondaryCarePartyId);
     assert.equal(result.created.defaultCarePartyId, result.created.carePartyId);
   });
+});
+
+test("first-use setup preserves an established owner and rolls back a different user", async () => {
+  await withDatabase(async (database, persistence) => {
+    insertSetting(database, "setup.ownerUserId", "local-dev");
+    const before = database.serialize();
+
+    await assert.rejects(
+      completeFirstUseSetup(
+        alternateSetupUser(),
+        {
+          careParty: { name: "Rejected care party", kind: "other" },
+          defaultCareParty: "primary",
+          children: []
+        },
+        persistence,
+        "2026-07-05T12:30:00.000Z"
+      ),
+      (error) => error instanceof Error && "code" in error && error.code === "setup_conflict"
+    );
+
+    assert.deepEqual(database.serialize(), before);
+    assert.equal(settingValue(database, "setup.ownerUserId"), "local-dev");
+  });
+});
+
+test("the established owner can complete an unfinished first-use setup", async () => {
+  await withDatabase(async (database, persistence) => {
+    insertSetting(database, "setup.ownerUserId", "local-dev");
+
+    await completeFirstUseSetup(
+      setupUser(),
+      {
+        careParty: { name: "Primary care", kind: "other" },
+        defaultCareParty: "primary",
+        children: []
+      },
+      persistence,
+      "2026-07-05T12:30:00.000Z"
+    );
+
+    assert.equal(settingValue(database, "setup.ownerUserId"), "local-dev");
+    assert.equal(settingValue(database, "setup.completedBy"), "local-dev");
+    assert.equal((await buildSetupState(persistence.query)).complete, true);
+  });
+});
+
+test("concurrent SQLite first-use attempts commit exactly one owner", async () => {
+  const root = mkdtempSync(join(tmpdir(), "betreuungskalender-setup-race-"));
+  const databasePath = join(root, "app.sqlite");
+  const first = createSqlitePersistenceRuntime(databasePath);
+  const second = createSqlitePersistenceRuntime(databasePath);
+  try {
+    await first.migrate();
+    const input = {
+      careParty: { name: "Primary care", kind: "other" as const },
+      defaultCareParty: "primary" as const,
+      children: []
+    };
+    const outcomes = await Promise.allSettled([
+      completeFirstUseSetup(setupUser(), input, first, "2026-07-05T12:30:00.000Z"),
+      completeFirstUseSetup(alternateSetupUser(), input, second, "2026-07-05T12:30:00.000Z")
+    ]);
+
+    assert.equal(outcomes.filter(({ status }) => status === "fulfilled").length, 1);
+    assert.equal(outcomes.filter(({ status }) => status === "rejected").length, 1);
+    const owner = settingValue(first.sqliteDatabase, "setup.ownerUserId");
+    assert.ok(owner === "local-dev" || owner === "alternate-owner");
+    const carePartyCount = first.sqliteDatabase.prepare(
+      "SELECT COUNT(*) AS count FROM care_parties"
+    ).get() as { count: number };
+    const membershipCount = first.sqliteDatabase.prepare(`
+      SELECT COUNT(*) AS count FROM app_memberships WHERE deleted_at IS NULL
+    `).get() as { count: number };
+    assert.equal(carePartyCount.count, 1);
+    assert.equal(membershipCount.count, 1);
+  } finally {
+    await Promise.all([first.close(), second.close()]);
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test("accepts the legacy child input but rejects ambiguous child forms", () => {

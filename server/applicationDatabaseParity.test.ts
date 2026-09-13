@@ -581,6 +581,43 @@ test("PostgreSQL produces the same application results as SQLite", {
   }
 });
 
+test("PostgreSQL first-use completion commits exactly one concurrent owner", {
+  skip: !postgresConfigured
+}, async () => {
+  const first = await postgresRuntime();
+  const second = createPersistenceRuntime(postgresOptions());
+  try {
+    const input = {
+      careParty: { name: "Primary fixture", kind: "other" as const },
+      defaultCareParty: "primary" as const,
+      children: []
+    };
+    const outcomes = await Promise.allSettled([
+      completeFirstUseSetup(user("first-owner", "admin"), input, first, timestamp),
+      completeFirstUseSetup(user("second-owner", "admin"), input, second, timestamp)
+    ]);
+
+    assert.equal(outcomes.filter(({ status }) => status === "fulfilled").length, 1);
+    assert.equal(outcomes.filter(({ status }) => status === "rejected").length, 1);
+    const ownerRow = await first.query.selectFrom("settings")
+      .select("value_json")
+      .where("key", "=", "setup.ownerUserId")
+      .where("deleted_at", "is", null)
+      .executeTakeFirstOrThrow();
+    const owner = JSON.parse(ownerRow.value_json) as unknown;
+    assert.ok(owner === "first-owner" || owner === "second-owner");
+    assert.equal(Number((await first.query.selectFrom("care_parties")
+      .select(({ fn }) => fn.count<number>("id").as("count"))
+      .executeTakeFirstOrThrow()).count), 1);
+    assert.equal(Number((await first.query.selectFrom("app_memberships")
+      .select(({ fn }) => fn.count<number>("id").as("count"))
+      .where("deleted_at", "is", null)
+      .executeTakeFirstOrThrow()).count), 1);
+  } finally {
+    await Promise.all([first.close(), second.close()]);
+  }
+});
+
 test("portable transfers remain atomic from SQLite to PostgreSQL and back", {
   skip: !postgresConfigured
 }, async () => {

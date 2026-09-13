@@ -1392,6 +1392,7 @@ test("runtime serves revocable personal iCalendar feeds without broader token ac
     })
   });
   assert.equal(setup.status, 200);
+  assert.equal(setup.headers.get("cache-control"), "no-store, max-age=0");
 
   const betaSession = await fetch(`${baseUrl}/api/session`, { headers: betaHeaders });
   assert.equal(betaSession.status, 200);

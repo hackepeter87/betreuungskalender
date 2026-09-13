@@ -254,6 +254,10 @@ latest workspace membership is authoritative in every production auth mode. An
 active membership grants its fixed workspace role; a missing or deleted
 membership grants no workspace access.
 
+The configured trusted-proxy admin group can establish the initial owner only
+while no owner exists. If the domain setup is still unfinished after ownership
+has been established, only that same active owner can complete it.
+
 For initial owner setup, mount a private random value at
 `OWNER_SETUP_TOKEN_FILE` and open `/setup?token=<one-time-value>` before
 `OWNER_SETUP_TOKEN_TTL_SECONDS` expires. The browser first shows a neutral

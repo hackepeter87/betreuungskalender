@@ -127,6 +127,11 @@ invitations. Existing installations without an explicit owner use the
 secret-backed owner setup link to establish ownership without rerunning the
 first-use data wizard.
 
+In trusted-proxy mode, the configured admin group can establish ownership only
+while the installation has no owner. An unfinished first-use wizard remains
+bound to the established owner; another administrator cannot replace it while
+completing setup.
+
 In Settings, the owner can:
 
 - list known app users

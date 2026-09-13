@@ -114,6 +114,10 @@ Member administration uses `settings.setup.ownerUserId`. The explicit owner can
 list members, manage invitation records, and update workspace roles. Existing
 installations without an explicit owner use the secret-backed owner setup flow;
 the claim establishes ownership without changing existing domain data.
+First-use completion claims or verifies this setting inside the same database
+transaction as its domain writes. An existing owner value is never overwritten
+by a different setup identity, including when concurrent requests use separate
+PostgreSQL connections.
 
 `audit_log` stores timestamp, stable API user ID, entity type and ID, action,
 field name, old/new serialized values, and optional metadata. Audit API
