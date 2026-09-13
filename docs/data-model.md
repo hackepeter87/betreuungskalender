@@ -133,7 +133,9 @@ Report periods cover at most 366 calendar days. Entries, unavailable periods,
 holiday periods, related child links, trips, costs, and monthly closings are
 filtered by interval in the database before the snapshot is materialized. A
 snapshot supports up to 10,000 records per top-level report category and up to
-50,000 related child links, trips, or costs per related collection.
+50,000 related child links, trips, or costs per related collection. Optional
+audit history is complete up to 50,000 matching entries. Larger selections are
+rejected instead of returning an incomplete report.
 
 Audit history remains in the same operational database and can contain
 historical identifiers or values needed for traceability. The current
