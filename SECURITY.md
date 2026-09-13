@@ -34,3 +34,6 @@ sessions; restoring membership requires a new login.
 
 When shared care-party assignments are enabled, non-admin planning and reduced
 schedule access is limited to the user's assigned care parties.
+
+Actual care ranges submitted through confirmation workflows use the same
+supported-date and maximum-duration limits as regular care entries.

@@ -4,6 +4,7 @@ import {
   answerCareConfirmation,
   deletePushSubscription,
   getNotificationPreferences,
+  isInvalidCareConfirmationRangeError,
   listOpenCareConfirmations,
   remindCareConfirmationLater,
   savePushSubscription,
@@ -42,6 +43,9 @@ export async function careConfirmationRoutes(app: FastifyInstance): Promise<void
     } catch (error) {
       if (isCareEntryConflictError(error)) {
         return reply.code(409).send({ error: "care_entry_conflict" });
+      }
+      if (isInvalidCareConfirmationRangeError(error)) {
+        return reply.code(400).send({ error: "invalid_actual_range" });
       }
       return reply.code(400).send({
         error: "invalid_relation",

@@ -8,6 +8,12 @@ import type {
   ApiNotificationPreferencesResponse,
   ApiPushSubscriptionInput
 } from "../../shared/api.js";
+import {
+  MAX_DOMAIN_RANGE_DAYS,
+  isSupportedDateKey,
+  isTimedRangeWithinDays,
+  isValidTimedRange
+} from "../../shared/temporal.js";
 import type { RequestUser } from "../auth.js";
 import { config } from "../config.js";
 import type { DatabaseExecutor, PersistenceRuntime } from "../db/runtime.js";
@@ -45,6 +51,21 @@ if (pushConfigured) {
 
 function httpError(code: string, statusCode: number, message: string): Error & { code: string; statusCode: number } {
   return Object.assign(new Error(message), { code, statusCode });
+}
+
+export function isInvalidCareConfirmationRangeError(error: unknown): boolean {
+  return error instanceof Error && (error as { code?: string }).code === "invalid_actual_range";
+}
+
+function assertValidActualRange(startDateTime: string, endDateTime: string): void {
+  if (
+    !isSupportedDateKey(startDateTime.slice(0, 10)) ||
+    !isSupportedDateKey(endDateTime.slice(0, 10)) ||
+    !isValidTimedRange(startDateTime, endDateTime) ||
+    !isTimedRangeWithinDays(startDateTime, endDateTime, MAX_DOMAIN_RANGE_DAYS)
+  ) {
+    throw httpError("invalid_actual_range", 400, "Ungültiger tatsächlicher Betreuungszeitraum.");
+  }
 }
 
 function isAllowedPushEndpoint(endpoint: string): boolean {
@@ -685,6 +706,9 @@ export async function answerCareConfirmation(
   const actualResponsiblePartyId = answer.status === "partial"
     ? answer.actualResponsiblePartyId ?? before.responsible_party_id
     : null;
+  if (actualStartDateTime && actualEndDateTime) {
+    assertValidActualRange(actualStartDateTime, actualEndDateTime);
+  }
   const plannedChildIds = await linkedChildIds(runtime.query, "care_entry_children", before.id);
   const resolvedActualChildIds = answer.status === "partial"
     ? [...new Set(answer.actualChildIds ?? plannedChildIds)]

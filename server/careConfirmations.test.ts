@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { after, beforeEach } from "node:test";
+import Fastify from "fastify";
 import type { RequestUser } from "./auth.js";
 
 const temporaryDirectory = mkdtempSync(join(tmpdir(), "betreuungskalender-confirmations-"));
@@ -25,6 +26,8 @@ const {
   sendDueCareConfirmationPushes,
   updateNotificationPreferences
 } = await import("./services/careConfirmations.js");
+const { careConfirmationRoutes } = await import("./routes/careConfirmations.js");
+const { careConfirmationAnswerSchema } = await import("./validation/schemas.js");
 
 runMigrations();
 
@@ -369,6 +372,137 @@ test("answers a confirmation request and stores partial status with audit metada
   assert.deepEqual(answered?.entry.actualChildIds, ["child-confirmation-a"]);
   assert.equal(answered?.entry.actualStartDateTime, "2026-07-02T17:00:00.000Z");
   assert.equal(openCount.count, 0);
+});
+
+test("validates explicit partial confirmation ranges against the care-entry time contract", () => {
+  const cases = [
+    {
+      name: "exact maximum",
+      start: "2024-01-01T00:00:00.000Z",
+      end: "2024-12-31T23:59:00.000Z",
+      valid: true
+    },
+    {
+      name: "one occupied day over maximum",
+      start: "2024-01-01T00:00:00.000Z",
+      end: "2025-01-01T00:01:00.000Z",
+      valid: false
+    },
+    {
+      name: "reversed",
+      start: "2026-07-03T18:00:00.000Z",
+      end: "2026-07-02T18:00:00.000Z",
+      valid: false
+    },
+    {
+      name: "equal",
+      start: "2026-07-02T18:00:00.000Z",
+      end: "2026-07-02T18:00:00.000Z",
+      valid: false
+    },
+    {
+      name: "leap-year overnight",
+      start: "2028-02-28T23:00:00.000Z",
+      end: "2028-02-29T01:00:00.000Z",
+      valid: true
+    },
+    {
+      name: "unsupported date",
+      start: "1899-12-31T23:00:00.000Z",
+      end: "1900-01-01T01:00:00.000Z",
+      valid: false
+    }
+  ];
+
+  for (const range of cases) {
+    const parsed = careConfirmationAnswerSchema.safeParse({
+      status: "partial",
+      actualStartDateTime: range.start,
+      actualEndDateTime: range.end
+    });
+    assert.equal(parsed.success, range.valid, range.name);
+  }
+});
+
+test("rejects invalid resolved partial ranges without changing persisted state", async () => {
+  const cases = [
+    {
+      name: "defaulted over-limit range",
+      mutateEntry: () => db.prepare(`
+        UPDATE care_entries
+        SET start_datetime = '2024-01-01T00:00:00.000Z',
+          end_datetime = '2025-01-01T00:01:00.000Z'
+        WHERE id = 'entry-confirmation-a'
+      `).run(),
+      answer: { status: "partial" as const }
+    },
+    {
+      name: "one-sided reversed range",
+      answer: {
+        status: "partial" as const,
+        actualStartDateTime: "2026-07-02T19:00:00.000Z"
+      }
+    }
+  ];
+
+  for (const testCase of cases) {
+    resetDatabase();
+    insertPastPlannedEntry();
+    await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
+    const request = db.prepare(`
+      SELECT id FROM care_confirmation_requests
+      WHERE care_entry_id = ? AND user_id = ?
+    `).get("entry-confirmation-a", "local-dev") as { id: string };
+    testCase.mutateEntry?.();
+    const before = db.serialize();
+
+    await assert.rejects(
+      answerCareConfirmation(persistence, request.id, "local-dev", testCase.answer),
+      (error: unknown) => (error as { code?: string }).code === "invalid_actual_range",
+      testCase.name
+    );
+    assert.deepEqual(db.serialize(), before, testCase.name);
+  }
+});
+
+test("returns a stable generic API error for invalid defaulted partial ranges", async () => {
+  insertPastPlannedEntry();
+  await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
+  const request = db.prepare(`
+    SELECT id FROM care_confirmation_requests
+    WHERE care_entry_id = ? AND user_id = ?
+  `).get("entry-confirmation-a", "local-dev") as { id: string };
+  db.prepare(`
+    UPDATE care_entries
+    SET start_datetime = '2024-01-01T00:00:00.000Z',
+      end_datetime = '2025-01-01T00:01:00.000Z'
+    WHERE id = 'entry-confirmation-a'
+  `).run();
+
+  const app = Fastify();
+  app.decorate("persistence", persistence);
+  app.addHook("onRequest", async (fastifyRequest) => {
+    fastifyRequest.user = {
+      id: "local-dev",
+      externalSubject: "local-dev",
+      displayName: "Local Development",
+      groups: [],
+      role: "admin",
+      permissions: ["read", "write", "admin"]
+    };
+  });
+  await careConfirmationRoutes(app);
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/care-confirmations/${request.id}/answer`,
+      payload: { status: "partial" }
+    });
+    assert.equal(response.statusCode, 400);
+    assert.deepEqual(response.json(), { error: "invalid_actual_range" });
+  } finally {
+    await app.close();
+  }
 });
 
 test("rejects confirmation when actual care would overlap an existing actual entry", async () => {
