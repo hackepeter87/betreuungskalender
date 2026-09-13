@@ -7,8 +7,10 @@ import {
   assertPersistedCareParty,
   assertPersistedChildren,
   getPersistedDefaultResponsiblePartyId,
+  isCarePartyAccessError,
   recordDomainAudit,
-  recordDomainFieldChanges
+  recordDomainFieldChanges,
+  scopedPersistedCarePartyIds
 } from "../services/domainPersistence.js";
 import { makeId, nowIso } from "../services/common.js";
 import {
@@ -40,10 +42,16 @@ const syncInputSchema = z.object({
 }).refine((range) => range.endDate >= range.startDate, { path: ["endDate"] });
 
 export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/contact-rules", readLimit, async () => {
-    const rows = await app.persistence.query.selectFrom("contact_rules")
+  app.get("/api/contact-rules", readLimit, async (request) => {
+    const scopedPartyIds = await scopedPersistedCarePartyIds(app.persistence.query, request.user);
+    if (scopedPartyIds?.length === 0) return [];
+    let query = app.persistence.query.selectFrom("contact_rules")
       .select("id")
-      .where("deleted_at", "is", null)
+      .where("deleted_at", "is", null);
+    if (scopedPartyIds) {
+      query = query.where("responsible_party_id", "in", scopedPartyIds);
+    }
+    const rows = await query
       .orderBy("start_date")
       .orderBy("name")
       .execute();
@@ -90,6 +98,9 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
       });
       return reply.code(201).send(result);
     } catch (error) {
+      if (isCarePartyAccessError(error)) {
+        return reply.code(403).send({ error: "forbidden" });
+      }
       return reply.code(400).send({
         error: "invalid_relation",
         message: error instanceof Error ? error.message : String(error)
@@ -140,6 +151,9 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
         return { ...await getContactRule(request.params.id, database), syncSummary };
       });
     } catch (error) {
+      if (isCarePartyAccessError(error)) {
+        return reply.code(403).send({ error: "forbidden" });
+      }
       return reply.code(400).send({
         error: "invalid_relation",
         message: error instanceof Error ? error.message : String(error)
@@ -159,6 +173,9 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
         database: app.persistence.query
       });
     } catch (error) {
+      if (isCarePartyAccessError(error)) {
+        return reply.code(403).send({ error: "forbidden" });
+      }
       return reply.code(400).send({
         error: "invalid_sync_range",
         message: error instanceof Error ? error.message : String(error)
@@ -195,6 +212,9 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
       if (isContactRuleSyncPreviewChangedError(error)) {
         return reply.code(409).send({ error: "contact_rule_sync_preview_changed" });
       }
+      if (isCarePartyAccessError(error)) {
+        return reply.code(403).send({ error: "forbidden" });
+      }
       return reply.code(400).send({
         error: "invalid_relation",
         message: error instanceof Error ? error.message : String(error)
@@ -208,6 +228,9 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
     try {
       await assertCanUsePersistedCareParty(app.persistence.query, request.user, before.responsiblePartyId);
     } catch (error) {
+      if (isCarePartyAccessError(error)) {
+        return reply.code(403).send({ error: "forbidden" });
+      }
       return reply.code(400).send({
         error: "invalid_relation",
         message: error instanceof Error ? error.message : String(error)

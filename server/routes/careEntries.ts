@@ -19,9 +19,11 @@ import {
   assertPersistedChildren,
   assignedPersistedCarePartyIds,
   getPersistedDefaultResponsiblePartyId,
+  isCarePartyAccessError,
   markDomainClosedMonthsChanged,
   recordDomainAudit,
   recordDomainFieldChanges,
+  scopedPersistedCarePartyIds,
   syncPersistedChildJunction
 } from "../services/domainPersistence.js";
 import {
@@ -68,9 +70,14 @@ function scheduleLocation(value: string | null): string | undefined {
   return value && scheduleLocations.has(value) ? value : undefined;
 }
 
-async function scheduleConflictEntryIds(database: DatabaseExecutor): Promise<Set<string>> {
+async function scheduleConflictEntryIds(
+  database: DatabaseExecutor,
+  responsiblePartyIds?: string[]
+): Promise<Set<string>> {
   try {
-    return new Set((await listCareConflicts(database)).flatMap((conflict) => conflict.entryIds));
+    return new Set((await listCareConflicts(database, {
+      ...(responsiblePartyIds ? { responsiblePartyIds } : {})
+    })).flatMap((conflict) => conflict.entryIds));
   } catch (error) {
     if (isCareConflictWorkLimitError(error)) return new Set();
     throw error;
@@ -299,7 +306,12 @@ async function getConflictPreviewEntry(
   };
 }
 
-async function getScheduleEntry(database: DatabaseExecutor, id: string): Promise<ApiScheduleEntry | undefined> {
+async function getScheduleEntry(
+  database: DatabaseExecutor,
+  id: string,
+  user?: RequestUser
+): Promise<ApiScheduleEntry | undefined> {
+  const scopedPartyIds = await scopedPersistedCarePartyIds(database, user);
   const row = await database.selectFrom("care_entries as entries")
     .leftJoin("care_parties as parties", (join) => join
       .onRef("parties.id", "=", "entries.responsible_party_id")
@@ -325,6 +337,8 @@ async function getScheduleEntry(database: DatabaseExecutor, id: string): Promise
     responsiblePartyName: string | null;
   } | undefined;
   if (!row) return undefined;
+  if (scopedPartyIds && !row.responsiblePartyId) return undefined;
+  if (scopedPartyIds && !scopedPartyIds.includes(row.responsiblePartyId ?? "")) return undefined;
   const children = await database.selectFrom("care_entry_children as links")
     .innerJoin("children", (join) => join
       .onRef("children.id", "=", "links.child_id")
@@ -334,7 +348,7 @@ async function getScheduleEntry(database: DatabaseExecutor, id: string): Promise
     .where("links.deleted_at", "is", null)
     .orderBy(sql`lower(children.name)`)
     .execute() as ApiScheduleEntry["children"];
-  const hasConflict = (await scheduleConflictEntryIds(database)).has(id);
+  const hasConflict = (await scheduleConflictEntryIds(database, scopedPartyIds)).has(id);
   const location = scheduleLocation(row.location);
   return {
     id: row.id,
@@ -806,23 +820,29 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
           existing
         ))) return schedulerForbidden(reply);
       }
+      let scopedPartyIds: string[] | undefined;
+      try {
+        await assertCanUsePersistedCareParty(
+          app.persistence.query,
+          request.user,
+          input.responsiblePartyId
+        );
+        scopedPartyIds = await scopedPersistedCarePartyIds(app.persistence.query, request.user);
+      } catch (error) {
+        if (isCarePartyAccessError(error)) return schedulerForbidden(reply);
+        throw error;
+      }
       const preview = await previewPlannedCareConflicts({
         status: "planned",
         startDateTime: input.startDateTime,
         endDateTime: input.endDateTime,
         childIds: input.childIds
-      }, app.persistence.query, request.query.entryId);
-      const assignedPartyIds = request.user?.workspaceRole === "scheduler"
-        ? new Set(await assignedPersistedCarePartyIds(app.persistence.query, request.user.id))
-        : undefined;
+      }, app.persistence.query, request.query.entryId, scopedPartyIds);
       const items = (await Promise.all(preview.conflicts.map(async (conflict) => {
         const conflictingId = conflict.entryIds.find((id) => id !== "__care_conflict_candidate__");
         const entry = conflictingId ? await getConflictPreviewEntry(app.persistence.query, conflictingId) : undefined;
         return entry ? [{ conflict, entry }] : [];
       }))).flat();
-      if (assignedPartyIds && items.some(({ entry }) =>
-        !entry.responsiblePartyId || !assignedPartyIds.has(entry.responsiblePartyId)
-      )) return schedulerForbidden(reply);
       return { fingerprint: preview.fingerprint, items };
     }
   );
@@ -840,14 +860,16 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
       }
       try {
         return await app.persistence.transaction(async (database) => {
-          const conflict = (await listCareConflicts(database)).find((item) =>
-            item.id === input.conflictId && item.entryIds.includes(input.entryId!)
-          );
           const existing = await getEntry(database, input.entryId!);
-          if (!conflict || !existing || !existing.contactRuleId || existing.status !== "planned") {
+          if (!existing) return reply.code(409).send({ error: "care_conflict_changed" });
+          await assertCanUsePersistedCareParty(database, request.user, existing.responsiblePartyId);
+          const scopedPartyIds = await scopedPersistedCarePartyIds(database, request.user);
+          const conflict = (await listCareConflicts(database, {
+            ...(scopedPartyIds ? { responsiblePartyIds: scopedPartyIds } : {})
+          })).find((item) => item.id === input.conflictId && item.entryIds.includes(input.entryId!));
+          if (!conflict || !existing.contactRuleId || existing.status !== "planned") {
             return reply.code(409).send({ error: "care_conflict_changed" });
           }
-          await assertCanUsePersistedCareParty(database, request.user, existing.responsiblePartyId);
           const timestamp = nowIso();
           await database.updateTable("care_entries").set((expression) => ({
             status: "cancelled",
@@ -876,6 +898,9 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
           return updated;
         });
       } catch (error) {
+        if (isCarePartyAccessError(error)) {
+          return reply.code(403).send({ error: "forbidden" });
+        }
         if (isCareConflictWorkLimitError(error)) {
           return reply.code(409).send({ error: "care_conflict_changed" });
         }
@@ -888,6 +913,8 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
     "/api/care-entries/schedule",
     scheduleLimit,
     async (request): Promise<ApiScheduleEntry[]> => {
+      const scopedPartyIds = await scopedPersistedCarePartyIds(app.persistence.query, request.user);
+      if (scopedPartyIds?.length === 0) return [];
       let query = app.persistence.query.selectFrom("care_entries as entries")
         .leftJoin("care_parties as parties", (join) => join
           .onRef("parties.id", "=", "entries.responsible_party_id")
@@ -902,16 +929,16 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
           "parties.name as responsiblePartyName"
         ])
         .where("entries.deleted_at", "is", null);
+      if (scopedPartyIds) {
+        query = query.where("entries.responsible_party_id", "in", scopedPartyIds);
+      }
       if (request.query.startDate) {
         query = query.where("entries.end_datetime", ">=", `${request.query.startDate}T00:00:00.000Z`);
       }
       if (request.query.endDate) {
         query = query.where("entries.start_datetime", "<=", `${request.query.endDate}T23:59:59.999Z`);
       }
-      const [conflicts, rows] = await Promise.all([
-        scheduleConflictEntryIds(app.persistence.query),
-        query.orderBy("entries.start_datetime").orderBy("entries.id").execute()
-      ]) as [Set<string>, Array<{
+      const rows = await query.orderBy("entries.start_datetime").orderBy("entries.id").execute() as Array<{
         id: string;
         startDateTime: string;
         endDateTime: string;
@@ -919,7 +946,8 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
         location: string | null;
         responsiblePartyId: string | null;
         responsiblePartyName: string | null;
-      }>];
+      }>;
+      const conflicts = await scheduleConflictEntryIds(app.persistence.query, scopedPartyIds);
       return Promise.all(rows.map(async (row) => {
         const location = scheduleLocation(row.location);
         const children = await app.persistence.query.selectFrom("care_entry_children as links")
@@ -997,9 +1025,12 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
         persistEntry(database, id, input, request.userEmail, undefined, request.user)
       );
       return reply.code(201).send(scheduler
-        ? await getScheduleEntry(app.persistence.query, id)
+        ? await getScheduleEntry(app.persistence.query, id, request.user)
         : created);
     } catch (error) {
+      if (isCarePartyAccessError(error)) {
+        return reply.code(403).send({ error: "forbidden" });
+      }
       if (isPlannedCareConflictPreviewRequiredError(error)) {
         return reply.code(409).send({
           error: "planned_care_conflict_confirmation_required",
@@ -1030,9 +1061,12 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
         persistEntry(database, request.params.id, input, request.userEmail, existing, request.user)
       );
       return scheduler
-        ? await getScheduleEntry(app.persistence.query, request.params.id)
+        ? await getScheduleEntry(app.persistence.query, request.params.id, request.user)
         : updated;
     } catch (error) {
+      if (isCarePartyAccessError(error)) {
+        return reply.code(403).send({ error: "forbidden" });
+      }
       if (isPlannedCareConflictPreviewRequiredError(error)) {
         return reply.code(409).send({
           error: "planned_care_conflict_confirmation_required",
@@ -1053,6 +1087,9 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
       await assertCanUsePersistedCareParty(app.persistence.query, request.user, existing.responsiblePartyId);
       if (existing.actualResponsiblePartyId) await assertCanUsePersistedCareParty(app.persistence.query, request.user, existing.actualResponsiblePartyId);
     } catch (error) {
+      if (isCarePartyAccessError(error)) {
+        return reply.code(403).send({ error: "forbidden" });
+      }
       return reply.code(400).send({ error: "invalid_relation", message: error instanceof Error ? error.message : String(error) });
     }
     const timestamp = nowIso();

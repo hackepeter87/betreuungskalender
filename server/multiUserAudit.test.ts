@@ -104,7 +104,7 @@ async function expectStatus(
   const response = await fetch(`${baseUrl}${path}`, {
     ...init,
     headers: {
-      "content-type": "application/json",
+      ...(init.body ? { "content-type": "application/json" } : {}),
       ...init.headers
     }
   });
@@ -528,7 +528,7 @@ test("shared care-party assignments restrict care entries and contact rules by e
     body: JSON.stringify(alphaEntryInput)
   });
 
-  await expectStatus(baseUrl, `/api/care-entries/${alphaEntry.id}`, 400, {
+  await expectStatus(baseUrl, `/api/care-entries/${alphaEntry.id}`, 403, {
     method: "PUT",
     headers: betaHeaders,
     body: JSON.stringify({
@@ -537,7 +537,7 @@ test("shared care-party assignments restrict care entries and contact rules by e
       location: "Nicht erlaubter Änderungsversuch"
     })
   });
-  await expectStatus(baseUrl, `/api/care-entries/${alphaEntry.id}`, 400, {
+  await expectStatus(baseUrl, `/api/care-entries/${alphaEntry.id}`, 403, {
     method: "DELETE",
     headers: betaHeaders
   });
@@ -584,7 +584,7 @@ test("shared care-party assignments restrict care entries and contact rules by e
     body: JSON.stringify(alphaRuleInput)
   });
 
-  await expectStatus(baseUrl, `/api/contact-rules/${alphaRule.id}`, 400, {
+  await expectStatus(baseUrl, `/api/contact-rules/${alphaRule.id}`, 403, {
     method: "PUT",
     headers: betaHeaders,
     body: JSON.stringify({
@@ -593,11 +593,11 @@ test("shared care-party assignments restrict care entries and contact rules by e
       responsiblePartyId: betaParty.id
     })
   });
-  await expectStatus(baseUrl, `/api/contact-rules/${alphaRule.id}`, 400, {
+  await expectStatus(baseUrl, `/api/contact-rules/${alphaRule.id}`, 403, {
     method: "DELETE",
     headers: betaHeaders
   });
-  await expectStatus(baseUrl, `/api/contact-rules/${alphaRule.id}/sync`, 400, {
+  await expectStatus(baseUrl, `/api/contact-rules/${alphaRule.id}/sync`, 403, {
     method: "POST",
     headers: betaHeaders
   });

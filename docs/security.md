@@ -210,7 +210,11 @@ individual tasks in the authenticated in-app notification view.
 Care parties are domain records, not authentication principals. Optional
 app-user to care-party assignments restrict non-admin shared users once at
 least one assignment exists, but they do not replace active workspace
-membership and its role as the authorization source.
+membership and its role as the authorization source. The same assignment scope
+is enforced for current and compatibility planning writes, planning lists, and
+reduced schedule responses. Hidden records do not contribute conflict markers
+to a scoped schedule response. Access failures use a generic response without
+record details.
 
 ## Local security baseline checks
 
