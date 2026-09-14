@@ -22,11 +22,11 @@ function positiveNumberEnv(value: string | undefined, fallback: number): number 
   return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : fallback;
 }
 
-function portEnv(value: string | undefined, fallback: number): number {
+function portEnv(value: string | undefined, fallback: number, name: string): number {
   if (value === undefined || value.trim() === "") return fallback;
   const parsed = Number(value);
   if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65_535) {
-    throw new Error("POSTGRES_PORT must be an integer between 1 and 65535.");
+    throw new Error(`${name} must be an integer between 1 and 65535.`);
   }
   return parsed;
 }
@@ -95,6 +95,17 @@ export interface DatabaseValidationInput {
   postgresTlsMode: PostgresTlsMode;
   postgresTlsModeConfigured?: boolean;
   postgresCaFile?: string;
+}
+
+export interface MetricsValidationInput {
+  enabled: boolean;
+  bearerTokenFile?: string;
+}
+
+export function validateMetricsConfig(input: MetricsValidationInput): void {
+  if (input.enabled && !input.bearerTokenFile?.trim()) {
+    throw new Error("METRICS_ENABLED=true requires METRICS_BEARER_TOKEN_FILE.");
+  }
 }
 
 export function validateDatabaseConfig(input: DatabaseValidationInput): void {
@@ -218,7 +229,7 @@ export const config = {
   databaseDriver,
   databasePath: resolve(process.cwd(), process.env.DATABASE_PATH ?? "./data/app.sqlite"),
   postgresHost: process.env.POSTGRES_HOST?.trim() || undefined,
-  postgresPort: portEnv(process.env.POSTGRES_PORT, 5432),
+  postgresPort: portEnv(process.env.POSTGRES_PORT, 5432, "POSTGRES_PORT"),
   postgresDatabase: process.env.POSTGRES_DATABASE?.trim() || undefined,
   postgresUser: process.env.POSTGRES_USER?.trim() || undefined,
   postgresPasswordFile: process.env.POSTGRES_PASSWORD_FILE?.trim() || undefined,
@@ -280,6 +291,10 @@ export const config = {
   logLevel: process.env.LOG_LEVEL ?? (
     process.env.NODE_ENV === "production" ? "info" : "debug"
   ),
+  metricsEnabled: booleanEnv(process.env.METRICS_ENABLED),
+  metricsHost: textEnv(process.env.METRICS_HOST, "127.0.0.1"),
+  metricsPort: portEnv(process.env.METRICS_PORT, 9090, "METRICS_PORT"),
+  metricsBearerTokenFile: process.env.METRICS_BEARER_TOKEN_FILE?.trim() || undefined,
   rateLimitMax: positiveNumberEnv(process.env.RATE_LIMIT_MAX, 120),
   rateLimitWriteMax: positiveNumberEnv(process.env.RATE_LIMIT_WRITE_MAX, 20),
   rateLimitSensitiveMax: positiveNumberEnv(process.env.RATE_LIMIT_SENSITIVE_MAX, 5),
@@ -322,4 +337,9 @@ validateAuthModeConfig({
   oidcIssuerUrl: config.oidcIssuerUrl,
   oidcClientId: config.oidcClientId,
   oidcRedirectUri: config.oidcRedirectUri
+});
+
+validateMetricsConfig({
+  enabled: config.metricsEnabled,
+  bearerTokenFile: config.metricsBearerTokenFile
 });

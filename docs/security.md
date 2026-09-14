@@ -386,6 +386,18 @@ Application request logs use registered route templates and never raw path or
 query values. Reverse proxies may still log full URLs unless configured
 otherwise.
 
+## Metrics
+
+The optional Prometheus-compatible listener is disabled by default, uses a
+separate internal port, and requires a bearer token from a mounted file. The
+application HTTP listener and ingress do not expose metrics. Metric labels are
+limited to normalized route templates, bounded HTTP methods and status classes,
+and fixed background-job outcomes. They never contain identities, domain data,
+URLs, IP addresses, request IDs, claims, tokens, filenames, or free text.
+
+Operators control network access, scraping, alerting, and retention. Metrics
+are runtime diagnostics and are not analytics or an audit record.
+
 Initial owner setup uses a one-time bearer value from a mounted secret file.
 Only its SHA-256 hash, validity window, and consumption metadata are stored in
 the selected database. The link is accepted only while no owner is established;

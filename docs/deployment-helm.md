@@ -16,6 +16,32 @@ must be selected explicitly.
 
 Do not commit private values, Secret manifests, database files or backups.
 
+## Optional Prometheus metrics
+
+Metrics are disabled by default. Enabling them creates a second ClusterIP
+Service named `<release>-betreuungskalender-metrics`; the normal application
+Service and Ingress remain unchanged. Create the bearer token as an existing
+Secret and reference it from private values:
+
+```bash
+openssl rand -hex 32 > /private/path/metrics-token
+kubectl create secret generic betreuungskalender-metrics \
+  --namespace example \
+  --from-file=token=/private/path/metrics-token
+```
+
+```yaml
+metrics:
+  enabled: true
+  bearerTokenSecret:
+    name: betreuungskalender-metrics
+    key: token
+```
+
+Permit access to that Service only from the monitoring namespace or collector,
+and send the mounted value as a bearer token. The chart does not create a
+ServiceMonitor, public route, retention policy, or monitoring stack.
+
 Operator-provided legal information can be mounted from a ConfigMap through the
 existing extra-volume interfaces. See
 [operator legal information](legal-information.md) for the reviewed read-only

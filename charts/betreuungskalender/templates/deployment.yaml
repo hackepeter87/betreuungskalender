@@ -50,6 +50,11 @@ spec:
             - name: http
               containerPort: {{ .Values.runtime.port }}
               protocol: TCP
+            {{- if .Values.metrics.enabled }}
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+            {{- end }}
           env:
             - name: NODE_ENV
               value: {{ .Values.runtime.nodeEnv | quote }}
@@ -86,6 +91,16 @@ spec:
               value: {{ .Values.runtime.tmpDir | quote }}
             - name: HOME
               value: {{ .Values.runtime.tmpDir | quote }}
+            {{- if .Values.metrics.enabled }}
+            - name: METRICS_ENABLED
+              value: "true"
+            - name: METRICS_HOST
+              value: {{ .Values.metrics.host | quote }}
+            - name: METRICS_PORT
+              value: {{ .Values.metrics.port | quote }}
+            - name: METRICS_BEARER_TOKEN_FILE
+              value: /run/secrets/metrics/{{ .Values.metrics.bearerTokenSecret.key }}
+            {{- end }}
             - name: XDG_CACHE_HOME
               value: {{ printf "%s/.cache" (trimSuffix "/" .Values.runtime.tmpDir) | quote }}
             {{- if .Values.ownerSetupSecret.existingSecret }}
@@ -127,6 +142,11 @@ spec:
               mountPath: {{ .Values.persistence.backups.mountPath }}
             - name: tmp
               mountPath: {{ .Values.persistence.tmp.mountPath }}
+            {{- if .Values.metrics.enabled }}
+            - name: metrics-token
+              mountPath: /run/secrets/metrics
+              readOnly: true
+            {{- end }}
             {{- if .Values.ownerSetupSecret.existingSecret }}
             - name: owner-setup-token
               mountPath: /run/secrets/owner-setup
@@ -212,6 +232,15 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: {{ .Values.persistence.tmp.sizeLimit }}
+        {{- if .Values.metrics.enabled }}
+        - name: metrics-token
+          secret:
+            secretName: {{ .Values.metrics.bearerTokenSecret.name }}
+            defaultMode: 0440
+            items:
+              - key: {{ .Values.metrics.bearerTokenSecret.key }}
+                path: {{ .Values.metrics.bearerTokenSecret.key }}
+        {{- end }}
         {{- if .Values.ownerSetupSecret.existingSecret }}
         - name: owner-setup-token
           secret:
