@@ -30,8 +30,25 @@ helm template external-postgres-private "${chart}" --namespace example \
   --set-string database.postgres.tls.mode=disable \
   --set-string database.postgres.tls.caSecret.name= \
   > "${workdir}/external-postgres-private.yaml"
+helm template metrics "${chart}" --namespace example \
+  --set metrics.enabled=true \
+  --set-string metrics.bearerTokenSecret.name=betreuungskalender-metrics \
+  > "${workdir}/metrics.yaml"
 
 grep -q 'name: family-one-betreuungskalender-data' "${workdir}/family-one.yaml"
+if grep -q 'name: metrics' "${workdir}/family-one.yaml"; then
+  echo "metrics must be absent with default values" >&2
+  exit 1
+fi
+grep -q 'name: metrics-betreuungskalender-metrics' "${workdir}/metrics.yaml"
+grep -q 'app.kubernetes.io/component: metrics' "${workdir}/metrics.yaml"
+grep -A1 'name: METRICS_ENABLED' "${workdir}/metrics.yaml" | grep -q 'value: "true"'
+grep -q 'secretName: betreuungskalender-metrics' "${workdir}/metrics.yaml"
+grep -q 'mountPath: /run/secrets/metrics' "${workdir}/metrics.yaml"
+if grep -A20 'kind: Ingress' "${workdir}/metrics.yaml" | grep -q 'name: metrics'; then
+  echo "application ingress must not route the metrics service" >&2
+  exit 1
+fi
 grep -A1 'name: DATABASE_DRIVER' "${workdir}/family-one.yaml" | grep -q 'value: "sqlite"'
 grep -q 'name: DATABASE_PATH' "${workdir}/family-one.yaml"
 if grep -q 'kind: StatefulSet' "${workdir}/family-one.yaml"; then
@@ -111,6 +128,12 @@ grep -q "ghcr.io/hackepeter87/betreuungskalender@${digest}" "${workdir}/digest.y
 
 if helm template invalid-replicas "${chart}" --set replicaCount=2 >/dev/null 2>&1; then
   echo "replicaCount=2 must be rejected" >&2
+  exit 1
+fi
+
+if helm template metrics-without-secret "${chart}" \
+  --set metrics.enabled=true >/dev/null 2>&1; then
+  echo "enabled metrics must require an existing bearer-token Secret" >&2
   exit 1
 fi
 

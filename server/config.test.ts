@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   validateAuthModeConfig,
   validateDatabaseConfig,
+  validateMetricsConfig,
   type AuthModeValidationInput,
   type DatabaseValidationInput
 } from "./config.js";
@@ -206,4 +207,16 @@ test("database validation rejects PostgreSQL settings with the SQLite driver", (
     })),
     /PostgreSQL settings require DATABASE_DRIVER=postgres/
   );
+});
+
+test("metrics validation requires a file-backed secret only when enabled", () => {
+  assert.doesNotThrow(() => validateMetricsConfig({ enabled: false }));
+  assert.throws(
+    () => validateMetricsConfig({ enabled: true }),
+    /METRICS_ENABLED=true requires METRICS_BEARER_TOKEN_FILE/
+  );
+  assert.doesNotThrow(() => validateMetricsConfig({
+    enabled: true,
+    bearerTokenFile: "/run/secrets/metrics/token"
+  }));
 });

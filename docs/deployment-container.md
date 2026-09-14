@@ -141,6 +141,50 @@ but it does not replace a database backup. Follow the complete
 The archive update tool intentionally stops before changing a PostgreSQL-backed
 installation because its automatic backup and rollback path is SQLite-specific.
 
+## Optional Prometheus metrics
+
+The metrics listener is disabled by default and is separate from the application
+HTTP listener. When enabled, it serves only `GET /metrics`, requires a bearer
+token read from a mounted file, and must remain on a private operator network.
+Do not route it through the public reverse proxy.
+
+Create a private token file and add an operator-owned Compose override rather
+than placing the token in `.env`:
+
+```bash
+install -d -m 0700 secrets
+openssl rand -hex 32 > secrets/metrics-token
+chmod 0644 secrets/metrics-token
+```
+
+```yaml
+services:
+  betreuungskalender:
+    environment:
+      METRICS_ENABLED: "true"
+      METRICS_HOST: 0.0.0.0
+      METRICS_PORT: "9090"
+      METRICS_BEARER_TOKEN_FILE: /run/secrets/metrics/token
+    expose:
+      - "9090"
+    volumes:
+      - ./secrets/metrics-token:/run/secrets/metrics/token:ro
+```
+
+`expose` documents an internal container port; it does not publish the port on
+the host. Podman can use the same private bind mount and container-network
+exposure. Configure the monitoring system to send `Authorization: Bearer ...`
+and manage scrape retention outside the application.
+
+The token file is readable by the non-root container process. Keep its parent
+directory mode at `0700`, do not share that directory, and mount the file
+read-only as shown above.
+
+Metrics contain process uptime, normalized request counts and durations,
+database reachability and migration readiness, and bounded background-job
+outcomes. They contain no user, child, calendar, token, URL, IP-address,
+request-ID, or free-text labels.
+
 ## Promoted GHCR image deployment
 
 For testing and production machines that should not build from release

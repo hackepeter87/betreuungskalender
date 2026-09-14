@@ -77,6 +77,10 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `OIDC_REQUIRE_ROLE_CLAIM` | Require a configured group for trusted-proxy pre-owner compatibility | `true` | Recommended for trusted proxy | `false` for local/trusted-proxy, `true` for native OIDC | Native OIDC always requires an active membership or a validated onboarding context; this setting cannot grant workspace access |
 | `ALLOWED_ORIGIN` | Single permitted browser origin for CORS | `https://betreuung.example.net` | Recommended | `http://localhost:5173` | Prevents cross-origin browser API use |
 | `LOG_LEVEL` | Fastify/Pino log level | `info` | Optional | `info` in production, `debug` otherwise | Avoid `debug` in production unless investigating |
+| `METRICS_ENABLED` | Start the separate Prometheus-compatible listener | `true` | Optional | `false` | Opt-in only; the application listener never serves metrics |
+| `METRICS_HOST` | Metrics listener address | `127.0.0.1` | Optional | `127.0.0.1` | Bind to a private interface; Helm uses the pod interface with a separate ClusterIP Service |
+| `METRICS_PORT` | Internal metrics listener port | `9090` | Optional | `9090` | Do not publish through the application ingress |
+| `METRICS_BEARER_TOKEN_FILE` | Mounted file containing the metrics bearer token | `/run/secrets/metrics/token` | Required when metrics are enabled | None | Token must contain 32-4096 non-whitespace characters and must not be placed in environment values |
 | `RATE_LIMIT_MAX` | Maximum API requests per client and time window | `120` | Optional | `120` | Baseline protection for every API route, including health and readiness |
 | `RATE_LIMIT_WRITE_MAX` | Maximum write requests per client and time window | `20` | Optional | `20` | Restricts POST, PUT, PATCH, and DELETE operations |
 | `RATE_LIMIT_SENSITIVE_MAX` | Maximum sensitive requests per client and time window | `5` | Optional | `5` | Protects authentication, recovery, setup, invitation acceptance, import, and migration workflows |

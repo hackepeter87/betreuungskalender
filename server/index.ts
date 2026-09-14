@@ -36,6 +36,7 @@ import { publicSetupState } from "./services/setupState.js";
 import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "./services/users.js";
 import { runCareConfirmationSweep } from "./services/careConfirmations.js";
 import { disableLocalDevelopmentIdentityAccess } from "./services/localDevelopmentIdentity.js";
+import { RuntimeMetrics, startMetricsListener } from "./metrics.js";
 
 const app = Fastify({
   logController: new LogController({
@@ -59,6 +60,8 @@ const app = Fastify({
 });
 
 installRequestDiagnostics(app);
+const metrics = new RuntimeMetrics(persistence);
+metrics.install(app);
 
 try {
   await runMigrations();
@@ -453,7 +456,10 @@ await app.register(legalRoutes, { legalContentDir: config.legalContentDir });
 await registerProtectedApplicationRoutes(app);
 
 const confirmationSweep = setInterval(() => {
-  void runCareConfirmationSweep(persistence).catch((error) => {
+  void runCareConfirmationSweep(persistence).then(() => {
+    metrics.recordBackgroundJob("success");
+  }).catch((error) => {
+    metrics.recordBackgroundJob("failure");
     app.log.warn({
       event: "background.care-confirmation-sweep.failed",
       code: safeErrorCode(error)
@@ -461,7 +467,10 @@ const confirmationSweep = setInterval(() => {
   });
 }, 15 * 60 * 1000);
 confirmationSweep.unref();
-void runCareConfirmationSweep(persistence).catch((error) => {
+void runCareConfirmationSweep(persistence).then(() => {
+  metrics.recordBackgroundJob("success");
+}).catch((error) => {
+  metrics.recordBackgroundJob("failure");
   app.log.warn({
     event: "background.care-confirmation-sweep.failed",
     code: safeErrorCode(error)
@@ -495,7 +504,10 @@ if (existsSync(frontendRoot)) {
   });
 }
 
+let metricsListener: Awaited<ReturnType<typeof startMetricsListener>>;
+
 const shutdown = async () => {
+  await metricsListener?.close();
   await app.close();
   await persistence.close();
 };
@@ -504,6 +516,12 @@ process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
 try {
+  metricsListener = await startMetricsListener({
+    enabled: config.metricsEnabled,
+    host: config.metricsHost,
+    port: config.metricsPort,
+    bearerTokenFile: config.metricsBearerTokenFile
+  }, metrics);
   await app.listen({
     host: config.host,
     port: config.port,
@@ -511,6 +529,7 @@ try {
   });
   app.log.info({ event: "server.started" }, "server started");
 } catch (error) {
+  await metricsListener?.close();
   app.log.error({
     event: "server.listen.failed",
     code: safeErrorCode(error)

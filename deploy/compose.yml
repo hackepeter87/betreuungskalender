@@ -14,6 +14,10 @@ services:
       DATABASE_PATH: /data/app.sqlite
       BACKUP_DIR: /backups
       LOG_LEVEL: ${LOG_LEVEL:-info}
+      METRICS_ENABLED: ${METRICS_ENABLED:-false}
+      METRICS_HOST: ${METRICS_HOST:-127.0.0.1}
+      METRICS_PORT: ${METRICS_PORT:-9090}
+      METRICS_BEARER_TOKEN_FILE: ${METRICS_BEARER_TOKEN_FILE:-}
     ports:
       - "${HOST_BIND_ADDRESS:-127.0.0.1}:${HOST_PORT:-3000}:3000"
     volumes:
