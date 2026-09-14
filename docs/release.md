@@ -39,7 +39,16 @@ the matching `vX.Y.Z` tag.
 ## 5. Run the release checks
 
 ```bash
+npm audit
+npm run test:docs
+npm run lint
+npm run test
 npm run build
+npm run test:e2e
+npm run test:security-runtime
+npm run test:postgres-runtime
+npm run test:container-smoke
+npm run test:container-postgres-smoke
 npm run test:helm
 npm run release:check:strict
 ```
@@ -48,7 +57,9 @@ The strict release check verifies the Git state, sensitive artifact patterns,
 `.gitignore`, matching package and lockfile versions, changelog and release-note
 metadata, native OIDC deployment documentation, and the expected `v<version>`
 tag. If the tag already exists, it must point to `HEAD`. The command also runs
-the build, lint, and test scripts.
+the build, lint, and test scripts. Browser, runtime-security, PostgreSQL, and
+container suites remain separate gates and must not be inferred from the strict
+metadata check.
 
 ## 6. Commit the release preparation
 

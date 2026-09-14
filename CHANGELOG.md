@@ -6,6 +6,36 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.30.0] - 2026-09-15
+
+### Added
+
+- Add bounded request identifiers and structured, privacy-preserving runtime
+  diagnostics.
+- Add an optional Prometheus-compatible listener on a separate private port,
+  disabled by default and protected by a file-backed bearer token.
+- Add bounded dependency update and vulnerability-review automation without
+  automatic merging or release publication.
+
+### Changed
+
+- Make legacy browser migration capabilities explicit for the selected
+  database while retaining SQLite-only backup replacement.
+- Strengthen maintained TypeScript projects with checked indexed access, exact
+  optional properties, and type-aware external-boundary linting.
+- Bind transfer approval, native OIDC rate limits, workspace reads,
+  notifications, calendar processing, and sensitive browser responses to
+  their current authorization and processing limits.
+- Align the release guide with the PostgreSQL, security, browser, container,
+  Helm, and documentation gates used by the current release process.
+
+### Security
+
+- Keep sensitive browser responses non-cacheable and require matching browser
+  origins for session-changing native OIDC and recovery actions.
+- Keep diagnostic and metrics output free of domain values, credentials,
+  identity claims, request targets, and user-controlled high-cardinality labels.
+
 ## [1.29.2] - 2026-09-13
 
 ### Security
