@@ -46,10 +46,10 @@ import type {
 } from "../../shared/api";
 import type {
   LegacyDataCounts,
-  LegacyDatabaseSummary,
   LegacyDuplicatePolicy,
   LegacyMigrationPreview,
-  LegacyMigrationReport
+  LegacyMigrationReport,
+  LegacyMigrationSummary
 } from "../../shared/migration";
 import { createEmptyData } from "../data/defaults";
 import type {
@@ -793,10 +793,7 @@ export const api = {
     return request<void>("/api/demo-data/edge-cases", { method: "POST" });
   },
   getLegacyMigrationSummary() {
-    return request<{
-      database: LegacyDatabaseSummary;
-      reports: LegacyMigrationReport[];
-    }>("/api/migration/legacy-summary");
+    return request<LegacyMigrationSummary>("/api/migration/legacy-summary");
   },
   recordLegacyDetected(input: {
     fingerprint: string;

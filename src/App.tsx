@@ -17,7 +17,10 @@ import { SetupWizardPage } from "./pages/SetupWizardPage";
 import { Icon } from "./components/Icon";
 import { PwaInstallPrompt } from "./components/PwaInstallPrompt";
 import type { CareEntry } from "./types";
-import type { LegacyDatabaseSummary } from "../shared/migration";
+import type {
+  LegacyDatabaseSummary,
+  LegacyMigrationCapabilities
+} from "../shared/migration";
 import { useAppStore } from "./store/AppStore";
 
 interface EntryDialogState {
@@ -66,6 +69,7 @@ export function App() {
   const [legacyMigration, setLegacyMigration] = useState<{
     legacy: LegacyBrowserData;
     database: LegacyDatabaseSummary;
+    capabilities: LegacyMigrationCapabilities;
   } | null>(null);
   const migrationChecked = useRef(false);
 
@@ -87,14 +91,14 @@ export function App() {
     migrationChecked.current = true;
     const legacy = detectLegacyBrowserData();
     if (!legacy || isLegacyFingerprintIgnored(legacy.fingerprint)) return;
-    void api.getLegacyMigrationSummary().then(async ({ database }) => {
+    void api.getLegacyMigrationSummary().then(async ({ database, capabilities }) => {
       try {
         await api.recordLegacyDetected({
           fingerprint: legacy.fingerprint,
           counts: legacy.counts
         });
       } finally {
-        setLegacyMigration({ legacy, database });
+        setLegacyMigration({ legacy, database, capabilities });
       }
     }).catch(() => {
       migrationChecked.current = false;
@@ -297,6 +301,7 @@ export function App() {
           componentProps={{
             legacy: legacyMigration.legacy,
             database: legacyMigration.database,
+            capabilities: legacyMigration.capabilities,
             onClose: () => setLegacyMigration(null)
           }}
         />
