@@ -28,7 +28,7 @@ import { setupRoutes } from "./routes/setup.js";
 import { nativeOidcRoutes } from "./routes/nativeOidc.js";
 import { recoveryAdminRoutes } from "./routes/recoveryAdmin.js";
 import { legalRoutes } from "./routes/legal.js";
-import { installRateLimitPolicy } from "./rateLimitPolicy.js";
+import { installRateLimitPolicy, rateLimitIdentity } from "./rateLimitPolicy.js";
 import { OidcSessionStore } from "./services/oidcSessions.js";
 import { RecoveryAdminStore } from "./services/recoveryAdmin.js";
 import { applyLegacyPreOwnerMembershipRole } from "./services/memberships.js";
@@ -53,9 +53,9 @@ const app = Fastify({
       censor: "[redacted]"
     }
   },
-  trustProxy: config.trustProxyAuth && config.trustedProxyRules.length > 0
+  trustProxy: config.trustedProxyRules.length > 0
     ? (address) => isTrustedProxyAddress(address, config.trustedProxyRules)
-    : config.trustProxyAuth
+    : false
 });
 
 installRequestDiagnostics(app);
@@ -156,6 +156,7 @@ await app.register(rateLimit, {
   global: true,
   max: config.rateLimitMax,
   timeWindow: config.rateLimitWindowMs,
+  keyGenerator: (request) => rateLimitIdentity(request, config.trustedProxyRules),
   errorResponseBuilder: (_request, context) => Object.assign(
     new Error("Zu viele Anfragen. Bitte später erneut versuchen."),
     { code: "rate_limit_exceeded", statusCode: context.statusCode }

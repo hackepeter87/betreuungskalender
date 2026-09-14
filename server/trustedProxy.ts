@@ -14,11 +14,20 @@ export function csvListEnv(value: string | undefined): string[] {
     .filter(Boolean);
 }
 
-function normalizeRemoteAddress(value: string | undefined): string | undefined {
+export function normalizeIpAddress(value: string | undefined): string | undefined {
   const normalized = value?.trim();
   if (!normalized) return undefined;
-  if (normalized.startsWith("::ffff:")) return normalized.slice("::ffff:".length);
-  return normalized;
+  const unmapped = normalized.startsWith("::ffff:")
+    ? normalized.slice("::ffff:".length)
+    : normalized;
+  const family = isIP(unmapped);
+  if (family === 4) return unmapped;
+  if (family !== 6) return undefined;
+  try {
+    return new URL(`http://[${unmapped}]/`).hostname.slice(1, -1).toLowerCase();
+  } catch {
+    return undefined;
+  }
 }
 
 function addressFamily(address: string): "ipv4" | "ipv6" | undefined {
@@ -30,7 +39,7 @@ function addressFamily(address: string): "ipv4" | "ipv6" | undefined {
 
 export function parseTrustedProxyRule(source: string): TrustedProxyRule {
   const [rawAddress, rawPrefix] = source.split("/");
-  const address = normalizeRemoteAddress(rawAddress);
+  const address = normalizeIpAddress(rawAddress);
   const family = address ? addressFamily(address) : undefined;
   if (!address || !family) {
     throw new Error(`Invalid trusted proxy address or CIDR: ${source}`);
@@ -55,7 +64,7 @@ export function isTrustedProxyAddress(
   rules: readonly TrustedProxyRule[]
 ): boolean {
   if (rules.length === 0) return false;
-  const address = normalizeRemoteAddress(remoteAddress);
+  const address = normalizeIpAddress(remoteAddress);
   const family = address ? addressFamily(address) : undefined;
   if (!address || !family) return false;
   const allowList = new BlockList();

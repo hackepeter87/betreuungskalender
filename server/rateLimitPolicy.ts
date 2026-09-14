@@ -1,4 +1,10 @@
-import type { FastifyInstance } from "fastify";
+import { createHash } from "node:crypto";
+import type { FastifyInstance, FastifyRequest } from "fastify";
+import {
+  isTrustedProxyAddress,
+  normalizeIpAddress,
+  type TrustedProxyRule
+} from "./trustedProxy.js";
 
 export interface RateLimitPolicyConfig {
   defaultMax: number;
@@ -6,6 +12,18 @@ export interface RateLimitPolicyConfig {
   sensitiveMax: number;
   exportMax: number;
   timeWindowMs: number;
+}
+
+export function rateLimitIdentity(
+  request: Pick<FastifyRequest, "ip" | "raw">,
+  trustedProxyRules: readonly TrustedProxyRule[]
+): string {
+  const socketAddress = normalizeIpAddress(request.raw.socket.remoteAddress);
+  const clientAddress = socketAddress && isTrustedProxyAddress(socketAddress, trustedProxyRules)
+    ? normalizeIpAddress(request.ip) ?? socketAddress
+    : socketAddress;
+  const boundedAddress = clientAddress ?? "unknown";
+  return `client:${createHash("sha256").update(boundedAddress).digest("base64url")}`;
 }
 
 function hasWriteMethod(method: string | string[]): boolean {
