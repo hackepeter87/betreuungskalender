@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import { randomUUID } from "node:crypto";
 import { config } from "../config.js";
 import { setMembershipRole } from "../services/memberships.js";
@@ -191,13 +192,13 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
       .executeTakeFirst();
     if (!actor) return noStore(reply).code(404).send({ error: "not_found", message: "Imported actor was not found." });
     try {
-      const created = await createInvitation({
+      const created = await createInvitation(omitUndefinedValues({
         role,
         expiresAt: body.expiresAt,
         actorId: request.userEmail,
         emailHint: typeof body.emailHint === "string" ? body.emailHint : actor.email ?? undefined,
         dataTransferActorId: actor.id
-      }, app.persistence.query);
+      }), app.persistence.query);
       await app.persistence.query.updateTable("data_transfer_actors")
         .set({
           invitation_id: created.invitation.id,

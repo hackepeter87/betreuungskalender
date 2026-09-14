@@ -1,5 +1,6 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { ApiCalendarFeedScope } from "../../shared/api.js";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import type { DatabaseExecutor, PersistenceRuntime } from "../db/runtime.js";
 import { nowIso } from "./common.js";
 import { assignedCarePartyIds, canUseCareParty, sharedCarePartyModeEnabled } from "./carePartyAccess.js";
@@ -141,13 +142,13 @@ export async function calendarFeedStatus(
 ): Promise<CalendarFeedStatus> {
   const token = await activeTokenForUser(userId, scope, database);
   if (!token) return { active: false, scope };
-  return {
+  return omitUndefinedValues({
     active: true,
     scope,
     createdAt: token.created_at,
     lastUsedAt: token.last_used_at ?? undefined,
     ...(feedUrl ? { feedUrl } : {})
-  };
+  });
 }
 
 async function assertScopeAllowed(

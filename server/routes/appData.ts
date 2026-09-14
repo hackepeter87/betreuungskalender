@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import type { DatabaseExecutor } from "../db/runtime.js";
 import { nowIso } from "../services/common.js";
 import { legacyRecurrenceForPattern, legacySegmentsForPattern } from "../services/contactRules.js";
@@ -472,7 +473,7 @@ export async function insertPattern(
       deleted_at: null
     }))).execute();
   }
-  await insertImportedContactRule({
+  await insertImportedContactRule(omitUndefinedValues({
     id,
     name: input.name,
     startDate: input.startDate,
@@ -489,7 +490,7 @@ export async function insertPattern(
     createdAt: text(record, "createdAt", timestamp),
     updatedAt: text(record, "updatedAt", timestamp),
     database
-  });
+  }));
 }
 
 interface ImportedContactRule {
@@ -580,7 +581,7 @@ export async function insertContactRule(
   });
   const id = text(record, "id");
   if (!id) throw new Error("Umgangsregel ohne ID kann nicht importiert werden.");
-  await insertImportedContactRule({
+  await insertImportedContactRule(omitUndefinedValues({
     id,
     ...input,
     sourceContactPatternId: optionalText(record, "sourceContactPatternId") ?? undefined,
@@ -589,7 +590,7 @@ export async function insertContactRule(
     createdAt: text(record, "createdAt", timestamp),
     updatedAt: text(record, "updatedAt", timestamp),
     database
-  });
+  }));
 }
 
 export async function insertUnavailable(
@@ -754,7 +755,7 @@ export async function importData(
   for (const audit of data.auditLog) {
     const action = text(audit, "action");
     if (!["created", "updated", "deleted"].includes(action)) continue;
-    await recordDomainAudit(database, {
+    await recordDomainAudit(database, omitUndefinedValues({
       userEmail: text(audit, "userId", userEmail),
       entityType: typeMap[text(audit, "objectType")] ?? text(audit, "objectType", "unknown"),
       entityId: text(audit, "objectId", "unknown"),
@@ -764,7 +765,7 @@ export async function importData(
       newValue: optionalText(audit, "newValue") ?? undefined,
       metadata: { importedLabel: text(audit, "objectLabel") },
       timestamp: text(audit, "timestamp", timestamp)
-    });
+    }));
   }
   await recordDomainAudit(database, {
     userEmail,

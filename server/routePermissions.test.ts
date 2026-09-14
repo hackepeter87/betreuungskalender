@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import Fastify, { type FastifyPluginAsync, type RouteOptions } from "fastify";
+import { omitUndefinedValues } from "../shared/objects.js";
 import { workspacePermissionValues, type WorkspacePermission } from "./auth.js";
 import {
   isPreAuthenticationApiRoute,
@@ -19,7 +20,7 @@ async function collectApiRoutes(plugins: readonly ProtectedApplicationRoutePlugi
     const methods = Array.isArray(route.method) ? route.method : [route.method];
     for (const method of methods) {
       if (method === "HEAD" || !route.url.startsWith("/api/")) continue;
-      routes.push({ method, url: route.url, permission: route.config?.permission });
+      routes.push(omitUndefinedValues({ method, url: route.url, permission: route.config?.permission }));
     }
   });
   for (const { plugin } of plugins) await app.register(plugin);

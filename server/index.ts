@@ -37,6 +37,7 @@ import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "./servi
 import { runCareConfirmationSweep } from "./services/careConfirmations.js";
 import { disableLocalDevelopmentIdentityAccess } from "./services/localDevelopmentIdentity.js";
 import { RuntimeMetrics, startMetricsListener } from "./metrics.js";
+import { omitUndefinedValues } from "../shared/objects.js";
 
 const app = Fastify({
   logController: new LogController({
@@ -47,7 +48,7 @@ const app = Fastify({
     return createRequestId(request.headers["x-request-id"]);
   },
   logger: {
-    base: undefined,
+    base: null,
     level: config.logLevel,
     redact: {
       paths: [...logRedactionPaths],
@@ -87,7 +88,9 @@ const recoveryAdmin = new RecoveryAdminStore({
   enabled: config.recoveryAdminEnabled,
   username: config.recoveryAdminUsername,
   initialPasswordFile: config.recoveryAdminInitialPasswordFile,
-  initialPassword: config.recoveryAdminInitialPassword,
+  ...(config.recoveryAdminInitialPassword
+    ? { initialPassword: config.recoveryAdminInitialPassword }
+    : {}),
   sessionTtlSeconds: config.recoveryAdminSessionTtlSeconds
 }, persistence);
 await recoveryAdmin.ensureConfigured();
@@ -436,7 +439,7 @@ app.get("/api/session", readLimit, async (request) => {
     }
   }
   return {
-    ...sessionInfo(request.headers, config),
+    ...sessionInfo(request.headers, omitUndefinedValues(config)),
     setup,
     ...(config.demoDatasetsEnabled ? { demoDatasetsEnabled: true } : {})
   };
@@ -520,7 +523,9 @@ try {
     enabled: config.metricsEnabled,
     host: config.metricsHost,
     port: config.metricsPort,
-    bearerTokenFile: config.metricsBearerTokenFile
+    ...(config.metricsBearerTokenFile
+      ? { bearerTokenFile: config.metricsBearerTokenFile }
+      : {})
   }, metrics);
   await app.listen({
     host: config.host,

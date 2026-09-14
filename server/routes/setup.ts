@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import { resolveRequestUser, type RequestUser } from "../auth.js";
 import { config } from "../config.js";
 import { cookieValue } from "../cookies.js";
@@ -136,7 +137,7 @@ export async function setupRoutes(
           message: "Authentifizierung erforderlich."
         });
       }
-      return await completeFirstUseSetup(user, parsed.data, options.persistence);
+      return await completeFirstUseSetup(user, omitUndefinedValues(parsed.data), options.persistence);
     } catch (error) {
       const normalized = normalizeSetupError(error);
       return reply.code(normalized.statusCode).send({

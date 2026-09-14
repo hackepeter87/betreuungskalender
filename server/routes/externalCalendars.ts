@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import { config } from "../config.js";
 import { ExternalCalendarError, deleteExternalCalendarSource, deriveHolidayPeriodsFromExternalCalendar, importExternalCalendar, importExternalCalendarFeed, listExternalCalendarBackupEvents, listExternalCalendarSources, refreshExternalCalendarFeed, updateExternalCalendarSource, visibleExternalCalendarEvents } from "../services/externalCalendars.js";
 import { externalCalendarFeedSchema, externalCalendarHolidayDeriveSchema, externalCalendarImportSchema, externalCalendarUpdateSchema } from "../validation/schemas.js";
@@ -64,7 +65,7 @@ export async function externalCalendarRoutes(app: FastifyInstance): Promise<void
   app.patch<{ Params: { id: string } }>("/api/external-calendars/:id", writeLimit, async (request, reply) => {
     const parsed = externalCalendarUpdateSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "external_calendar_invalid" });
-    try { return await updateExternalCalendarSource(app.persistence.query, request.params.id, parsed.data); } catch (error) { return errorReply(reply, error); }
+    try { return await updateExternalCalendarSource(app.persistence.query, request.params.id, omitUndefinedValues(parsed.data)); } catch (error) { return errorReply(reply, error); }
   });
   app.post<{ Params: { id: string } }>("/api/external-calendars/:id/derive-holidays", writeLimit, async (request, reply) => {
     const parsed = externalCalendarHolidayDeriveSchema.safeParse(request.body);

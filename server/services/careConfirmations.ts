@@ -8,6 +8,7 @@ import type {
   ApiNotificationPreferencesResponse,
   ApiPushSubscriptionInput
 } from "../../shared/api.js";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import {
   MAX_DOMAIN_RANGE_DAYS,
   isSupportedDateKey,
@@ -206,7 +207,7 @@ async function mapEntry(
     linkedChildIds(database, "care_entry_actual_children", row.id)
   ]);
   const unconfirmed = row.status === "planned" && !row.confirmed_at && Date.parse(row.end_datetime) < Date.now();
-  return {
+  return omitUndefinedValues({
     id: row.id,
     generatedByPatternId: optional(row.generated_by_pattern_id),
     ruleOccurrenceDate: optional(row.rule_occurrence_date),
@@ -254,7 +255,7 @@ async function mapEntry(
     updatedAt: row.updated_at,
     trips: [],
     costs: []
-  };
+  });
 }
 
 async function mapRequest(
@@ -262,7 +263,7 @@ async function mapRequest(
   row: RequestRow,
   entry: EntryRow
 ): Promise<ApiCareConfirmationRequest> {
-  return {
+  return omitUndefinedValues({
     id: row.id,
     careEntryId: row.care_entry_id,
     userId: row.user_id,
@@ -275,7 +276,7 @@ async function mapRequest(
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     entry: await mapEntry(database, entry)
-  };
+  });
 }
 
 function dueAtForEntry(endDateTime: string): string {
@@ -838,7 +839,7 @@ export async function answerCareConfirmation(
     }
   }
   const result = await runtime.transaction(async (database) => {
-    await assertNoActualCareConflict({
+    await assertNoActualCareConflict(omitUndefinedValues({
       id: before.id,
       status: answer.status,
       startDateTime: before.start_datetime,
@@ -847,7 +848,7 @@ export async function answerCareConfirmation(
       actualStartDateTime: actualStartDateTime ?? undefined,
       actualEndDateTime: actualEndDateTime ?? undefined,
       actualChildIds: resolvedActualChildIds
-    }, database);
+    }), database);
     await database.updateTable("care_entries").set({
       status: answer.status,
       confirmation_note: note,

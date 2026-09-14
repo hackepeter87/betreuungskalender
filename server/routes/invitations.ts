@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyPluginAsync, FastifyReply } from "fastify";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import { config } from "../config.js";
 import {
   createInvitation,
@@ -79,7 +80,7 @@ async function registerInvitationRoutes(
         message: normalized.message
       });
     }
-    return { emailDeliveryAvailable: invitationEmailAvailable(config) };
+    return { emailDeliveryAvailable: invitationEmailAvailable(omitUndefinedValues(config)) };
   });
 
   app.get("/api/invitations", readLimit, async (request, reply) => {
@@ -113,10 +114,10 @@ async function registerInvitationRoutes(
         issues: parsed.error.issues
       });
     }
-    const created = await createInvitation({
+    const created = await createInvitation(omitUndefinedValues({
       ...parsed.data,
       actorId: request.userEmail
-    }, app.persistence.query);
+    }), app.persistence.query);
     if (!parsed.data.sendEmail) {
       return invitationReply.code(201).send(toApiCreatedInvitation(
         created,
@@ -126,16 +127,16 @@ async function registerInvitationRoutes(
     }
     try {
       await dependencies.sendInvitationEmail(
-        {
+        omitUndefinedValues({
           to: parsed.data.emailHint,
           token: created.token,
           role: created.invitation.role,
           expiresAt: created.invitation.expiresAt
-        },
-        {
+        }),
+        omitUndefinedValues({
           ...config,
           smtpFromName: await invitationSenderName(app)
-        }
+        })
       );
       return invitationReply.code(201).send(toApiCreatedInvitation(
         created,

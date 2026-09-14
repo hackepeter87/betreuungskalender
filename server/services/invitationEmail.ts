@@ -1,4 +1,5 @@
 import nodemailer from "nodemailer";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import { config } from "../config.js";
 import type { WorkspaceRole } from "../auth.js";
 
@@ -130,7 +131,7 @@ export function invitationSenderAddress(smtpFrom: string, smtpFromName?: string)
 
 export async function sendInvitationEmail(
   input: InvitationEmailInput,
-  mailConfig: InvitationEmailConfig = config,
+  mailConfig: InvitationEmailConfig = omitUndefinedValues(config),
   transportFactory = defaultTransport
 ): Promise<void> {
   const to = input.to?.trim();

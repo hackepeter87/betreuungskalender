@@ -8,6 +8,7 @@ import type {
   ContactRuleRecurrence,
   ContactRuleWeekday
 } from "../../shared/api.js";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import {
   expandContactRule,
   type ExpandedContactRuleEntry
@@ -169,7 +170,7 @@ export function legacySegmentsForPattern(input: {
 }
 
 export function mapContactRule(row: ContactRuleRow, childIds: string[], syncSummary?: ApiContactRuleSyncSummary): ApiContactRule {
-  return {
+  return omitUndefinedValues({
     id: row.id,
     name: row.name,
     startDate: row.start_date,
@@ -187,7 +188,7 @@ export function mapContactRule(row: ContactRuleRow, childIds: string[], syncSumm
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     ...(syncSummary ? { syncSummary } : {})
-  };
+  });
 }
 
 export async function contactRuleChildIds(ruleId: string, database: DatabaseExecutor): Promise<string[]> {
@@ -499,17 +500,17 @@ export async function syncContactRule(
 
   const window = syncWindow(rule, options);
   if (options.previewFingerprint) {
-    const preview = await previewContactRuleSync(ruleId, {
+    const preview = await previewContactRuleSync(ruleId, omitUndefinedValues({
       startDate: window.startDate,
       endDate: window.endDate,
       now: options.now,
       database
-    });
+    }));
     if (preview.fingerprint !== options.previewFingerprint) {
       throw new ContactRuleSyncPreviewChangedError();
     }
   }
-  const expanded = expandContactRule({
+  const expanded = expandContactRule(omitUndefinedValues({
     startDate: rule.startDate,
     endDate: rule.endDate,
     recurrence: rule.recurrence,
@@ -518,7 +519,7 @@ export async function syncContactRule(
     childIds: rule.childIds,
     rangeStart: window.startDate,
     rangeEnd: window.endDate
-  });
+  }));
 
   const summary: ApiContactRuleSyncSummary = {
     ...window,
@@ -532,7 +533,7 @@ export async function syncContactRule(
   for (const item of expanded) {
     const existing = await existingGeneratedEntry(database, rule.id, item.occurrenceKey, item.occurrenceDate);
     if (!existing) {
-      await insertGeneratedEntry({
+      await insertGeneratedEntry(omitUndefinedValues({
         database,
         rule,
         expanded: item,
@@ -543,7 +544,7 @@ export async function syncContactRule(
           Date.parse(item.endDateTime) < Date.parse(options.now ?? timestamp)
         ),
         recordAudit: options.recordAudit
-      });
+      }));
       summary.created += 1;
       continue;
     }
@@ -582,7 +583,7 @@ export async function previewContactRuleSync(
   const rule = await getContactRule(ruleId, database);
   if (!rule) throw new Error("Umgangsregel wurde nicht gefunden.");
   const window = syncWindow(rule, { ...options, userEmail: "preview", strictWindow: true });
-  const expanded = expandContactRule({
+  const expanded = expandContactRule(omitUndefinedValues({
     startDate: rule.startDate,
     endDate: rule.endDate,
     recurrence: rule.recurrence,
@@ -591,7 +592,7 @@ export async function previewContactRuleSync(
     childIds: rule.childIds,
     rangeStart: window.startDate,
     rangeEnd: window.endDate
-  });
+  }));
   const today = (options.now ?? nowIso()).slice(0, 10);
   let create = 0;
   let alreadyPresent = 0;

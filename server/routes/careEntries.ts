@@ -9,6 +9,7 @@ import type {
   ApiScheduleEntry,
   ApiTrip
 } from "../../shared/api.js";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import type { RequestUser } from "../auth.js";
 import { config } from "../config.js";
 import { sql } from "kysely";
@@ -172,7 +173,7 @@ async function getTrips(database: DatabaseExecutor, entryId: string): Promise<Ap
     .orderBy("created_at")
     .orderBy("id")
     .execute() as TripRow[];
-  return rows.map((row) => ({
+  return rows.map((row) => omitUndefinedValues({
     id: row.id,
     purpose: row.purpose,
     km: row.km,
@@ -193,7 +194,7 @@ async function getCosts(database: DatabaseExecutor, entryId: string): Promise<Ap
     .orderBy("created_at")
     .orderBy("id")
     .execute() as CostRow[];
-  return rows.map((row) => ({
+  return rows.map((row) => omitUndefinedValues({
     id: row.id,
     category: row.category,
     amount: row.amount,
@@ -211,7 +212,7 @@ async function mapEntry(database: DatabaseExecutor, row: EntryRow): Promise<ApiC
     getTrips(database, row.id),
     getCosts(database, row.id)
   ]);
-  return {
+  return omitUndefinedValues({
     id: row.id,
     generatedByPatternId: optional(row.generated_by_pattern_id),
     ruleOccurrenceDate: optional(row.rule_occurrence_date),
@@ -233,9 +234,9 @@ async function mapEntry(database: DatabaseExecutor, row: EntryRow): Promise<ApiC
     deviationType: optional(row.deviation_type),
     deviationNote: optional(row.deviation_note),
     confirmationState: row.status === "planned" && !row.confirmed_at && Date.parse(row.end_datetime) < Date.now()
-      ? "unconfirmed"
+      ? "unconfirmed" as const
       : row.confirmed_at
-        ? "confirmed"
+        ? "confirmed" as const
         : undefined,
     confirmedAt: optional(row.confirmed_at),
     confirmedBy: optional(row.confirmed_by),
@@ -262,7 +263,7 @@ async function mapEntry(database: DatabaseExecutor, row: EntryRow): Promise<ApiC
     updatedAt: row.updated_at,
     trips,
     costs
-  };
+  });
 }
 
 async function getEntry(database: DatabaseExecutor, id: string): Promise<ApiCareEntry | undefined> {
@@ -628,8 +629,8 @@ async function persistEntry(
     await assertPersistedCareParty(database, actualResponsiblePartyId);
     await assertCanUsePersistedCareParty(database, user, actualResponsiblePartyId);
   }
-  await assertPlannedCareConflictAcknowledged({
-    candidate: {
+  await assertPlannedCareConflictAcknowledged(omitUndefinedValues({
+    candidate: omitUndefinedValues({
       status: input.status,
       startDateTime: input.startDateTime,
       endDateTime: input.endDateTime,
@@ -637,13 +638,13 @@ async function persistEntry(
       actualStartDateTime: input.actualStartDateTime,
       actualEndDateTime: input.actualEndDateTime,
       actualChildIds
-    },
+    }),
     confirmPlannedConflict: input.confirmPlannedConflict,
     conflictFingerprint: input.conflictFingerprint,
     database,
     excludeId: existing?.id
-  });
-  await assertNoActualCareConflict({
+  }));
+  await assertNoActualCareConflict(omitUndefinedValues({
     id,
     status: input.status,
     startDateTime: input.startDateTime,
@@ -656,7 +657,7 @@ async function persistEntry(
       ? input.actualEndDateTime ?? existing?.actualEndDateTime ?? input.endDateTime
       : undefined,
     actualChildIds
-  }, database);
+  }), database);
 
   if (existing) {
     const generatedByPatternId = input.generatedByPatternId ?? existing.generatedByPatternId ?? null;
@@ -763,8 +764,8 @@ async function persistEntry(
 
   await syncPersistedChildJunction(database, { table: "care_entry_children", owner: "care_entry_id" }, id, input.childIds, timestamp);
   await syncPersistedChildJunction(database, { table: "care_entry_actual_children", owner: "care_entry_id" }, id, input.status === "partial" ? actualChildIds : [], timestamp);
-  await syncTrips(database, id, input.trips, userEmail, timestamp);
-  await syncCosts(database, id, input.costs, userEmail, timestamp);
+  await syncTrips(database, id, input.trips.map(omitUndefinedValues), userEmail, timestamp);
+  await syncCosts(database, id, input.costs.map(omitUndefinedValues), userEmail, timestamp);
 
   const after = await getEntry(database, id);
   if (!after) throw new Error("Betreuungseintrag konnte nicht geladen werden.");

@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { ApiMonthlyClosing } from "../../shared/api.js";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import { config } from "../config.js";
 import { makeId, nowIso } from "../services/common.js";
 import { recordDomainAudit } from "../services/domainPersistence.js";
@@ -26,7 +27,7 @@ function mapClosing(row: ClosingRow): ApiMonthlyClosing {
     dataUpdatedAt?: string;
     summary?: unknown;
   };
-  return {
+  return omitUndefinedValues({
     monthKey: row.month_key,
     closedAt: row.created_at,
     closedBy: row.closed_by,
@@ -34,7 +35,7 @@ function mapClosing(row: ClosingRow): ApiMonthlyClosing {
     summary: stored.summary ?? stored,
     changedAfterCloseAt: row.changed_after_close_at ?? undefined,
     updatedBy: row.updated_by
-  };
+  });
 }
 
 async function getClosing(

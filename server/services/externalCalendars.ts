@@ -1,4 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import { lookup } from "node:dns/promises";
 import { request as httpsRequest } from "node:https";
 import { isIP, type LookupFunction } from "node:net";
@@ -131,7 +132,7 @@ export function parseIcs(content: string): ParsedExternalCalendarEvent[] {
     const title = text(eventComponent.getFirstPropertyValue("summary"), 500) ?? "Untitled event";
     const description = text(eventComponent.getFirstPropertyValue("description"));
     const location = text(eventComponent.getFirstPropertyValue("location"), 500);
-    return {
+    return omitUndefinedValues({
       icalUid: uid,
       recurrenceId: recurrence ? iso(recurrence) : "",
       title,
@@ -141,7 +142,7 @@ export function parseIcs(content: string): ParsedExternalCalendarEvent[] {
       allDay,
       location,
       rawHash: createHash("sha256").update(eventComponent.toString()).digest("hex")
-    };
+    });
   });
 }
 

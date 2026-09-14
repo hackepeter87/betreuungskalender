@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { isValidDateKey } from "../../shared/temporal.js";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import { config } from "../config.js";
 import {
   assertCanUsePersistedCareParty,
@@ -66,10 +67,10 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
     const timestamp = nowIso();
     try {
       const result = await app.persistence.transaction(async (database) => {
-        const rule = {
+        const rule = omitUndefinedValues({
           ...parsed.data,
           responsiblePartyId: parsed.data.responsiblePartyId ?? await getPersistedDefaultResponsiblePartyId(database)
-        };
+        });
         await assertPersistedChildren(database, rule.childIds);
         await assertPersistedCareParty(database, rule.responsiblePartyId);
         await assertCanUsePersistedCareParty(database, request.user, rule.responsiblePartyId);
@@ -117,17 +118,17 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
     try {
       return await app.persistence.transaction(async (database) => {
         await assertCanUsePersistedCareParty(database, request.user, before.responsiblePartyId);
-        const rule = {
+        const rule = omitUndefinedValues({
           ...parsed.data,
           responsiblePartyId: parsed.data.responsiblePartyId ?? before.responsiblePartyId ??
             await getPersistedDefaultResponsiblePartyId(database)
-        };
+        });
         await assertPersistedChildren(database, rule.childIds);
         await assertPersistedCareParty(database, rule.responsiblePartyId);
         await assertCanUsePersistedCareParty(database, request.user, rule.responsiblePartyId);
         const saved = await upsertContactRule({
           id: request.params.id,
-          rule: { ...rule, sourceContactPatternId: before.sourceContactPatternId },
+          rule: omitUndefinedValues({ ...rule, sourceContactPatternId: before.sourceContactPatternId }),
           createdBy: before.createdBy,
           updatedBy: request.userEmail,
           createdAt: before.createdAt,

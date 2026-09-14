@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import { config } from "../config.js";
 import type { DatabaseExecutor } from "../db/runtime.js";
 import {
@@ -73,7 +74,7 @@ function patternInputFromRow(
   pattern: MappedPattern,
   responsiblePartyId: string | undefined
 ): ContactRulePatternInput {
-  return {
+  return omitUndefinedValues({
     id: pattern.id,
     name: pattern.name,
     startDate: pattern.startDate,
@@ -86,7 +87,7 @@ function patternInputFromRow(
     updatedBy: pattern.updatedBy,
     createdAt: pattern.createdAt,
     updatedAt: pattern.updatedAt
-  };
+  });
 }
 
 async function getPattern(database: DatabaseExecutor, id: string): Promise<MappedPattern | undefined> {
