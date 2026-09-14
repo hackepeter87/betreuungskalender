@@ -68,10 +68,9 @@ export function detectLegacyBrowserData(): LegacyBrowserData | null {
         ? parsed.data
         : parsed;
       result.counts = sourceCounts(source);
-      result.sourceSchemaVersion =
-        isRecord(source) && typeof source.schemaVersion === "number"
-          ? source.schemaVersion
-          : undefined;
+      if (isRecord(source) && typeof source.schemaVersion === "number") {
+        result.sourceSchemaVersion = source.schemaVersion;
+      }
       if (isRecord(source)) {
         const known = new Set([
           "schemaVersion", "children", "entries", "holidayPeriods",

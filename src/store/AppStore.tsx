@@ -42,6 +42,7 @@ import type {
   NotificationPreferencesResponse,
   UnavailablePeriod
 } from "../types";
+import { omitUndefinedValues } from "../../shared/objects";
 
 interface ChildInput {
   id?: string;
@@ -332,17 +333,17 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         const input =
           typeof noteOrAnswer === "object"
             ? { status, ...noteOrAnswer }
-            : {
+            : omitUndefinedValues({
                 status,
                 note: noteOrAnswer,
                 cancellationReason: status === "cancelled" ? noteOrAnswer : undefined
-              };
-        await api.answerCareConfirmation(id, {
+              });
+        await api.answerCareConfirmation(id, omitUndefinedValues({
           ...input,
           cancellationReason: status === "cancelled"
             ? input.cancellationReason ?? input.note
             : input.cancellationReason
-        });
+        }));
         await reloadInternal(true);
         return true;
       }, false),
@@ -502,7 +503,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       return performWrite(async () => {
         const { id, ...payload } = input;
         if (session.workspaceRole === "scheduler") {
-          const schedulePayload = {
+          const schedulePayload = omitUndefinedValues({
             startDateTime: payload.startDateTime,
             endDateTime: payload.endDateTime,
             childIds: payload.childIds,
@@ -510,7 +511,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
             location: payload.location === "other" ? undefined : payload.location,
             confirmPlannedConflict: payload.confirmPlannedConflict,
             conflictFingerprint: payload.conflictFingerprint
-          };
+          });
           if (id) await api.updateScheduleEntry(id, schedulePayload);
           else await api.createScheduleEntry(schedulePayload);
         } else if (id) await api.updateEntry(id, payload);
@@ -542,12 +543,12 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     async (id: string, status: EntryStatus, cancellationReason?: string) => {
       const entry = dataRef.current.entries.find((item) => item.id === id);
       if (!entry) return false;
-      return saveEntry({
+      return saveEntry(omitUndefinedValues({
         ...entry,
         status,
         cancellationReason:
           status === "cancelled" ? cancellationReason?.trim() : undefined
-      });
+      }));
     },
     [saveEntry]
   );
@@ -656,7 +657,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         const saved = id
           ? await api.updatePattern(id, payload)
           : await api.createPattern(payload);
-        return { id: saved.id, syncSummary: saved.syncSummary };
+        return omitUndefinedValues({ id: saved.id, syncSummary: saved.syncSummary });
       }, null),
     [performWrite]
   );
@@ -668,7 +669,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         const saved = id
           ? await api.updateContactRule(id, payload)
           : await api.createContactRule(payload);
-        return { id: saved.id, syncSummary: saved.syncSummary };
+        return omitUndefinedValues({ id: saved.id, syncSummary: saved.syncSummary });
       }, null),
     [performWrite]
   );
@@ -677,7 +678,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     async (id: string) =>
       performWrite(async () => {
         const synced = await api.syncContactRule(id);
-        return { id: synced.id, syncSummary: synced.syncSummary };
+        return omitUndefinedValues({ id: synced.id, syncSummary: synced.syncSummary });
       }, null),
     [performWrite]
   );
@@ -706,7 +707,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         endDate: preview.endDate,
         previewFingerprint: preview.fingerprint
       });
-      return { id: synced.id, syncSummary: synced.syncSummary };
+      return omitUndefinedValues({ id: synced.id, syncSummary: synced.syncSummary });
     }, null),
     [performWrite]
   );

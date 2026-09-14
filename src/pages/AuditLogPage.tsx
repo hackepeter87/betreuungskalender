@@ -51,7 +51,7 @@ export function AuditLogPage() {
     setIsLoading(true);
     setIsLoadingMore(false);
     void api.listAuditPage({
-      objectType: objectType === "all" ? undefined : objectType,
+      ...(objectType === "all" ? {} : { objectType }),
       signal: controller.signal
     }).then((page) => {
       if (pageGeneration.current !== generation) return;
@@ -79,7 +79,7 @@ export function AuditLogPage() {
     setLoadError(false);
     try {
       const page = await api.listAuditPage({
-        objectType: objectType === "all" ? undefined : objectType,
+        ...(objectType === "all" ? {} : { objectType }),
         cursor: nextCursor
       });
       if (pageGeneration.current !== generation) return;

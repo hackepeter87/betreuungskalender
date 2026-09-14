@@ -6,15 +6,16 @@ type HelpInput = Omit<FieldHelp, "fieldId" | "commonMistakes" | "examples"> & {
 };
 
 function help(fieldId: string, input: HelpInput): FieldHelp {
+  const { commonMistakes: rawCommonMistakes, examples: rawExamples, ...details } = input;
+  const commonMistakes = typeof rawCommonMistakes === "string"
+    ? [rawCommonMistakes]
+    : rawCommonMistakes;
+  const examples = typeof rawExamples === "string" ? [rawExamples] : rawExamples;
   return {
     fieldId,
-    ...input,
-    commonMistakes:
-      typeof input.commonMistakes === "string"
-        ? [input.commonMistakes]
-        : input.commonMistakes,
-    examples:
-      typeof input.examples === "string" ? [input.examples] : input.examples
+    ...details,
+    ...(commonMistakes ? { commonMistakes } : {}),
+    ...(examples ? { examples } : {})
   };
 }
 

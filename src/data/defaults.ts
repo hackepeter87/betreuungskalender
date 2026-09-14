@@ -80,6 +80,8 @@ export function createDemoData(): AppData {
       updatedAt: timestamp
     }
   ];
+  const responsiblePartyId = careParties[0]?.id;
+  if (!responsiblePartyId) throw new Error("Demo care party is incomplete.");
 
   const makeEntry = (
     dayOffset: number,
@@ -96,7 +98,7 @@ export function createDemoData(): AppData {
       startDateTime: start.toISOString(),
       endDateTime: end.toISOString(),
       childIds,
-      responsiblePartyId: careParties[0]?.id,
+      responsiblePartyId,
       status,
       additionalCare: false,
       overnight,
@@ -127,7 +129,7 @@ export function createDemoData(): AppData {
     careParties,
     settings: {
       ...createEmptyData().settings,
-      defaultResponsiblePartyId: careParties[0]?.id
+      defaultResponsiblePartyId: responsiblePartyId
     },
     entries: [
       makeEntry(-8, children.map((child) => child.id), "completed", true, "Reguläre Betreuung"),

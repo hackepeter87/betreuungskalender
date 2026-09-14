@@ -13,6 +13,7 @@ import type {
   PeriodStats,
   UnavailablePeriod
 } from "../types";
+import { omitUndefinedValues } from "../../shared/objects";
 import { detectCareConflicts } from "../../shared/careConflicts";
 import {
   addDays,
@@ -164,11 +165,11 @@ function careAllocationForDay(
     const start = Math.max(dayStart, Date.parse(actualStartDateTime(entry)));
     const end = Math.min(dayEnd, Date.parse(actualEndDateTime(entry)));
     if (start >= end) continue;
-    intervals.push({
+    intervals.push(omitUndefinedValues({
       start,
       end,
       partyId: actualResponsiblePartyId(entry) ?? defaultResponsiblePartyId
-    });
+    }));
   }
 
   return resolveTimedAllocation(intervals, status === "actual");
@@ -629,7 +630,7 @@ function calculateEntityStats(
   }
 
   const totalDays = daysBetween(startDate, endDate);
-  const holidayStats = calculateHolidayStats({
+  const holidayStats = calculateHolidayStats(omitUndefinedValues({
     periods: data.holidayPeriods,
     startDate,
     endDate,
@@ -640,9 +641,9 @@ function calculateEntityStats(
     careParties: data.careParties,
     defaultResponsiblePartyId: data.settings.defaultResponsiblePartyId,
     primaryCarePartyId: data.settings.primaryCarePartyId
-  });
+  }));
 
-  return {
+  return omitUndefinedValues({
     childId,
     careHours: Math.round(careHours * 10) / 10,
     unresolvedCareHours: Math.round(unresolvedCareHours * 10) / 10,
@@ -666,7 +667,7 @@ function calculateEntityStats(
     calculatedTravelCost: Math.round(calculatedTravelCost * 100) / 100,
     reimbursedAmount: Math.round(reimbursedAmount * 100) / 100,
     costsTotal: Math.round(costsTotal * 100) / 100
-  };
+  });
 }
 
 export function calculatePeriodStats(
@@ -701,7 +702,7 @@ export function calculatePeriodStats(
       startDate,
       endDate
     ),
-    holidays: calculateHolidayStats({
+    holidays: calculateHolidayStats(omitUndefinedValues({
       periods: data.holidayPeriods,
       startDate,
       endDate,
@@ -711,7 +712,7 @@ export function calculatePeriodStats(
       careParties: data.careParties,
       defaultResponsiblePartyId: data.settings.defaultResponsiblePartyId,
       primaryCarePartyId: data.settings.primaryCarePartyId
-    }),
+    })),
     costsByCategory,
     byChild: data.children.map((child) =>
       calculateEntityStats(data, entries, startDate, endDate, child.id)

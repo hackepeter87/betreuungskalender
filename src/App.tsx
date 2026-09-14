@@ -130,7 +130,9 @@ export function App() {
   const canCreateAppointments = session.permissions?.includes("appointments:create") ?? true;
   const canEditAppointments = session.permissions?.includes("appointments:edit") ?? true;
   const openNewEntry = (date?: string, additionalCare = false) => {
-    if (canCreateAppointments) setEntryDialog({ date, additionalCare });
+    if (canCreateAppointments) {
+      setEntryDialog({ ...(date ? { date } : {}), additionalCare });
+    }
   };
   const openEditEntry = (entry: CareEntry) => {
     if (canEditAppointments) setEntryDialog({ entry });
@@ -286,9 +288,11 @@ export function App() {
           onClose={() => setEntryDialog(null)}
         >
           <EntryForm
-            entry={entryDialog.entry}
-            initialDate={entryDialog.date}
-            initialAdditionalCare={entryDialog.additionalCare}
+            {...(entryDialog.entry ? { entry: entryDialog.entry } : {})}
+            {...(entryDialog.date ? { initialDate: entryDialog.date } : {})}
+            {...(entryDialog.additionalCare !== undefined
+              ? { initialAdditionalCare: entryDialog.additionalCare }
+              : {})}
             onSaved={() => setEntryDialog(null)}
             onCancel={() => setEntryDialog(null)}
           />

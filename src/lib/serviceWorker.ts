@@ -9,11 +9,14 @@ export interface OptionalServiceWorkerEnvironment {
 }
 
 function browserEnvironment(): OptionalServiceWorkerEnvironment {
+  const serviceWorker = typeof navigator !== "undefined" ? navigator.serviceWorker : undefined;
+  const caches = typeof window !== "undefined" ? window.caches : undefined;
+  const storage = typeof window !== "undefined" ? window.localStorage : undefined;
   return {
     production: import.meta.env?.PROD ?? false,
-    serviceWorker: typeof navigator !== "undefined" ? navigator.serviceWorker : undefined,
-    caches: typeof window !== "undefined" ? window.caches : undefined,
-    storage: typeof window !== "undefined" ? window.localStorage : undefined
+    ...(serviceWorker ? { serviceWorker } : {}),
+    ...(caches ? { caches } : {}),
+    ...(storage ? { storage } : {})
   };
 }
 

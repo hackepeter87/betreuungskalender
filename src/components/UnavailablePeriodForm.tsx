@@ -8,6 +8,7 @@ import { useAppStore } from "../store/AppStore";
 import type { UnavailableCategory, UnavailablePeriod, UnavailableScope } from "../types";
 import { FieldHelpButton, FieldHelpLabel } from "./FieldHelp";
 import { Icon } from "./Icon";
+import { omitUndefinedValues } from "../../shared/objects";
 
 function localParts(value?: string): { date: string; time: string } {
   if (!value) return { date: "", time: "" };
@@ -193,7 +194,7 @@ export function UnavailablePeriodForm({
       setError(copy(locale, "unavailable", "endAfterStart"));
       return;
     }
-    const saved = await saveUnavailablePeriod({
+    const saved = await saveUnavailablePeriod(omitUndefinedValues({
       id: period?.id,
       startDateTime,
       endDateTime,
@@ -208,7 +209,7 @@ export function UnavailablePeriodForm({
       notes: notes.trim() || undefined,
       hasEvidence,
       evidenceReference: evidenceReference.trim() || undefined
-    });
+    }));
     if (saved) onDone();
   };
 

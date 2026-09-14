@@ -28,6 +28,7 @@ import {
   type ApiUserCarePartyAssignment
 } from "../../shared/api";
 import type { CareLocation, CareParty, Child, HandoverParty, NotificationEventType, NotificationPreference } from "../types";
+import { omitUndefinedValues } from "../../shared/objects";
 
 function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
   const { saveChild, canWrite, isSaving } = useAppStore();
@@ -40,7 +41,7 @@ function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!name.trim()) return;
-    if (await saveChild({ id: child?.id, name, birthMonth, birthYear, color })) {
+    if (await saveChild(omitUndefinedValues({ id: child?.id, name, birthMonth, birthYear, color }))) {
       onDone();
     }
   };
@@ -244,12 +245,12 @@ function MemberInvitationManager() {
     try {
       const safeExpiresDays = Number.isFinite(expiresDays) ? Math.min(30, Math.max(1, expiresDays)) : 7;
       const expiresAt = new Date(Date.now() + safeExpiresDays * 86_400_000).toISOString();
-      const created = await api.createInvitation({
+      const created = await api.createInvitation(omitUndefinedValues({
         role: inviteRole,
         expiresAt,
         emailHint: inviteEmail.trim() || undefined,
         sendEmail
-      });
+      }));
       setInvitations((items) => [created.invitation, ...items]);
       setCreatedInvitationUrl(created.invitationUrl);
       setInviteEmail("");
@@ -487,7 +488,7 @@ function CarePartyForm({ party, onDone }: { party?: CareParty; onDone: () => voi
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!name.trim()) return;
-    if (await saveCareParty({ id: party?.id, name: name.trim(), kind })) {
+    if (await saveCareParty(omitUndefinedValues({ id: party?.id, name: name.trim(), kind }))) {
       onDone();
     }
   };
@@ -1126,9 +1127,9 @@ export function SettingsPage() {
               value={data.settings.primaryCarePartyId ?? data.settings.defaultResponsiblePartyId ?? ""}
               disabled={!canWrite || isSaving || !data.careParties.length}
               onChange={(event) =>
-                void updateSettings({
-                  primaryCarePartyId: event.target.value || undefined
-                })
+                void updateSettings(event.target.value
+                  ? { primaryCarePartyId: event.target.value }
+                  : {})
               }
             >
               {data.careParties.length ? null : (
@@ -1151,9 +1152,9 @@ export function SettingsPage() {
               value={data.settings.defaultResponsiblePartyId ?? ""}
               disabled={!canWrite || isSaving || !data.careParties.length}
               onChange={(event) =>
-                void updateSettings({
-                  defaultResponsiblePartyId: event.target.value || undefined
-                })
+                void updateSettings(event.target.value
+                  ? { defaultResponsiblePartyId: event.target.value }
+                  : {})
               }
             >
               {data.careParties.length ? null : (
@@ -1216,12 +1217,12 @@ export function SettingsPage() {
 
       {canManageChildren && editingChild ? (
         <Modal title={editingChild === "new" ? copy(locale, "settings", "addChild") : copy(locale, "settings", "editChild")} onClose={() => setEditingChild(null)}>
-          <ChildForm child={editingChild === "new" ? undefined : editingChild} onDone={() => setEditingChild(null)} />
+          <ChildForm {...(editingChild === "new" ? {} : { child: editingChild })} onDone={() => setEditingChild(null)} />
         </Modal>
       ) : null}
       {canManagePlanning && editingCareParty ? (
         <Modal title={editingCareParty === "new" ? copy(locale, "settings", "addCareParty") : copy(locale, "settings", "editCareParty")} onClose={() => setEditingCareParty(null)}>
-          <CarePartyForm party={editingCareParty === "new" ? undefined : editingCareParty} onDone={() => setEditingCareParty(null)} />
+          <CarePartyForm {...(editingCareParty === "new" ? {} : { party: editingCareParty })} onDone={() => setEditingCareParty(null)} />
         </Modal>
       ) : null}
     </div>

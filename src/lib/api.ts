@@ -68,6 +68,7 @@ import type {
   UnavailablePeriod,
   ExternalCalendarSource
 } from "../types";
+import { omitUndefinedValues } from "../../shared/objects";
 
 export const SERVER_UNAVAILABLE_MESSAGE =
   "Die Serververbindung ist nicht verfügbar. Änderungen können derzeit nicht gespeichert werden.";
@@ -127,7 +128,7 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = 5_000): 
 export function mapReportSnapshotData(snapshot: ApiReportSnapshot): AppData {
   const empty = createEmptyData();
   const { lastJsonBackupAt, ...settings } = snapshot.data.settings;
-  return {
+  return omitUndefinedValues({
     ...empty,
     schemaVersion: snapshot.data.schemaVersion as AppData["schemaVersion"],
     children: snapshot.data.children as Child[],
@@ -140,7 +141,7 @@ export function mapReportSnapshotData(snapshot: ApiReportSnapshot): AppData {
     auditLog: snapshot.data.auditLog.map(mapAudit),
     monthClosures: snapshot.data.monthClosures as MonthlyClosure[],
     updatedAt: snapshot.dataUpdatedAt
-  };
+  });
 }
 
 async function requestOptionalCareConflicts(): Promise<ApiCareConflictList> {
@@ -189,7 +190,7 @@ interface ApiContactPattern extends ContactPattern {
 }
 
 function mapEntry(entry: ApiCareEntry): CareEntry {
-  return {
+  return omitUndefinedValues({
     id: entry.id,
     date: entry.startDateTime.slice(0, 10),
     generatedByPatternId: entry.generatedByPatternId,
@@ -241,7 +242,7 @@ function mapEntry(entry: ApiCareEntry): CareEntry {
     updatedBy: entry.updatedBy,
     createdAt: entry.createdAt,
     updatedAt: entry.updatedAt
-  };
+  });
 }
 
 function mapConfirmation(request: ApiCareConfirmationRequest): CareConfirmationRequest {
@@ -366,7 +367,7 @@ function displayValue(value?: string | null): string {
 }
 
 export function mapAudit(entry: ApiAuditEntry): AppData["auditLog"][number] {
-  return {
+  return omitUndefinedValues({
     id: String(entry.id),
     timestamp: entry.timestamp,
     userId: entry.userEmail,
@@ -379,7 +380,7 @@ export function mapAudit(entry: ApiAuditEntry): AppData["auditLog"][number] {
     oldValue: displayValue(entry.oldValue),
     newValue: displayValue(entry.newValue),
     action: actionMap[entry.action] ?? "updated"
-  };
+  });
 }
 
 function newestTimestamp(values: Array<string | undefined>): string {
@@ -428,7 +429,7 @@ export async function loadAppData(options: {
     ({ warnings: _warnings, ...period }) => period
   );
   const mappedClosures = monthClosures as MonthlyClosure[];
-  return {
+  return omitUndefinedValues({
     ...empty,
     children: children as Child[],
     careParties: careParties as CareParty[],
@@ -458,7 +459,7 @@ export async function loadAppData(options: {
         item.changedAfterCloseAt
       ])
     ])
-  };
+  });
 }
 
 export async function loadRestrictedAppData(): Promise<AppData> {
@@ -488,7 +489,7 @@ export async function loadRestrictedAppData(): Promise<AppData> {
       createdAt: timestamp,
       updatedAt: timestamp
     })),
-    entries: entries.map((entry) => ({
+    entries: entries.map((entry) => omitUndefinedValues({
       id: entry.id,
       date: entry.startDateTime.slice(0, 10),
       startDateTime: entry.startDateTime,
@@ -502,8 +503,8 @@ export async function loadRestrictedAppData(): Promise<AppData> {
       holiday: false,
       weekend: false,
       location: (entry.location ?? "other") as CareEntry["location"],
-      handoverFrom: "mother",
-      handoverTo: "mother",
+      handoverFrom: "mother" as const,
+      handoverTo: "mother" as const,
       hasEvidence: false,
       trips: [],
       costs: [],
@@ -536,12 +537,12 @@ export const api = {
     }
     if (options.cursor) query.set("cursor", options.cursor);
     const page = await request<ApiAuditPage>(`/api/audit-log/page?${query}`, {
-      signal: options.signal
+      ...(options.signal ? { signal: options.signal } : {})
     });
-    return {
+    return omitUndefinedValues({
       items: page.items.map(mapAudit),
       nextCursor: page.nextCursor
-    };
+    });
   },
   resolveActorLabels(ids: string[]) {
     return request<ApiActorLabel[]>("/api/actor-labels/resolve", {
@@ -568,7 +569,11 @@ export const api = {
       endDate,
       includeAuditHistory: String(includeAuditHistory)
     });
-    return request<ApiReportSnapshot>(`/api/reports/snapshot?${query}`, { signal }, 15_000);
+    return request<ApiReportSnapshot>(
+      `/api/reports/snapshot?${query}`,
+      signal ? { signal } : {},
+      15_000
+    );
   },
   getSession() {
     return loadSession();
