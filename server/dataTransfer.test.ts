@@ -144,12 +144,12 @@ test("portable import requires the exact dry-run fingerprint and preserves targe
   const target = await database();
   try {
     await source.transaction((database) => importData(createEdgeCaseDemoData(), "fixture-actor", database));
-    const transfer = await createPortableTransfer(source);
-    const dryRun = await dryRunPortableTransfer(transfer, target);
     target.sqliteDatabase.prepare(`
       INSERT INTO settings (key, value_json, created_by, updated_by, created_at, updated_at)
       VALUES ('setup.ownerUserId', '"target-owner"', 'target-owner', 'target-owner', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
     `).run();
+    const transfer = await createPortableTransfer(source);
+    const dryRun = await dryRunPortableTransfer(transfer, target);
 
     await assert.rejects(importPortableTransfer({
       package: transfer,
@@ -178,6 +178,73 @@ test("portable import requires the exact dry-run fingerprint and preserves targe
       rhythmStartDate: "2026-07-10",
       lastJsonBackupAt: "2026-07-01T09:30:00.000Z"
     });
+  } finally {
+    await source.close();
+    await target.close();
+  }
+});
+
+test("portable import rejects a dry run after relevant target data changes", async () => {
+  const source = await database();
+  const target = await database();
+  try {
+    await source.transaction((database) => importData(createEdgeCaseDemoData(), "fixture-actor", database));
+    const transfer = await createPortableTransfer(source);
+    const dryRun = await dryRunPortableTransfer(transfer, target);
+    target.sqliteDatabase.prepare(`
+      INSERT INTO children (id, name, birth_month, birth_year, color, created_at, updated_at)
+      VALUES ('concurrent-child', 'Concurrent child', 1, 2018, '#0f8b8d', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run();
+    const before = target.sqliteDatabase.serialize();
+
+    await assert.rejects(importPortableTransfer({
+      package: transfer,
+      fingerprint: dryRun.fingerprint,
+      dryRunReceipt: dryRun.dryRunReceipt!,
+      confirmWarnings: false,
+      actorId: "target-owner"
+    }, target), /current successful dry run/);
+
+    assert.deepEqual(target.sqliteDatabase.serialize(), before);
+  } finally {
+    await source.close();
+    await target.close();
+  }
+});
+
+test("portable actor references use an isolated namespace and remain unmapped", async () => {
+  const source = await database();
+  const target = await database();
+  try {
+    await source.transaction((database) => importData(createEdgeCaseDemoData(), "target-owner", database));
+    target.sqliteDatabase.prepare(`
+      INSERT INTO app_users (
+        id, external_subject, display_name, role, groups_json, last_seen_at, created_at, updated_at
+      ) VALUES (
+        'target-owner', 'target-subject', 'Target owner', 'admin', '[]',
+        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      )
+    `).run();
+    const transfer = await createPortableTransfer(source);
+    const dryRun = await dryRunPortableTransfer(transfer, target);
+
+    await importPortableTransfer({
+      package: transfer,
+      fingerprint: dryRun.fingerprint,
+      dryRunReceipt: dryRun.dryRunReceipt!,
+      confirmWarnings: false,
+      actorId: "target-owner"
+    }, target);
+
+    const importedActors = target.sqliteDatabase.prepare(`
+      SELECT id, source_ref AS sourceRef, mapped_user_id AS mappedUserId
+      FROM data_transfer_actors
+    `).all() as Array<{ id: string; sourceRef: string; mappedUserId: string | null }>;
+    const collidingSource = importedActors.find((actor) => actor.sourceRef === "target-owner");
+    assert.ok(collidingSource);
+    assert.match(collidingSource.id, /^transfer_actor_[a-f0-9]{24}$/);
+    assert.notEqual(collidingSource.id, "target-owner");
+    assert.equal(collidingSource.mappedUserId, null);
   } finally {
     await source.close();
     await target.close();
