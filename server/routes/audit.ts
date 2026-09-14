@@ -138,28 +138,29 @@ async function auditEntries(
   return rows.map(mapAuditEntry);
 }
 
-async function referencedActorIds(database: DatabaseExecutor): Promise<Set<string>> {
+async function referencedActorIds(
+  database: DatabaseExecutor,
+  requestedIds: readonly string[]
+): Promise<Set<string>> {
+  if (!requestedIds.length) return new Set();
   const rows = await Promise.all([
-    database.selectFrom("children").select("created_by as id").where("deleted_at", "is", null).execute(),
-    database.selectFrom("children").select("updated_by as id").where("deleted_at", "is", null).execute(),
-    database.selectFrom("care_parties").select("created_by as id").where("deleted_at", "is", null).execute(),
-    database.selectFrom("care_parties").select("updated_by as id").where("deleted_at", "is", null).execute(),
-    database.selectFrom("care_entries").select("created_by as id").where("deleted_at", "is", null).execute(),
-    database.selectFrom("care_entries").select("updated_by as id").where("deleted_at", "is", null).execute(),
-    database.selectFrom("trips").select("created_by as id").where("deleted_at", "is", null).execute(),
-    database.selectFrom("trips").select("updated_by as id").where("deleted_at", "is", null).execute(),
-    database.selectFrom("costs").select("created_by as id").where("deleted_at", "is", null).execute(),
-    database.selectFrom("costs").select("updated_by as id").where("deleted_at", "is", null).execute(),
-    database.selectFrom("holiday_periods").select("created_by as id").where("deleted_at", "is", null).execute(),
-    database.selectFrom("holiday_periods").select("updated_by as id").where("deleted_at", "is", null).execute(),
-    database.selectFrom("unavailable_periods").select("created_by as id").where("deleted_at", "is", null).execute(),
-    database.selectFrom("unavailable_periods").select("updated_by as id").where("deleted_at", "is", null).execute(),
-    database.selectFrom("contact_patterns").select("created_by as id").where("deleted_at", "is", null).execute(),
-    database.selectFrom("contact_patterns").select("updated_by as id").where("deleted_at", "is", null).execute(),
-    database.selectFrom("contact_rules").select("created_by as id").where("deleted_at", "is", null).execute(),
-    database.selectFrom("contact_rules").select("updated_by as id").where("deleted_at", "is", null).execute(),
-    database.selectFrom("monthly_closings").select("closed_by as id").where("deleted_at", "is", null).execute(),
-    database.selectFrom("monthly_closings").select("updated_by as id").where("deleted_at", "is", null).execute()
+    ...(["children", "care_parties", "care_entries", "trips", "costs", "holiday_periods", "unavailable_periods", "contact_patterns", "contact_rules"] as const)
+      .flatMap((table) => (["created_by", "updated_by"] as const).map((column) =>
+        database.selectFrom(table)
+          .select(`${column} as id`)
+          .where("deleted_at", "is", null)
+          .where(column, "in", requestedIds)
+          .limit(requestedIds.length)
+          .execute()
+      )),
+    ...(["closed_by", "updated_by"] as const).map((column) =>
+      database.selectFrom("monthly_closings")
+        .select(`${column} as id`)
+        .where("deleted_at", "is", null)
+        .where(column, "in", requestedIds)
+        .limit(requestedIds.length)
+        .execute()
+    )
   ]);
   return new Set(rows.flat().map((row) => row.id));
 }
@@ -203,7 +204,7 @@ export async function auditRoutes(app: FastifyInstance): Promise<void> {
     if (!ids.length) {
       return [];
     }
-    const referenced = await referencedActorIds(app.persistence.query);
+    const referenced = await referencedActorIds(app.persistence.query, ids);
     const visibleIds = ids.filter((id) => referenced.has(id));
     if (!visibleIds.length) return [];
     const [users, actors] = await Promise.all([

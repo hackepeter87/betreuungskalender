@@ -420,6 +420,31 @@ test("workspace roles enforce restricted projections and scheduler writes", asyn
   })).status, 403);
   assert.equal((await request(baseUrl, "/api/care-entries/schedule", viewerHeaders)).status, 200);
 
+  for (const path of ["/api/care-entries", "/api/care-entries/schedule"]) {
+    const invalid = await request(baseUrl, `${path}?startDate=2030-02-31`, ownerHeaders);
+    assert.equal(invalid.status, 400);
+    assert.equal(invalid.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await invalid.json(), { error: "invalid_request" });
+
+    const reversed = await request(
+      baseUrl,
+      `${path}?startDate=2031-01-02&endDate=2030-01-02`,
+      ownerHeaders
+    );
+    assert.equal(reversed.status, 400);
+    assert.equal(reversed.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await reversed.json(), { error: "invalid_request" });
+
+    const oversized = await request(
+      baseUrl,
+      `${path}?startDate=2020-01-01&endDate=2031-01-02`,
+      ownerHeaders
+    );
+    assert.equal(oversized.status, 400);
+    assert.equal(oversized.headers.get("cache-control"), "no-store");
+    assert.deepEqual(await oversized.json(), { error: "workspace_query_limit" });
+  }
+
   const customLocationEntry = await jsonRequest<{ id: string }>(baseUrl, "/api/care-entries", ownerHeaders, {
     method: "POST",
     body: JSON.stringify({

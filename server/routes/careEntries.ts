@@ -42,6 +42,16 @@ import {
   careEntryInputSchema,
   schedulerCareEntryInputSchema
 } from "../validation/schemas.js";
+import {
+  MAX_WORKSPACE_QUERY_RANGE_DAYS,
+  MAX_WORKSPACE_QUERY_RECORDS,
+  MAX_WORKSPACE_QUERY_RELATIONS
+} from "../validation/processingLimits.js";
+import {
+  WorkspaceQueryLimitError,
+  withinResultLimit
+} from "../services/boundedQueries.js";
+import { z } from "zod";
 
 const readLimit = {
   config: { permission: "notes:view" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
@@ -67,17 +77,52 @@ const scheduleLocations = new Set([
   "ogs"
 ]);
 
+const calendarDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+});
+
+const workspaceQuerySchema = z.object({
+  startDate: calendarDateSchema.optional(),
+  endDate: calendarDateSchema.optional()
+}).superRefine((value, context) => {
+  if (!value.startDate || !value.endDate) return;
+  const start = Date.parse(`${value.startDate}T00:00:00.000Z`);
+  const end = Date.parse(`${value.endDate}T00:00:00.000Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) {
+    context.addIssue({ code: "custom", message: "invalid_range" });
+    return;
+  }
+  if ((end - start) / 86_400_000 > MAX_WORKSPACE_QUERY_RANGE_DAYS) {
+    context.addIssue({ code: "custom", message: "workspace_query_limit" });
+  }
+});
+
+function workspaceQueryFailure(
+  reply: { header(name: string, value: string): unknown; code(status: number): { send(payload: unknown): unknown } }
+) {
+  reply.header("Cache-Control", "no-store");
+  return reply.code(400).send({ error: "workspace_query_limit" });
+}
+
 function scheduleLocation(value: string | null): string | undefined {
   return value && scheduleLocations.has(value) ? value : undefined;
 }
 
 async function scheduleConflictEntryIds(
   database: DatabaseExecutor,
-  responsiblePartyIds?: string[]
+  responsiblePartyIds?: string[],
+  range?: { startDate?: string; endDate?: string }
 ): Promise<Set<string>> {
   try {
     return new Set((await listCareConflicts(database, {
-      ...(responsiblePartyIds ? { responsiblePartyIds } : {})
+      ...(responsiblePartyIds ? { responsiblePartyIds } : {}),
+      ...(range?.startDate ? { endAfter: `${range.startDate}T00:00:00.000Z` } : {}),
+      ...(range?.endDate ? {
+        startBefore: new Date(
+          Date.parse(`${range.endDate}T00:00:00.000Z`) + 86_400_000
+        ).toISOString()
+      } : {})
     })).flatMap((conflict) => conflict.entryIds));
   } catch (error) {
     if (isCareConflictWorkLimitError(error)) return new Set();
@@ -151,29 +196,8 @@ interface CostRow {
   updated_by: string;
 }
 
-function optional<T>(value: T | null): T | undefined {
-  return value === null ? undefined : value;
-}
-
-async function childIds(database: DatabaseExecutor, table: "care_entry_children" | "care_entry_actual_children", entryId: string): Promise<string[]> {
-  const rows = await database.selectFrom(table)
-    .select("child_id")
-    .where("care_entry_id", "=", entryId)
-    .where("deleted_at", "is", null)
-    .orderBy("child_id")
-    .execute();
-  return rows.map((row) => row.child_id);
-}
-
-async function getTrips(database: DatabaseExecutor, entryId: string): Promise<ApiTrip[]> {
-  const rows = await database.selectFrom("trips")
-    .select(["id", "purpose", "km", "own_car", "reimbursed", "reimbursement_amount", "notes", "created_by", "updated_by"])
-    .where("care_entry_id", "=", entryId)
-    .where("deleted_at", "is", null)
-    .orderBy("created_at")
-    .orderBy("id")
-    .execute() as TripRow[];
-  return rows.map((row) => omitUndefinedValues({
+function mapTripRow(row: TripRow): ApiTrip {
+  return omitUndefinedValues({
     id: row.id,
     purpose: row.purpose,
     km: row.km,
@@ -183,18 +207,11 @@ async function getTrips(database: DatabaseExecutor, entryId: string): Promise<Ap
     notes: optional(row.notes),
     createdBy: row.created_by,
     updatedBy: row.updated_by
-  }));
+  });
 }
 
-async function getCosts(database: DatabaseExecutor, entryId: string): Promise<ApiCost[]> {
-  const rows = await database.selectFrom("costs")
-    .select(["id", "category", "amount", "paid_by", "notes", "created_by", "updated_by"])
-    .where("care_entry_id", "=", entryId)
-    .where("deleted_at", "is", null)
-    .orderBy("created_at")
-    .orderBy("id")
-    .execute() as CostRow[];
-  return rows.map((row) => omitUndefinedValues({
+function mapCostRow(row: CostRow): ApiCost {
+  return omitUndefinedValues({
     id: row.id,
     category: row.category,
     amount: row.amount,
@@ -202,16 +219,55 @@ async function getCosts(database: DatabaseExecutor, entryId: string): Promise<Ap
     notes: optional(row.notes),
     createdBy: row.created_by,
     updatedBy: row.updated_by
-  }));
+  });
 }
 
-async function mapEntry(database: DatabaseExecutor, row: EntryRow): Promise<ApiCareEntry> {
-  const [plannedChildren, actualChildren, trips, costs] = await Promise.all([
-    childIds(database, "care_entry_children", row.id),
-    childIds(database, "care_entry_actual_children", row.id),
-    getTrips(database, row.id),
-    getCosts(database, row.id)
-  ]);
+function optional<T>(value: T | null): T | undefined {
+  return value === null ? undefined : value;
+}
+
+async function childIds(database: DatabaseExecutor, table: "care_entry_children" | "care_entry_actual_children", entryId: string): Promise<string[]> {
+  const rows = withinResultLimit(await database.selectFrom(table)
+    .select("child_id")
+    .where("care_entry_id", "=", entryId)
+    .where("deleted_at", "is", null)
+    .orderBy("child_id")
+    .limit(MAX_WORKSPACE_QUERY_RELATIONS + 1)
+    .execute(), MAX_WORKSPACE_QUERY_RELATIONS);
+  return rows.map((row) => row.child_id);
+}
+
+async function getTrips(database: DatabaseExecutor, entryId: string): Promise<ApiTrip[]> {
+  const rows = withinResultLimit(await database.selectFrom("trips")
+    .select(["id", "purpose", "km", "own_car", "reimbursed", "reimbursement_amount", "notes", "created_by", "updated_by"])
+    .where("care_entry_id", "=", entryId)
+    .where("deleted_at", "is", null)
+    .orderBy("created_at")
+    .orderBy("id")
+    .limit(MAX_WORKSPACE_QUERY_RELATIONS + 1)
+    .execute() as TripRow[], MAX_WORKSPACE_QUERY_RELATIONS);
+  return rows.map(mapTripRow);
+}
+
+async function getCosts(database: DatabaseExecutor, entryId: string): Promise<ApiCost[]> {
+  const rows = withinResultLimit(await database.selectFrom("costs")
+    .select(["id", "category", "amount", "paid_by", "notes", "created_by", "updated_by"])
+    .where("care_entry_id", "=", entryId)
+    .where("deleted_at", "is", null)
+    .orderBy("created_at")
+    .orderBy("id")
+    .limit(MAX_WORKSPACE_QUERY_RELATIONS + 1)
+    .execute() as CostRow[], MAX_WORKSPACE_QUERY_RELATIONS);
+  return rows.map(mapCostRow);
+}
+
+function mapEntryRow(
+  row: EntryRow,
+  plannedChildren: string[],
+  actualChildren: string[],
+  trips: ApiTrip[],
+  costs: ApiCost[]
+): ApiCareEntry {
   return omitUndefinedValues({
     id: row.id,
     generatedByPatternId: optional(row.generated_by_pattern_id),
@@ -264,6 +320,71 @@ async function mapEntry(database: DatabaseExecutor, row: EntryRow): Promise<ApiC
     trips,
     costs
   });
+}
+
+async function mapEntry(database: DatabaseExecutor, row: EntryRow): Promise<ApiCareEntry> {
+  const [plannedChildren, actualChildren, trips, costs] = await Promise.all([
+    childIds(database, "care_entry_children", row.id),
+    childIds(database, "care_entry_actual_children", row.id),
+    getTrips(database, row.id),
+    getCosts(database, row.id)
+  ]);
+  return mapEntryRow(row, plannedChildren, actualChildren, trips, costs);
+}
+
+async function mapEntries(database: DatabaseExecutor, rows: EntryRow[]): Promise<ApiCareEntry[]> {
+  if (!rows.length) return [];
+  const ids = rows.map((row) => row.id);
+  const [plannedChildren, actualChildren, tripRows, costRows] = await Promise.all([
+    database.selectFrom("care_entry_children")
+      .select(["care_entry_id as entryId", "child_id as childId"])
+      .where("care_entry_id", "in", ids)
+      .where("deleted_at", "is", null)
+      .orderBy("care_entry_id").orderBy("child_id")
+      .limit(MAX_WORKSPACE_QUERY_RELATIONS + 1).execute(),
+    database.selectFrom("care_entry_actual_children")
+      .select(["care_entry_id as entryId", "child_id as childId"])
+      .where("care_entry_id", "in", ids)
+      .where("deleted_at", "is", null)
+      .orderBy("care_entry_id").orderBy("child_id")
+      .limit(MAX_WORKSPACE_QUERY_RELATIONS + 1).execute(),
+    database.selectFrom("trips")
+      .select(["care_entry_id as entryId", "id", "purpose", "km", "own_car", "reimbursed", "reimbursement_amount", "notes", "created_by", "updated_by"])
+      .where("care_entry_id", "in", ids)
+      .where("deleted_at", "is", null)
+      .orderBy("care_entry_id").orderBy("created_at").orderBy("id")
+      .limit(MAX_WORKSPACE_QUERY_RELATIONS + 1).execute() as Promise<Array<TripRow & { entryId: string }>>,
+    database.selectFrom("costs")
+      .select(["care_entry_id as entryId", "id", "category", "amount", "paid_by", "notes", "created_by", "updated_by"])
+      .where("care_entry_id", "in", ids)
+      .where("deleted_at", "is", null)
+      .orderBy("care_entry_id").orderBy("created_at").orderBy("id")
+      .limit(MAX_WORKSPACE_QUERY_RELATIONS + 1).execute() as Promise<Array<CostRow & { entryId: string }>>
+  ]);
+  if (
+    plannedChildren.length + actualChildren.length + tripRows.length + costRows.length >
+    MAX_WORKSPACE_QUERY_RELATIONS
+  ) throw new WorkspaceQueryLimitError();
+  const grouped = <T extends { entryId: string }>(items: T[]) => {
+    const result = new Map<string, T[]>();
+    for (const item of items) {
+      const existing = result.get(item.entryId);
+      if (existing) existing.push(item);
+      else result.set(item.entryId, [item]);
+    }
+    return result;
+  };
+  const plannedByEntry = grouped(plannedChildren);
+  const actualByEntry = grouped(actualChildren);
+  const tripsByEntry = grouped(tripRows);
+  const costsByEntry = grouped(costRows);
+  return rows.map((row) => mapEntryRow(
+    row,
+    (plannedByEntry.get(row.id) ?? []).map(({ childId }) => childId),
+    (actualByEntry.get(row.id) ?? []).map(({ childId }) => childId),
+    (tripsByEntry.get(row.id) ?? []).map(mapTripRow),
+    (costsByEntry.get(row.id) ?? []).map(mapCostRow)
+  ));
 }
 
 async function getEntry(database: DatabaseExecutor, id: string): Promise<ApiCareEntry | undefined> {
@@ -913,10 +1034,19 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: { startDate?: string; endDate?: string } }>(
     "/api/care-entries/schedule",
     scheduleLimit,
-    async (request): Promise<ApiScheduleEntry[]> => {
-      const scopedPartyIds = await scopedPersistedCarePartyIds(app.persistence.query, request.user);
-      if (scopedPartyIds?.length === 0) return [];
-      let query = app.persistence.query.selectFrom("care_entries as entries")
+    async (request, reply) => {
+      const parsedQuery = workspaceQuerySchema.safeParse(request.query);
+      if (!parsedQuery.success) {
+        if (parsedQuery.error.issues.some((issue) => issue.message === "workspace_query_limit")) {
+          return workspaceQueryFailure(reply);
+        }
+        reply.header("Cache-Control", "no-store");
+        return reply.code(400).send({ error: "invalid_request" });
+      }
+      try {
+        const scopedPartyIds = await scopedPersistedCarePartyIds(app.persistence.query, request.user);
+        if (scopedPartyIds?.length === 0) return [];
+        let query = app.persistence.query.selectFrom("care_entries as entries")
         .leftJoin("care_parties as parties", (join) => join
           .onRef("parties.id", "=", "entries.responsible_party_id")
           .on("parties.deleted_at", "is", null))
@@ -933,13 +1063,15 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
       if (scopedPartyIds) {
         query = query.where("entries.responsible_party_id", "in", scopedPartyIds);
       }
-      if (request.query.startDate) {
-        query = query.where("entries.end_datetime", ">=", `${request.query.startDate}T00:00:00.000Z`);
-      }
-      if (request.query.endDate) {
-        query = query.where("entries.start_datetime", "<=", `${request.query.endDate}T23:59:59.999Z`);
-      }
-      const rows = await query.orderBy("entries.start_datetime").orderBy("entries.id").execute() as Array<{
+        if (parsedQuery.data.startDate) {
+          query = query.where("entries.end_datetime", ">=", `${parsedQuery.data.startDate}T00:00:00.000Z`);
+        }
+        if (parsedQuery.data.endDate) {
+          query = query.where("entries.start_datetime", "<=", `${parsedQuery.data.endDate}T23:59:59.999Z`);
+        }
+        const rows = withinResultLimit(await query
+          .orderBy("entries.start_datetime").orderBy("entries.id")
+          .limit(MAX_WORKSPACE_QUERY_RECORDS + 1).execute() as Array<{
         id: string;
         startDateTime: string;
         endDateTime: string;
@@ -947,32 +1079,52 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
         location: string | null;
         responsiblePartyId: string | null;
         responsiblePartyName: string | null;
-      }>;
-      const conflicts = await scheduleConflictEntryIds(app.persistence.query, scopedPartyIds);
-      return Promise.all(rows.map(async (row) => {
-        const location = scheduleLocation(row.location);
-        const children = await app.persistence.query.selectFrom("care_entry_children as links")
+        }>, MAX_WORKSPACE_QUERY_RECORDS);
+        const ids = rows.map((row) => row.id);
+        const childRows = ids.length ? withinResultLimit(await app.persistence.query
+          .selectFrom("care_entry_children as links")
           .innerJoin("children", (join) => join
             .onRef("children.id", "=", "links.child_id")
             .on("children.deleted_at", "is", null))
-          .select(["children.id", "children.name", "children.color"])
-          .where("links.care_entry_id", "=", row.id)
+          .select(["links.care_entry_id as entryId", "children.id", "children.name", "children.color"])
+          .where("links.care_entry_id", "in", ids)
           .where("links.deleted_at", "is", null)
-          .orderBy(sql`lower(children.name)`)
-          .execute() as ApiScheduleEntry["children"];
-        return ({
-        id: row.id,
-        children,
-        startDateTime: row.startDateTime,
-        endDateTime: row.endDateTime,
-        status: row.status,
-        ...(row.responsiblePartyId && row.responsiblePartyName
-          ? { responsibleParty: { id: row.responsiblePartyId, name: row.responsiblePartyName } }
-          : {}),
-        ...(location ? { location } : {}),
-        hasConflict: conflicts.has(row.id)
+          .orderBy("links.care_entry_id").orderBy(sql`lower(children.name)`).orderBy("children.id")
+          .limit(MAX_WORKSPACE_QUERY_RELATIONS + 1)
+          .execute(), MAX_WORKSPACE_QUERY_RELATIONS) : [];
+        const childrenByEntry = new Map<string, ApiScheduleEntry["children"]>();
+        for (const { entryId, ...child } of childRows) {
+          const existing = childrenByEntry.get(entryId);
+          if (existing) existing.push(child);
+          else childrenByEntry.set(entryId, [child]);
+        }
+        const conflicts = await scheduleConflictEntryIds(
+          app.persistence.query,
+          scopedPartyIds,
+          {
+            ...(parsedQuery.data.startDate ? { startDate: parsedQuery.data.startDate } : {}),
+            ...(parsedQuery.data.endDate ? { endDate: parsedQuery.data.endDate } : {})
+          }
+        );
+        return rows.map((row) => {
+          const location = scheduleLocation(row.location);
+          return ({
+            id: row.id,
+            children: childrenByEntry.get(row.id) ?? [],
+            startDateTime: row.startDateTime,
+            endDateTime: row.endDateTime,
+            status: row.status,
+            ...(row.responsiblePartyId && row.responsiblePartyName
+              ? { responsibleParty: { id: row.responsiblePartyId, name: row.responsiblePartyName } }
+              : {}),
+            ...(location ? { location } : {}),
+            hasConflict: conflicts.has(row.id)
+          });
         });
-      }));
+      } catch (error) {
+        if (error instanceof WorkspaceQueryLimitError) return workspaceQueryFailure(reply);
+        throw error;
+      }
     }
   );
 
@@ -990,18 +1142,35 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
   app.get<{ Querystring: { startDate?: string; endDate?: string } }>(
     "/api/care-entries",
     readLimit,
-    async (request) => {
-      let query = app.persistence.query.selectFrom("care_entries")
+    async (request, reply) => {
+      const parsedQuery = workspaceQuerySchema.safeParse(request.query);
+      if (!parsedQuery.success) {
+        if (parsedQuery.error.issues.some((issue) => issue.message === "workspace_query_limit")) {
+          return workspaceQueryFailure(reply);
+        }
+        reply.header("Cache-Control", "no-store");
+        return reply.code(400).send({ error: "invalid_request" });
+      }
+      try {
+        let query = app.persistence.query.selectFrom("care_entries")
         .selectAll()
         .where("deleted_at", "is", null);
-      if (request.query.startDate) {
-        query = query.where("end_datetime", ">=", `${request.query.startDate}T00:00:00.000Z`);
+        if (parsedQuery.data.startDate) {
+          query = query.where("end_datetime", ">=", `${parsedQuery.data.startDate}T00:00:00.000Z`);
+        }
+        if (parsedQuery.data.endDate) {
+          query = query.where("start_datetime", "<=", `${parsedQuery.data.endDate}T23:59:59.999Z`);
+        }
+        const rows = withinResultLimit(
+          await query.orderBy("start_datetime").orderBy("id")
+            .limit(MAX_WORKSPACE_QUERY_RECORDS + 1).execute() as EntryRow[],
+          MAX_WORKSPACE_QUERY_RECORDS
+        );
+        return await mapEntries(app.persistence.query, rows);
+      } catch (error) {
+        if (error instanceof WorkspaceQueryLimitError) return workspaceQueryFailure(reply);
+        throw error;
       }
-      if (request.query.endDate) {
-        query = query.where("start_datetime", "<=", `${request.query.endDate}T23:59:59.999Z`);
-      }
-      const rows = await query.orderBy("start_datetime").orderBy("id").execute() as EntryRow[];
-      return Promise.all(rows.map((row) => mapEntry(app.persistence.query, row)));
     }
   );
 

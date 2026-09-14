@@ -235,7 +235,7 @@ export async function listCareConflictEntries(
 
 export async function listCareConflicts(
   database: DatabaseExecutor,
-  options: Pick<CareConflictEntryQuery, "responsiblePartyIds"> = {}
+  options: Pick<CareConflictEntryQuery, "endAfter" | "responsiblePartyIds" | "startBefore"> = {}
 ): Promise<ApiCareConflict[]> {
   return detectCareConflicts(await listCareConflictEntries(database, options), {
     maxConflicts: MAX_CARE_CONFLICT_RESULTS
