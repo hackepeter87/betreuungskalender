@@ -359,7 +359,11 @@ evidence files.
 ## Logging
 
 Set `LOG_LEVEL=info` or `warn` in production. Request bodies are not logged by
-default. Authentication and cookie headers are redacted. Native OIDC tokens,
+default. Every HTTP response includes a bounded `X-Request-ID`; a syntactically
+valid inbound identifier may be preserved for proxy correlation, while invalid
+or oversized values are replaced. Completion and error events use normalized
+route templates rather than raw paths or query strings. Authentication and
+cookie headers are redacted. Native OIDC tokens,
 authorization codes, state, nonce, PKCE verifiers, raw claims, and client
 secrets must not be logged. Native session cookie values and raw session
 tokens must not be logged; store only their hashes server-side. Recovery admin
@@ -368,11 +372,16 @@ and raw recovery tokens must not be logged. Do not add
 names, notes, evidence references, exported data, or full request bodies to
 routine logs.
 
-Calendar feed request paths redact the token segment before application
-request metadata is logged. Setup and invitation browser links redact their
-entire query string so bearer tokens and adjacent parameters do not enter
-application request logs. Reverse proxies may still log the full URL unless
-configured otherwise.
+Routine JSON logs contain only the timestamp, severity, stable event code,
+request identifier, normalized route, method, status, duration, and narrowly
+required runtime state. Operators are responsible for restricting log access,
+rotating collected output, and selecting a retention period appropriate to
+their installation. Application logs are operational diagnostics and do not
+replace the domain audit history.
+
+Application request logs use registered route templates and never raw path or
+query values. Reverse proxies may still log full URLs unless configured
+otherwise.
 
 Initial owner setup uses a one-time bearer value from a mounted secret file.
 Only its SHA-256 hash, validity window, and consumption metadata are stored in

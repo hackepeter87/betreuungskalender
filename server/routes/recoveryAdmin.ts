@@ -191,7 +191,12 @@ export async function recoveryAdminRoutes(
     } catch (error) {
       const normalized = normalizedError(error);
       request.log.warn(
-        { code: normalized.code, statusCode: normalized.statusCode, requestId: request.id },
+        {
+          event: "auth.recovery.login.rejected",
+          code: normalized.code,
+          statusCode: normalized.statusCode,
+          requestId: request.id
+        },
         "recovery admin login rejected"
       );
       if (wantsHtml(request)) {
@@ -237,7 +242,12 @@ export async function recoveryAdminRoutes(
     } catch (error) {
       const normalized = normalizedError(error);
       request.log.warn(
-        { code: normalized.code, statusCode: normalized.statusCode, requestId: request.id },
+        {
+          event: "auth.recovery.password-change.rejected",
+          code: normalized.code,
+          statusCode: normalized.statusCode,
+          requestId: request.id
+        },
         "recovery admin password change rejected"
       );
       if (wantsHtml(request)) {

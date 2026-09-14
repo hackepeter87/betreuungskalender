@@ -350,7 +350,11 @@ export async function nativeOidcRoutes(
     } catch (error) {
       const normalized = sanitizedError(error);
       log.warn(
-        { code: normalized.code, statusCode: normalized.statusCode },
+        {
+          event: "integration.native-oidc.logout.failed",
+          code: normalized.code,
+          statusCode: normalized.statusCode
+        },
         "native oidc provider logout unavailable"
       );
       return undefined;
@@ -565,7 +569,12 @@ export async function nativeOidcRoutes(
     } catch (error) {
       const normalized = sanitizedError(error);
       request.log.warn(
-        { code: normalized.code, statusCode: normalized.statusCode, requestId: request.id },
+        {
+          event: "auth.native-oidc.callback.rejected",
+          code: normalized.code,
+          statusCode: normalized.statusCode,
+          requestId: request.id
+        },
         "native oidc callback rejected"
       );
       if (normalized.statusCode === 403) {
