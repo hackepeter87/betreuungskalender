@@ -161,21 +161,30 @@ function sha256(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
 }
 
-function dryRunReceipt(fingerprint: string, result: "ready" | "warnings"): string {
+function dryRunReceipt(
+  fingerprint: string,
+  targetFingerprint: string,
+  result: "ready" | "warnings"
+): string {
   const expiresAt = Date.now() + DRY_RUN_RECEIPT_TTL_MS;
-  const payload = `${fingerprint}:${result}:${expiresAt}`;
+  const payload = `${fingerprint}:${targetFingerprint}:${result}:${expiresAt}`;
   const signature = createHmac("sha256", dryRunReceiptSecret).update(payload).digest("hex");
   return `${expiresAt}.${signature}`;
 }
 
-function verifyDryRunReceipt(receipt: string, fingerprint: string, result: "ready" | "warnings"): boolean {
+function verifyDryRunReceipt(
+  receipt: string,
+  fingerprint: string,
+  targetFingerprint: string,
+  result: "ready" | "warnings"
+): boolean {
   const [expiresText, signature, ...rest] = receipt.split(".");
   const expiresAt = Number(expiresText);
   if (rest.length || !Number.isSafeInteger(expiresAt) || expiresAt < Date.now() || !signature || !/^[a-f0-9]{64}$/.test(signature)) {
     return false;
   }
   const expected = createHmac("sha256", dryRunReceiptSecret)
-    .update(`${fingerprint}:${result}:${expiresAt}`)
+    .update(`${fingerprint}:${targetFingerprint}:${result}:${expiresAt}`)
     .digest();
   return timingSafeEqual(expected, Buffer.from(signature, "hex"));
 }
@@ -599,6 +608,17 @@ function referencedActorIds(data: ImportData): Set<string> {
   return ids;
 }
 
+function assertPortableActorCoverage(data: ImportData, actors: PortableActor[]): void {
+  const actorRefs = new Set<string>();
+  for (const actor of actors) {
+    if (actorRefs.has(actor.sourceRef)) throw new Error("Transfer package contains duplicate actor records.");
+    actorRefs.add(actor.sourceRef);
+  }
+  for (const referencedId of referencedActorIds(data)) {
+    if (!actorRefs.has(referencedId)) throw new Error("Transfer package has an incomplete actor index.");
+  }
+}
+
 async function exportActors(
   data: ImportData,
   database: DatabaseExecutor
@@ -796,6 +816,7 @@ function normalizeTransfer(input: unknown): NormalizedTransfer {
           } satisfies PortableActor;
         })
       : [];
+    assertPortableActorCoverage(data, actors);
     return {
       fingerprint: checksum,
       formatVersion: FORMAT_VERSION,
@@ -885,12 +906,12 @@ function missingReferences(data: ImportData): string[] {
   return [...missing].sort();
 }
 
-function mappedActorId(fingerprint: string, sourceRef: string): string {
-  return `transfer_actor_${sha256(`${fingerprint}:${sourceRef}`).slice(0, 24)}`;
+function mappedActorId(namespace: string, sourceRef: string): string {
+  return `transfer_actor_${sha256(`${namespace}:${sourceRef}`).slice(0, 24)}`;
 }
 
-function remapActorReferences(data: ImportData, actors: PortableActor[], fingerprint: string): ImportData {
-  const mapping = new Map(actors.map((actor) => [actor.sourceRef, mappedActorId(fingerprint, actor.sourceRef)]));
+function remapActorReferences(data: ImportData, actors: PortableActor[], namespace: string): ImportData {
+  const mapping = new Map(actors.map((actor) => [actor.sourceRef, mappedActorId(namespace, actor.sourceRef)]));
   const actorKeys = new Set(["createdBy", "updatedBy", "confirmedBy", "userId", "closedBy"]);
   const visit = (value: unknown): unknown => {
     if (Array.isArray(value)) return value.map(visit);
@@ -903,6 +924,43 @@ function remapActorReferences(data: ImportData, actors: PortableActor[], fingerp
   return appDataImportSchema.parse(visit(data));
 }
 
+async function targetStateFingerprint(
+  database: DatabaseExecutor,
+  domain?: ImportData
+): Promise<string> {
+  const currentDomain = domain ?? await exportDomainData(database);
+  const { updatedAt: _derivedTimestamp, ...stableDomain } = currentDomain;
+  const [runs, actors, assignments] = await Promise.all([
+    database.selectFrom("data_transfer_runs")
+      .select(["id", "package_fingerprint", "result", "imported_at"])
+      .orderBy("id")
+      .execute(),
+    database.selectFrom("data_transfer_actors")
+      .select(["id", "transfer_run_id", "source_ref", "mapped_user_id", "invitation_id", "updated_at"])
+      .orderBy("id")
+      .execute(),
+    database.selectFrom("data_transfer_actor_care_parties")
+      .select(["actor_id", "source_care_party_id", "target_care_party_id", "updated_at"])
+      .orderBy("actor_id")
+      .orderBy("source_care_party_id")
+      .execute()
+  ]);
+  return sha256(canonicalJson({ domain: stableDomain, runs, actors, assignments }));
+}
+
+async function lockPostgresTransferTarget(database: DatabaseExecutor): Promise<void> {
+  await sql.raw(`LOCK TABLE
+    children, care_parties, care_entries, care_entry_children, care_entry_actual_children,
+    trips, costs, holiday_periods, holiday_period_children, unavailable_periods,
+    unavailable_period_children, contact_patterns, contact_pattern_children, contact_rules,
+    contact_rule_children, external_calendar_sources, external_calendar_events,
+    monthly_closings, audit_log, settings, app_user_care_party_assignments,
+    care_confirmation_requests, notification_preferences, push_subscriptions,
+    calendar_feed_tokens, data_transfer_runs, data_transfer_actors,
+    data_transfer_actor_care_parties, app_invitations
+    IN SHARE ROW EXCLUSIVE MODE`).execute(database);
+}
+
 export async function dryRunPortableTransfer(
   input: unknown,
   targetRuntime: PersistenceRuntime
@@ -910,7 +968,13 @@ export async function dryRunPortableTransfer(
   const normalized = normalizeTransfer(input);
   assertTransferRecordBudgets(normalized.data, normalized.actors);
   const counts = countRecords(normalized.data);
-  const currentData = await targetRuntime.transaction((database) => exportDomainData(database));
+  const { currentData, targetFingerprint } = await targetRuntime.transaction(async (database) => {
+    const currentData = await exportDomainData(database);
+    return {
+      currentData,
+      targetFingerprint: await targetStateFingerprint(database, currentData)
+    };
+  });
   const currentCounts = countRecords(currentData);
   const comparison = transferComparison(counts, currentCounts);
   const checks = baseChecks(normalized);
@@ -966,7 +1030,7 @@ export async function dryRunPortableTransfer(
     missingReferences: [],
     warnings: normalized.warnings,
     actors: normalized.actors.map((actor) => ({ ...actor, mappingRequired: true as const })),
-    dryRunReceipt: dryRunReceipt(normalized.fingerprint, result)
+    dryRunReceipt: dryRunReceipt(normalized.fingerprint, targetFingerprint, result)
   };
 }
 
@@ -987,13 +1051,12 @@ function skippedRuntimeData(): string[] {
 async function insertImportedActors(
   database: DatabaseExecutor,
   runId: string,
-  fingerprint: string,
   actors: PortableActor[],
   actorId: string,
   timestamp: string
 ): Promise<void> {
   for (const actor of actors) {
-    const id = mappedActorId(fingerprint, actor.sourceRef);
+    const id = mappedActorId(runId, actor.sourceRef);
     await database.insertInto("data_transfer_actors").values({
       id,
       transfer_run_id: runId,
@@ -1034,18 +1097,26 @@ export async function importPortableTransfer(input: {
 }, runtime: PersistenceRuntime): Promise<TransferDryRunResult> {
   const result = await dryRunPortableTransfer(input.package, runtime);
   if (result.result === "blocked") throw new Error("Transfer package is blocked.");
+  const successfulResult = result.result;
   if (result.fingerprint !== input.fingerprint) throw new Error("Transfer package differs from the tested package.");
-  if (!verifyDryRunReceipt(input.dryRunReceipt, result.fingerprint, result.result)) {
-    throw new Error("Transfer package requires a current successful dry run.");
-  }
   if (result.result === "warnings" && !input.confirmWarnings) {
     throw new Error("Transfer warnings must be confirmed before import.");
   }
   const normalized = normalizeTransfer(input.package);
   const timestamp = new Date().toISOString();
   const runId = randomUUID();
-  const data = remapActorReferences(normalized.data, normalized.actors, normalized.fingerprint);
   await runtime.transaction(async (database) => {
+    if (runtime.driver === "postgres") await lockPostgresTransferTarget(database);
+    const currentTargetFingerprint = await targetStateFingerprint(database);
+    if (!verifyDryRunReceipt(
+      input.dryRunReceipt,
+      result.fingerprint,
+      currentTargetFingerprint,
+      successfulResult
+    )) {
+      throw new Error("Transfer package requires a current successful dry run.");
+    }
+    const data = remapActorReferences(normalized.data, normalized.actors, runId);
     await database.updateTable("app_invitations")
       .set({ data_transfer_actor_id: null })
       .where("data_transfer_actor_id", "is not", null)
@@ -1066,7 +1137,7 @@ export async function importPortableTransfer(input: {
       created_at: timestamp,
       imported_at: timestamp
     }).execute();
-    await insertImportedActors(database, runId, result.fingerprint, normalized.actors, input.actorId, timestamp);
+    await insertImportedActors(database, runId, normalized.actors, input.actorId, timestamp);
   });
   return result;
 }
