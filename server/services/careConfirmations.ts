@@ -40,6 +40,48 @@ const notificationEvents: ApiNotificationEventType[] = [
   "care_confirmation_reminder"
 ];
 
+export interface NotificationProcessingLimits {
+  maximumEntries: number;
+  maximumRecipientsPerEntry: number;
+  maximumRequests: number;
+  maximumOpenRequestsPerUser: number;
+  maximumPushSubscriptionsPerUser: number;
+}
+
+const DEFAULT_NOTIFICATION_PROCESSING_LIMITS: NotificationProcessingLimits = {
+  maximumEntries: 5_000,
+  maximumRecipientsPerEntry: 100,
+  maximumRequests: 10_000,
+  maximumOpenRequestsPerUser: 1_000,
+  maximumPushSubscriptionsPerUser: 20
+};
+
+export class NotificationProcessingLimitError extends Error {
+  readonly code = "notification_processing_limit";
+  readonly statusCode = 503;
+
+  constructor() {
+    super("Die Benachrichtigungsverarbeitung überschreitet das zulässige Arbeitsvolumen.");
+    this.name = "NotificationProcessingLimitError";
+  }
+}
+
+export function isNotificationProcessingLimitError(
+  error: unknown
+): error is NotificationProcessingLimitError {
+  return error instanceof NotificationProcessingLimitError;
+}
+
+function notificationLimits(
+  overrides?: Partial<NotificationProcessingLimits>
+): NotificationProcessingLimits {
+  return { ...DEFAULT_NOTIFICATION_PROCESSING_LIMITS, ...overrides };
+}
+
+function assertWithinLimit(length: number, maximum: number): void {
+  if (length > maximum) throw new NotificationProcessingLimitError();
+}
+
 const pushConfigured = Boolean(config.webPushPublicKey && config.webPushPrivateKey);
 if (pushConfigured) {
   webPush.setVapidDetails(
@@ -250,14 +292,20 @@ async function activeCarePartyAssignmentsExist(database: DatabaseExecutor): Prom
     .executeTakeFirst());
 }
 
-async function usersForEntry(database: DatabaseExecutor, entry: EntryRow): Promise<string[]> {
+async function usersForEntry(
+  database: DatabaseExecutor,
+  entry: EntryRow,
+  maximumRecipients: number
+): Promise<string[]> {
   if (entry.responsible_party_id && await activeCarePartyAssignmentsExist(database)) {
     const rows = await database.selectFrom("app_user_care_party_assignments")
       .select("user_id")
       .where("care_party_id", "=", entry.responsible_party_id)
       .where("deleted_at", "is", null)
       .orderBy("user_id")
+      .limit(maximumRecipients + 1)
       .execute();
+    assertWithinLimit(rows.length, maximumRecipients);
     if (rows.length) {
       const allowed = await Promise.all(rows.map(async (row) => ({
         userId: row.user_id,
@@ -271,7 +319,9 @@ async function usersForEntry(database: DatabaseExecutor, entry: EntryRow): Promi
     .where("deleted_at", "is", null)
     .where("role", "in", ["admin", "parent"])
     .orderBy("id")
+    .limit(maximumRecipients + 1)
     .execute();
+  assertWithinLimit(users.length, maximumRecipients);
   const allowed = await Promise.all(users.map(async ({ id }) => ({
     userId: id,
     allowed: await userHasWorkspacePermission(id, "appointments:confirm", database)
@@ -320,15 +370,19 @@ async function getRequest(database: DatabaseExecutor, id: string): Promise<Reque
 export async function invalidateInaccessibleCareConfirmations(
   runtime: PersistenceRuntime,
   userId: string,
-  timestamp = nowIso()
+  timestamp = nowIso(),
+  limitOverrides?: Partial<NotificationProcessingLimits>
 ): Promise<number> {
+  const limits = notificationLimits(limitOverrides);
   const user = await currentUserForId(runtime.query, userId);
   const rows = await runtime.query.selectFrom("care_confirmation_requests")
     .select(["id", "care_entry_id"])
     .where("user_id", "=", userId)
     .where("deleted_at", "is", null)
     .where("answered_at", "is", null)
+    .limit(limits.maximumOpenRequestsPerUser + 1)
     .execute();
+  assertWithinLimit(rows.length, limits.maximumOpenRequestsPerUser);
   let revoked = 0n;
   await runtime.transaction(async (database) => {
     for (const row of rows) {
@@ -348,8 +402,10 @@ export async function invalidateInaccessibleCareConfirmations(
 
 export async function createDueCareConfirmationRequests(
   runtime: PersistenceRuntime,
-  referenceTime = new Date()
+  referenceTime = new Date(),
+  limitOverrides?: Partial<NotificationProcessingLimits>
 ): Promise<number> {
+  const limits = notificationLimits(limitOverrides);
   const timestamp = nowIso();
   const conflictIds = await careConflictEntryIds(runtime.query);
   if (!conflictIds) return 0;
@@ -362,11 +418,22 @@ export async function createDueCareConfirmationRequests(
     .where("end_datetime", "<", referenceTime.toISOString())
     .orderBy("end_datetime")
     .orderBy("id")
+    .limit(limits.maximumEntries + 1)
     .execute() as EntryRow[];
-  const entryUsers = new Map<string, string[]>(await Promise.all(
-    entries.filter((entry) => !conflictIds.has(entry.id))
-      .map(async (entry) => [entry.id, await usersForEntry(runtime.query, entry)] as const)
-  ));
+  assertWithinLimit(entries.length, limits.maximumEntries);
+  const entryUsers = new Map<string, string[]>();
+  let requestCount = 0;
+  for (const entry of entries) {
+    if (conflictIds.has(entry.id)) continue;
+    const userIds = await usersForEntry(
+      runtime.query,
+      entry,
+      limits.maximumRecipientsPerEntry
+    );
+    requestCount += userIds.length;
+    assertWithinLimit(requestCount, limits.maximumRequests);
+    entryUsers.set(entry.id, userIds);
+  }
   return runtime.transaction(async (database) => {
     if (conflictIds.size) {
       await database.updateTable("care_confirmation_requests")
@@ -487,12 +554,27 @@ export async function savePushSubscription(
   database: DatabaseExecutor,
   userId: string,
   input: ApiPushSubscriptionInput,
-  userAgent?: string
+  userAgent?: string,
+  maximumSubscriptions = DEFAULT_NOTIFICATION_PROCESSING_LIMITS.maximumPushSubscriptionsPerUser
 ): Promise<void> {
   if (!isAllowedPushEndpoint(input.endpoint)) {
     throw httpError("invalid_push_endpoint", 400, "Der Push-Endpunkt ist nicht zugelassen.");
   }
   const timestamp = nowIso();
+  const existing = await database.selectFrom("push_subscriptions")
+    .select(["id", "user_id"])
+    .where("endpoint", "=", input.endpoint)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst();
+  if (existing?.user_id !== userId) {
+    const active = await database.selectFrom("push_subscriptions")
+      .select("id")
+      .where("user_id", "=", userId)
+      .where("deleted_at", "is", null)
+      .limit(maximumSubscriptions)
+      .execute();
+    if (active.length >= maximumSubscriptions) throw new NotificationProcessingLimitError();
+  }
   await database.insertInto("push_subscriptions").values({
     id: makeId("push"),
     user_id: userId,
@@ -529,18 +611,26 @@ export async function deletePushSubscription(
   return result.numUpdatedRows > 0n;
 }
 
-async function pushSubscriptionsForUser(database: DatabaseExecutor, userId: string) {
-  return database.selectFrom("push_subscriptions")
+async function pushSubscriptionsForUser(
+  database: DatabaseExecutor,
+  userId: string,
+  maximumSubscriptions: number
+) {
+  const rows = await database.selectFrom("push_subscriptions")
     .select(["id", "endpoint", "p256dh", "auth"])
     .where("user_id", "=", userId)
     .where("deleted_at", "is", null)
+    .limit(maximumSubscriptions + 1)
     .execute();
+  assertWithinLimit(rows.length, maximumSubscriptions);
+  return rows;
 }
 
 async function sendPushForRequest(
   database: DatabaseExecutor,
   row: RequestRow,
-  eventType: ApiNotificationEventType
+  eventType: ApiNotificationEventType,
+  maximumSubscriptions = DEFAULT_NOTIFICATION_PROCESSING_LIMITS.maximumPushSubscriptionsPerUser
 ): Promise<boolean> {
   if (!pushConfigured || !(await preferenceAllowsPush(database, row.user_id, eventType))) return false;
   const payload = JSON.stringify({
@@ -549,7 +639,7 @@ async function sendPushForRequest(
     url: `/?confirmation=${encodeURIComponent(row.id)}`
   });
   let delivered = false;
-  for (const subscription of await pushSubscriptionsForUser(database, row.user_id)) {
+  for (const subscription of await pushSubscriptionsForUser(database, row.user_id, maximumSubscriptions)) {
     if (!isAllowedPushEndpoint(subscription.endpoint)) {
       await deletePushSubscription(database, row.user_id, subscription.id);
       continue;
@@ -574,12 +664,14 @@ async function sendPushForRequest(
 export async function sendDueCareConfirmationPushes(
   runtime: PersistenceRuntime,
   referenceTime = new Date(),
-  deliverPush: (
+  deliverPush?: (
     database: DatabaseExecutor,
     row: RequestRow,
     eventType: ApiNotificationEventType
-  ) => Promise<boolean> = sendPushForRequest
+  ) => Promise<boolean>,
+  limitOverrides?: Partial<NotificationProcessingLimits>
 ): Promise<number> {
+  const limits = notificationLimits(limitOverrides);
   const now = referenceTime.toISOString();
   const conflictIds = await careConflictEntryIds(runtime.query);
   if (!conflictIds) return 0;
@@ -601,7 +693,9 @@ export async function sendDueCareConfirmationPushes(
     ]))
     .orderBy("due_at")
     .orderBy("id")
+    .limit(limits.maximumRequests + 1)
     .execute() as RequestRow[];
+  assertWithinLimit(rows.length, limits.maximumRequests);
   const rowsByUser = new Map<string, RequestRow[]>();
   for (const row of rows) {
     if (conflictIds.has(row.care_entry_id)) continue;
@@ -618,7 +712,14 @@ export async function sendDueCareConfirmationPushes(
     const eventType = representative.status === "snoozed"
       ? "care_confirmation_reminder"
       : "care_confirmation_due";
-    const delivered = await deliverPush(runtime.query, representative, eventType);
+    const delivered = await (deliverPush
+      ? deliverPush(runtime.query, representative, eventType)
+      : sendPushForRequest(
+          runtime.query,
+          representative,
+          eventType,
+          limits.maximumPushSubscriptionsPerUser
+        ));
     const timestamp = nowIso();
     await runtime.transaction(async (database) => {
       for (const row of userRows) {
@@ -638,17 +739,19 @@ export async function sendDueCareConfirmationPushes(
 
 export async function runCareConfirmationSweep(
   runtime: PersistenceRuntime,
-  referenceTime = new Date()
+  referenceTime = new Date(),
+  limitOverrides?: Partial<NotificationProcessingLimits>
 ): Promise<void> {
-  await createDueCareConfirmationRequests(runtime, referenceTime);
-  await sendDueCareConfirmationPushes(runtime, referenceTime);
+  await createDueCareConfirmationRequests(runtime, referenceTime, limitOverrides);
+  await sendDueCareConfirmationPushes(runtime, referenceTime, undefined, limitOverrides);
 }
 
 export async function listOpenCareConfirmations(
   runtime: PersistenceRuntime,
-  userOrId: RequestUser | string
+  userOrId: RequestUser | string,
+  limitOverrides?: Partial<NotificationProcessingLimits>
 ): Promise<ApiCareConfirmationRequest[]> {
-  await runCareConfirmationSweep(runtime);
+  const limits = notificationLimits(limitOverrides);
   const conflictIds = await careConflictEntryIds(runtime.query);
   if (!conflictIds) return [];
   const user = typeof userOrId === "string" ? await currentUserForId(runtime.query, userOrId) : userOrId;
@@ -661,7 +764,21 @@ export async function listOpenCareConfirmations(
     .where("status", "in", ["open", "snoozed"])
     .orderBy("due_at")
     .orderBy("id")
+    .limit(limits.maximumOpenRequestsPerUser + 1)
     .execute() as RequestRow[];
+  assertWithinLimit(rows.length, limits.maximumOpenRequestsPerUser);
+  const conflictingRequestIds = rows
+    .filter((row) => conflictIds.has(row.care_entry_id))
+    .map((row) => row.id);
+  if (conflictingRequestIds.length) {
+    const timestamp = nowIso();
+    await runtime.query.updateTable("care_confirmation_requests")
+      .set({ deleted_at: timestamp, updated_at: timestamp })
+      .where("user_id", "=", user.id)
+      .where("id", "in", conflictingRequestIds)
+      .where("deleted_at", "is", null)
+      .execute();
+  }
   const visible: ApiCareConfirmationRequest[] = [];
   for (const row of rows) {
     if (conflictIds.has(row.care_entry_id)) continue;

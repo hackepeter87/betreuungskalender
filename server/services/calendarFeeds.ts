@@ -10,6 +10,38 @@ import { userHasWorkspacePermission } from "./memberships.js";
 const TOKEN_BYTES = 32;
 const PRODUCT_ID = "-//Betreuungskalender//Personal Calendar Feed//DE";
 
+export interface CalendarFeedProcessingLimits {
+  maximumEntries: number;
+  maximumChildLinks: number;
+  maximumBytes: number;
+}
+
+const DEFAULT_CALENDAR_FEED_LIMITS: CalendarFeedProcessingLimits = {
+  maximumEntries: 10_000,
+  maximumChildLinks: 50_000,
+  maximumBytes: 8 * 1024 * 1024
+};
+
+export class CalendarFeedProcessingLimitError extends Error {
+  readonly code = "calendar_feed_processing_limit";
+  readonly statusCode = 503;
+
+  constructor() {
+    super("Der persönliche Kalender überschreitet das zulässige Arbeitsvolumen.");
+    this.name = "CalendarFeedProcessingLimitError";
+  }
+}
+
+export function isCalendarFeedProcessingLimitError(
+  error: unknown
+): error is CalendarFeedProcessingLimitError {
+  return error instanceof CalendarFeedProcessingLimitError;
+}
+
+function feedLimits(overrides?: Partial<CalendarFeedProcessingLimits>): CalendarFeedProcessingLimits {
+  return { ...DEFAULT_CALENDAR_FEED_LIMITS, ...overrides };
+}
+
 export interface CalendarFeedStatus {
   active: boolean;
   scope: ApiCalendarFeedScope;
@@ -237,7 +269,8 @@ export async function resolveCalendarFeedToken(
 
 async function feedEntriesForToken(
   token: TokenRow,
-  database: DatabaseExecutor
+  database: DatabaseExecutor,
+  limits: CalendarFeedProcessingLimits
 ): Promise<FeedEntryRow[]> {
   const requestUser = await findAuthenticatedUserBySubject(
     token.external_subject,
@@ -273,7 +306,8 @@ async function feedEntriesForToken(
   } else if (!unrestricted) {
     return [];
   }
-  const entries = await query.execute();
+  const entries = await query.limit(limits.maximumEntries + 1).execute();
+  if (entries.length > limits.maximumEntries) throw new CalendarFeedProcessingLimitError();
   if (!entries.length) return [];
   const childRows = await database.selectFrom("care_entry_children as ec")
     .innerJoin("children as c", (join) => join
@@ -284,7 +318,9 @@ async function feedEntriesForToken(
     .where("ec.deleted_at", "is", null)
     .orderBy("c.name")
     .orderBy("c.id")
+    .limit(limits.maximumChildLinks + 1)
     .execute();
+  if (childRows.length > limits.maximumChildLinks) throw new CalendarFeedProcessingLimitError();
   const childrenByEntry = new Map<string, string[]>();
   for (const child of childRows) {
     childrenByEntry.set(child.care_entry_id, [
@@ -382,7 +418,9 @@ export async function buildPersonalCalendarFeed(input: {
   token: TokenRow;
   generatedAt?: string;
   database: DatabaseExecutor;
+  limits?: Partial<CalendarFeedProcessingLimits>;
 }): Promise<string> {
+  const limits = feedLimits(input.limits);
   const generatedAt = input.generatedAt ?? nowIso();
   const scope = scopeFromRow(input.token);
   const title = scope === "legacy"
@@ -390,7 +428,17 @@ export async function buildPersonalCalendarFeed(input: {
     : scope === "all"
       ? "Betreuungskalender Gesamt"
       : `Kinder bei ${input.token.scope_party_name ?? "betreuende Person"}`;
-  const lines = [
+  const lines: string[] = [];
+  let outputBytes = 0;
+  const append = (...rawLines: string[]) => {
+    for (const rawLine of rawLines) {
+      const line = `${foldLine(rawLine)}\r\n`;
+      outputBytes += Buffer.byteLength(line, "utf8");
+      if (outputBytes > limits.maximumBytes) throw new CalendarFeedProcessingLimitError();
+      lines.push(line);
+    }
+  };
+  append(
     "BEGIN:VCALENDAR",
     "VERSION:2.0",
     `PRODID:${PRODUCT_ID}`,
@@ -398,10 +446,10 @@ export async function buildPersonalCalendarFeed(input: {
     "METHOD:PUBLISH",
     `X-WR-CALNAME:${escapeText(title)}`,
     "X-WR-TIMEZONE:Europe/Berlin"
-  ];
-  for (const entry of await feedEntriesForToken(input.token, input.database)) {
+  );
+  for (const entry of await feedEntriesForToken(input.token, input.database, limits)) {
     const location = feedLocation(entry);
-    lines.push(
+    append(
       "BEGIN:VEVENT",
       `UID:${escapeText(`${entry.id}@betreuungskalender`)}`,
       `DTSTAMP:${utcDateTimeValue(generatedAt)}`,
@@ -414,6 +462,6 @@ export async function buildPersonalCalendarFeed(input: {
       "END:VEVENT"
     );
   }
-  lines.push("END:VCALENDAR");
-  return `${lines.map(foldLine).join("\r\n")}\r\n`;
+  append("END:VCALENDAR");
+  return lines.join("");
 }
