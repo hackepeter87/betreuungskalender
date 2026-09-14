@@ -33,8 +33,11 @@ for (const locale of ["de", "en"] as const) {
       }));
       const before = structuredClone(data);
       let document: (jsPDF & { lastAutoTable: Table }) | undefined;
-      const originalSave = jsPDF.API.save;
-      jsPDF.API.save = function (this: jsPDF & { lastAutoTable: Table }) {
+      const pdfApi = jsPDF.API as typeof jsPDF.API & {
+        save: (this: jsPDF & { lastAutoTable: Table }) => jsPDF;
+      };
+      const originalSave = pdfApi.save;
+      pdfApi.save = function (this: jsPDF & { lastAutoTable: Table }) {
         document = this;
         return this;
       };
@@ -46,7 +49,7 @@ for (const locale of ["de", "en"] as const) {
           locale
         });
       } finally {
-        jsPDF.API.save = originalSave;
+        pdfApi.save = originalSave;
       }
       assert.ok(document);
       const pdf = document.output();

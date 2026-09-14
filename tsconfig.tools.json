@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["node", "vite/client"],
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.tools.tsbuildinfo"
+  },
+  "include": [
+    "e2e/**/*.ts",
+    "scripts/**/*.ts",
+    "server/types/**/*.d.ts",
+    "src/vite-env.d.ts",
+    "playwright.config.ts"
+  ]
+}

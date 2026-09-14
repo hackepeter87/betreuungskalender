@@ -91,6 +91,9 @@ React + TypeScript + Vite
                 +-- SQLite (default) or PostgreSQL (explicit)
 ```
 
+Maintained TypeScript sources are covered by named strict compiler projects;
+see [TypeScript project coverage](docs/typescript-projects.md).
+
 The browser UI loads and stores children, care parties, care entries, holidays,
 flexible contact rules, legacy contact patterns, trips, costs, unavailable
 periods, settings, monthly closings, and audit records exclusively through the

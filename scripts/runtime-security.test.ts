@@ -14,6 +14,7 @@ import { migrateDatabase } from "../server/db/migrationRunner.js";
 import { createSqlitePersistenceRuntime } from "../server/db/runtime.js";
 import { createInvitation } from "../server/services/invitations.js";
 import { oidcSessionTokenForTesting } from "../server/services/oidcSessions.js";
+import type { ApiSession } from "../shared/api.js";
 
 const projectRoot = resolve(import.meta.dirname, "..");
 
