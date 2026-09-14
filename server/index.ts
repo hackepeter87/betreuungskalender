@@ -2,7 +2,7 @@ import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import fastifyStatic from "@fastify/static";
 import rateLimit from "@fastify/rate-limit";
-import Fastify, { type FastifyRequest } from "fastify";
+import Fastify, { LogController, type FastifyRequest } from "fastify";
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { resolveRequestUser, sessionInfo, workspacePermissionsForRole, type RequestUser } from "./auth.js";
@@ -16,7 +16,13 @@ import { cookieValue } from "./cookies.js";
 import { persistence } from "./db/connection.js";
 import { runMigrations } from "./db/migrate.js";
 import { classifyDatabaseError } from "./db/runtime.js";
-import { sanitizeRequestUrl } from "./logging.js";
+import {
+  createRequestId,
+  installRequestDiagnostics,
+  logRedactionPaths,
+  normalizedRequestRoute,
+  safeErrorCode
+} from "./logging.js";
 import { isTrustedProxyAddress } from "./trustedProxy.js";
 import { setupRoutes } from "./routes/setup.js";
 import { nativeOidcRoutes } from "./routes/nativeOidc.js";
@@ -31,7 +37,44 @@ import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "./servi
 import { runCareConfirmationSweep } from "./services/careConfirmations.js";
 import { disableLocalDevelopmentIdentityAccess } from "./services/localDevelopmentIdentity.js";
 
-await runMigrations();
+const app = Fastify({
+  logController: new LogController({
+    disableRequestLogging: true,
+    requestIdLogLabel: "requestId"
+  }),
+  genReqId(request) {
+    return createRequestId(request.headers["x-request-id"]);
+  },
+  logger: {
+    base: undefined,
+    level: config.logLevel,
+    redact: {
+      paths: [...logRedactionPaths],
+      censor: "[redacted]"
+    }
+  },
+  trustProxy: config.trustProxyAuth && config.trustedProxyRules.length > 0
+    ? (address) => isTrustedProxyAddress(address, config.trustedProxyRules)
+    : config.trustProxyAuth
+});
+
+installRequestDiagnostics(app);
+
+try {
+  await runMigrations();
+  app.log.info({
+    event: "database.migrations.completed",
+    driver: persistence.driver
+  }, "database migrations completed");
+} catch (error) {
+  app.log.fatal({
+    event: "database.migrations.failed",
+    code: safeErrorCode(error),
+    driver: persistence.driver
+  }, "database migrations failed");
+  process.exit(1);
+}
+
 if (config.authMode !== "local") {
   await disableLocalDevelopmentIdentityAccess(persistence);
 }
@@ -45,36 +88,6 @@ const recoveryAdmin = new RecoveryAdminStore({
   sessionTtlSeconds: config.recoveryAdminSessionTtlSeconds
 }, persistence);
 await recoveryAdmin.ensureConfigured();
-
-const app = Fastify({
-  logger: {
-    level: config.logLevel,
-    serializers: {
-      req(request) {
-        return {
-          method: request.method,
-          url: sanitizeRequestUrl(request.url),
-          hostname: request.hostname,
-          remoteAddress: request.ip
-        };
-      }
-    },
-    redact: {
-      paths: [
-        "req.headers.authorization",
-        "req.headers.cookie",
-        "req.headers.x-auth-request-email",
-        "req.headers.x-forwarded-email",
-        "req.headers.x-auth-request-user",
-        "req.headers.x-forwarded-user"
-      ],
-      censor: "[redacted]"
-    }
-  },
-  trustProxy: config.trustProxyAuth && config.trustedProxyRules.length > 0
-    ? (address) => isTrustedProxyAddress(address, config.trustedProxyRules)
-    : config.trustProxyAuth
-});
 
 app.addHook("onRoute", assertApplicationApiRouteAuthorization); // codeql[js/missing-rate-limiting]: This hook validates static route metadata during registration; requests are rate-limited in the preHandler below.
 
@@ -127,7 +140,8 @@ await app.register(cors, {
     "x-forwarded-preferred-username",
     "x-auth-request-groups",
     "x-forwarded-groups"
-  ]
+  ],
+  exposedHeaders: ["x-request-id"]
 });
 
 installRateLimitPolicy(app, {
@@ -164,23 +178,28 @@ app.setErrorHandler((error, request, reply) => {
   const normalized = error as Error & { code?: string; statusCode?: number };
   const originDenied = normalized.message === "origin_not_allowed";
   const statusCode = originDenied ? 403 : normalized.statusCode ?? 500;
-  if (config.nodeEnv === "development") {
-    request.log.error(normalized);
-  } else if (statusCode < 500) {
+  const logCode = originDenied ? "origin_not_allowed" : safeErrorCode(normalized);
+  if (statusCode < 500) {
     request.log.warn(
       {
-        code: normalized.code ?? (originDenied ? "origin_not_allowed" : "request_error"),
+        event: "http.request.rejected",
+        code: logCode === "unknown" ? "request_error" : logCode,
         statusCode,
-        requestId: request.id
+        requestId: request.id,
+        route: normalizedRequestRoute(request),
+        method: request.method
       },
       "request rejected"
     );
   } else {
     request.log.error(
       {
-        code: normalized.code ?? "unknown",
+        event: "http.request.failed",
+        code: safeErrorCode(normalized),
         statusCode,
-        requestId: request.id
+        requestId: request.id,
+        route: normalizedRequestRoute(request),
+        method: request.method
       },
       "request failed"
     );
@@ -434,12 +453,18 @@ await registerProtectedApplicationRoutes(app);
 
 const confirmationSweep = setInterval(() => {
   void runCareConfirmationSweep(persistence).catch((error) => {
-    app.log.warn({ error }, "care confirmation sweep failed");
+    app.log.warn({
+      event: "background.care-confirmation-sweep.failed",
+      code: safeErrorCode(error)
+    }, "care confirmation sweep failed");
   });
 }, 15 * 60 * 1000);
 confirmationSweep.unref();
 void runCareConfirmationSweep(persistence).catch((error) => {
-  app.log.warn({ error }, "initial care confirmation sweep failed");
+  app.log.warn({
+    event: "background.care-confirmation-sweep.failed",
+    code: safeErrorCode(error)
+  }, "initial care confirmation sweep failed");
 });
 
 const frontendRoot = resolve(process.cwd(), "dist");
@@ -478,8 +503,16 @@ process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
 try {
-  await app.listen({ host: config.host, port: config.port });
+  await app.listen({
+    host: config.host,
+    port: config.port,
+    listenTextResolver: () => "server listening"
+  });
+  app.log.info({ event: "server.started" }, "server started");
 } catch (error) {
-  app.log.error(error);
+  app.log.error({
+    event: "server.listen.failed",
+    code: safeErrorCode(error)
+  }, "server failed to listen");
   process.exitCode = 1;
 }
