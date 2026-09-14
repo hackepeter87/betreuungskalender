@@ -34,7 +34,7 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `AUTH_MODE` | Authentication implementation mode | `trusted-proxy` | Optional | Derived from `TRUST_PROXY_AUTH` | Selects the only authentication implementation the API will accept |
 | `REQUIRE_AUTH` | Require a trusted identity for API routes | `true` | Recommended in production | `false` | Must be `true` for protected reverse-proxy operation |
 | `TRUST_PROXY_AUTH` | Legacy trusted-proxy switch and header-trust flag | `true` | Required with `AUTH_MODE=trusted-proxy` | `false` | Only valid for trusted-proxy auth; never enable when clients can directly reach the app |
-| `TRUSTED_PROXY_CIDRS` | Comma-separated trusted source IPs or CIDRs for trusted-proxy identity headers | `127.0.0.1/32,10.88.0.0/16` | Required with `AUTH_MODE=trusted-proxy` | Empty | Trusted-proxy mode fails startup when no source boundary is configured |
+| `TRUSTED_PROXY_CIDRS` | Comma-separated trusted reverse-proxy source IPs or CIDRs | `127.0.0.1/32,10.88.0.0/16` | Required with `AUTH_MODE=trusted-proxy`; optional behind a reverse proxy in other modes | Empty | Controls forwarded client-address handling; trusted-proxy authentication still requires the matching auth mode |
 | `AUTH_LOGOUT_URL` | Optional browser logout path shown in the app shell | `/oauth2/sign_out` | Optional with external auth | None | Keep same-origin or reviewed by the operator |
 | `OIDC_ISSUER_URL` | Native OIDC issuer URL | `https://idp.example.net/realms/family` | Required for `AUTH_MODE=native-oidc` | None | Must match the provider issuer exactly |
 | `OIDC_CLIENT_ID` | Native OIDC client ID | `betreuungskalender` | Required for `AUTH_MODE=native-oidc` | None | Register the exact redirect URI with this client |

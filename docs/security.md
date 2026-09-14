@@ -94,11 +94,12 @@ unintentionally.
 - Set `REQUIRE_AUTH=true` in production.
 - Set `AUTH_MODE=trusted-proxy` and `TRUST_PROXY_AUTH=true` only behind a
   trusted authentication proxy.
-- Set `TRUSTED_PROXY_CIDRS` to the actual proxy source address or private proxy
-  network so identity headers are ignored from unexpected socket sources. Use
-  IP addresses or CIDR ranges only; container or DNS names are not trusted
-  identity boundaries. Trusted-proxy mode fails startup when this allowlist is
-  empty.
+- Set `TRUSTED_PROXY_CIDRS` to the actual reverse-proxy source address or
+  private proxy network. The allowlist controls forwarded client-address
+  handling for rate limits in every authentication mode and additionally
+  protects identity headers in trusted-proxy mode. Use IP addresses or CIDR
+  ranges only; container or DNS names are not trust boundaries. Trusted-proxy
+  mode fails startup when this allowlist is empty.
 - Configure `OIDC_USER_ID_HEADER` for a stable, non-empty subject. Mutable email,
   display-name, role, and group attributes never substitute for that identity.
 - Block all direct access that could bypass oauth2-proxy.
@@ -107,7 +108,9 @@ unintentionally.
 - Restrict `ALLOWED_ORIGIN` to the exact public origin.
 - Keep API rate limits enabled and tune their documented environment variables
   only after reviewing expected client traffic. Imports, migrations, exports,
-  and writes intentionally have stricter limits than normal API reads.
+  and writes intentionally have stricter limits than normal API reads. Client
+  identities used for limits are normalized and represented by bounded,
+  server-generated keys; raw forwarded values are not used as keys.
 - Keep the host, minimal Node.js 24 runtime, npm build toolchain, proxy, Keycloak,
   and container images updated.
 

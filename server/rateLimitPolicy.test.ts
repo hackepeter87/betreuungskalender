@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { FastifyInstance, RouteOptions } from "fastify";
-import { installRateLimitPolicy } from "./rateLimitPolicy.js";
+import type { FastifyInstance, FastifyRequest, RouteOptions } from "fastify";
+import { installRateLimitPolicy, rateLimitIdentity } from "./rateLimitPolicy.js";
+import { parseTrustedProxyRules } from "./trustedProxy.js";
 
 const policy = {
   defaultMax: 120,
@@ -65,4 +66,39 @@ test("central policy classifies routes without an explicit budget", () => {
   assert.deepEqual(rateLimitFor(exported), { max: 15, timeWindow: 60_000 });
   assert.deepEqual(rateLimitFor(feed), { max: 15, timeWindow: 60_000 });
   assert.equal(rateLimitFor(staticPage), false);
+});
+
+function requestIdentity(remoteAddress: string | undefined, ip: string): string {
+  return rateLimitIdentity({
+    ip,
+    raw: { socket: { remoteAddress } }
+  } as unknown as Pick<FastifyRequest, "ip" | "raw">, parseTrustedProxyRules([
+    "10.20.0.0/16",
+    "2001:db8:42::/48"
+  ]));
+}
+
+test("untrusted forwarding metadata cannot select the rate-limit identity", () => {
+  const direct = requestIdentity("198.51.100.7", "198.51.100.7");
+  const forged = requestIdentity("198.51.100.7", "203.0.113.99");
+
+  assert.equal(forged, direct);
+  assert.match(direct, /^client:[A-Za-z0-9_-]{43}$/);
+  assert.doesNotMatch(direct, /198\.51\.100\.7/);
+});
+
+test("trusted proxies use canonical bounded IPv4 and IPv6 client identities", () => {
+  const ipv4 = requestIdentity("10.20.0.5", "198.51.100.7");
+  const ipv6Compressed = requestIdentity("2001:db8:42::5", "2001:db8::1");
+  const ipv6Expanded = requestIdentity(
+    "2001:0db8:0042:0000:0000:0000:0000:0005",
+    "2001:0db8:0000:0000:0000:0000:0000:0001"
+  );
+
+  assert.notEqual(ipv4, requestIdentity("10.20.0.5", "198.51.100.8"));
+  assert.equal(ipv6Compressed, ipv6Expanded);
+});
+
+test("invalid or missing socket addresses share a bounded fallback identity", () => {
+  assert.equal(requestIdentity(undefined, "203.0.113.9"), requestIdentity("invalid", "198.51.100.4"));
 });
