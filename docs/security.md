@@ -250,6 +250,11 @@ optional local or staging review against fictional data only; it is not part of
 default CI and must not be pointed at production. See
 [security-review.md](security-review.md).
 
+Automated update pull requests, immutable workflow and container references,
+high-risk review areas, advisory exceptions, and rollback are defined in
+[dependency-maintenance.md](dependency-maintenance.md). Automation never
+merges, releases, or promotes a dependency change by itself.
+
 ## Access-control baseline
 
 Server-side authorization is enforced for `/api/*` routes before route

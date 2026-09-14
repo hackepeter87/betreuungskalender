@@ -12,11 +12,11 @@ jobs:
   artifact:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: 24.18.0
           cache: npm
@@ -25,7 +25,7 @@ jobs:
 
       - run: npm ci
 
-      - uses: azure/setup-helm@v5
+      - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310 # v5
         with:
           version: v3.17.3
 
@@ -48,7 +48,7 @@ jobs:
           tar -tzf betreuungskalender-${GITHUB_REF_NAME}.tar.gz \
             | grep -Fx "docs/release-notes/${GITHUB_REF_NAME}.md"
 
-      - uses: actions/upload-artifact@v7
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: betreuungskalender-${{ github.ref_name }}
           path: |
