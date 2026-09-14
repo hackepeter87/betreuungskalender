@@ -3,6 +3,7 @@ import { config } from "../config.js";
 import {
   buildPersonalCalendarFeed,
   calendarFeedStatus,
+  isCalendarFeedProcessingLimitError,
   parseCalendarFeedScope,
   resolveCalendarFeedToken,
   revokeCalendarFeedTokens,
@@ -80,10 +81,20 @@ export async function calendarFeedRoutes(app: FastifyInstance): Promise<void> {
         message: "Kalenderfeed nicht gefunden."
       });
     }
-    const calendar = await buildPersonalCalendarFeed({
-      token,
-      database: app.persistence.query
-    });
+    let calendar: string;
+    try {
+      calendar = await buildPersonalCalendarFeed({
+        token,
+        database: app.persistence.query
+      });
+    } catch (error) {
+      if (isCalendarFeedProcessingLimitError(error)) {
+        return reply.header("cache-control", "no-store").code(503).send({
+          error: "calendar_feed_processing_limit"
+        });
+      }
+      throw error;
+    }
     return reply
       .header("content-type", "text/calendar; charset=utf-8")
       .header("cache-control", "no-store")

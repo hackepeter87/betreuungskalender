@@ -14,7 +14,9 @@ import {
 import { clearDomainData, importData } from "./routes/appData.js";
 import { auditRoutes } from "./routes/audit.js";
 import {
+  buildPersonalCalendarFeed,
   calendarFeedStatus,
+  isCalendarFeedProcessingLimitError,
   resolveCalendarFeedToken,
   rotateCalendarFeedToken
 } from "./services/calendarFeeds.js";
@@ -340,6 +342,19 @@ async function runApplicationScenario(runtime: PersistenceRuntime) {
   const acceptedUser = await findAuthenticatedUserBySubject(invited.externalSubject, runtime.query);
   const feed = await rotateCalendarFeedToken(invited.id, "all", runtime);
   const resolvedFeed = await resolveCalendarFeedToken(feed.token, runtime.query);
+  let feedLimitCode = "none";
+  if (resolvedFeed) {
+    try {
+      await buildPersonalCalendarFeed({
+        token: resolvedFeed,
+        database: runtime.query,
+        limits: { maximumEntries: 0 }
+      });
+    } catch (error) {
+      if (!isCalendarFeedProcessingLimitError(error)) throw error;
+      feedLimitCode = error.code;
+    }
+  }
   const notificationPreferences = await updateNotificationPreferences(runtime, invited.id, [{
     eventType: "care_confirmation_due",
     inAppEnabled: true,
@@ -440,7 +455,8 @@ async function runApplicationScenario(runtime: PersistenceRuntime) {
     feed: {
       active: status.active,
       scope: status.scope,
-      resolved: resolvedFeed?.user_id === invited.id
+      resolved: resolvedFeed?.user_id === invited.id,
+      limitCode: feedLimitCode
     },
     notifications: {
       updated: notificationPreferences.preferences.find(

@@ -5,6 +5,7 @@ import {
   deletePushSubscription,
   getNotificationPreferences,
   isInvalidCareConfirmationRangeError,
+  isNotificationProcessingLimitError,
   listOpenCareConfirmations,
   remindCareConfirmationLater,
   savePushSubscription,
@@ -29,9 +30,18 @@ const confirmationLimit = {
 };
 
 export async function careConfirmationRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/care-confirmations/open", readLimit, async (request) =>
-    request.user ? listOpenCareConfirmations(app.persistence, request.user) : []
-  );
+  app.get("/api/care-confirmations/open", readLimit, async (request, reply) => {
+    try {
+      return request.user ? await listOpenCareConfirmations(app.persistence, request.user) : [];
+    } catch (error) {
+      if (isNotificationProcessingLimitError(error)) {
+        return reply.header("cache-control", "no-store").code(503).send({
+          error: "notification_processing_limit"
+        });
+      }
+      throw error;
+    }
+  });
 
   app.post<{ Params: { id: string } }>("/api/care-confirmations/:id/answer", confirmationLimit, async (request, reply) => {
     const parsed = careConfirmationAnswerSchema.safeParse(request.body);
@@ -81,7 +91,16 @@ export async function careConfirmationRoutes(app: FastifyInstance): Promise<void
   app.post("/api/push-subscriptions", writeLimit, async (request, reply) => {
     const parsed = pushSubscriptionSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
-    await savePushSubscription(app.persistence.query, request.userEmail, parsed.data, request.headers["user-agent"]);
+    try {
+      await savePushSubscription(app.persistence.query, request.userEmail, parsed.data, request.headers["user-agent"]);
+    } catch (error) {
+      if (isNotificationProcessingLimitError(error)) {
+        return reply.header("cache-control", "no-store").code(503).send({
+          error: "notification_processing_limit"
+        });
+      }
+      throw error;
+    }
     return reply.code(204).send();
   });
 

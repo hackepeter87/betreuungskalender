@@ -20,6 +20,7 @@ const {
   answerCareConfirmation,
   createDueCareConfirmationRequests,
   getNotificationPreferences,
+  isNotificationProcessingLimitError,
   listOpenCareConfirmations,
   remindCareConfirmationLater,
   savePushSubscription,
@@ -221,6 +222,46 @@ test("creates one due confirmation request for an unconfirmed past planned entry
   assert.equal(open.length, 1);
   assert.equal(open[0]?.entry.id, "entry-confirmation-a");
   assert.equal(open[0]?.entry.confirmationState, "unconfirmed");
+});
+
+test("listing open confirmations does not run workspace-wide maintenance", async () => {
+  insertPastPlannedEntry();
+
+  const open = await listOpenCareConfirmations(persistence, "local-dev");
+  const stored = db.prepare("SELECT COUNT(*) AS count FROM care_confirmation_requests")
+    .get() as { count: number };
+
+  assert.deepEqual(open, []);
+  assert.equal(stored.count, 0);
+});
+
+test("rejects an over-limit confirmation sweep without partial writes", async () => {
+  insertPastPlannedEntry();
+  db.prepare(`
+    INSERT INTO care_entries (
+      id, start_datetime, end_datetime, status, care_scope,
+      overnight, school_handover, holiday, weekend, additional_care,
+      responsible_party_id, duration_minutes, is_contact_time, created_by, updated_by,
+      created_at, updated_at
+    )
+    SELECT 'entry-confirmation-b', start_datetime, end_datetime, status, care_scope,
+      overnight, school_handover, holiday, weekend, additional_care,
+      responsible_party_id, duration_minutes, is_contact_time, created_by, updated_by,
+      created_at, updated_at
+    FROM care_entries WHERE id = 'entry-confirmation-a'
+  `).run();
+
+  await assert.rejects(
+    createDueCareConfirmationRequests(
+      persistence,
+      new Date("2026-07-03T08:05:00.000Z"),
+      { maximumEntries: 1, maximumRecipientsPerEntry: 10, maximumRequests: 10 }
+    ),
+    isNotificationProcessingLimitError
+  );
+  const stored = db.prepare("SELECT COUNT(*) AS count FROM care_confirmation_requests")
+    .get() as { count: number };
+  assert.equal(stored.count, 0);
 });
 
 test("batches multiple due confirmations into one push per user", async () => {
@@ -662,4 +703,96 @@ test("push subscriptions only allow configured public push service endpoints", a
   `).get("local-dev") as { count: number };
 
   assert.equal(stored.count, 1);
+});
+
+test("updates an existing push subscription at the limit and rejects a new endpoint", async () => {
+  const first = {
+    endpoint: "https://fcm.googleapis.com/fcm/send/fictional-subscription-a",
+    keys: { p256dh: "fictional-public-key-a", auth: "fictional-auth-secret-a" }
+  };
+  await savePushSubscription(persistence.query, "local-dev", first, undefined, 1);
+  await savePushSubscription(persistence.query, "local-dev", {
+    ...first,
+    keys: { p256dh: "fictional-public-key-updated", auth: "fictional-auth-secret-updated" }
+  }, undefined, 1);
+
+  await assert.rejects(
+    savePushSubscription(persistence.query, "local-dev", {
+      endpoint: "https://fcm.googleapis.com/fcm/send/fictional-subscription-b",
+      keys: { p256dh: "fictional-public-key-b", auth: "fictional-auth-secret-b" }
+    }, undefined, 1),
+    isNotificationProcessingLimitError
+  );
+  const stored = db.prepare(`
+    SELECT endpoint, p256dh, auth FROM push_subscriptions
+    WHERE user_id = ? AND deleted_at IS NULL
+  `).all("local-dev") as Array<{ endpoint: string; p256dh: string; auth: string }>;
+
+  assert.deepEqual(stored, [{
+    endpoint: first.endpoint,
+    p256dh: "fictional-public-key-updated",
+    auth: "fictional-auth-secret-updated"
+  }]);
+});
+
+test("returns a generic no-store response when the push subscription limit is reached", async () => {
+  const timestamp = "2026-07-01T10:00:00.000Z";
+  const insert = db.prepare(`
+    INSERT INTO push_subscriptions (
+      id, user_id, endpoint, p256dh, auth, user_agent, created_at, updated_at, deleted_at
+    ) VALUES (?, 'local-dev', ?, 'fictional-public-key', 'fictional-auth-secret', NULL, ?, ?, NULL)
+  `);
+  for (let index = 0; index < 20; index += 1) {
+    insert.run(
+      `push-limit-${index}`,
+      `https://fcm.googleapis.com/fcm/send/fictional-existing-${index}`,
+      timestamp,
+      timestamp
+    );
+  }
+
+  const app = Fastify();
+  app.decorate("persistence", persistence);
+  app.decorateRequest("userEmail", "local-dev");
+  await careConfirmationRoutes(app);
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/push-subscriptions",
+      payload: {
+        endpoint: "https://fcm.googleapis.com/fcm/send/fictional-over-limit",
+        keys: { p256dh: "fictional-public-key", auth: "fictional-auth-secret" }
+      }
+    });
+
+    assert.equal(response.statusCode, 503);
+    assert.equal(response.headers["cache-control"], "no-store");
+    assert.deepEqual(response.json(), { error: "notification_processing_limit" });
+    assert.doesNotMatch(response.body, /fictional|fcm|local-dev/);
+  } finally {
+    await app.close();
+  }
+});
+
+test("does not count revoked push subscriptions toward the active limit", async () => {
+  await savePushSubscription(persistence.query, "local-dev", {
+    endpoint: "https://fcm.googleapis.com/fcm/send/fictional-revoked",
+    keys: { p256dh: "fictional-public-key", auth: "fictional-auth-secret" }
+  }, undefined, 1);
+  db.prepare(`
+    UPDATE push_subscriptions
+    SET deleted_at = '2026-07-03T08:00:00.000Z'
+    WHERE endpoint = 'https://fcm.googleapis.com/fcm/send/fictional-revoked'
+  `).run();
+
+  await savePushSubscription(persistence.query, "local-dev", {
+    endpoint: "https://fcm.googleapis.com/fcm/send/fictional-active",
+    keys: { p256dh: "fictional-public-key", auth: "fictional-auth-secret" }
+  }, undefined, 1);
+
+  const active = db.prepare(`
+    SELECT COUNT(*) AS count FROM push_subscriptions
+    WHERE user_id = 'local-dev' AND deleted_at IS NULL
+  `).get() as { count: number };
+  assert.equal(active.count, 1);
 });
