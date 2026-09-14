@@ -479,6 +479,8 @@ export function ContactPage({
     );
   };
 
+  const firstPreviewItem = previewCalendarItems.at(0);
+
   return (
     <div className="page" data-testid="page-contact">
       <div className="page-header">
@@ -533,10 +535,10 @@ export function ContactPage({
               <span>
                 <strong>{copy(locale, "contact", "previewTitle")}</strong>
                 <small>
-                  {previewCalendarItems.length
+                  {firstPreviewItem
                     ? copy(locale, "contactFlow", "mobilePreviewSummary", {
                         count: previewCalendarItems.length,
-                        date: formatShortDate(previewCalendarItems[0].startDate, intlLocale)
+                        date: formatShortDate(firstPreviewItem.startDate, intlLocale)
                       })
                     : copy(locale, "contact", "previewEmpty")}
                 </small>

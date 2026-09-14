@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent } from "react";
 import { FieldHelpLabel } from "../components/FieldHelp";
 import { Icon } from "../components/Icon";
-import { CHILD_COLORS } from "../data/defaults";
+import { CHILD_COLORS, childColor } from "../data/defaults";
 import { useI18n } from "../i18n/I18nProvider";
 import { catalogKey, copy } from "../i18n/catalog";
 import { api } from "../lib/api";
@@ -30,7 +30,7 @@ function childDraft(id: number): SetupChildDraft {
     name: "",
     birthMonth: 1,
     birthYear: defaultBirthYear(),
-    color: CHILD_COLORS[id % CHILD_COLORS.length]
+    color: childColor(id)
   };
 }
 

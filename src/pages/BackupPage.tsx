@@ -457,6 +457,7 @@ export function BackupPage() {
             {actors.map((actor) => {
               const defaultMember = actor.mappedUserId ?? "";
               const defaultRole = actor.suggestedRole ?? "editor";
+              const invitationUrl = actorLinks[actor.id];
               return <div className="transfer-actor" key={actor.id}>
                 <div><strong>{actor.displayName}</strong>{actor.email ? <small>{actor.email}</small> : null}</div>
                 <label className="field field--compact"><span>{copy(locale, "backup", "targetMember")}</span><select defaultValue={defaultMember} data-actor-member={actor.id}><option value="">{copy(locale, "backup", "notMapped")}</option>{members.filter((member) => member.workspaceAccess).map((member) => <option key={member.id} value={member.id}>{member.displayName}</option>)}</select></label>
@@ -478,7 +479,7 @@ export function BackupPage() {
                     if (role) void inviteActor(actor, role);
                   }}>{copy(locale, "backup", "inviteActor")}</button>
                 </div>
-                {actorLinks[actor.id] ? <div className="transfer-actor__link"><input readOnly value={actorLinks[actor.id]} /><button className="button button--icon" type="button" title={copy(locale, "backup", "copyLink")} onClick={() => void navigator.clipboard.writeText(actorLinks[actor.id])}><Icon name="copy" /></button></div> : null}
+                {invitationUrl ? <div className="transfer-actor__link"><input readOnly value={invitationUrl} /><button className="button button--icon" type="button" title={copy(locale, "backup", "copyLink")} onClick={() => void navigator.clipboard.writeText(invitationUrl)}><Icon name="copy" /></button></div> : null}
               </div>;
             })}
           </div>

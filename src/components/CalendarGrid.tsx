@@ -197,13 +197,16 @@ export function CalendarGrid({
                 {renderedEntries.map((entry) => {
                   const isRuleEntry = Boolean(entry.contactRuleId || entry.generatedByPatternId);
                   const isRuleException = entry.contactRuleSyncState === "manual_override";
+                  const firstChildId = entry.childIds.at(0);
                   const entryLabel = entry.status === "cancelled"
                     ? copy(locale, "calendar", "cancelled")
                     : entry.additionalCare
                       ? copy(locale, "agenda", "additionalCare")
                     : entry.childIds.length > 1
                       ? copy(locale, "calendar", "bothChildren")
-                      : childMap.get(entry.childIds[0])?.name ?? copy(locale, "calendar", "entry");
+                      : firstChildId
+                        ? childMap.get(firstChildId)?.name ?? copy(locale, "calendar", "entry")
+                        : copy(locale, "calendar", "entry");
                   const shortEntryLabel = entry.status === "cancelled"
                     ? locale === "en" ? "Cancelled" : "Ausfall"
                     : entry.additionalCare
