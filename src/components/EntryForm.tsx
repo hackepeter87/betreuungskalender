@@ -28,6 +28,7 @@ import { FieldHelpButton, FieldHelpLabel } from "./FieldHelp";
 import { Icon } from "./Icon";
 import { isValidTimedRange } from "../../shared/temporal";
 import { DateTimeRange } from "./DateTimeRange";
+import { omitUndefinedValues } from "../../shared/objects";
 
 interface EntryFormProps {
   entry?: CareEntry;
@@ -298,7 +299,7 @@ export function EntryForm({
       return;
     }
 
-    const entryInput = {
+    const entryInput = omitUndefinedValues({
       id: entry?.id,
       date: startDate,
       startDateTime,
@@ -334,20 +335,20 @@ export function EntryForm({
       notes: notes.trim() || undefined,
       hasEvidence,
       evidenceReference: hasEvidence ? evidenceReference.trim() || undefined : undefined,
-      trips: trips.map((trip) => ({
+      trips: trips.map((trip) => omitUndefinedValues({
         ...trip,
         reimbursementAmount: trip.reimbursed
           ? trip.reimbursementAmount
           : undefined,
         notes: trip.notes?.trim() || undefined
       })),
-      costs: costs.map((cost) => ({
+      costs: costs.map((cost) => omitUndefinedValues({
         ...cost,
         notes: cost.notes?.trim() || undefined
       })),
       confirmPlannedConflict: Boolean(confirmedConflictFingerprint),
       conflictFingerprint: confirmedConflictFingerprint
-    };
+    });
     if (status === "planned") {
       try {
         const preview = await api.previewCareConflicts(entryInput, entry?.id);

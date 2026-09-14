@@ -32,6 +32,7 @@ import type {
   ContactRuleRecurrence,
   ContactRuleWeekday
 } from "../../shared/api";
+import { omitUndefinedValues } from "../../shared/objects";
 
 function nextFriday(): string {
   const date = new Date();
@@ -296,7 +297,7 @@ export function ContactPage({
     () => {
       if (!recurrenceSelectionComplete) return [];
       try {
-        return expandContactRule({
+        return expandContactRule(omitUndefinedValues({
           startDate,
           endDate: endDate || undefined,
           recurrence,
@@ -305,7 +306,7 @@ export function ContactPage({
           childIds,
           rangeStart: generationStart,
           rangeEnd: generationEnd
-        }).filter((entry) =>
+        })).filter((entry) =>
           ruleId
             ? !data.entries.some((existing) =>
                 existing.contactRuleId === ruleId &&
@@ -401,7 +402,7 @@ export function ContactPage({
       setMessage(copy(locale, "contact", "ordinalRequired"));
       return;
     }
-    const saved = await saveContactRule({
+    const saved = await saveContactRule(omitUndefinedValues({
       id: ruleId,
       name: name.trim() || copy(locale, "contact", "defaultName"),
       startDate,
@@ -413,7 +414,7 @@ export function ContactPage({
       responsiblePartyId: responsiblePartyId || undefined,
       childIds,
       active
-    });
+    }));
     if (saved) {
       setRuleId(saved.id);
       const created = saved.syncSummary?.created ?? 0;

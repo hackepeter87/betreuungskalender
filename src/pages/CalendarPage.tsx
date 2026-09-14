@@ -188,7 +188,7 @@ export function CalendarPage({
           canWrite={canWrite}
           onSelectDate={(date) => onNewEntry(date || undefined)}
           onSelectEntry={onEditEntry}
-          onSelectUnavailable={canManagePlanning ? setEditingUnavailable : undefined}
+          {...(canManagePlanning ? { onSelectUnavailable: setEditingUnavailable } : {})}
           allowCreate={canCreateAppointments && canWrite}
         />
       ) : (
@@ -204,7 +204,7 @@ export function CalendarPage({
               conflicts={data.careConflicts}
               onSelectDate={onNewEntry}
               onSelectEntry={onEditEntry}
-              onSelectUnavailable={canManagePlanning ? setEditingUnavailable : undefined}
+              {...(canManagePlanning ? { onSelectUnavailable: setEditingUnavailable } : {})}
               allowCreate={canCreateAppointments && canWrite}
             />
             <div className="calendar-legend">
@@ -230,7 +230,7 @@ export function CalendarPage({
           onClose={() => setEditingUnavailable(null)}
         >
           <UnavailablePeriodForm
-            period={editingUnavailable === "new" ? undefined : editingUnavailable}
+            {...(editingUnavailable === "new" ? {} : { period: editingUnavailable })}
             onDone={() => setEditingUnavailable(null)}
           />
         </Modal>

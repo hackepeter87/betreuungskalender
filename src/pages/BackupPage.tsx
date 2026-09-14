@@ -258,7 +258,7 @@ export function BackupPage() {
       const invitation = await api.inviteTransferActor(actor.id, {
         role,
         expiresAt: new Date(Date.now() + 7 * 86_400_000).toISOString(),
-        emailHint: actor.email
+        ...(actor.email ? { emailHint: actor.email } : {})
       });
       setActorLinks((current) => ({ ...current, [actor.id]: invitation.invitationUrl }));
       setActors(await api.listTransferActors());

@@ -82,7 +82,7 @@ function makeAuditEntry(
     oldValue: auditValue(oldValue),
     newValue: auditValue(newValue),
     action,
-    effectiveDate
+    ...(effectiveDate ? { effectiveDate } : {})
   };
 }
 

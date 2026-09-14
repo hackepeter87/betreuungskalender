@@ -180,7 +180,9 @@ export function CareConfirmationCenter({
                   actualChildIds: partialDraft.actualChildIds,
                   actualStartDateTime: `${partialDraft.startDate}T${partialDraft.startTime}`,
                   actualEndDateTime: `${partialDraft.endDate}T${partialDraft.endTime}`,
-                  actualResponsiblePartyId: partialDraft.actualResponsiblePartyId || undefined
+                  ...(partialDraft.actualResponsiblePartyId
+                    ? { actualResponsiblePartyId: partialDraft.actualResponsiblePartyId }
+                    : {})
                 })}
               >
                 {copy(locale, "confirmation", "partial")}

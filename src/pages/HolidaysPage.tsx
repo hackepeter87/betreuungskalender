@@ -15,6 +15,7 @@ import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
 import { useAppStore } from "../store/AppStore";
 import type { HolidayPeriod } from "../types";
+import { omitUndefinedValues } from "../../shared/objects";
 
 function ExternalHolidayDerivationPanel() {
   const { locale } = useI18n();
@@ -135,7 +136,7 @@ function HolidayForm({
       setError(copy(locale, "holiday", "childRequired"));
       return;
     }
-    const saved = await saveHolidayPeriod({
+    const saved = await saveHolidayPeriod(omitUndefinedValues({
       id: period?.id,
       name: name.trim() || copy(locale, "holiday", "defaultName"),
       startDate,
@@ -143,7 +144,7 @@ function HolidayForm({
       childIds,
       assignedTo: period?.assignedTo ?? "shared",
       notes: notes.trim() || undefined
-    });
+    }));
     if (saved) onDone();
   };
 
@@ -216,7 +217,7 @@ export function HolidaysPage() {
   const [editing, setEditing] = useState<HolidayPeriod | "new" | null>(null);
   const stats = useMemo(
     () =>
-      calculateHolidayStats({
+      calculateHolidayStats(omitUndefinedValues({
         periods: data.holidayPeriods,
         startDate: selection.startDate,
         endDate: selection.endDate,
@@ -226,7 +227,7 @@ export function HolidaysPage() {
         careParties: data.careParties,
         defaultResponsiblePartyId: data.settings.defaultResponsiblePartyId,
         primaryCarePartyId: data.settings.primaryCarePartyId
-      }),
+      })),
     [data.careParties, data.children, data.entries, data.holidayPeriods, data.settings.defaultResponsiblePartyId, data.settings.primaryCarePartyId, data.unavailablePeriods, selection.endDate, selection.startDate]
   );
 
@@ -359,7 +360,7 @@ export function HolidaysPage() {
 
       {editing ? (
         <Modal title={editing === "new" ? copy(locale, "holiday", "createTitle") : copy(locale, "holiday", "editTitle")} onClose={() => setEditing(null)}>
-          <HolidayForm period={editing === "new" ? undefined : editing} onDone={() => setEditing(null)} />
+          <HolidayForm {...(editing === "new" ? {} : { period: editing })} onDone={() => setEditing(null)} />
         </Modal>
       ) : null}
     </div>

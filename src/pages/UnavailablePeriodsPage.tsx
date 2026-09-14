@@ -173,7 +173,7 @@ export function UnavailablePeriodsPage() {
           className="modal--unavailable"
         >
           <UnavailablePeriodForm
-            period={editing === "new" ? undefined : editing}
+            {...(editing === "new" ? {} : { period: editing })}
             onDone={() => setEditing(null)}
           />
         </Modal>
