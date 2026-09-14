@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import Fastify from "fastify";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -16,6 +17,7 @@ const {
   analyzeLegacyData,
   executeLegacyMigration,
   getLegacyDatabaseSummary,
+  legacyMigrationCapabilities,
   previewLegacyMigration,
   recordLegacyMigrationEvent
 } = await import("./services/legacyMigration.js");
@@ -25,6 +27,7 @@ const {
   insertEntry
 } = await import("./routes/appData.js");
 const { appDataImportSchema } = await import("./validation/schemas.js");
+const { migrationRoutes } = await import("./routes/migration.js");
 
 runMigrations();
 
@@ -146,6 +149,79 @@ after(() => {
 
 test("eine leere SQLite-Datenbank wird als fachlich leer erkannt", async () => {
   assert.equal((await getLegacyDatabaseSummary(persistence.query)).isEmpty, true);
+});
+
+test("Migrationsfähigkeiten trennen SQLite-Ersetzung von additiver Übernahme", () => {
+  assert.deepEqual(legacyMigrationCapabilities("sqlite"), {
+    additiveImport: true,
+    replaceAfterBackup: true
+  });
+  assert.deepEqual(legacyMigrationCapabilities("postgres"), {
+    additiveImport: true,
+    replaceAfterBackup: false
+  });
+});
+
+test("PostgreSQL lehnt den SQLite-Ersetzungsweg vor Datenzugriff ab", async () => {
+  const postgresRuntime = {
+    ...persistence,
+    driver: "postgres" as const
+  };
+  await assert.rejects(
+    executeLegacyMigration({
+      data: fixture(),
+      mode: "replace",
+      duplicatePolicy: "skip",
+      fingerprint: "fixture-postgres-replace",
+      userEmail: "test@example.invalid"
+    }, postgresRuntime),
+    (error: unknown) => (
+      typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "legacy_migration_replace_unavailable"
+    )
+  );
+});
+
+test("Migrations-API liefert Fähigkeiten und lehnt PostgreSQL-Ersetzung generisch ab", async () => {
+  const postgresRuntime = Object.create(persistence) as typeof persistence;
+  Object.defineProperty(postgresRuntime, "driver", { value: "postgres" });
+  const app = Fastify({ logger: false });
+  app.decorateRequest("userEmail", "test@example.invalid");
+  app.decorateRequest("user", undefined);
+  app.decorate("persistence", postgresRuntime);
+  await app.register(migrationRoutes);
+
+  const summary = await app.inject({
+    method: "GET",
+    url: "/api/migration/legacy-summary"
+  });
+  assert.equal(summary.statusCode, 200);
+  assert.deepEqual(summary.json().capabilities, {
+    additiveImport: true,
+    replaceAfterBackup: false
+  });
+
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/migration/legacy-import",
+    payload: {
+      data: fixture(),
+      mode: "replace",
+      duplicatePolicy: "skip",
+      fingerprint: "fixture-api-postgres-replace",
+      invalidRecords: 0,
+      warnings: []
+    }
+  });
+  assert.equal(response.statusCode, 400);
+  assert.deepEqual(response.json(), {
+    error: "legacy_migration_replace_unavailable",
+    message: "Dieser Migrationsmodus ist für die ausgewählte Datenbank nicht verfügbar."
+  });
+  assert.equal((await getLegacyDatabaseSummary(persistence.query)).isEmpty, true);
+  await app.close();
 });
 
 test("leere SQLite-Datenbank zeigt korrekte Vorschau und übernimmt Daten", async () => {
@@ -372,4 +448,13 @@ test("Erkennung, Vorschau, Import, Überspringen und Fehler werden auditiert", a
   assert.ok(fields.includes("legacy_migration_skip"));
   assert.ok(fields.includes("legacy_migration_import"));
   assert.ok(fields.includes("legacy_migration_failed"));
+  const failedAudit = db.prepare(`
+    SELECT metadata_json AS value FROM audit_log
+    WHERE entity_type = 'legacy_migration'
+      AND field_name = 'legacy_migration_failed'
+    ORDER BY id DESC
+    LIMIT 1
+  `).get() as { value: string };
+  assert.match(failedAudit.value, /migration_failed/);
+  assert.doesNotMatch(failedAudit.value, /fiktiver Fehler/);
 });

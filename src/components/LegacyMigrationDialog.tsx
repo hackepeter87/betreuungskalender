@@ -2,6 +2,7 @@ import { useState } from "react";
 import type {
   LegacyDatabaseSummary,
   LegacyDuplicatePolicy,
+  LegacyMigrationCapabilities,
   LegacyMigrationPreview,
   LegacyMigrationReport
 } from "../../shared/migration";
@@ -19,6 +20,7 @@ import { copy } from "../i18n/catalog";
 interface Props {
   legacy: LegacyBrowserData;
   database: LegacyDatabaseSummary;
+  capabilities: LegacyMigrationCapabilities;
   onClose: () => void;
 }
 
@@ -34,7 +36,7 @@ function downloadReport(report: LegacyMigrationReport): void {
   URL.revokeObjectURL(url);
 }
 
-export function LegacyMigrationDialog({ legacy, database, onClose }: Props) {
+export function LegacyMigrationDialog({ legacy, database, capabilities, onClose }: Props) {
   const { reload, serverStatus } = useAppStore();
   const { locale, intlLocale } = useI18n();
   const [preview, setPreview] = useState<LegacyMigrationPreview | null>(null);
@@ -208,7 +210,7 @@ export function LegacyMigrationDialog({ legacy, database, onClose }: Props) {
                 <button className="button button--primary" type="button" disabled={busy || serverStatus !== "online" || preview.invalidRecords > 0} onClick={() => void importData("add")}>
                   {copy(locale, "legacy", "addImport")}
                 </button>
-                {!database.isEmpty ? (
+                {!database.isEmpty && capabilities.replaceAfterBackup ? (
                   <button className="button button--danger-quiet" type="button" disabled={busy || serverStatus !== "online" || preview.invalidRecords > 0} onClick={() => void importData("replace")}>
                     {copy(locale, "legacy", "replace")}
                   </button>
@@ -249,7 +251,7 @@ export function LegacyMigrationDialog({ legacy, database, onClose }: Props) {
                 </button>
               </div>
             </footer>
-            {!database.isEmpty ? (
+            {!database.isEmpty && capabilities.replaceAfterBackup ? (
               <p className="migration-risk">
                 {copy(locale, "legacy", "risk")}
               </p>

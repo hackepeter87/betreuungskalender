@@ -1,4 +1,5 @@
 import type {
+  LegacyMigrationCapabilities,
   LegacyDataCounts,
   LegacyDatabaseSummary,
   LegacyDuplicatePolicy,
@@ -26,6 +27,15 @@ import { appDataImportSchema } from "../validation/schemas.js";
 type MigrationData = ReturnType<typeof appDataImportSchema.parse>;
 type DataRecord = Record<string, unknown>;
 type BackupCreator = () => Promise<string>;
+
+const migrationErrorCodePattern = /^[a-z0-9][a-z0-9_.:-]{0,99}$/i;
+
+function migrationErrorCode(error: unknown): string {
+  const candidate = typeof error === "object" && error !== null && "code" in error
+    ? String(error.code)
+    : "migration_failed";
+  return migrationErrorCodePattern.test(candidate) ? candidate : "migration_failed";
+}
 
 interface ExistingEntry {
   id: string;
@@ -673,6 +683,11 @@ export async function executeLegacyMigration(input: {
   userEmail: string;
   backupCreator?: BackupCreator;
 }, runtime: PersistenceRuntime): Promise<LegacyMigrationReport> {
+  if (input.mode === "replace" && !legacyMigrationCapabilities(runtime.driver).replaceAfterBackup) {
+    throw Object.assign(new Error("This migration mode is unavailable."), {
+      code: "legacy_migration_replace_unavailable"
+    });
+  }
   const startedAt = nowIso();
   const reportId = makeId("migration");
   const preview = await analyzeLegacyData(
@@ -741,17 +756,25 @@ export async function executeLegacyMigration(input: {
       return report;
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
     await recordMigrationAudit(runtime.query, input.userEmail, "legacy_migration_failed", {
       reportId,
       mode: input.mode,
       counts: preview.counts,
       conflicts: preview.conflicts,
       backupCreated: Boolean(backupFile),
-      error: message.slice(0, 500)
+      error: migrationErrorCode(error)
     });
     throw error;
   }
+}
+
+export function legacyMigrationCapabilities(
+  driver: PersistenceRuntime["driver"]
+): LegacyMigrationCapabilities {
+  return {
+    additiveImport: true,
+    replaceAfterBackup: driver === "sqlite"
+  };
 }
 
 export async function listLegacyMigrationReports(

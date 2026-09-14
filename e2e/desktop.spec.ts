@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { readFile } from "node:fs/promises";
+import { createEmptyData } from "../src/data/defaults";
 import {
   createChild,
   createEntry,
@@ -15,6 +16,77 @@ import {
 
 test.beforeEach(async ({ request }) => {
   await resetApp(request);
+});
+
+test("hides SQLite replacement when the migration backend does not support it", async ({ page }) => {
+  const legacy = {
+    ...createEmptyData(),
+    schemaVersion: 4,
+    children: [{
+      id: "legacy-demo-child",
+      name: "Demo Kind",
+      birthMonth: 5,
+      birthYear: 2018,
+      color: "#087f7b",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z"
+    }],
+    updatedAt: "2026-01-01T00:00:00.000Z"
+  };
+  await page.addInitScript((data) => {
+    window.localStorage.setItem("betreuungskalender:data:v1", JSON.stringify(data));
+  }, legacy);
+  await page.route("**/api/session", async (route) => {
+    const response = await route.fetch();
+    const session = await response.json() as Record<string, unknown>;
+    await route.fulfill({
+      response,
+      json: {
+        ...session,
+        workspaceAccess: true,
+        workspaceRole: "admin",
+        isOwner: true,
+        permissions: ["admin:destructive"]
+      }
+    });
+  });
+  let summaryRequests = 0;
+  await page.route("**/api/migration/legacy-summary", (route) => {
+    summaryRequests += 1;
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        database: {
+          children: 1,
+          entries: 0,
+          holidays: 0,
+          contactPatterns: 0,
+          trips: 0,
+          costs: 0,
+          unavailablePeriods: 0,
+          settings: 0,
+          monthClosures: 0,
+          auditEntries: 0,
+          isEmpty: false
+        },
+        reports: [],
+        capabilities: { additiveImport: true, replaceAfterBackup: false }
+      })
+    });
+  });
+
+  await openApp(page);
+  await expect.poll(() => page.evaluate(() => Boolean(
+    window.localStorage.getItem("betreuungskalender:data:v1")
+  ))).toBe(true);
+  await expect.poll(() => summaryRequests).toBe(1);
+  const dialog = page.getByRole("dialog", { name: "Ältere Browserdaten" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText(/SQLite-Sicherung/)).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Nur prüfen / Import vorbereiten" }).click();
+  await expect(dialog.getByRole("button", { name: "Zusätzlich importieren" })).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Sichern und ersetzen" })).toHaveCount(0);
 });
 
 async function deferredAsset(source: string): Promise<string> {

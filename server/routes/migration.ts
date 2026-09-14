@@ -4,6 +4,7 @@ import { config } from "../config.js";
 import {
   executeLegacyMigration,
   getLegacyDatabaseSummary,
+  legacyMigrationCapabilities,
   listLegacyMigrationReports,
   previewLegacyMigration,
   recordLegacyMigrationEvent
@@ -35,7 +36,8 @@ const importSchema = previewSchema.extend({
 export async function migrationRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/migration/legacy-summary", sensitiveLimit, async () => ({
     database: await getLegacyDatabaseSummary(app.persistence.query),
-    reports: await listLegacyMigrationReports(app.persistence.query)
+    reports: await listLegacyMigrationReports(app.persistence.query),
+    capabilities: legacyMigrationCapabilities(app.persistence.driver)
   }));
 
   app.post("/api/migration/legacy-detected", sensitiveLimit, async (request, reply) => {
@@ -92,9 +94,18 @@ export async function migrationRoutes(app: FastifyInstance): Promise<void> {
         userEmail: request.userEmail
       }, app.persistence);
     } catch (error) {
+      const code = typeof error === "object" && error !== null && "code" in error
+        ? String(error.code)
+        : "migration_failed";
+      if (code === "legacy_migration_replace_unavailable") {
+        return reply.code(400).send({
+          error: code,
+          message: "Dieser Migrationsmodus ist für die ausgewählte Datenbank nicht verfügbar."
+        });
+      }
       return reply.code(400).send({
         error: "migration_failed",
-        message: error instanceof Error ? error.message : "Migration fehlgeschlagen."
+        message: "Migration fehlgeschlagen."
       });
     }
   });

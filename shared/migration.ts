@@ -1,6 +1,17 @@
 export type LegacyMigrationMode = "add" | "preview" | "replace";
 export type LegacyDuplicatePolicy = "skip" | "include";
 
+export interface LegacyMigrationCapabilities {
+  additiveImport: true;
+  replaceAfterBackup: boolean;
+}
+
+export interface LegacyMigrationSummary {
+  database: LegacyDatabaseSummary;
+  reports: LegacyMigrationReport[];
+  capabilities: LegacyMigrationCapabilities;
+}
+
 export interface LegacyDataCounts {
   children: number;
   entries: number;

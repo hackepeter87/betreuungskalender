@@ -37,6 +37,12 @@ import {
 } from "./services/dataTransfer.js";
 import { createEdgeCaseDemoData } from "./services/demoFixtures.js";
 import { acceptInvitation, createInvitation, listInvitations } from "./services/invitations.js";
+import {
+  executeLegacyMigration,
+  getLegacyDatabaseSummary,
+  legacyMigrationCapabilities,
+  previewLegacyMigration
+} from "./services/legacyMigration.js";
 import { listMembers, updateMemberRole } from "./services/memberManagement.js";
 import { createReportSnapshot } from "./services/reportSnapshots.js";
 import { completeFirstUseSetup } from "./services/setupBootstrap.js";
@@ -546,6 +552,38 @@ async function transferBetween(source: PersistenceRuntime, target: PersistenceRu
   };
 }
 
+async function runLegacyAdditiveMigration(runtime: PersistenceRuntime) {
+  const source = createEdgeCaseDemoData();
+  const data = {
+    ...source,
+    entries: [],
+    holidayPeriods: [],
+    unavailablePeriods: [],
+    contactPatterns: [],
+    monthClosures: [],
+    settings: {}
+  };
+  const preview = await previewLegacyMigration(
+    data,
+    "migration-fixture@example.invalid",
+    "legacy-parity-fixture",
+    runtime.query
+  );
+  const report = await executeLegacyMigration({
+    data,
+    mode: "add",
+    duplicatePolicy: "skip",
+    fingerprint: "legacy-parity-fixture",
+    userEmail: "migration-fixture@example.invalid"
+  }, runtime);
+  return {
+    capabilities: legacyMigrationCapabilities(runtime.driver),
+    previewCounts: preview.counts,
+    imported: report.imported,
+    database: await getLegacyDatabaseSummary(runtime.query)
+  };
+}
+
 test("SQLite exercises the complete application parity scenario", async () => {
   const runtime = await sqliteRuntime();
   try {
@@ -576,6 +614,26 @@ test("PostgreSQL produces the same application results as SQLite", {
       runApplicationScenario(postgres)
     ]);
     assert.deepEqual(withoutDriver(postgresResult), withoutDriver(sqliteResult));
+  } finally {
+    await Promise.all([sqlite.close(), postgres.close()]);
+  }
+});
+
+test("legacy additive migration remains equivalent on SQLite and PostgreSQL", {
+  skip: !postgresConfigured
+}, async () => {
+  const sqlite = await sqliteRuntime();
+  const postgres = await postgresRuntime();
+  try {
+    const [sqliteResult, postgresResult] = await Promise.all([
+      runLegacyAdditiveMigration(sqlite),
+      runLegacyAdditiveMigration(postgres)
+    ]);
+    assert.equal(sqliteResult.capabilities.replaceAfterBackup, true);
+    assert.equal(postgresResult.capabilities.replaceAfterBackup, false);
+    assert.deepEqual(postgresResult.previewCounts, sqliteResult.previewCounts);
+    assert.deepEqual(postgresResult.imported, sqliteResult.imported);
+    assert.deepEqual(postgresResult.database, sqliteResult.database);
   } finally {
     await Promise.all([sqlite.close(), postgres.close()]);
   }
