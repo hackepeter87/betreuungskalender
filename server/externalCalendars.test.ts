@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import Fastify from "fastify";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -18,6 +19,7 @@ import {
   redactExternalCalendarFeedUrl,
   visibleExternalCalendarEvents
 } from "./services/externalCalendars.js";
+import { externalCalendarRoutes } from "./routes/externalCalendars.js";
 
 const calendar = (event: string) => `BEGIN:VCALENDAR\r\nVERSION:2.0\r\n${event}\r\nEND:VCALENDAR\r\n`;
 const event = (id: number, body = "SUMMARY:Import test") => [
@@ -59,6 +61,23 @@ test("parses all-day events with exclusive DTEND and escaped text", () => {
   assert.equal(event?.title, "Spring, break");
   assert.equal(event?.startDateTime, "2026-04-03T00:00:00.000Z");
   assert.equal(event?.endDateTime, "2026-04-06T00:00:00.000Z");
+});
+
+test("external calendar export is not cacheable", async () => {
+  await withRuntime(async (runtime) => {
+    const app = Fastify({ logger: false });
+    app.decorate("persistence", runtime);
+    await app.register(externalCalendarRoutes);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/external-calendar-events/export"
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.headers["cache-control"], "no-store, max-age=0");
+    assert.equal(response.headers.pragma, "no-cache");
+    await app.close();
+  });
 });
 
 test("parses timed events and normalizes missing recurrence IDs", () => {

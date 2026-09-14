@@ -54,6 +54,7 @@ function routeConfig(overrides: Partial<Parameters<typeof recoveryAdminRoutes>[1
     recoveryAdminInitialPassword: "Initial recovery passphrase",
     recoveryAdminSessionCookieName: "betreuungskalender_recovery",
     recoveryAdminSessionTtlSeconds: 900,
+    allowedOrigin: "https://app.example.invalid",
     rateLimitSensitiveMax: 5,
     rateLimitWindowMs: 60_000,
     ...overrides
@@ -217,6 +218,20 @@ test("recovery routes create short lived server-side sessions and require passwo
     assert.equal(loginPage.statusCode, 200);
     assert.match(loginPage.payload, /href="\/impressum"/);
     assert.match(loginPage.payload, /href="\/datenschutz"/);
+    assert.equal(loginPage.headers["cache-control"], "no-store, max-age=0");
+
+    const rejectedLogin = await app.inject({
+      method: "POST",
+      url: "/auth/recovery/login",
+      headers: { origin: "https://foreign.example.invalid" },
+      payload: {
+        username: "breakglass",
+        password: "Initial recovery passphrase"
+      }
+    });
+    assert.equal(rejectedLogin.statusCode, 403);
+    assert.equal(rejectedLogin.headers["cache-control"], "no-store, max-age=0");
+    assert.equal(rejectedLogin.headers["set-cookie"], undefined);
 
     const login = await app.inject({
       method: "POST",
@@ -234,6 +249,7 @@ test("recovery routes create short lived server-side sessions and require passwo
     });
     assert.match(login.headers["set-cookie"] as string, /HttpOnly/);
     assert.match(login.headers["set-cookie"] as string, /Secure/);
+    assert.equal(login.headers["cache-control"], "no-store, max-age=0");
     const cookie = cookieValue(login.headers["set-cookie"] as string);
 
     const change = await app.inject({
@@ -243,6 +259,7 @@ test("recovery routes create short lived server-side sessions and require passwo
       payload: { newPassword: "Changed recovery passphrase" }
     });
     assert.equal(change.statusCode, 200);
+    assert.equal(change.headers["cache-control"], "no-store, max-age=0");
     assert.deepEqual(JSON.parse(change.body), {
       authenticated: true,
       passwordChangeRequired: false,

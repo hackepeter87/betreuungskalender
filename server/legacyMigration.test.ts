@@ -265,6 +265,8 @@ test("Migrations-API liefert Fähigkeiten und lehnt PostgreSQL-Ersetzung generis
     additiveImport: true,
     replaceAfterBackup: false
   });
+  assert.equal(summary.headers["cache-control"], "no-store, max-age=0");
+  assert.equal(summary.headers.pragma, "no-cache");
 
   const response = await app.inject({
     method: "POST",

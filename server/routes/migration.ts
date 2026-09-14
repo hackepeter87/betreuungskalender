@@ -10,6 +10,7 @@ import {
   recordLegacyMigrationEvent
 } from "../services/legacyMigration.js";
 import { appDataImportSchema } from "../validation/schemas.js";
+import { preventSensitiveResponseCaching } from "../httpProtection.js";
 import {
   ImportProcessingLimitError,
   assertImportProcessingLimits
@@ -60,6 +61,10 @@ function validationFailure(
 }
 
 export async function migrationRoutes(app: FastifyInstance): Promise<void> {
+  app.addHook("onRequest", async (_request, reply) => {
+    preventSensitiveResponseCaching(reply);
+  });
+
   app.get("/api/migration/legacy-summary", sensitiveLimit, async () => ({
     database: await getLegacyDatabaseSummary(app.persistence.query),
     reports: await listLegacyMigrationReports(app.persistence.query),

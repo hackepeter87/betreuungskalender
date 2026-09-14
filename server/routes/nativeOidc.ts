@@ -26,6 +26,10 @@ import {
   InvitationError,
   prepareInvitationLogin
 } from "../services/invitations.js";
+import {
+  browserRequestOriginGuard,
+  preventSensitiveResponseCaching
+} from "../httpProtection.js";
 import { publicLegalLinksHtml } from "./legal.js";
 
 type NativeOidcRouteConfig = Pick<
@@ -48,6 +52,7 @@ type NativeOidcRouteConfig = Pick<
   | "nodeEnv"
   | "rateLimitSensitiveMax"
   | "rateLimitWindowMs"
+  | "allowedOrigin"
 > & Partial<Pick<
   typeof appConfig,
   "ownerSetupTokenFile" | "ownerSetupTokenTtlSeconds" | "oidcDisplayNameClaim"
@@ -151,13 +156,6 @@ function notFound(reply: FastifyReply) {
     error: "not_found",
     message: "Ressource nicht gefunden."
   });
-}
-
-function preventOnboardingCache(reply: FastifyReply): FastifyReply {
-  return reply
-    .header("cache-control", "no-store, max-age=0")
-    .header("pragma", "no-cache")
-    .header("expires", "0");
 }
 
 function sanitizedError(error: unknown): NativeOidcError {
@@ -274,6 +272,10 @@ export async function nativeOidcRoutes(
   app: FastifyInstance,
   options: NativeOidcRoutesOptions
 ): Promise<void> {
+  app.addHook("onRequest", async (_request, reply) => {
+    preventSensitiveResponseCaching(reply);
+  });
+
   const persistence = options.persistence;
   const secureCookie = options.config.nodeEnv === "production";
   const authRateLimit = {
@@ -283,6 +285,10 @@ export async function nativeOidcRoutes(
         timeWindow: options.config.rateLimitWindowMs
       }
     }
+  };
+  const browserSessionAction = {
+    ...authRateLimit,
+    preHandler: browserRequestOriginGuard(options.config.allowedOrigin)
   };
   const service = options.service ?? new NativeOidcService({
     config: omitUndefinedValues({
@@ -377,7 +383,7 @@ export async function nativeOidcRoutes(
   });
 
   app.get<{ Querystring: { token?: string } }>("/setup", authRateLimit, async (request, reply) => {
-    const onboardingReply = preventOnboardingCache(reply);
+    const onboardingReply = preventSensitiveResponseCaching(reply);
     if (options.config.authMode !== "native-oidc") return notFound(onboardingReply);
     try {
       const token = request.query.token?.trim();
@@ -403,7 +409,7 @@ export async function nativeOidcRoutes(
   });
 
   app.get<{ Querystring: { token?: string } }>("/setup/continue", authRateLimit, async (request, reply) => {
-    const onboardingReply = preventOnboardingCache(reply);
+    const onboardingReply = preventSensitiveResponseCaching(reply);
     if (options.config.authMode !== "native-oidc") return notFound(onboardingReply);
     try {
       const token = request.query.token?.trim();
@@ -423,7 +429,7 @@ export async function nativeOidcRoutes(
   });
 
   app.get<{ Querystring: { token?: string } }>("/invite", authRateLimit, async (request, reply) => {
-    const onboardingReply = preventOnboardingCache(reply);
+    const onboardingReply = preventSensitiveResponseCaching(reply);
     if (options.config.authMode !== "native-oidc") return notFound(onboardingReply);
     try {
       const token = request.query.token?.trim();
@@ -445,7 +451,7 @@ export async function nativeOidcRoutes(
   });
 
   app.get<{ Querystring: { token?: string } }>("/invite/continue", authRateLimit, async (request, reply) => {
-    const onboardingReply = preventOnboardingCache(reply);
+    const onboardingReply = preventSensitiveResponseCaching(reply);
     if (options.config.authMode !== "native-oidc") return notFound(onboardingReply);
     try {
       const token = request.query.token?.trim();
@@ -466,7 +472,7 @@ export async function nativeOidcRoutes(
 
   app.get("/auth/callback", authRateLimit, async (request, reply) => {
     if (options.config.authMode !== "native-oidc") return notFound(reply);
-    const callbackReply = preventOnboardingCache(reply);
+    const callbackReply = preventSensitiveResponseCaching(reply);
     const state = oidcState(request.url);
     const clearedMarker = state ? clearOidcBrowserMarker(state, secureCookie) : undefined;
     try {
@@ -599,7 +605,7 @@ export async function nativeOidcRoutes(
     }
   });
 
-  app.get("/auth/logout", authRateLimit, async (request, reply) => {
+  app.get("/auth/logout", browserSessionAction, async (request, reply) => {
     if (options.config.authMode !== "native-oidc") return notFound(reply);
     await sessions.revokeByToken(
       cookieValue(request.headers.cookie, options.config.sessionCookieName)
@@ -610,7 +616,7 @@ export async function nativeOidcRoutes(
       .redirect(redirectUrl ?? "/");
   });
 
-  app.post("/auth/logout", authRateLimit, async (request, reply) => {
+  app.post("/auth/logout", browserSessionAction, async (request, reply) => {
     if (options.config.authMode !== "native-oidc") return notFound(reply);
     await sessions.revokeByToken(
       cookieValue(request.headers.cookie, options.config.sessionCookieName)

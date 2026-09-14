@@ -38,6 +38,7 @@ import { runCareConfirmationSweep } from "./services/careConfirmations.js";
 import { disableLocalDevelopmentIdentityAccess } from "./services/localDevelopmentIdentity.js";
 import { RuntimeMetrics, startMetricsListener } from "./metrics.js";
 import { omitUndefinedValues } from "../shared/objects.js";
+import { preventSensitiveResponseCaching } from "./httpProtection.js";
 
 const app = Fastify({
   logController: new LogController({
@@ -232,7 +233,7 @@ app.setErrorHandler((error, request, reply) => {
     });
   }
   if (originDenied) {
-    return reply.code(403).send({
+    return preventSensitiveResponseCaching(reply).code(403).send({
       error: "origin_not_allowed",
       message: "Diese Herkunft ist nicht zugelassen."
     });

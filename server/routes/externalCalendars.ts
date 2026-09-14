@@ -3,6 +3,7 @@ import { omitUndefinedValues } from "../../shared/objects.js";
 import { config } from "../config.js";
 import { ExternalCalendarError, deleteExternalCalendarSource, deriveHolidayPeriodsFromExternalCalendar, importExternalCalendar, importExternalCalendarFeed, listExternalCalendarBackupEvents, listExternalCalendarSources, refreshExternalCalendarFeed, updateExternalCalendarSource, visibleExternalCalendarEvents } from "../services/externalCalendars.js";
 import { externalCalendarFeedSchema, externalCalendarHolidayDeriveSchema, externalCalendarImportSchema, externalCalendarUpdateSchema } from "../validation/schemas.js";
+import { preventSensitiveResponseCaching } from "../httpProtection.js";
 
 function errorReply(reply: { code(status: number): { send(payload: unknown): unknown } }, error: unknown) {
   if (error instanceof ExternalCalendarError) return reply.code(error.code === "external_calendar_not_found" ? 404 : 400).send({ error: error.code });
@@ -38,7 +39,9 @@ export async function externalCalendarRoutes(app: FastifyInstance): Promise<void
     }
   };
   app.get("/api/external-calendars", readLimit, async () => listExternalCalendarSources(app.persistence.query));
-  app.get("/api/external-calendar-events/export", exportLimit, async () => listExternalCalendarBackupEvents(app.persistence.query));
+  app.get("/api/external-calendar-events/export", exportLimit, async (_request, reply) =>
+    preventSensitiveResponseCaching(reply).send(await listExternalCalendarBackupEvents(app.persistence.query))
+  );
   app.post("/api/external-calendars/import", writeLimit, async (request, reply) => {
     const parsed = externalCalendarImportSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "external_calendar_invalid" });

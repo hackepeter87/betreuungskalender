@@ -106,6 +106,10 @@ unintentionally.
 - In oauth2-proxy, set `trusted_ips` only to the actual upstream reverse proxy
   IP/CIDR. Never trust all client networks.
 - Restrict `ALLOWED_ORIGIN` to the exact public origin.
+- Session-changing browser actions validate available `Origin`, `Referer`, and
+  Fetch Metadata against that public origin. Authentication, onboarding,
+  recovery, migration, and sensitive export responses use explicit `no-store`
+  headers and remain network-only in the service worker.
 - Keep API rate limits enabled and tune their documented environment variables
   only after reviewing expected client traffic. Imports, migrations, exports,
   and writes intentionally have stricter limits than normal API reads. Client

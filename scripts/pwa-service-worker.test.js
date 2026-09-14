@@ -108,23 +108,30 @@ test("service worker activation removes only outdated application caches", async
 });
 
 test("service worker keeps API GET requests network-only", async () => {
-  const worker = await loadServiceWorker();
-  let response;
-  const request = {
-    method: "GET",
-    url: "http://127.0.0.1:3100/api/app-data"
-  };
+  for (const path of [
+    "/api/app-data",
+    "/api/migration/legacy-summary",
+    "/api/external-calendar-events/export",
+    "/api/data-transfer/export"
+  ]) {
+    const worker = await loadServiceWorker();
+    let response;
+    const request = {
+      method: "GET",
+      url: `http://127.0.0.1:3100${path}`
+    };
 
-  worker.fetchHandler({
-    request,
-    respondWith(value) {
-      response = value;
-    }
-  });
+    worker.fetchHandler({
+      request,
+      respondWith(value) {
+        response = value;
+      }
+    });
 
-  await response;
-  assert.deepEqual(worker.networkRequests, [request]);
-  assert.equal(worker.cacheAccesses(), 0);
+    await response;
+    assert.deepEqual(worker.networkRequests, [request]);
+    assert.equal(worker.cacheAccesses(), 0);
+  }
 });
 
 test("service worker does not intercept API write requests", async () => {
@@ -149,9 +156,11 @@ test("service worker does not intercept API write requests", async () => {
 test("service worker keeps authentication, onboarding, recovery, and legal pages network-only", async () => {
   for (const path of [
     "/auth/login",
+    "/auth/logout",
     "/setup?token=fictional",
     "/invite?token=fictional",
     "/auth/recovery",
+    "/auth/recovery/logout",
     "/impressum",
     "/datenschutz"
   ]) {
