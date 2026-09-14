@@ -23,6 +23,8 @@ import {
   MAX_TRANSFER_COLLECTION_RECORDS
 } from "./processingLimits.js";
 
+// rrule's ESM declaration does not model every supported Node export wrapper.
+// eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
 const rruleExports = rrule as typeof rrule & {
   default?: typeof rrule;
   rrule?: typeof rrule;

@@ -2,6 +2,7 @@ import "dotenv/config";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { csvListEnv, parseTrustedProxyRules } from "./trustedProxy.js";
+import { isUnknownRecord } from "../shared/objects.js";
 
 export type AuthMode = "local" | "trusted-proxy" | "native-oidc";
 export type DatabaseDriver = "sqlite" | "postgres";
@@ -201,10 +202,12 @@ export function validateAuthModeConfig(input: AuthModeValidationInput): void {
 
 function packageVersion(): string {
   try {
-    const packageJson = JSON.parse(
+    const packageJson: unknown = JSON.parse(
       readFileSync(resolve(process.cwd(), "package.json"), "utf8")
-    ) as { version?: string };
-    return packageJson.version ?? "unknown";
+    );
+    return isUnknownRecord(packageJson) && typeof packageJson.version === "string"
+      ? packageJson.version
+      : "unknown";
   } catch {
     return "unknown";
   }

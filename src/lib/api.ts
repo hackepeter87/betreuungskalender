@@ -68,7 +68,7 @@ import type {
   UnavailablePeriod,
   ExternalCalendarSource
 } from "../types";
-import { omitUndefinedValues } from "../../shared/objects";
+import { isUnknownRecord, omitUndefinedValues } from "../../shared/objects";
 
 export const SERVER_UNAVAILABLE_MESSAGE =
   "Die Serververbindung ist nicht verfügbar. Änderungen können derzeit nicht gespeichert werden.";
@@ -106,11 +106,17 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = 5_000): 
   if (!response.ok) {
     let message = `Serveranfrage fehlgeschlagen (${response.status}).`;
     try {
-      const body = (await response.json()) as {
-        message?: string;
-        issues?: Array<{ message?: string }>;
-      };
-      message = body.message ?? body.issues?.[0]?.message ?? message;
+      const body: unknown = await response.json();
+      if (isUnknownRecord(body)) {
+        const issue = Array.isArray(body.issues) && isUnknownRecord(body.issues[0])
+          ? body.issues[0]
+          : undefined;
+        message = typeof body.message === "string"
+          ? body.message
+          : typeof issue?.message === "string"
+            ? issue.message
+            : message;
+      }
     } catch {
       // Keep the status-based message for non-JSON responses.
     }
@@ -121,8 +127,11 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs = 5_000): 
       unavailable
     );
   }
-  if (response.status === 204) return undefined as T;
-  return (await response.json()) as T;
+  if (response.status === 204) {
+    return undefined as T;
+  }
+  const body: unknown = await response.json();
+  return body as T;
 }
 
 export function mapReportSnapshotData(snapshot: ApiReportSnapshot): AppData {

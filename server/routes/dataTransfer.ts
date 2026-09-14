@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { omitUndefinedValues } from "../../shared/objects.js";
+import { isUnknownRecord, omitUndefinedValues } from "../../shared/objects.js";
 import { randomUUID } from "node:crypto";
 import { config } from "../config.js";
 import { setMembershipRole } from "../services/memberships.js";
@@ -81,13 +81,8 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.put("/api/data-transfer/import", sensitive, async (request, reply) => {
-    const body = request.body as {
-      package?: unknown;
-      fingerprint?: unknown;
-      dryRunReceipt?: unknown;
-      confirmWarnings?: unknown;
-    };
-    if (!body || typeof body.fingerprint !== "string" || typeof body.dryRunReceipt !== "string" || !("package" in body)) {
+    const body = request.body;
+    if (!isUnknownRecord(body) || typeof body.fingerprint !== "string" || typeof body.dryRunReceipt !== "string" || !("package" in body)) {
       return noStore(reply).code(400).send({ error: "validation_error", message: "Import request is incomplete." });
     }
     try {
@@ -109,16 +104,16 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
   );
 
   app.put<{ Params: { id: string } }>("/api/data-transfer/actors/:id/mapping", sensitive, async (request, reply) => {
-    const body = request.body as { userId?: unknown; role?: unknown; carePartyIds?: unknown };
-    const role = workspaceRole(body?.role);
-    const submittedCarePartyIds = Array.isArray(body?.carePartyIds) ? body.carePartyIds : [];
+    const body = isUnknownRecord(request.body) ? request.body : {};
+    const role = workspaceRole(body.role);
+    const submittedCarePartyIds = Array.isArray(body.carePartyIds) ? body.carePartyIds : [];
     if (submittedCarePartyIds.length > MAX_CHILD_RELATIONS_PER_RECORD) {
       return noStore(reply).code(400).send({ error: "validation_error", message: "Actor mapping is invalid." });
     }
-    const carePartyIds = Array.isArray(body?.carePartyIds)
+    const carePartyIds = Array.isArray(body.carePartyIds)
       ? [...new Set(body.carePartyIds.filter((value): value is string => typeof value === "string"))]
       : [];
-    if (typeof body?.userId !== "string" || !role) {
+    if (typeof body.userId !== "string" || !role) {
       return noStore(reply).code(400).send({ error: "validation_error", message: "Mapping request is incomplete." });
     }
     const userId = body.userId;
@@ -181,9 +176,9 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post<{ Params: { id: string } }>("/api/data-transfer/actors/:id/invitation", sensitive, async (request, reply) => {
-    const body = request.body as { role?: unknown; expiresAt?: unknown; emailHint?: unknown };
-    const role = workspaceRole(body?.role);
-    if (!role || typeof body?.expiresAt !== "string") {
+    const body = isUnknownRecord(request.body) ? request.body : {};
+    const role = workspaceRole(body.role);
+    if (!role || typeof body.expiresAt !== "string") {
       return noStore(reply).code(400).send({ error: "validation_error", message: "Invitation request is incomplete." });
     }
     const actor = await app.persistence.query.selectFrom("data_transfer_actors")

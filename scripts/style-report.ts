@@ -5,6 +5,14 @@ import { gzipSync } from "node:zlib";
 import { inventoryStyles, repeatedStyleProperties } from "./style-inventory";
 import { extractLegalStyles, validateStyleReduction } from "./style-reduction-contract";
 
+function packageVersion(packagePath: string): string {
+  const value: unknown = JSON.parse(readFileSync(packagePath, "utf8"));
+  if (typeof value !== "object" || value === null || !("version" in value) || typeof value.version !== "string") {
+    throw new Error(`Package metadata at ${packagePath} has no version`);
+  }
+  return value.version;
+}
+
 const args = process.argv.slice(2);
 const allowed = new Set(["--ref", "--build-dir", "--inventory", "--check"]);
 const options = new Map<string, string>();
@@ -61,8 +69,8 @@ console.log(JSON.stringify({
   revision: commit ?? "working-tree",
   runtime: {
     node: process.version,
-    postcss: JSON.parse(readFileSync("node_modules/postcss/package.json", "utf8")).version,
-    vite: JSON.parse(readFileSync("node_modules/vite/package.json", "utf8")).version
+    postcss: packageVersion("node_modules/postcss/package.json"),
+    vite: packageVersion("node_modules/vite/package.json")
   },
   metrics: inventory.metrics,
   build,

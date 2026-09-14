@@ -106,7 +106,7 @@ export function normalizeBackupData(value: unknown): AppData {
   }
 
   const empty = createEmptyData();
-  return {
+  const normalized = {
     ...empty,
     ...value,
     schemaVersion: SCHEMA_VERSION,
@@ -400,7 +400,10 @@ export function normalizeBackupData(value: unknown): AppData {
       ? { ...empty.settings, ...value.settings }
       : empty.settings,
     updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : nowIso()
-  } as AppData;
+  };
+  // Every retained collection and scalar is normalized before this legacy object crosses into AppData.
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-type-assertion
+  return normalized as AppData;
 }
 
 export function createBackup(data: AppData): BackupEnvelope {
