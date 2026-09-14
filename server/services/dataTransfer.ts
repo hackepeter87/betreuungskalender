@@ -926,9 +926,10 @@ function remapActorReferences(data: ImportData, actors: PortableActor[], namespa
 
 async function targetStateFingerprint(
   database: DatabaseExecutor,
-  domain = await exportDomainData(database)
+  domain?: ImportData
 ): Promise<string> {
-  const { updatedAt: _derivedTimestamp, ...stableDomain } = domain;
+  const currentDomain = domain ?? await exportDomainData(database);
+  const { updatedAt: _derivedTimestamp, ...stableDomain } = currentDomain;
   const [runs, actors, assignments] = await Promise.all([
     database.selectFrom("data_transfer_runs")
       .select(["id", "package_fingerprint", "result", "imported_at"])
