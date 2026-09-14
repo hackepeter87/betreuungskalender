@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { omitUndefinedValues } from "../shared/objects.js";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import Fastify from "fastify";
@@ -323,14 +324,14 @@ async function runApplicationScenario(runtime: PersistenceRuntime) {
   ));
 
   const invited = user("invited-member", "parent");
-  const createdInvitation = await createInvitation({
-    role: "editor",
+  const createdInvitation = await createInvitation(omitUndefinedValues({
+    role: "editor" as const,
     actorId: owner.id,
     emailHint: invited.email,
     token: "parity-invitation-token",
     timestamp: "2026-07-01T09:00:00.000Z",
     expiresAt: "2026-07-08T09:00:00.000Z"
-  }, runtime.query);
+  }), runtime.query);
   const acceptedInvitation = await acceptInvitation(
     createdInvitation.token,
     invited,

@@ -106,6 +106,31 @@ test("maps claim-derived headers to stable internal users and permissions", () =
   assert.deepEqual(auth.user?.permissions, ["read", "write"]);
 });
 
+test("omits an absent optional email from trusted proxy identities", () => {
+  const auth = resolveRequestUser(
+    {
+      "x-auth-request-user": "subject-without-email",
+      "x-auth-request-groups": "/betreuungskalender/parents"
+    },
+    {
+      requireAuth: true,
+      trustProxyAuth: true,
+      userIdHeader: "x-auth-request-user",
+      emailHeader: "x-auth-request-email",
+      displayNameHeader: "x-auth-request-preferred-username",
+      groupsHeader: "x-auth-request-groups",
+      adminGroup: "/betreuungskalender/admins",
+      parentGroup: "/betreuungskalender/parents",
+      readonlyGroup: "/betreuungskalender/readers",
+      requireRoleClaim: true
+    }
+  );
+
+  assert.equal(auth.authenticated, true);
+  assert.ok(auth.user);
+  assert.equal(Object.hasOwn(auth.user, "email"), false);
+});
+
 test("derives roles from configured OIDC groups", () => {
   const options = {
     adminGroup: "admins",

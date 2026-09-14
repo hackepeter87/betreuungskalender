@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { omitUndefinedValues } from "../shared/objects.js";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -29,14 +30,19 @@ function testDatabase() {
   };
 }
 
-function recoveryConfig(overrides: Partial<ConstructorParameters<typeof RecoveryAdminStore>[0]> = {}) {
-  return {
+type RecoveryConfig = ConstructorParameters<typeof RecoveryAdminStore>[0];
+type RecoveryConfigOverrides = Omit<Partial<RecoveryConfig>, "initialPassword"> & {
+  initialPassword?: string | undefined;
+};
+
+function recoveryConfig(overrides: RecoveryConfigOverrides = {}) {
+  return omitUndefinedValues({
     enabled: true,
     username: "breakglass",
     initialPassword: "Initial recovery passphrase",
     sessionTtlSeconds: 900,
     ...overrides
-  };
+  });
 }
 
 function routeConfig(overrides: Partial<Parameters<typeof recoveryAdminRoutes>[1]["config"]> = {}) {

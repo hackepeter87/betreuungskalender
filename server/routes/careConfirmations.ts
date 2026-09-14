@@ -1,4 +1,5 @@
 import type { FastifyInstance } from "fastify";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import { config } from "../config.js";
 import {
   answerCareConfirmation,
@@ -49,7 +50,12 @@ export async function careConfirmationRoutes(app: FastifyInstance): Promise<void
     if (!request.user) return reply.code(401).send({ error: "authentication_required" });
     let result: Awaited<ReturnType<typeof answerCareConfirmation>>;
     try {
-      result = await answerCareConfirmation(app.persistence, request.params.id, request.user, parsed.data);
+      result = await answerCareConfirmation(
+        app.persistence,
+        request.params.id,
+        request.user,
+        omitUndefinedValues(parsed.data)
+      );
     } catch (error) {
       if (isCareEntryConflictError(error)) {
         return reply.code(409).send({ error: "care_entry_conflict" });

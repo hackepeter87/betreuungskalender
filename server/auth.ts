@@ -277,7 +277,7 @@ export function resolveRequestUser(
     user: {
       id: stableUserId(subject),
       externalSubject: subject,
-      email,
+      ...(email ? { email } : {}),
       displayName: displayNameForIdentity(displayName),
       groups,
       role,

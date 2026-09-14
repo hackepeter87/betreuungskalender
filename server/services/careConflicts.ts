@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { sql } from "kysely";
 import type { ApiCareConflict, ApiEntryStatus } from "../../shared/api.js";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import type { DatabaseExecutor } from "../db/runtime.js";
 import {
   CareConflictDetectionLimitError,
@@ -220,7 +221,7 @@ export async function listCareConflictEntries(
     loadChildIds(database, "care_entry_children", entryIds, maxChildLinks),
     loadChildIds(database, "care_entry_actual_children", entryIds, maxChildLinks)
   ]);
-  return rows.map((row) => ({
+  return rows.map((row) => omitUndefinedValues({
     id: row.id,
     status: row.status,
     startDateTime: row.start_datetime,
@@ -252,7 +253,7 @@ export async function previewPlannedCareConflicts(
   if (candidate.status !== "planned") {
     return { conflicts: [], fingerprint: createHash("sha256").update("no-planned-conflict").digest("hex") };
   }
-  const entries = await listCareConflictEntries(database, {
+  const entries = await listCareConflictEntries(database, omitUndefinedValues({
     childIds: candidate.childIds,
     endAfter: candidate.startDateTime,
     excludeId,
@@ -260,7 +261,7 @@ export async function previewPlannedCareConflicts(
     maxEntries: MAX_ACTUAL_CONFLICT_CANDIDATES,
     ...(responsiblePartyIds ? { responsiblePartyIds } : {}),
     startBefore: candidate.endDateTime
-  });
+  }));
   const conflicts = detectCareConflicts([
     ...entries,
     { ...candidate, id: previewCandidateId }

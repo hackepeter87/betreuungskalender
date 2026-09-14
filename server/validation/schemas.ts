@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import * as rrule from "rrule";
 import {
   careLocations,
@@ -444,11 +445,11 @@ export const contactRuleInputSchema = z
     if (!rule.active) return;
     const rangeEnd = rule.endDate ?? contactRuleDefaultRangeEnd(rule.startDate, rule.syncHorizonMonths);
     try {
-      expandContactRule({
+      expandContactRule(omitUndefinedValues({
         ...rule,
         rangeStart: rule.startDate,
         rangeEnd
-      });
+      }));
     } catch (error) {
       if (error instanceof RangeError && error.message === "contact_rule_expansion_limit_exceeded") {
         context.addIssue({

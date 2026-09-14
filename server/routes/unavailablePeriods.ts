@@ -1,5 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import type { ApiUnavailablePeriod } from "../../shared/api.js";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import { config } from "../config.js";
 import {
   assertCanUsePersistedCareParty,
@@ -55,7 +56,7 @@ async function childIdsForPeriod(database: DatabaseExecutor, id: string): Promis
 }
 
 async function mapPeriod(database: DatabaseExecutor, row: UnavailableRow): Promise<ApiUnavailablePeriod> {
-  const period = {
+  const period = omitUndefinedValues({
     id: row.id,
     startDateTime: row.start_datetime,
     endDateTime: row.end_datetime,
@@ -74,11 +75,11 @@ async function mapPeriod(database: DatabaseExecutor, row: UnavailableRow): Promi
     updatedBy: row.updated_by,
     createdAt: row.created_at,
     updatedAt: row.updated_at
-  };
-  return {
+  });
+  return omitUndefinedValues({
     ...period,
     warnings: unavailablePeriodWarnings(period)
-  };
+  });
 }
 
 async function validateRelations(database: DatabaseExecutor, input: {
@@ -137,7 +138,7 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
     const timestamp = nowIso();
     try {
       const period = await app.persistence.transaction(async (database) => {
-        await validateRelations(database, parsed.data);
+        await validateRelations(database, omitUndefinedValues(parsed.data));
         await assertOptionalCarePartyAccess(database, request.user, parsed.data.responsiblePartyId);
         await database.insertInto("unavailable_periods").values({
           id,
@@ -196,7 +197,7 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
       try {
         const timestamp = nowIso();
         return await app.persistence.transaction(async (database) => {
-        await validateRelations(database, parsed.data);
+        await validateRelations(database, omitUndefinedValues(parsed.data));
         await assertOptionalCarePartyAccess(database, request.user, before.responsiblePartyId);
         await assertOptionalCarePartyAccess(database, request.user, parsed.data.responsiblePartyId);
         await database.updateTable("unavailable_periods").set({

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import type { FastifyInstance, FastifyReply } from "fastify";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import { userFromClaims, type RequestUser } from "../auth.js";
 import type { config as appConfig } from "../config.js";
 import {
@@ -284,7 +285,7 @@ export async function nativeOidcRoutes(
     }
   };
   const service = options.service ?? new NativeOidcService({
-    config: {
+    config: omitUndefinedValues({
       issuerUrl: options.config.oidcIssuerUrl,
       clientId: options.config.oidcClientId,
       clientSecret: options.config.oidcClientSecret,
@@ -294,7 +295,7 @@ export async function nativeOidcRoutes(
       groupsClaim: options.config.oidcGroupsClaim,
       displayNameClaim: options.config.oidcDisplayNameClaim ?? "preferred_username",
       loginStateTtlSeconds: options.config.oidcLoginStateTtlSeconds
-    },
+    }),
     loginStates: new OidcLoginStateStore(persistence)
   });
   const sessions = options.sessions ?? new OidcSessionStore(persistence.query);

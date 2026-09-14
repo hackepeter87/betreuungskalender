@@ -316,15 +316,15 @@ export const config = {
 
 validateDatabaseConfig({
   driver: config.databaseDriver,
-  postgresHost: config.postgresHost,
+  ...(config.postgresHost ? { postgresHost: config.postgresHost } : {}),
   postgresPort: config.postgresPort,
   postgresPortConfigured: Boolean(process.env.POSTGRES_PORT?.trim()),
-  postgresDatabase: config.postgresDatabase,
-  postgresUser: config.postgresUser,
-  postgresPasswordFile: config.postgresPasswordFile,
+  ...(config.postgresDatabase ? { postgresDatabase: config.postgresDatabase } : {}),
+  ...(config.postgresUser ? { postgresUser: config.postgresUser } : {}),
+  ...(config.postgresPasswordFile ? { postgresPasswordFile: config.postgresPasswordFile } : {}),
   postgresTlsMode: config.postgresTlsMode,
   postgresTlsModeConfigured: Boolean(process.env.POSTGRES_TLS_MODE?.trim()),
-  postgresCaFile: config.postgresCaFile
+  ...(config.postgresCaFile ? { postgresCaFile: config.postgresCaFile } : {})
 });
 
 validateAuthModeConfig({
@@ -334,12 +334,12 @@ validateAuthModeConfig({
   configuredTrustProxyAuth,
   explicitAuthMode,
   trustedProxyCidrs,
-  oidcIssuerUrl: config.oidcIssuerUrl,
-  oidcClientId: config.oidcClientId,
-  oidcRedirectUri: config.oidcRedirectUri
+  ...(config.oidcIssuerUrl ? { oidcIssuerUrl: config.oidcIssuerUrl } : {}),
+  ...(config.oidcClientId ? { oidcClientId: config.oidcClientId } : {}),
+  ...(config.oidcRedirectUri ? { oidcRedirectUri: config.oidcRedirectUri } : {})
 });
 
 validateMetricsConfig({
   enabled: config.metricsEnabled,
-  bearerTokenFile: config.metricsBearerTokenFile
+  ...(config.metricsBearerTokenFile ? { bearerTokenFile: config.metricsBearerTokenFile } : {})
 });

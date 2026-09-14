@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import type { config as appConfig } from "../config.js";
 import {
   clearSessionCookie,
@@ -106,11 +107,11 @@ function changePasswordPage(message = ""): string {
 function credentials(body: unknown): RecoveryCredentialsBody {
   if (!body || typeof body !== "object") return {};
   const record = body as Record<string, unknown>;
-  return {
+  return omitUndefinedValues({
     username: typeof record.username === "string" ? record.username : undefined,
     password: typeof record.password === "string" ? record.password : undefined,
     newPassword: typeof record.newPassword === "string" ? record.newPassword : undefined
-  };
+  });
 }
 
 function normalizedError(error: unknown): RecoveryAdminError {
@@ -127,13 +128,13 @@ export async function recoveryAdminRoutes(
   options: RecoveryAdminRoutesOptions
 ): Promise<void> {
   const secureCookie = options.config.nodeEnv === "production";
-  const store = options.store ?? new RecoveryAdminStore({
+  const store = options.store ?? new RecoveryAdminStore(omitUndefinedValues({
     enabled: options.config.recoveryAdminEnabled,
     username: options.config.recoveryAdminUsername,
     initialPasswordFile: options.config.recoveryAdminInitialPasswordFile,
     initialPassword: options.config.recoveryAdminInitialPassword,
     sessionTtlSeconds: options.config.recoveryAdminSessionTtlSeconds
-  }, app.persistence);
+  }), app.persistence);
   const authRateLimit = {
     config: {
       rateLimit: {

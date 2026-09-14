@@ -65,6 +65,9 @@ test("parses timed events and normalizes missing recurrence IDs", () => {
   const [event] = parseIcs(calendar("BEGIN:VEVENT\r\nUID:test-2\r\nSUMMARY:Timed\r\nDTSTART:20260501T090000Z\r\nDTEND:20260501T100000Z\r\nEND:VEVENT"));
   assert.equal(event?.allDay, false);
   assert.equal(event?.recurrenceId, "");
+  assert.ok(event);
+  assert.equal(Object.hasOwn(event, "description"), false);
+  assert.equal(Object.hasOwn(event, "location"), false);
 });
 
 test("rejects malformed calendars and unsupported recurrence rules", () => {

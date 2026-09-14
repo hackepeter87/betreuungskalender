@@ -14,5 +14,5 @@ export const persistence = config.databaseDriver === "sqlite"
       user: config.postgresUser!,
       passwordFile: config.postgresPasswordFile!,
       tlsMode: config.postgresTlsMode,
-      caFile: config.postgresCaFile
+      ...(config.postgresCaFile ? { caFile: config.postgresCaFile } : {})
     });

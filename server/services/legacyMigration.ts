@@ -8,6 +8,7 @@ import type {
   LegacyMigrationReport,
   LegacyMigrationMode
 } from "../../shared/migration.js";
+import { omitUndefinedValues } from "../../shared/objects.js";
 import type { DatabaseExecutor, PersistenceRuntime } from "../db/runtime.js";
 import {
   clearDomainData,
@@ -717,13 +718,14 @@ export async function executeLegacyMigration(input: {
         );
       }
       const finishedAt = nowIso();
-      const report: LegacyMigrationReport = {
+      const status: LegacyMigrationReport["status"] =
+        preview.conflicts || preview.invalidRecords || preview.warnings.length
+          ? "warning"
+          : "success";
+      const report: LegacyMigrationReport = omitUndefinedValues({
         id: reportId,
         mode: input.mode,
-        status:
-          preview.conflicts || preview.invalidRecords || preview.warnings.length
-            ? "warning"
-            : "success",
+        status,
         startedAt,
         finishedAt,
         counts: preview.counts,
@@ -735,7 +737,7 @@ export async function executeLegacyMigration(input: {
         warnings: preview.warnings,
         errors: [],
         backupFile
-      };
+      });
       await storeReport(database, report, input.fingerprint, input.userEmail);
       await recordMigrationAudit(
         database,
