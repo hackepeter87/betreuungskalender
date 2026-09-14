@@ -13,6 +13,7 @@ import {
 } from "../services/dataTransfer.js";
 import type { WorkspaceRole } from "../auth.js";
 import { MAX_CHILD_RELATIONS_PER_RECORD } from "../validation/processingLimits.js";
+import { preventSensitiveResponseCaching as noStore } from "../httpProtection.js";
 
 const sensitive = {
   bodyLimit: config.dataTransferMaxBytes,
@@ -21,13 +22,6 @@ const sensitive = {
     rateLimit: { max: config.rateLimitSensitiveMax, timeWindow: config.rateLimitWindowMs }
   }
 };
-
-function noStore<T extends { header(name: string, value: string): unknown }>(reply: T): T {
-  reply.header("cache-control", "no-store, max-age=0");
-  reply.header("pragma", "no-cache");
-  reply.header("expires", "0");
-  return reply;
-}
 
 function errorReply(error: unknown) {
   const message = error instanceof Error ? error.message : "";

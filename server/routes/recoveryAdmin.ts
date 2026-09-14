@@ -10,6 +10,10 @@ import {
   RecoveryAdminError,
   RecoveryAdminStore
 } from "../services/recoveryAdmin.js";
+import {
+  browserRequestOriginGuard,
+  preventSensitiveResponseCaching
+} from "../httpProtection.js";
 import { publicLegalLinksHtml } from "./legal.js";
 
 type RecoveryRouteConfig = Pick<
@@ -23,6 +27,7 @@ type RecoveryRouteConfig = Pick<
   | "recoveryAdminSessionTtlSeconds"
   | "rateLimitSensitiveMax"
   | "rateLimitWindowMs"
+  | "allowedOrigin"
 >;
 
 interface RecoveryAdminRoutesOptions {
@@ -127,6 +132,10 @@ export async function recoveryAdminRoutes(
   app: FastifyInstance,
   options: RecoveryAdminRoutesOptions
 ): Promise<void> {
+  app.addHook("onRequest", async (_request, reply) => {
+    preventSensitiveResponseCaching(reply);
+  });
+
   const secureCookie = options.config.nodeEnv === "production";
   const store = options.store ?? new RecoveryAdminStore(omitUndefinedValues({
     enabled: options.config.recoveryAdminEnabled,
@@ -143,6 +152,10 @@ export async function recoveryAdminRoutes(
       }
     }
   };
+  const browserSessionAction = {
+    ...authRateLimit,
+    preHandler: browserRequestOriginGuard(options.config.allowedOrigin)
+  };
 
   app.addContentTypeParser(
     "application/x-www-form-urlencoded",
@@ -158,7 +171,7 @@ export async function recoveryAdminRoutes(
     return reply.type("text/html").send(loginPage(options.config.recoveryAdminUsername));
   });
 
-  app.post("/auth/recovery/login", authRateLimit, async (request, reply) => {
+  app.post("/auth/recovery/login", browserSessionAction, async (request, reply) => {
     if (!options.config.recoveryAdminEnabled) return notFound(reply);
     try {
       const body = credentials(request.body);
@@ -222,7 +235,7 @@ export async function recoveryAdminRoutes(
     return reply.type("text/html").send(changePasswordPage());
   });
 
-  app.post("/auth/recovery/change-password", authRateLimit, async (request, reply) => {
+  app.post("/auth/recovery/change-password", browserSessionAction, async (request, reply) => {
     if (!options.config.recoveryAdminEnabled) return notFound(reply);
     try {
       const body = credentials(request.body);
@@ -264,7 +277,7 @@ export async function recoveryAdminRoutes(
     }
   });
 
-  app.get("/auth/recovery/logout", authRateLimit, async (request, reply) => {
+  app.get("/auth/recovery/logout", browserSessionAction, async (request, reply) => {
     if (!options.config.recoveryAdminEnabled) return notFound(reply);
     await store.revokeByToken(
       cookieValue(request.headers.cookie, options.config.recoveryAdminSessionCookieName)
@@ -274,7 +287,7 @@ export async function recoveryAdminRoutes(
       .redirect("/");
   });
 
-  app.post("/auth/recovery/logout", authRateLimit, async (request, reply) => {
+  app.post("/auth/recovery/logout", browserSessionAction, async (request, reply) => {
     if (!options.config.recoveryAdminEnabled) return notFound(reply);
     await store.revokeByToken(
       cookieValue(request.headers.cookie, options.config.recoveryAdminSessionCookieName)

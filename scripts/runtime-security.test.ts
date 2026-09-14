@@ -845,6 +845,23 @@ test("runtime enforces native OIDC sessions without trusting proxy headers or lo
     }
   });
 
+  const rejectedLogout = await fetch(`${baseUrl}/auth/logout`, {
+    method: "POST",
+    headers: {
+      ...cookie(parentToken),
+      origin: "https://foreign.example.test"
+    }
+  });
+  assert.equal(rejectedLogout.status, 403);
+  assert.equal(rejectedLogout.headers.get("cache-control"), "no-store, max-age=0");
+  assert.deepEqual(await rejectedLogout.json(), {
+    error: "origin_not_allowed",
+    message: "Diese Herkunft ist nicht zugelassen."
+  });
+  assert.equal((await fetch(`${baseUrl}/api/session`, {
+    headers: cookie(parentToken)
+  })).status, 200);
+
   const trustedProxyHeadersOnly = await fetch(`${baseUrl}/api/children`, {
     headers: {
       "x-auth-request-user": "subject-admin",
@@ -1801,10 +1818,14 @@ test("production runtime applies central and stricter API rate limits", async (t
   assert.equal(setupExceeded.status, 429);
   assert.equal(setupExceeded.headers.get("x-ratelimit-limit"), "1");
 
-  assert.equal((await request("/api/migration/legacy-summary", "198.51.100.3")).status, 200);
+  const migrationSummary = await request("/api/migration/legacy-summary", "198.51.100.3");
+  assert.equal(migrationSummary.status, 200);
+  assert.equal(migrationSummary.headers.get("cache-control"), "no-store, max-age=0");
   assert.equal((await request("/api/migration/legacy-summary", "198.51.100.3")).status, 429);
 
-  assert.equal((await request("/api/external-calendar-events/export", "198.51.100.4")).status, 200);
+  const calendarExport = await request("/api/external-calendar-events/export", "198.51.100.4");
+  assert.equal(calendarExport.status, 200);
+  assert.equal(calendarExport.headers.get("cache-control"), "no-store, max-age=0");
   assert.equal((await request("/api/external-calendar-events/export", "198.51.100.4")).status, 429);
 
   assert.equal((await request("/datenschutz", "198.51.100.6")).status, 404);

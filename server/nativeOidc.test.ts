@@ -539,6 +539,7 @@ test("native OIDC routes redirect login and keep callback responses token-free",
       oidcRequireRoleClaim: true,
       sessionCookieName: "betreuungskalender_session",
       sessionTtlSeconds: 3600,
+      allowedOrigin: "https://bk.example.test",
       rateLimitSensitiveMax: 5,
       rateLimitWindowMs: 60_000
     },
@@ -800,6 +801,18 @@ test("native OIDC routes redirect login and keep callback responses token-free",
       groups_json: "[\"/betreuungskalender/parents\"]"
     });
 
+    const rejectedLogout = await app.inject({
+      method: "POST",
+      url: "/auth/logout",
+      headers: {
+        cookie: cookieHeader ?? "",
+        origin: "https://foreign.example.test"
+      }
+    });
+    assert.equal(rejectedLogout.statusCode, 403);
+    assert.equal(rejectedLogout.headers["cache-control"], "no-store, max-age=0");
+    assert.equal((await sessions.findByToken(sessionToken))?.externalSubject, "subject-123");
+
     const logout = await app.inject({
       method: "POST",
       url: "/auth/logout",
@@ -812,6 +825,7 @@ test("native OIDC routes redirect login and keep callback responses token-free",
       logoutRedirectUrl: "https://idp.example.test/logout?client_id=betreuungskalender"
     });
     assert.match(String(logout.headers["set-cookie"]), /Max-Age=0/);
+    assert.equal(logout.headers["cache-control"], "no-store, max-age=0");
     assert.equal(await sessions.findByToken(sessionToken), undefined);
 
     const browserLogout = await app.inject({
@@ -868,6 +882,7 @@ test("native OIDC invitation callback rolls back every write when session creati
       oidcRequireRoleClaim: true,
       sessionCookieName: "betreuungskalender_session",
       sessionTtlSeconds: 3600,
+      allowedOrigin: "https://bk.example.test",
       rateLimitSensitiveMax: 5,
       rateLimitWindowMs: 60_000
     },
@@ -945,6 +960,7 @@ test("native OIDC callback rejects normal login without workspace membership", a
       oidcRequireRoleClaim: true,
       sessionCookieName: "betreuungskalender_session",
       sessionTtlSeconds: 3600,
+      allowedOrigin: "https://bk.example.test",
       rateLimitSensitiveMax: 5,
       rateLimitWindowMs: 60_000
     },
@@ -1015,6 +1031,7 @@ test("native OIDC callback accepts users with app membership without role groups
       oidcRequireRoleClaim: true,
       sessionCookieName: "betreuungskalender_session",
       sessionTtlSeconds: 3600,
+      allowedOrigin: "https://bk.example.test",
       rateLimitSensitiveMax: 5,
       rateLimitWindowMs: 60_000
     },
@@ -1105,6 +1122,7 @@ test("native OIDC normal login stays closed before owner setup for every claim r
           oidcRequireRoleClaim: true,
           sessionCookieName: "betreuungskalender_session",
           sessionTtlSeconds: 3600,
+          allowedOrigin: "https://bk.example.test",
           rateLimitSensitiveMax: 5,
           rateLimitWindowMs: 60_000
         },
