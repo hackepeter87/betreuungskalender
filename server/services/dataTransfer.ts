@@ -1,5 +1,6 @@
 import { sql } from "kysely";
 import { createHash, createHmac, randomBytes, randomUUID, timingSafeEqual } from "node:crypto";
+import { isUnknownRecord } from "../../shared/objects.js";
 import { config } from "../config.js";
 import {
   createSqlitePersistenceRuntime,
@@ -43,6 +44,12 @@ interface ExportDomainDataOptions {
 }
 
 export class DomainExportLimitError extends Error {}
+
+function workspaceRole(value: unknown): WorkspaceRole | undefined {
+  return value === "admin" || value === "editor" || value === "scheduler" || value === "viewer"
+    ? value
+    : undefined;
+}
 
 export interface PortableActor {
   sourceRef: string;
@@ -143,9 +150,9 @@ const transferCategories: Array<{ code: TransferCategoryCode; key: string }> = [
 
 function stableValue(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stableValue);
-  if (value && typeof value === "object") {
+  if (isUnknownRecord(value)) {
     return Object.fromEntries(
-      Object.entries(value as DataRecord)
+      Object.entries(value)
         .sort(([left], [right]) => left.localeCompare(right))
         .map(([key, entry]) => [key, stableValue(entry)])
     );
@@ -198,8 +205,8 @@ function validateStructure(value: unknown, depth = 0): void {
     for (const item of value) validateStructure(item, depth + 1);
     return;
   }
-  if (!value || typeof value !== "object") return;
-  const entries = Object.entries(value as DataRecord);
+  if (!isUnknownRecord(value)) return;
+  const entries = Object.entries(value);
   if (entries.length > MAX_OBJECT_KEYS) throw new Error("Transfer package object contains too many fields.");
   for (const [key, item] of entries) {
     if (key.length > 200) throw new Error("Transfer package contains an oversized field name.");
@@ -207,7 +214,7 @@ function validateStructure(value: unknown, depth = 0): void {
   }
 }
 
-function envelopePayload(envelope: Omit<PortableTransferEnvelope, "checksum">): string {
+function envelopePayload(envelope: unknown): string {
   return canonicalJson(envelope);
 }
 
@@ -331,13 +338,21 @@ async function junctionMap(
     return query;
   };
   const rows: Array<{ parentId: string; childId: string }> = [];
+  const appendRows = (selected: Array<{ parentId: unknown; childId: string }>) => {
+    for (const row of selected) {
+      if (typeof row.parentId !== "string") {
+        throw new Error("Related transfer record has an invalid identifier.");
+      }
+      rows.push({ parentId: row.parentId, childId: row.childId });
+    }
+  };
   if (parentIds) {
     for (const parentIdChunk of chunks(parentIds, REPORT_QUERY_CHUNK_SIZE)) {
-      rows.push(...await queryFor(parentIdChunk).limit(MAX_REPORT_RELATED_RECORDS + 1).execute() as Array<{ parentId: string; childId: string }>);
+      appendRows(await queryFor(parentIdChunk).limit(MAX_REPORT_RELATED_RECORDS + 1).execute());
       assertRecordLimit(rows, MAX_REPORT_RELATED_RECORDS);
     }
   } else {
-    rows.push(...await queryFor().limit(MAX_TRANSFER_COLLECTION_RECORDS + 1).execute() as Array<{ parentId: string; childId: string }>);
+    appendRows(await queryFor().limit(MAX_TRANSFER_COLLECTION_RECORDS + 1).execute());
     assertRecordLimit(rows, MAX_TRANSFER_COLLECTION_RECORDS);
   }
   for (const row of rows) result.set(row.parentId, [...(result.get(row.parentId) ?? []), row.childId]);
@@ -560,8 +575,9 @@ export async function exportDomainData(
       action: row.action
     })),
     monthClosures: closingRows.map((row) => {
-      const item = camelRecord(row as DataRecord);
-      const summary = parseJson(item.summaryJson, {}) as DataRecord;
+      const item = camelRecord(row);
+      const parsedSummary = parseJson(item.summaryJson, {});
+      const summary = isUnknownRecord(parsedSummary) ? parsedSummary : {};
       return {
         monthKey: item.monthKey,
         closedAt: item.closedAt,
@@ -597,9 +613,9 @@ function referencedActorIds(data: ImportData): Set<string> {
       for (const nested of [record.trips, record.costs]) {
         if (!Array.isArray(nested)) continue;
         for (const item of nested) {
-          if (item && typeof item === "object") {
-            add((item as DataRecord).createdBy);
-            add((item as DataRecord).updatedBy);
+          if (isUnknownRecord(item)) {
+            add(item.createdBy);
+            add(item.updatedBy);
           }
         }
       }
@@ -677,7 +693,7 @@ async function exportActors(
 
   return sourceRefs.map((sourceRef) => {
     const row = actorsBySourceRef.get(sourceRef);
-    const role = row?.role as WorkspaceRole | null | undefined;
+    const role = workspaceRole(row?.role);
     return {
       sourceRef,
       displayName: row?.displayName ?? sourceRef,
@@ -779,13 +795,13 @@ function normalizeTransfer(input: unknown): NormalizedTransfer {
   const serialized = JSON.stringify(input);
   const bytes = Buffer.byteLength(serialized, "utf8");
   if (bytes > config.dataTransferMaxBytes) throw new Error("Transfer package exceeds the configured size limit.");
-  if (!input || typeof input !== "object") throw new Error("Transfer package is invalid.");
-  const record = input as DataRecord;
+  if (!isUnknownRecord(input)) throw new Error("Transfer package is invalid.");
+  const record = input;
   if (record.application === "betreuungskalender" && record.formatVersion === FORMAT_VERSION) {
     const checksum = typeof record.checksum === "string" ? record.checksum : "";
     const withoutChecksum = { ...record };
     delete withoutChecksum.checksum;
-    const expected = sha256(envelopePayload(withoutChecksum as Omit<PortableTransferEnvelope, "checksum">));
+    const expected = sha256(envelopePayload(withoutChecksum));
     if (checksum !== expected) throw new Error("Transfer package checksum is invalid.");
     const data = appDataImportSchema.parse(record.data);
     if (Array.isArray(record.actors) && record.actors.length > MAX_TRANSFER_ACTORS) {
@@ -793,8 +809,8 @@ function normalizeTransfer(input: unknown): NormalizedTransfer {
     }
     const actors = Array.isArray(record.actors)
       ? record.actors.map((actor) => {
-          if (!actor || typeof actor !== "object") throw new Error("Transfer actor is invalid.");
-          const item = actor as DataRecord;
+          if (!isUnknownRecord(actor)) throw new Error("Transfer actor is invalid.");
+          const item = actor;
           const sourceRef = String(item.sourceRef ?? "").trim();
           const displayName = String(item.displayName ?? "").trim();
           if (!sourceRef || !displayName) throw new Error("Transfer actor is incomplete.");
@@ -915,8 +931,8 @@ function remapActorReferences(data: ImportData, actors: PortableActor[], namespa
   const actorKeys = new Set(["createdBy", "updatedBy", "confirmedBy", "userId", "closedBy"]);
   const visit = (value: unknown): unknown => {
     if (Array.isArray(value)) return value.map(visit);
-    if (!value || typeof value !== "object") return value;
-    return Object.fromEntries(Object.entries(value as DataRecord).map(([key, entry]) => [
+    if (!isUnknownRecord(value)) return value;
+    return Object.fromEntries(Object.entries(value).map(([key, entry]) => [
       key,
       actorKeys.has(key) && typeof entry === "string" ? mapping.get(entry) ?? entry : visit(entry)
     ]));

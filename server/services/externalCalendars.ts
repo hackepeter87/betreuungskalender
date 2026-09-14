@@ -99,7 +99,11 @@ export function parseIcs(content: string): ParsedExternalCalendarEvent[] {
     throw new ExternalCalendarError("external_calendar_limit", "Calendar file exceeds the supported size.");
   }
   let component: ICAL.Component;
-  try { component = new ICAL.Component(ICAL.parse(content)); } catch {
+  try {
+    // ical.js exposes parsed JCal as `any`; Component performs the library's structural conversion.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-argument
+    component = new ICAL.Component(ICAL.parse(content));
+  } catch {
     throw new ExternalCalendarError("external_calendar_invalid", "Calendar file is malformed.");
   }
   if (component.name !== "vcalendar") throw new ExternalCalendarError("external_calendar_invalid", "Calendar must contain VCALENDAR.");

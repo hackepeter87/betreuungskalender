@@ -4,6 +4,17 @@ import type { AppData } from "../types";
 
 export const LEGACY_STORAGE_KEYS = ["betreuungskalender:data:v1"] as const;
 const IGNORE_PREFERENCE_KEY = "betreuungskalender:ui:legacy-migration:v1";
+const legacyCountKeys: ReadonlyArray<keyof LegacyDataCounts> = [
+  "children",
+  "entries",
+  "holidays",
+  "contactPatterns",
+  "trips",
+  "costs",
+  "unavailablePeriods",
+  "settings",
+  "monthClosures"
+];
 
 export interface LegacyBrowserData {
   key: string;
@@ -88,13 +99,12 @@ export function detectLegacyBrowserData(): LegacyBrowserData | null {
       const normalized = sourceCounts(result.data);
       result.invalidRecords = Math.max(
         0,
-        Object.keys(result.counts).reduce(
+        legacyCountKeys.reduce(
           (total, keyName) =>
             total +
             Math.max(
               0,
-              result.counts[keyName as keyof LegacyDataCounts] -
-                normalized[keyName as keyof LegacyDataCounts]
+              result.counts[keyName] - normalized[keyName]
             ),
           0
         )
@@ -105,8 +115,8 @@ export function detectLegacyBrowserData(): LegacyBrowserData | null {
         );
       }
     } catch (error) {
-      result.invalidRecords = Object.values(result.counts).reduce(
-        (total, value) => total + value,
+      result.invalidRecords = legacyCountKeys.reduce(
+        (total, keyName) => total + result.counts[keyName],
         0
       ) || 1;
       result.error =
