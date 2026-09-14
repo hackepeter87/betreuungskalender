@@ -576,14 +576,16 @@ function checkDeploymentExamples(cwd, version, report) {
   }
 
   const dockerfiles = `${dockerfile}\n${releaseDockerfile}`;
+  const buildImage =
+    "node:24.18.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d";
   const runtimeImage =
     "gcr.io/distroless/nodejs24-debian13:nonroot@sha256:fbbdda866ea71aef98c4abece17e3d61fbf820cc2ef3961522caa2478716171a";
   const runtimeStages = [dockerfile, releaseDockerfile].map((content) =>
     content.slice(content.lastIndexOf(" AS runtime"))
   );
   if (
-    !dockerfile.includes("FROM node:24.18.0-bookworm-slim AS build") ||
-    !releaseDockerfile.includes("FROM node:24.18.0-bookworm-slim AS production-deps") ||
+    !dockerfile.includes(`FROM ${buildImage} AS build`) ||
+    !releaseDockerfile.includes(`FROM ${buildImage} AS production-deps`) ||
     !dockerfile.includes(`FROM ${runtimeImage} AS runtime`) ||
     !releaseDockerfile.includes(`FROM ${runtimeImage} AS runtime`) ||
     !dockerfiles.includes("npm install -g npm@12.0.1")

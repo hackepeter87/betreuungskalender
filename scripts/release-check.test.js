@@ -280,7 +280,7 @@ test("pins the required npm version in Node-based GitHub workflows", () => {
 
   for (const workflowPath of workflowPaths) {
     const workflow = readFileSync(resolve(workflowPath), "utf8");
-    const setupNodeSteps = workflow.match(/actions\/setup-node@v6/g) ?? [];
+    const setupNodeSteps = workflow.match(/actions\/setup-node@[0-9a-f]{40} # v6/g) ?? [];
     const pinnedNpmSteps = workflow.match(/npm install --global npm@12\.0\.1/g) ?? [];
 
     assert.equal(
@@ -343,8 +343,14 @@ test("direct Compose example does not trust proxy identity headers", () => {
   assert.equal(parseEnvValue(oidcEnvExample, "APP_RELEASE_DIR")?.endsWith(`/v${packageJson.version}`), true);
   assert.equal(parseEnvValue(envExample, "TRUST_PROXY_AUTH"), "false");
   assert.equal(parseEnvValue(oidcEnvExample, "TRUST_PROXY_AUTH"), "true");
-  assert.match(dockerfile, /FROM node:24\.18\.0-bookworm-slim AS build/);
-  assert.match(releaseDockerfile, /FROM node:24\.18\.0-bookworm-slim AS production-deps/);
+  assert.match(
+    dockerfile,
+    /FROM node:24\.18\.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS build/
+  );
+  assert.match(
+    releaseDockerfile,
+    /FROM node:24\.18\.0-bookworm-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS production-deps/
+  );
   assert.match(
     dockerfile,
     /FROM gcr\.io\/distroless\/nodejs24-debian13:nonroot@sha256:fbbdda866ea71aef98c4abece17e3d61fbf820cc2ef3961522caa2478716171a AS runtime/
