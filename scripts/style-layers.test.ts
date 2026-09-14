@@ -12,6 +12,7 @@ import {
   validateBreakpointOwnership,
   validateLayerEntry,
   validateRawColorBudget,
+  type RawColorBudget,
   type StyleSource
 } from "./style-guardrails";
 import {
@@ -32,6 +33,7 @@ const layerNames = [
 ] as const;
 
 const sharedStyleOwners = ["summaries", "confirmations", "care-conflicts", "data-migration", "period-selector"];
+const reviewedRawColorBudget: RawColorBudget = rawColorBudget;
 
 test("does not use filled-action background tokens for foreground text", async () => {
   for (const source of await styleSources()) {
@@ -421,7 +423,7 @@ test("keeps the repository within the reviewed style contracts", async () => {
         .filter((candidate) => candidate.layer === layer)
         .map((candidate) => candidate.source)
         .join("\n");
-      return validateRawColorBudget(budgetPath, source, rawColorBudget[budgetPath] ?? {});
+      return validateRawColorBudget(budgetPath, source, reviewedRawColorBudget[budgetPath] ?? {});
     }),
     ...validateBaselineOwnership(sources, baselineOwners),
     ...validateBreakpointOwnership(sources, approvedViewportQueries),

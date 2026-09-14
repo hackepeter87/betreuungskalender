@@ -1,4 +1,5 @@
 import "fastify";
+import "@fastify/rate-limit";
 import type { RequestUser, WorkspacePermission } from "../auth.js";
 import type { PersistenceRuntime } from "../db/runtime.js";
 

@@ -7,13 +7,13 @@ RUN npm install -g npm@12.0.1 && npm cache clean --force
 COPY package.json package-lock.json ./
 RUN npm ci
 
-COPY index.html tsconfig*.json vite.config.ts ./
+COPY index.html playwright.config.ts tsconfig*.json vite.config.ts ./
 COPY public ./public
 COPY server ./server
 COPY shared ./shared
 COPY src ./src
-COPY scripts/copy-migrations.js scripts/check-frontend-bundle.js ./scripts/
-COPY scripts/style-report.ts scripts/style-inventory.ts scripts/style-reduction-contract.ts ./scripts/
+COPY e2e/*.ts ./e2e/
+COPY scripts/*.ts scripts/copy-migrations.js scripts/check-frontend-bundle.js ./scripts/
 RUN npm run build
 
 FROM build AS production-deps
