@@ -2,7 +2,13 @@ import type { AppData, CareEntry, CareParty, Child } from "../types";
 import { SCHEMA_VERSION } from "../types";
 import { makeId, nowIso, toDateKey } from "../lib/date";
 
-export const CHILD_COLORS = ["#0d9488", "#6967d9", "#d97706", "#2563eb", "#c24170"];
+export const CHILD_COLORS = ["#0d9488", "#6967d9", "#d97706", "#2563eb", "#c24170"] as const;
+
+export function childColor(index: number): string {
+  if (!Number.isInteger(index)) return CHILD_COLORS[0];
+  const normalizedIndex = ((index % CHILD_COLORS.length) + CHILD_COLORS.length) % CHILD_COLORS.length;
+  return CHILD_COLORS[normalizedIndex] ?? CHILD_COLORS[0];
+}
 
 export function createEmptyData(): AppData {
   return {
@@ -45,7 +51,7 @@ export function createDemoData(): AppData {
       name: "Demo-Kind A",
       birthMonth: 5,
       birthYear: 2015,
-      color: CHILD_COLORS[0],
+      color: childColor(0),
       createdBy: "local-dev",
       updatedBy: "local-dev",
       createdAt: timestamp,
@@ -56,7 +62,7 @@ export function createDemoData(): AppData {
       name: "Demo-Kind B",
       birthMonth: 5,
       birthYear: 2017,
-      color: CHILD_COLORS[1],
+      color: childColor(1),
       createdBy: "local-dev",
       updatedBy: "local-dev",
       createdAt: timestamp,
@@ -111,6 +117,10 @@ export function createDemoData(): AppData {
     };
   };
 
+  const firstChild = children.at(0);
+  const secondChild = children.at(1);
+  if (!firstChild || !secondChild) throw new Error("Demo children are incomplete.");
+
   return {
     ...createEmptyData(),
     children,
@@ -121,9 +131,9 @@ export function createDemoData(): AppData {
     },
     entries: [
       makeEntry(-8, children.map((child) => child.id), "completed", true, "Reguläre Betreuung"),
-      makeEntry(-3, [children[0].id], "completed", false, "Abholung nach der Schule"),
+      makeEntry(-3, [firstChild.id], "completed", false, "Abholung nach der Schule"),
       makeEntry(1, children.map((child) => child.id), "planned", true, "Geplanter Umgang"),
-      makeEntry(5, [children[1].id], "planned", false, "Zusätzlicher Nachmittag")
+      makeEntry(5, [secondChild.id], "planned", false, "Zusätzlicher Nachmittag")
     ],
     contactPatterns: [],
     contactRules: [],

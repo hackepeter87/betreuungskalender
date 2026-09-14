@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { CHILD_COLORS } from "../data/defaults";
+import { CHILD_COLORS, childColor } from "../data/defaults";
 import { Icon } from "../components/Icon";
 import { AppearanceControl } from "../components/AppearanceControl";
 import { FieldHelpButton, FieldHelpLabel } from "../components/FieldHelp";
@@ -35,7 +35,7 @@ function ChildForm({ child, onDone }: { child?: Child; onDone: () => void }) {
   const [name, setName] = useState(child?.name ?? "");
   const [birthMonth, setBirthMonth] = useState(child?.birthMonth ?? 1);
   const [birthYear, setBirthYear] = useState(child?.birthYear ?? new Date().getFullYear() - 8);
-  const [color, setColor] = useState(child?.color ?? CHILD_COLORS[0]);
+  const [color, setColor] = useState(child?.color ?? childColor(0));
 
   const submit = async (event: FormEvent) => {
     event.preventDefault();

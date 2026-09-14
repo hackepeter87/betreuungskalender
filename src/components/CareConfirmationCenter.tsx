@@ -16,7 +16,7 @@ interface PartialConfirmationDraft {
 }
 
 function dateTimeParts(value: string) {
-  const [date, time = "00:00"] = value.slice(0, 16).split("T");
+  const [date = "", time = "00:00"] = value.slice(0, 16).split("T");
   return { date, time };
 }
 

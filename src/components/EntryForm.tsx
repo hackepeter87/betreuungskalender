@@ -45,7 +45,7 @@ function dateTimeParts(value: string): { date: string; time: string } {
       time: `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
     };
   }
-  const [date, time = "00:00"] = value.split("T");
+  const [date = "", time = "00:00"] = value.split("T");
   return { date, time: time.slice(0, 5) };
 }
 
