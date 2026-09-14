@@ -27,6 +27,10 @@ const {
   insertEntry
 } = await import("./routes/appData.js");
 const { appDataImportSchema } = await import("./validation/schemas.js");
+const {
+  ImportProcessingLimitError,
+  assertImportProcessingLimits
+} = await import("./validation/processingLimits.js");
 const { migrationRoutes } = await import("./routes/migration.js");
 
 runMigrations();
@@ -162,6 +166,65 @@ test("Migrationsfähigkeiten trennen SQLite-Ersetzung von additiver Übernahme",
   });
 });
 
+test("Legacy-Importbudgets akzeptieren die Grenze und lehnen den nächsten Datensatz ab", () => {
+  const data = fixture();
+  const limits = {
+    maximumCollectionRecords: 2,
+    maximumTotalRecords: 5,
+    maximumChildRelationsPerRecord: 2,
+    maximumTripsPerRecord: 2,
+    maximumCostsPerRecord: 2,
+    maximumNestingDepth: 20,
+    maximumObjectProperties: 30,
+    maximumTraversedValues: 500
+  };
+  assert.doesNotThrow(() => assertImportProcessingLimits(data, limits));
+  assert.throws(
+    () => assertImportProcessingLimits({
+      ...data,
+      children: [...data.children, { id: "second-child" }],
+      entries: data.entries
+    }, limits),
+    ImportProcessingLimitError
+  );
+});
+
+test("Legacy-Importbudgets begrenzen verschachtelte Sammlungen und Tiefe", () => {
+  const data = fixture();
+  assert.throws(
+    () => assertImportProcessingLimits({
+      ...data,
+      entries: [{ ...data.entries[0], childIds: ["one", "two", "three"] }]
+    }, {
+      maximumCollectionRecords: 2,
+      maximumTotalRecords: 10,
+      maximumChildRelationsPerRecord: 2,
+      maximumTripsPerRecord: 2,
+      maximumCostsPerRecord: 2,
+      maximumNestingDepth: 20,
+      maximumObjectProperties: 30,
+      maximumTraversedValues: 500
+    }),
+    ImportProcessingLimitError
+  );
+  assert.throws(
+    () => assertImportProcessingLimits({
+      ...data,
+      settings: { nested: { too: { deeply: true } } }
+    }, {
+      maximumCollectionRecords: 10,
+      maximumTotalRecords: 20,
+      maximumChildRelationsPerRecord: 10,
+      maximumTripsPerRecord: 10,
+      maximumCostsPerRecord: 10,
+      maximumNestingDepth: 2,
+      maximumObjectProperties: 30,
+      maximumTraversedValues: 500
+    }),
+    ImportProcessingLimitError
+  );
+});
+
 test("PostgreSQL lehnt den SQLite-Ersetzungsweg vor Datenzugriff ab", async () => {
   const postgresRuntime = {
     ...persistence,
@@ -220,6 +283,40 @@ test("Migrations-API liefert Fähigkeiten und lehnt PostgreSQL-Ersetzung generis
     error: "legacy_migration_replace_unavailable",
     message: "Dieser Migrationsmodus ist für die ausgewählte Datenbank nicht verfügbar."
   });
+  assert.equal((await getLegacyDatabaseSummary(persistence.query)).isEmpty, true);
+  await app.close();
+});
+
+test("Vorschau und Import lehnen dasselbe übergroße Paket generisch und nicht cachebar ab", async () => {
+  const app = Fastify({ logger: false });
+  app.decorateRequest("userEmail", "test@example.invalid");
+  app.decorateRequest("user", undefined);
+  app.decorate("persistence", persistence);
+  await app.register(migrationRoutes);
+  const data = {
+    ...fixture(),
+    children: Array.from({ length: 50_001 }, () => ({}))
+  };
+
+  for (const path of ["legacy-preview", "legacy-import"]) {
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/migration/${path}`,
+      payload: {
+        data,
+        fingerprint: "fixture-over-limit",
+        invalidRecords: 0,
+        warnings: [],
+        ...(path === "legacy-import" ? { mode: "add", duplicatePolicy: "skip" } : {})
+      }
+    });
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.headers["cache-control"], "no-store");
+    assert.deepEqual(response.json(), {
+      error: "migration_processing_limit",
+      message: "Das Datenpaket überschreitet die unterstützten Grenzen."
+    });
+  }
   assert.equal((await getLegacyDatabaseSummary(persistence.query)).isEmpty, true);
   await app.close();
 });

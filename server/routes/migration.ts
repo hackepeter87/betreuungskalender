@@ -10,6 +10,10 @@ import {
   recordLegacyMigrationEvent
 } from "../services/legacyMigration.js";
 import { appDataImportSchema } from "../validation/schemas.js";
+import {
+  ImportProcessingLimitError,
+  assertImportProcessingLimits
+} from "../validation/processingLimits.js";
 
 const sensitiveLimit = {
   config: { permission: "admin:destructive" as const, rateLimit: { max: config.rateLimitSensitiveMax, timeWindow: config.rateLimitWindowMs } }
@@ -21,8 +25,17 @@ const metadataSchema = z.object({
   reason: z.string().max(100).optional()
 });
 
+const legacyDataImportSchema = appDataImportSchema.superRefine((data, context) => {
+  try {
+    assertImportProcessingLimits(data);
+  } catch (error) {
+    if (!(error instanceof ImportProcessingLimitError)) throw error;
+    context.addIssue({ code: "custom", message: "migration_processing_limit" });
+  }
+});
+
 const previewSchema = z.object({
-  data: appDataImportSchema,
+  data: legacyDataImportSchema,
   fingerprint: z.string().min(1).max(200),
   invalidRecords: z.number().int().nonnegative().default(0),
   warnings: z.array(z.string().max(500)).max(100).default([])
@@ -32,6 +45,19 @@ const importSchema = previewSchema.extend({
   mode: z.enum(["add", "replace"]),
   duplicatePolicy: z.enum(["skip", "include"]).default("skip")
 });
+
+function validationFailure(
+  reply: { code(status: number): { send(payload: unknown): unknown } },
+  issues: z.ZodIssue[]
+) {
+  if (issues.some((issue) => issue.message === "migration_processing_limit")) {
+    return reply.code(400).send({
+      error: "migration_processing_limit",
+      message: "Das Datenpaket überschreitet die unterstützten Grenzen."
+    });
+  }
+  return reply.code(400).send({ error: "validation_error", issues });
+}
 
 export async function migrationRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/migration/legacy-summary", sensitiveLimit, async () => ({
@@ -69,9 +95,10 @@ export async function migrationRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post("/api/migration/legacy-preview", sensitiveLimit, async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
     const parsed = previewSchema.safeParse(request.body);
     if (!parsed.success) {
-      return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
+      return validationFailure(reply, parsed.error.issues);
     }
     return previewLegacyMigration(
       parsed.data.data,
@@ -84,9 +111,10 @@ export async function migrationRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post("/api/migration/legacy-import", sensitiveLimit, async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
     const parsed = importSchema.safeParse(request.body);
     if (!parsed.success) {
-      return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
+      return validationFailure(reply, parsed.error.issues);
     }
     try {
       return await executeLegacyMigration({

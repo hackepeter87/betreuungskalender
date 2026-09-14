@@ -24,6 +24,7 @@ import { createSqliteBackup } from "./backup.js";
 import { makeId, nowIso } from "./common.js";
 import { getDefaultResponsiblePartyId } from "./settings.js";
 import { appDataImportSchema } from "../validation/schemas.js";
+import { assertImportProcessingLimits } from "../validation/processingLimits.js";
 
 type MigrationData = ReturnType<typeof appDataImportSchema.parse>;
 type DataRecord = Record<string, unknown>;
@@ -232,6 +233,8 @@ export async function analyzeLegacyData(
   invalidRecords = 0,
   sourceWarnings: string[] = []
 ): Promise<LegacyMigrationPreview> {
+  assertImportProcessingLimits(data);
+  data = appDataImportSchema.parse(data);
   const database = await getLegacyDatabaseSummary(executor);
   const duplicateDetails: LegacyMigrationIssue[] = [];
   const conflictDetails: LegacyMigrationIssue[] = [];
