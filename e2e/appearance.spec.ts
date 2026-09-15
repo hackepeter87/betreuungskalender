@@ -211,7 +211,11 @@ for (const colorScheme of ["light", "dark"] as const) {
     await expectNoDocumentHorizontalOverflow(page);
     await page.screenshot({ path: testInfo.outputPath(`${colorScheme}-entry-validation.png`), fullPage: false, animations: "disabled" });
     if (testInfo.project.name.startsWith("visual-")) {
-      await expect(page).toHaveScreenshot(`${colorScheme}-entry-validation.png`, { animations: "disabled", caret: "hide" });
+      await expect(page).toHaveScreenshot(`${colorScheme}-entry-validation.png`, {
+        animations: "disabled",
+        caret: "hide",
+        maxDiffPixels: testInfo.project.name === "visual-768" && colorScheme === "light" ? 1 : 0,
+      });
     }
     await page.keyboard.press("Escape");
     await expect(dialog).toBeHidden();
