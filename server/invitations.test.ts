@@ -20,6 +20,7 @@ import {
   invitationEmailAvailable,
   invitationEmailText,
   invitationSenderAddress,
+  invitationTransportOptions,
   invitationUrl,
   sendInvitationEmail,
   type InvitationEmailConfig
@@ -396,6 +397,29 @@ test("invitation email capability requires enabled host and sender configuration
     smtpSecure: false,
     smtpFrom: "no-reply@example.test"
   }), false);
+});
+
+test("invitation mail transport cannot resolve file or URL content", () => {
+  assert.deepEqual(invitationTransportOptions({
+    invitationEmailEnabled: true,
+    invitationPublicBaseUrl: "https://bk.example.test",
+    smtpHost: "smtp.example.test",
+    smtpPort: 587,
+    smtpSecure: false,
+    smtpUser: "smtp-user",
+    smtpPassword: "smtp-secret",
+    smtpFrom: "no-reply@example.test"
+  }), {
+    host: "smtp.example.test",
+    port: 587,
+    secure: false,
+    disableFileAccess: true,
+    disableUrlAccess: true,
+    auth: {
+      user: "smtp-user",
+      pass: "smtp-secret"
+    }
+  });
 });
 
 test("invitation email delivery can use the installation label as sender display name", async () => {
