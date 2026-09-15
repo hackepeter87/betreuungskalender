@@ -54,6 +54,10 @@ updates:
       time: "05:30"
       timezone: Europe/Berlin
     open-pull-requests-limit: 4
+    ignore:
+      - dependency-name: node
+        update-types:
+          - version-update:semver-major
     groups:
       container-bases:
         patterns:

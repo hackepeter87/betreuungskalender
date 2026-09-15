@@ -61,3 +61,9 @@ test("the Compose guide keeps file secrets reachable only through a private dire
   assert.match(content, /nonroot users in the application and PostgreSQL containers/);
   assert.match(content, /Do not place them in a shared or traversable directory/);
 });
+
+test("the PostgreSQL smoke test treats generated secret markers as data", async () => {
+  const content = await readFile("scripts/container-postgres-smoke.sh", "utf8");
+
+  assert.match(content, /grep -Fq -- "\$secret" "\$path"/);
+});

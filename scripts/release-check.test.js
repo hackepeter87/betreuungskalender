@@ -280,7 +280,7 @@ test("pins the required npm version in Node-based GitHub workflows", () => {
 
   for (const workflowPath of workflowPaths) {
     const workflow = readFileSync(resolve(workflowPath), "utf8");
-    const setupNodeSteps = workflow.match(/actions\/setup-node@[0-9a-f]{40} # v6/g) ?? [];
+    const setupNodeSteps = workflow.match(/actions\/setup-node@[0-9a-f]{40} # v7\.0\.0/g) ?? [];
     const pinnedNpmSteps = workflow.match(/npm install --global npm@12\.0\.1/g) ?? [];
 
     assert.equal(
@@ -353,11 +353,11 @@ test("direct Compose example does not trust proxy identity headers", () => {
   );
   assert.match(
     dockerfile,
-    /FROM gcr\.io\/distroless\/nodejs24-debian13:nonroot@sha256:fbbdda866ea71aef98c4abece17e3d61fbf820cc2ef3961522caa2478716171a AS runtime/
+    /FROM gcr\.io\/distroless\/nodejs24-debian13:nonroot@sha256:bb6b03d81066993293a10feda7250e8e1cc034035fe9b61cfceededa7c8bf04d AS runtime/
   );
   assert.match(
     releaseDockerfile,
-    /FROM gcr\.io\/distroless\/nodejs24-debian13:nonroot@sha256:fbbdda866ea71aef98c4abece17e3d61fbf820cc2ef3961522caa2478716171a AS runtime/
+    /FROM gcr\.io\/distroless\/nodejs24-debian13:nonroot@sha256:bb6b03d81066993293a10feda7250e8e1cc034035fe9b61cfceededa7c8bf04d AS runtime/
   );
   assert.match(`${dockerfile}\n${releaseDockerfile}`, /npm install -g npm@12\.0\.1/);
   assert.doesNotMatch(`${dockerfile}\n${releaseDockerfile}`, /CMD \["npm", "run", "start"\]/);

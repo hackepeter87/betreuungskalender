@@ -137,7 +137,7 @@ wait_for_health() {
 assert_secret_absent() {
   local path="$1"
   while IFS= read -r secret; do
-    if [[ -n "$secret" ]] && grep -Fq "$secret" "$path"; then
+    if [[ -n "$secret" ]] && grep -Fq -- "$secret" "$path"; then
       echo "A database secret appeared in $path." >&2
       exit 1
     fi
