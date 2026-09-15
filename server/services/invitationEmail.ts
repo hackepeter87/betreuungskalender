@@ -95,11 +95,13 @@ function assertMailConfig(mailConfig: InvitationEmailConfig): asserts mailConfig
   }
 }
 
-function defaultTransport(mailConfig: InvitationEmailConfig): InvitationEmailTransport {
-  return nodemailer.createTransport({
+export function invitationTransportOptions(mailConfig: InvitationEmailConfig) {
+  return {
     host: mailConfig.smtpHost,
     port: mailConfig.smtpPort,
     secure: mailConfig.smtpSecure,
+    disableFileAccess: true,
+    disableUrlAccess: true,
     ...(mailConfig.smtpUser && mailConfig.smtpPassword
       ? {
           auth: {
@@ -108,7 +110,11 @@ function defaultTransport(mailConfig: InvitationEmailConfig): InvitationEmailTra
           }
         }
       : {})
-  });
+  };
+}
+
+function defaultTransport(mailConfig: InvitationEmailConfig): InvitationEmailTransport {
+  return nodemailer.createTransport(invitationTransportOptions(mailConfig));
 }
 
 function sanitizeDisplayName(value?: string): string | undefined {
