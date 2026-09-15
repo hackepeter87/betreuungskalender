@@ -263,7 +263,7 @@ test("allows only required dependency install scripts", () => {
   const packageJson = JSON.parse(readFileSync(resolve("package.json"), "utf8"));
 
   assert.deepEqual(packageJson.allowScripts, {
-    "better-sqlite3": true,
+    "better-sqlite3": false,
     "core-js": false,
     esbuild: true,
     fsevents: false
