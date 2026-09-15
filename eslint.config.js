@@ -51,6 +51,7 @@ export default tseslint.config(
       "dist/**",
       "dist-server/**",
       "node_modules/**",
+      ".worktrees/**",
       "playwright-report/**",
       "test-results/**",
       "**/*.test.{js,ts}",

@@ -6,6 +6,7 @@ dist-server/
 *.tsbuildinfo
 .idea/
 .vscode/
+.worktrees/
 .projectatlas/*
 !.projectatlas/config.toml
 .env
