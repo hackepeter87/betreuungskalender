@@ -403,7 +403,7 @@ function checkReleaseMetadata(cwd, packageJson, version, report) {
 
   const installScriptPolicy = packageJson.allowScripts;
   if (
-    installScriptPolicy?.["better-sqlite3"] !== true ||
+    installScriptPolicy?.["better-sqlite3"] !== false ||
     installScriptPolicy?.esbuild !== true ||
     installScriptPolicy?.["core-js"] !== false ||
     installScriptPolicy?.fsevents !== false ||
