@@ -25,14 +25,16 @@ export default defineConfig({
   },
   build: {
     manifest: true,
-    rollupOptions: {
+    cssMinify: "esbuild",
+    rolldownOptions: {
       output: {
-        manualChunks(id) {
-          if (
-            id.includes("/node_modules/react/") ||
-            id.includes("/node_modules/react-dom/") ||
-            id.includes("/node_modules/scheduler/")
-          ) return "react-vendor";
+        codeSplitting: {
+          groups: [
+            {
+              name: "react-vendor",
+              test: /node_modules\/(?:react|react-dom|scheduler)\//
+            }
+          ]
         }
       }
     },
