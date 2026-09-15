@@ -6,6 +6,25 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.30.2] - 2026-09-15
+
+### Changed
+
+- Update the supported mail transport and request rate-limiting dependencies.
+- Refresh the pinned Node.js 24 container build baseline.
+- Update SQLite and shared persistence dependencies while retaining SQLite as
+  the default and PostgreSQL as an optional backend.
+- Move the frontend build to Vite 8 and its supported Rolldown configuration
+  while preserving the established browser target, CSS output, and lazy chunk
+  boundaries.
+
+### Security
+
+- Keep external message resource access disabled and confirm that the resolved
+  production dependency tree contains no known npm vulnerabilities.
+- Preserve the existing authorization, request throttling, persistence, and
+  runtime-security behavior across SQLite and PostgreSQL validation paths.
+
 ## [1.30.1] - 2026-09-15
 
 ### Changed
