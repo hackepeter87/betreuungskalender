@@ -6,6 +6,29 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.30.1] - 2026-09-15
+
+### Changed
+
+- Update supported application, development, and browser-test dependencies
+  within the established runtime and toolchain majors.
+- Refresh the pinned minimal Node.js runtime image and reviewed immutable
+  GitHub Actions revisions.
+- Keep automatic dependency proposals within the supported Node.js major and
+  exclude local worktree checkouts from repository analysis.
+
+### Fixed
+
+- Keep the PostgreSQL container smoke test's secret-redaction checks reliable
+  for generated values that resemble command options.
+- Bound a platform-specific visual raster difference to one reviewed pixel in
+  one test scenario without weakening the remaining visual baselines.
+
+### Security
+
+- Retain immutable workflow and container references and confirm that the
+  resolved production dependencies contain no known npm vulnerabilities.
+
 ## [1.30.0] - 2026-09-15
 
 ### Added
