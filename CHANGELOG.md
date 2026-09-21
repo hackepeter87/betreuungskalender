@@ -6,6 +6,30 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.31.0] - 2026-09-21
+
+### Added
+
+- Add an event-first editor for recurring care with familiar weekly,
+  biweekly, monthly, one-time, and custom repeat choices.
+- Add an immediate plain-language summary and representative occurrence
+  preview before a recurring series is saved.
+
+### Changed
+
+- Keep uncommon recurrence controls in an explicitly advanced section.
+- Present historical backfill as a separate, collapsed management action for
+  an already saved series.
+- Use consistent responsive steps on compact screens while retaining the full
+  editor on larger viewports.
+
+### Compatibility
+
+- Preserve the existing recurrence expansion, stored rule format, generated
+  occurrence keys, permissions, and historical exceptions.
+- No database migration, authentication change, or deployment configuration
+  change is required.
+
 ## [1.30.2] - 2026-09-15
 
 ### Changed
