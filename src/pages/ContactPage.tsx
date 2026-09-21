@@ -984,7 +984,9 @@ export function ContactPage({
               </div>
             </div>
             {ruleId ? (
-              <div className="historical-sync" data-testid="contact-historical-sync">
+              <details className="advanced-recurrence historical-sync" data-testid="contact-historical-sync">
+                <summary>{copy(locale, "contactHistory", "manage")}</summary>
+                <p>{copy(locale, "contactHistory", "manageDescription")}</p>
                 <div className="historical-sync__heading">
                   <div>
                     <strong>{copy(locale, "contactHistory", "title")}</strong>
@@ -1031,7 +1033,7 @@ export function ContactPage({
                     </div>
                   </div>
                 ) : null}
-              </div>
+              </details>
             ) : null}
             <FieldHelpButton fieldId="contactPattern.duplicatePrevention" showRequirement={false} />
             {message ? <p className="inline-message" role="status" data-testid="contact-message">{message}</p> : null}
