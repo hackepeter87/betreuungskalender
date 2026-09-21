@@ -1532,7 +1532,7 @@ test("manages care parties and assigns them to entries and contact rules", async
   await navigate(page, "contact");
   await page.getByTestId("contact-responsible-party").selectOption(party!.id);
   await page.getByTestId("contact-pattern-save").click();
-  await expect(page.getByText(/Umgangsregel gespeichert/)).toBeVisible();
+  await expect(page.getByText(/Betreuungsserie gespeichert/)).toBeVisible();
 
   const rules = await (await request.get("/api/contact-rules")).json() as Array<{ id: string; responsiblePartyId?: string }>;
   const assignedRule = rules.find((rule) => rule.responsiblePartyId === party?.id);
@@ -1720,6 +1720,8 @@ test("generates recurring weekend contact dates and shows them in the calendar",
   await navigate(page, "contact");
   await expect(page.getByTestId("page-contact")).toBeVisible();
   await page.getByTestId("contact-pattern-start-date").fill("2026-07-03");
+  await page.getByTestId("contact-repeat-preset").selectOption("biweekly");
+  await page.getByRole("button", { name: "An einem Datum" }).click();
   await page.getByTestId("contact-pattern-end-date").fill("2026-07-31");
   await page.getByTestId("contact-pattern-friday-start-time").fill("16:00");
   await page.getByTestId("contact-pattern-sunday-end-time").fill("18:00");
@@ -1736,7 +1738,7 @@ test("generates recurring weekend contact dates and shows them in the calendar",
 
   await page.getByTestId("contact-pattern-save").click();
   await expect(page.getByTestId("contact-message")).toContainText(
-    "Umgangsregel gespeichert"
+    "Betreuungsserie gespeichert"
   );
   await expect(page.getByTestId("contact-message")).toContainText(
     "geplante Termine"
@@ -1935,7 +1937,7 @@ test("keeps care views usable when the conflict overview is incomplete", async (
   await expect(page.getByTestId("care-conflicts-limited")).toBeVisible();
 });
 
-test("uses a weekly multi-day contact rule builder with calendar preview", async ({
+test("creates a weekly multi-day care series with calendar preview", async ({
   page,
   request
 }) => {
@@ -1943,30 +1945,26 @@ test("uses a weekly multi-day contact rule builder with calendar preview", async
   await createChild(page, "Wochentage Kind");
 
   await navigate(page, "contact");
-  await page.getByTestId("contact-recurrence-frequency").selectOption("weekly");
-  await page.getByTestId("contact-recurrence-interval").fill("1");
-  await page.getByTestId("contact-pattern-start-date").fill("2026-07-01");
-  await page.getByTestId("contact-pattern-end-date").fill("2026-07-31");
+  await page.getByTestId("contact-pattern-start-date").fill("2026-10-02");
+  await page.getByTestId("contact-first-end-date").fill("2026-10-04");
   await page.getByTestId("contact-pattern-friday-start-time").fill("15:00");
   await page.getByTestId("contact-pattern-sunday-end-time").fill("18:00");
-  const wednesday = page.getByTestId("contact-weekday-WE");
-  if (!(await wednesday.locator("input").isChecked())) await wednesday.click();
-  const friday = page.getByTestId("contact-weekday-FR");
-  if (!(await friday.locator("input").isChecked())) await friday.click();
-  await page.getByTestId("contact-generation-start").fill("2026-07-01");
-  await page.getByTestId("contact-generation-end").fill("2026-07-10");
+  await page.getByTestId("contact-repeat-preset").selectOption("weekly");
+  await page.getByTestId("contact-generation-start").fill("2026-10-01");
+  await page.getByTestId("contact-generation-end").fill("2026-10-09");
 
   await expect(page.getByTestId("contact-generation-preview")).toContainText(
-    "4 neue geplante Termine"
+    "2 neue geplante Termine"
   );
-  await expect(page.getByTestId("contact-preview-day-2026-07-01").first())
+  await expect(page.getByTestId("contact-recurrence-summary")).toContainText("Wöchentlich");
+  await expect(page.getByTestId("contact-preview-day-2026-10-02").first())
     .toHaveClass(/contact-preview-day--active/);
-  await expect(page.locator('[data-testid="contact-preview-day-2026-07-03"].contact-preview-day--active'))
-    .toHaveCount(2);
+  await expect(page.locator('[data-testid="contact-preview-day-2026-10-04"].contact-preview-day--active'))
+    .toHaveCount(1);
 
   await page.getByTestId("contact-pattern-save").click();
   await expect(page.getByTestId("contact-message")).toContainText(
-    "Umgangsregel gespeichert"
+    "Betreuungsserie gespeichert"
   );
 
   const entriesResponse = await request.get("/api/care-entries");
@@ -1976,12 +1974,12 @@ test("uses a weekly multi-day contact rule builder with calendar preview", async
     contactRuleId?: string;
     startDateTime: string;
     status: string;
-  }>).filter((entry) => entry.contactRuleId && entry.startDateTime.startsWith("2026-07"));
-  expect(generatedEntries).toHaveLength(10);
+  }>).filter((entry) => entry.contactRuleId && entry.startDateTime.startsWith("2026-10"));
+  expect(generatedEntries).toHaveLength(5);
   expect(generatedEntries.every((entry) => entry.status === "planned")).toBe(true);
 
   await navigate(page, "calendar");
-  await page.getByTestId("month-picker").fill("2026-07");
+  await page.getByTestId("month-picker").fill("2026-10");
   if (await page.getByTestId("calendar-view-month").isVisible()) {
     await page.getByTestId("calendar-view-month").click();
   }

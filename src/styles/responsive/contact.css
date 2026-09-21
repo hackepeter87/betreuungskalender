@@ -15,6 +15,11 @@
     flex: 1;
   }
 
+  .rule-form .form-actions__right {
+    display: flex;
+    width: 100%;
+  }
+
   .rule-entry {
     grid-template-columns: 1fr;
   }
@@ -33,6 +38,7 @@
   }
 
   .recurrence-builder,
+  .event-time-grid,
   .rule-segment-row {
     grid-template-columns: 1fr;
   }
@@ -83,37 +89,6 @@
     border-radius: 50%;
     background: var(--color-surface-raised);
     font-size: 0.68rem;
-  }
-
-  .mobile-rule-live-preview {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: 9px;
-    padding: 10px 11px;
-    border: 1px solid var(--color-status-success-border);
-    border-radius: 7px;
-    background: var(--color-status-success-surface);
-    color: var(--teal-strong);
-  }
-
-  .mobile-rule-live-preview > span {
-    display: grid;
-    min-width: 0;
-    gap: 2px;
-  }
-
-  .mobile-rule-live-preview strong,
-  .mobile-rule-live-preview small {
-    overflow-wrap: anywhere;
-  }
-
-  .mobile-rule-live-preview strong {
-    font-size: 0.75rem;
-  }
-
-  .mobile-rule-live-preview small {
-    font-size: 0.7rem;
   }
 
   .rule-form[data-mobile-step="1"] [data-rule-step]:not([data-rule-step="1"]),

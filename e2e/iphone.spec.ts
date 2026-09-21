@@ -642,29 +642,30 @@ test("shows link-based onboarding completion once without retaining the query", 
   await expect(notice).toHaveCount(0);
 });
 
-test("guides a custom non-14-day contact rule through the mobile flow", async ({
+test("guides a custom care series through the mobile flow", async ({
   page
 }) => {
   await openApp(page);
   await createChild(page, "Regel Layout Kind");
 
   await navigate(page, "contact");
-  await expect(page.getByTestId("contact-mobile-live-preview")).toBeVisible();
-  await page.getByTestId("contact-pattern-start-date").fill("2026-07-01");
-  await page.getByTestId("contact-pattern-end-date").fill("2026-12-31");
-
+  await expect(page.getByTestId("contact-mobile-step-1")).toHaveAttribute("aria-current", "step");
   await page.getByTestId("contact-mobile-next-step").click();
   await expect(page.getByTestId("contact-mobile-step-2")).toHaveAttribute("aria-current", "step");
-  await page.getByTestId("contact-recurrence-frequency").selectOption("weekly");
-  await page.getByTestId("contact-recurrence-interval").fill("3");
-  await page.getByTestId("contact-weekday-FR").click();
-  await expect(page.getByTestId("contact-mobile-live-preview")).toContainText(/keine neuen Termine/i);
-  await page.getByTestId("contact-weekday-MO").click();
-  await page.getByTestId("contact-weekday-TH").click();
-  await expect(page.getByTestId("contact-mobile-live-preview")).toContainText("Termin");
+  await page.getByTestId("contact-pattern-start-date").fill("2026-07-01");
+  await page.getByTestId("contact-first-end-date").fill("2026-07-01");
+  await page.getByTestId("contact-pattern-friday-start-time").fill("15:00");
+  await page.getByTestId("contact-pattern-sunday-end-time").fill("18:00");
 
   await page.getByTestId("contact-mobile-next-step").click();
   await expect(page.getByTestId("contact-mobile-step-3")).toHaveAttribute("aria-current", "step");
+  await page.getByTestId("contact-repeat-preset").selectOption("custom");
+  await page.getByTestId("contact-recurrence-frequency").selectOption("weekly");
+  await page.getByTestId("contact-recurrence-interval").fill("3");
+  const friday = page.getByTestId("contact-weekday-FR");
+  if (await friday.locator("input").isChecked()) await friday.click();
+  await page.getByTestId("contact-weekday-MO").click();
+  await page.getByTestId("contact-weekday-TH").click();
   const segmentRow = page.locator(".rule-segment-row").first();
   await segmentRow.scrollIntoViewIfNeeded();
   await expect(segmentRow).toBeVisible();
@@ -680,8 +681,9 @@ test("guides a custom non-14-day contact rule through the mobile flow", async ({
 
   await page.getByTestId("contact-mobile-next-step").click();
   await expect(page.getByTestId("contact-mobile-step-4")).toHaveAttribute("aria-current", "step");
+  await expect(page.getByTestId("contact-recurrence-summary")).toContainText("Benutzerdefinierter Rhythmus");
   await page.getByTestId("contact-pattern-save").click();
-  await expect(page.getByTestId("contact-message")).toContainText("Umgangsregel gespeichert");
+  await expect(page.getByTestId("contact-message")).toContainText("Betreuungsserie gespeichert");
 
   const summary = page.locator(".summary-strip--seven").first();
   await summary.scrollIntoViewIfNeeded();
