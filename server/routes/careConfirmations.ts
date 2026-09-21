@@ -5,6 +5,7 @@ import {
   answerCareConfirmation,
   deletePushSubscription,
   getNotificationPreferences,
+  isCareConfirmationNoLongerActionableError,
   isInvalidCareConfirmationRangeError,
   isNotificationProcessingLimitError,
   listOpenCareConfirmations,
@@ -57,6 +58,9 @@ export async function careConfirmationRoutes(app: FastifyInstance): Promise<void
         omitUndefinedValues(parsed.data)
       );
     } catch (error) {
+      if (isCareConfirmationNoLongerActionableError(error)) {
+        return reply.code(409).send({ error: "confirmation_no_longer_actionable" });
+      }
       if (isCareEntryConflictError(error)) {
         return reply.code(409).send({ error: "care_entry_conflict" });
       }
@@ -75,12 +79,20 @@ export async function careConfirmationRoutes(app: FastifyInstance): Promise<void
     const parsed = careConfirmationRemindLaterSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     if (!request.user) return reply.code(401).send({ error: "authentication_required" });
-    const result = await remindCareConfirmationLater(
-      app.persistence,
-      request.params.id,
-      request.user,
-      parsed.data.nextReminderAt
-    );
+    let result: Awaited<ReturnType<typeof remindCareConfirmationLater>>;
+    try {
+      result = await remindCareConfirmationLater(
+        app.persistence,
+        request.params.id,
+        request.user,
+        parsed.data.nextReminderAt
+      );
+    } catch (error) {
+      if (isCareConfirmationNoLongerActionableError(error)) {
+        return reply.code(409).send({ error: "confirmation_no_longer_actionable" });
+      }
+      throw error;
+    }
     return result ?? reply.code(404).send({ error: "not_found" });
   });
 

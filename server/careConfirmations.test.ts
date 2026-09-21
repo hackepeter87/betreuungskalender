@@ -28,6 +28,7 @@ const {
   updateNotificationPreferences
 } = await import("./services/careConfirmations.js");
 const { careConfirmationRoutes } = await import("./routes/careConfirmations.js");
+const { careEntryRoutes } = await import("./routes/careEntries.js");
 const { careConfirmationAnswerSchema } = await import("./validation/schemas.js");
 
 runMigrations();
@@ -201,6 +202,49 @@ function assignCareParty(userId: string, carePartyId: string): void {
     "2026-07-01T10:00:00.000Z",
     "2026-07-01T10:00:00.000Z"
   );
+}
+
+async function buildCareApi() {
+  const app = Fastify();
+  app.decorate("persistence", persistence);
+  app.addHook("onRequest", async (request) => {
+    request.userEmail = "local-dev";
+    request.user = {
+      id: "local-dev",
+      externalSubject: "local-dev",
+      displayName: "Local Development",
+      groups: [],
+      role: "admin",
+      workspaceRole: "admin",
+      permissions: ["read", "write", "admin"]
+    };
+  });
+  await careEntryRoutes(app);
+  await careConfirmationRoutes(app);
+  return app;
+}
+
+function directEntryPayload(
+  status: "planned" | "completed" | "partial" | "cancelled",
+  overrides: Record<string, unknown> = {}
+) {
+  return {
+    startDateTime: "2026-07-02T16:00:00.000Z",
+    endDateTime: "2026-07-02T18:00:00.000Z",
+    childIds: ["child-confirmation-a", "child-confirmation-b"],
+    responsiblePartyId: "party-confirmation-a",
+    status,
+    careScope: "hourly",
+    overnight: false,
+    schoolHandover: false,
+    holiday: false,
+    weekend: false,
+    additionalCare: false,
+    hasEvidence: false,
+    trips: [],
+    costs: [],
+    ...overrides
+  };
 }
 
 beforeEach(resetDatabase);
@@ -413,6 +457,227 @@ test("answers a confirmation request and stores partial status with audit metada
   assert.deepEqual(answered?.entry.actualChildIds, ["child-confirmation-a"]);
   assert.equal(answered?.entry.actualStartDateTime, "2026-07-02T17:00:00.000Z");
   assert.equal(openCount.count, 0);
+});
+
+test("directly resolving a planned entry confirms it and retires every open task", async () => {
+  insertPastPlannedEntry();
+  const secondUser = parentUser("user-second-confirmation");
+  insertAppUser(secondUser);
+  await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
+  const app = await buildCareApi();
+
+  try {
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/care-entries/entry-confirmation-a",
+      payload: directEntryPayload("completed")
+    });
+    assert.equal(response.statusCode, 200);
+    const resolved = response.json() as { confirmedAt?: string; confirmedBy?: string; status: string };
+    assert.equal(resolved.status, "completed");
+    assert.match(resolved.confirmedAt ?? "", /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(resolved.confirmedBy, "local-dev");
+
+    const tasks = db.prepare(`
+      SELECT user_id AS userId, deleted_at AS deletedAt
+      FROM care_confirmation_requests
+      WHERE care_entry_id = ?
+      ORDER BY user_id
+    `).all("entry-confirmation-a") as Array<{ userId: string; deletedAt: string | null }>;
+    assert.equal(tasks.length, 2);
+    assert.equal(tasks.every((task) => Boolean(task.deletedAt)), true);
+
+    const firstConfirmation = resolved.confirmedAt;
+    const laterEdit = await app.inject({
+      method: "PUT",
+      url: "/api/care-entries/entry-confirmation-a",
+      payload: directEntryPayload("completed", { location: "Fiktiver Ort" })
+    });
+    assert.equal(laterEdit.statusCode, 200);
+    assert.equal((laterEdit.json() as { confirmedAt?: string }).confirmedAt, firstConfirmation);
+  } finally {
+    await app.close();
+  }
+});
+
+test("replanning a directly resolved entry permits exactly one fresh task per user", async () => {
+  insertPastPlannedEntry();
+  await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
+  const app = await buildCareApi();
+  try {
+    assert.equal((await app.inject({
+      method: "PUT",
+      url: "/api/care-entries/entry-confirmation-a",
+      payload: directEntryPayload("cancelled", { cancellationReason: "Fiktiver Grund" })
+    })).statusCode, 200);
+    const replanned = await app.inject({
+      method: "PUT",
+      url: "/api/care-entries/entry-confirmation-a",
+      payload: directEntryPayload("planned")
+    });
+    assert.equal(replanned.statusCode, 200);
+    assert.equal((replanned.json() as { confirmedAt?: string }).confirmedAt, undefined);
+
+    assert.equal(await createDueCareConfirmationRequests(
+      persistence,
+      new Date("2026-07-03T08:05:00.000Z")
+    ), 1);
+    assert.equal(await createDueCareConfirmationRequests(
+      persistence,
+      new Date("2026-07-03T09:05:00.000Z")
+    ), 0);
+  } finally {
+    await app.close();
+  }
+});
+
+test("direct partial completion retires tasks while unchanged planned care keeps them", async () => {
+  insertPastPlannedEntry();
+  await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
+  const app = await buildCareApi();
+
+  try {
+    const planned = await app.inject({
+      method: "PUT",
+      url: "/api/care-entries/entry-confirmation-a",
+      payload: directEntryPayload("planned", { location: "Fiktiver Ort" })
+    });
+    assert.equal(planned.statusCode, 200);
+    assert.equal((db.prepare(`
+      SELECT COUNT(*) AS count FROM care_confirmation_requests
+      WHERE care_entry_id = ? AND deleted_at IS NULL
+    `).get("entry-confirmation-a") as { count: number }).count, 1);
+
+    const partial = await app.inject({
+      method: "PUT",
+      url: "/api/care-entries/entry-confirmation-a",
+      payload: directEntryPayload("partial", {
+        actualStartDateTime: "2026-07-02T17:00:00.000Z",
+        actualEndDateTime: "2026-07-02T18:00:00.000Z",
+        actualChildIds: ["child-confirmation-a"],
+        actualResponsiblePartyId: "party-confirmation-a"
+      })
+    });
+    assert.equal(partial.statusCode, 200);
+    const resolved = partial.json() as { status: string; confirmedAt?: string; confirmedBy?: string };
+    assert.equal(resolved.status, "partial");
+    assert.match(resolved.confirmedAt ?? "", /^\d{4}-\d{2}-\d{2}T/);
+    assert.equal(resolved.confirmedBy, "local-dev");
+    assert.equal((db.prepare(`
+      SELECT COUNT(*) AS count FROM care_confirmation_requests
+      WHERE care_entry_id = ? AND deleted_at IS NULL
+    `).get("entry-confirmation-a") as { count: number }).count, 0);
+  } finally {
+    await app.close();
+  }
+});
+
+test("direct resolution and task retirement roll back together after a later failure", async () => {
+  insertPastPlannedEntry();
+  await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
+  const app = await buildCareApi();
+  db.exec(`
+    CREATE TRIGGER reject_direct_confirmation_audit
+    BEFORE INSERT ON audit_log
+    WHEN NEW.entity_type = 'care_entry'
+    BEGIN
+      SELECT RAISE(ABORT, 'synthetic audit failure');
+    END;
+  `);
+
+  try {
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/care-entries/entry-confirmation-a",
+      payload: directEntryPayload("completed")
+    });
+    assert.equal(response.statusCode, 400);
+    assert.deepEqual(db.prepare(`
+      SELECT status, confirmed_at AS confirmedAt, confirmed_by AS confirmedBy
+      FROM care_entries WHERE id = ?
+    `).get("entry-confirmation-a"), {
+      status: "planned",
+      confirmedAt: null,
+      confirmedBy: null
+    });
+    assert.equal((db.prepare(`
+      SELECT COUNT(*) AS count FROM care_confirmation_requests
+      WHERE care_entry_id = ? AND deleted_at IS NULL
+    `).get("entry-confirmation-a") as { count: number }).count, 1);
+  } finally {
+    db.exec("DROP TRIGGER reject_direct_confirmation_audit");
+    await app.close();
+  }
+});
+
+test("stale confirmation actions return a stable conflict without changing data", async () => {
+  for (const action of ["answer", "remind-later"] as const) {
+    resetDatabase();
+    insertPastPlannedEntry();
+    await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
+    const request = db.prepare(`
+      SELECT id FROM care_confirmation_requests
+      WHERE care_entry_id = ? AND user_id = ?
+    `).get("entry-confirmation-a", "local-dev") as { id: string };
+    db.prepare(`
+      UPDATE care_entries
+      SET status = 'completed', confirmed_at = ?, confirmed_by = ?, updated_at = ?
+      WHERE id = ?
+    `).run(
+      "2026-07-03T09:00:00.000Z",
+      "local-dev",
+      "2026-07-03T09:00:00.000Z",
+      "entry-confirmation-a"
+    );
+    const before = db.serialize();
+    const app = await buildCareApi();
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/care-confirmations/${request.id}/${action}`,
+        payload: action === "answer"
+          ? { status: "cancelled", cancellationReason: "Darf nicht angewendet werden" }
+          : {}
+      });
+      assert.equal(response.statusCode, 409, action);
+      assert.deepEqual(response.json(), { error: "confirmation_no_longer_actionable" }, action);
+      assert.deepEqual(db.serialize(), before, action);
+    } finally {
+      await app.close();
+    }
+  }
+});
+
+test("stale tasks are hidden and never sent after the entry was resolved", async () => {
+  insertPastPlannedEntry();
+  await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
+  db.prepare(`
+    UPDATE care_entries
+    SET status = 'completed', confirmed_at = ?, confirmed_by = ?, updated_at = ?
+    WHERE id = ?
+  `).run(
+    "2026-07-03T09:00:00.000Z",
+    "local-dev",
+    "2026-07-03T09:00:00.000Z",
+    "entry-confirmation-a"
+  );
+  let deliveries = 0;
+
+  assert.deepEqual(await listOpenCareConfirmations(persistence, "local-dev"), []);
+  assert.equal(await sendDueCareConfirmationPushes(
+    persistence,
+    new Date("2026-07-03T09:05:00.000Z"),
+    async () => {
+      deliveries += 1;
+      return true;
+    }
+  ), 0);
+  assert.equal(deliveries, 0);
+  const active = db.prepare(`
+    SELECT COUNT(*) AS count FROM care_confirmation_requests
+    WHERE care_entry_id = ? AND deleted_at IS NULL
+  `).get("entry-confirmation-a") as { count: number };
+  assert.equal(active.count, 0);
 });
 
 test("validates explicit partial confirmation ranges against the care-entry time contract", () => {
