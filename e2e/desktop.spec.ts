@@ -1532,7 +1532,7 @@ test("manages care parties and assigns them to entries and contact rules", async
   await navigate(page, "contact");
   await page.getByTestId("contact-responsible-party").selectOption(party!.id);
   await page.getByTestId("contact-pattern-save").click();
-  await expect(page.getByText(/Umgangsregel gespeichert/)).toBeVisible();
+  await expect(page.getByText(/Betreuungsserie gespeichert/)).toBeVisible();
 
   const rules = await (await request.get("/api/contact-rules")).json() as Array<{ id: string; responsiblePartyId?: string }>;
   const assignedRule = rules.find((rule) => rule.responsiblePartyId === party?.id);
@@ -1720,6 +1720,8 @@ test("generates recurring weekend contact dates and shows them in the calendar",
   await navigate(page, "contact");
   await expect(page.getByTestId("page-contact")).toBeVisible();
   await page.getByTestId("contact-pattern-start-date").fill("2026-07-03");
+  await page.getByTestId("contact-repeat-preset").selectOption("biweekly");
+  await page.getByRole("button", { name: "An einem Datum" }).click();
   await page.getByTestId("contact-pattern-end-date").fill("2026-07-31");
   await page.getByTestId("contact-pattern-friday-start-time").fill("16:00");
   await page.getByTestId("contact-pattern-sunday-end-time").fill("18:00");
@@ -1736,7 +1738,7 @@ test("generates recurring weekend contact dates and shows them in the calendar",
 
   await page.getByTestId("contact-pattern-save").click();
   await expect(page.getByTestId("contact-message")).toContainText(
-    "Umgangsregel gespeichert"
+    "Betreuungsserie gespeichert"
   );
   await expect(page.getByTestId("contact-message")).toContainText(
     "geplante Termine"
@@ -1962,7 +1964,7 @@ test("creates a weekly multi-day care series with calendar preview", async ({
 
   await page.getByTestId("contact-pattern-save").click();
   await expect(page.getByTestId("contact-message")).toContainText(
-    "Umgangsregel gespeichert"
+    "Betreuungsserie gespeichert"
   );
 
   const entriesResponse = await request.get("/api/care-entries");

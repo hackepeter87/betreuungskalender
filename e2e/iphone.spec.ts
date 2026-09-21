@@ -683,7 +683,7 @@ test("guides a custom care series through the mobile flow", async ({
   await expect(page.getByTestId("contact-mobile-step-4")).toHaveAttribute("aria-current", "step");
   await expect(page.getByTestId("contact-recurrence-summary")).toContainText("Benutzerdefinierter Rhythmus");
   await page.getByTestId("contact-pattern-save").click();
-  await expect(page.getByTestId("contact-message")).toContainText("Umgangsregel gespeichert");
+  await expect(page.getByTestId("contact-message")).toContainText("Betreuungsserie gespeichert");
 
   const summary = page.locator(".summary-strip--seven").first();
   await summary.scrollIntoViewIfNeeded();

@@ -15,6 +15,11 @@
     flex: 1;
   }
 
+  .rule-form .form-actions__right {
+    display: flex;
+    width: 100%;
+  }
+
   .rule-entry {
     grid-template-columns: 1fr;
   }

@@ -41,15 +41,6 @@
   font-size: 0.78rem;
 }
 
-.advanced-recurrence > fieldset + fieldset {
-  margin-top: 12px;
-}
-
-.representative-occurrences {
-  display: grid;
-  gap: 8px;
-}
-
 .representative-occurrences ol {
   display: grid;
   gap: 6px;

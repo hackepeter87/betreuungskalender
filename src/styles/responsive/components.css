@@ -269,8 +269,9 @@
   }
 
   .form-actions__right {
-    display: flex;
+    display: grid;
     width: 100%;
+    grid-template-columns: minmax(0, 0.7fr) minmax(0, 1.3fr);
   }
 
   .readiness-item--wide {
