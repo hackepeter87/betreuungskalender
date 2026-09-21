@@ -181,8 +181,8 @@
   }
 
   .notification-preferences-row {
-    grid-template-columns: minmax(0, 1fr) repeat(2, 56px);
-    gap: 8px;
+    grid-template-columns: minmax(0, 1fr) repeat(var(--n), 44px);
+    gap: 6px;
     padding: 12px 14px;
   }
 

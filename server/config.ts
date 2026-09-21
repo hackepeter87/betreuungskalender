@@ -285,6 +285,7 @@ export const config = {
   allowedOrigin,
   invitationPublicBaseUrl: textEnv(process.env.INVITATION_PUBLIC_BASE_URL, allowedOrigin),
   invitationEmailEnabled: booleanEnv(process.env.INVITATION_EMAIL_ENABLED),
+  notificationEmailEnabled: booleanEnv(process.env.NOTIFICATION_EMAIL_ENABLED),
   smtpHost: process.env.SMTP_HOST?.trim() || undefined,
   smtpPort: positiveNumberEnv(process.env.SMTP_PORT, 587),
   smtpSecure: booleanEnv(process.env.SMTP_SECURE),

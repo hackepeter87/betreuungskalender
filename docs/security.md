@@ -324,6 +324,16 @@ sender display name when available; the actual sender mailbox still comes from
 `SMTP_FROM`. Delivery errors returned to owners must remain generic and must not
 include raw tokens, SMTP credentials, relay hostnames, or provider stack traces.
 
+Optional care-confirmation email delivery is independently controlled by
+`NOTIFICATION_EMAIL_ENABLED` and remains disabled by default. Enabling it also
+requires complete SMTP sender configuration, a valid current account email, and
+an explicit per-event user opt-in. Recipients cannot be entered freely. Mail
+contains only a generic notice and an application link derived from
+`ALLOWED_ORIGIN`; it contains no child names, care periods, locations, notes,
+evidence references, conflicts, bearer tokens, tracking pixels, or read
+receipts. Delivery state stores neither recipient addresses nor message bodies,
+and raw transport errors are reduced to an abstract status.
+
 Fresh native-OIDC installations require the explicit, secret-backed owner setup
 link. The validated callback creates the initial admin membership and owner
 designation; the guided first-use wizard then records application defaults.

@@ -245,8 +245,13 @@
 }
 
 .notification-preferences-table {
+  --n: 2;
   display: grid;
   border-top: 1px solid var(--line);
+}
+
+.notification-preferences-table--email {
+  --n: 3;
 }
 
 .notification-rules {
@@ -269,7 +274,7 @@
 
 .notification-preferences-row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 90px 90px;
+  grid-template-columns: minmax(0, 1fr) repeat(var(--n), 90px);
   align-items: center;
   gap: 12px;
   padding: 14px 18px;

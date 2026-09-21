@@ -18,6 +18,63 @@ test.beforeEach(async ({ request }) => {
   await resetApp(request);
 });
 
+test("shows email notification preferences only with server capability", async ({ page }) => {
+  let recipientAvailable = false;
+  let savedEmailPreference = false;
+  await page.route("**/api/notification-preferences", async (route) => {
+    if (route.request().method() === "PUT") {
+      const body = route.request().postDataJSON() as {
+        preferences: Array<{ eventType: string; emailEnabled: boolean }>;
+      };
+      savedEmailPreference = Boolean(body.preferences.find(
+        (preference) => preference.eventType === "care_confirmation_due"
+      )?.emailEnabled);
+      recipientAvailable = true;
+    }
+    const responseBody = {
+      preferences: [
+        {
+          eventType: "care_confirmation_due",
+          inAppEnabled: true,
+          pushEnabled: true,
+          emailEnabled: savedEmailPreference
+        },
+        {
+          eventType: "care_confirmation_reminder",
+          inAppEnabled: true,
+          pushEnabled: true,
+          emailEnabled: false
+        }
+      ],
+      pushAvailable: false,
+      pushConfigured: false,
+      emailAvailable: true,
+      emailRecipientAvailable: recipientAvailable,
+      activePushSubscriptions: 0
+    };
+    await route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(responseBody) });
+  });
+
+  await openApp(page);
+  await navigate(page, "settings");
+  const preferences = page.getByTestId("notification-preferences");
+  const dueEmail = preferences.getByRole("checkbox", { name: "Betreuung bestätigen: E-Mail" });
+  await expect(dueEmail).toBeDisabled();
+  await expect(preferences.getByText(/keine verwendbare E-Mail-Adresse/)).toBeVisible();
+
+  recipientAvailable = true;
+  await page.reload();
+  await navigate(page, "settings");
+  await expect(dueEmail).toBeEnabled();
+  await dueEmail.focus();
+  await page.keyboard.press("Space");
+  await expect.poll(() => savedEmailPreference).toBe(true);
+  await page.setViewportSize({ width: 320, height: 800 });
+  await expect.poll(() => page.locator("main").evaluate((element) => getComputedStyle(element).marginLeft)).toBe("0px");
+  await expectNoDocumentHorizontalOverflow(page);
+  await expect(dueEmail).toBeChecked();
+});
+
 test("hides SQLite replacement when the migration backend does not support it", async ({ page }) => {
   const legacy = {
     ...createEmptyData(),

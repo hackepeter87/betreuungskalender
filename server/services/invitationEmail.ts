@@ -1,9 +1,17 @@
-import nodemailer from "nodemailer";
 import { omitUndefinedValues } from "../../shared/objects.js";
 import { config } from "../config.js";
 import type { WorkspaceRole } from "../auth.js";
+import {
+  createSmtpTransport,
+  smtpMailAvailable,
+  smtpSenderAddress,
+  smtpTransportOptions,
+  type SmtpMailConfig,
+  type TextMailTransport,
+  type TextMailTransportFactory
+} from "./mailTransport.js";
 
-export interface InvitationEmailConfig {
+export interface InvitationEmailConfig extends SmtpMailConfig {
   invitationEmailEnabled: boolean;
   invitationPublicBaseUrl: string;
   smtpHost?: string;
@@ -16,11 +24,7 @@ export interface InvitationEmailConfig {
 }
 
 export function invitationEmailAvailable(config: InvitationEmailConfig): boolean {
-  return Boolean(
-    config.invitationEmailEnabled &&
-    config.smtpHost?.trim() &&
-    config.smtpFrom?.trim()
-  );
+  return config.invitationEmailEnabled && smtpMailAvailable(config);
 }
 
 export interface InvitationEmailInput {
@@ -30,14 +34,7 @@ export interface InvitationEmailInput {
   expiresAt: string;
 }
 
-export interface InvitationEmailTransport {
-  sendMail(message: {
-    from: string;
-    to: string;
-    subject: string;
-    text: string;
-  }): Promise<unknown> | unknown;
-}
+export type InvitationEmailTransport = TextMailTransport;
 
 export class InvitationEmailError extends Error {
   constructor(
@@ -96,49 +93,14 @@ function assertMailConfig(mailConfig: InvitationEmailConfig): asserts mailConfig
 }
 
 export function invitationTransportOptions(mailConfig: InvitationEmailConfig) {
-  return {
-    host: mailConfig.smtpHost,
-    port: mailConfig.smtpPort,
-    secure: mailConfig.smtpSecure,
-    disableFileAccess: true,
-    disableUrlAccess: true,
-    ...(mailConfig.smtpUser && mailConfig.smtpPassword
-      ? {
-          auth: {
-            user: mailConfig.smtpUser,
-            pass: mailConfig.smtpPassword
-          }
-        }
-      : {})
-  };
+  return smtpTransportOptions(mailConfig);
 }
-
-function defaultTransport(mailConfig: InvitationEmailConfig): InvitationEmailTransport {
-  return nodemailer.createTransport(invitationTransportOptions(mailConfig));
-}
-
-function sanitizeDisplayName(value?: string): string | undefined {
-  const normalized = value?.replace(/[\r\n]+/g, " ").replace(/\s+/g, " ").trim();
-  if (!normalized) return undefined;
-  return normalized.slice(0, 120);
-}
-
-function escapeDisplayName(value: string): string {
-  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-}
-
-export function invitationSenderAddress(smtpFrom: string, smtpFromName?: string): string {
-  const displayName = sanitizeDisplayName(smtpFromName);
-  if (!displayName) return smtpFrom;
-  const from = smtpFrom.trim();
-  const address = from.match(/<([^<>]+)>/)?.[1]?.trim() || from;
-  return `"${escapeDisplayName(displayName)}" <${address}>`;
-}
+export const invitationSenderAddress = smtpSenderAddress;
 
 export async function sendInvitationEmail(
   input: InvitationEmailInput,
   mailConfig: InvitationEmailConfig = omitUndefinedValues(config),
-  transportFactory = defaultTransport
+  transportFactory: TextMailTransportFactory = createSmtpTransport
 ): Promise<void> {
   const to = input.to?.trim();
   if (!to) {

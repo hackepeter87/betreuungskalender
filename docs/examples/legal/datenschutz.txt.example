@@ -72,6 +72,13 @@ vollständiges Löschkonzept.
 Einladungsversand (SMTP)
 [BETREIBER: Anbieter, Daten, Zweck, Rechtsgrundlage, Empfänger, Aufbewahrung]
 
+Optionale Benachrichtigungen per E-Mail (SMTP)
+[BETREIBER: Anbieter, aktuelle Konto-E-Mail als Empfänger, Zweck,
+Rechtsgrundlage, Nutzer-Opt-in, technische Versandzustände, Aufbewahrung]
+Die Anwendung versendet dabei nur einen allgemeinen Hinweis und einen Link zur
+Anwendung, keine Angaben zu Kindern oder Betreuungsvorgängen. Nur behalten,
+wenn diese Funktion tatsächlich aktiviert ist.
+
 Push-Mitteilungen
 [BETREIBER: Browser-Push-Anbieter, Endpunkt/Geräteschlüssel, Zweck,
 Rechtsgrundlage, Frist und Garantien bei Drittlandtransfer]

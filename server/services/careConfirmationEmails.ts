@@ -6,6 +6,7 @@ import {
   NotificationProcessingLimitError
 } from "./careConfirmations.js";
 import { bool, makeId } from "./common.js";
+import { usableNotificationEmailAddress } from "./notificationEmail.js";
 
 const MAX_EMAIL_OCCURRENCES_PER_SWEEP = 10_000;
 const MAX_DELIVERY_ATTEMPTS = 3;
@@ -248,7 +249,7 @@ export async function processCareConfirmationEmailDeliveries(
 
   const claimed = new Map<string, DeliveryCandidate[]>();
   for (const candidate of candidates) {
-    const email = candidate.email?.trim() ?? "";
+    const email = usableNotificationEmailAddress(candidate.email) ?? "";
     const currentOccurrence = currentIdentity(candidate);
     const actionable = currentOccurrence === candidate.occurrence_key &&
       await isCareConfirmationRequestActionable(
