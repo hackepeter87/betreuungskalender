@@ -63,6 +63,14 @@ Interactive input avoids placing the value in this document, but shell history
 and local process visibility still depend on the local command environment. An
 existing Secret can instead be referenced with `extraEnvFrom`.
 
+Optional application email uses the provider-neutral `SMTP_*` settings. Keep
+`NOTIFICATION_EMAIL_ENABLED` and `INVITATION_EMAIL_ENABLED` independently
+disabled unless the corresponding flow was reviewed. Non-secret switches can
+be supplied through `config`; SMTP credentials belong in an existing Secret
+referenced by `extraEnv` or `extraEnvFrom`. Generic care-confirmation email uses
+`ALLOWED_ORIGIN` for its application link and contains no care details or
+authentication token.
+
 ## Select the database
 
 With no database values, the chart renders the established SQLite deployment

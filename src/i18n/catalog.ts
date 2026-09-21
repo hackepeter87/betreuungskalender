@@ -341,15 +341,18 @@ const de = {
     event: "Anlass",
     inApp: "In-App",
     push: "Push",
+    email: "E-Mail",
     careConfirmationDue: "Betreuung bestätigen",
     careConfirmationReminder: "Später erinnern",
     enablePush: "Push auf diesem Gerät aktivieren",
     pushActive: "Push ist auf {count} Gerät(en) aktiv.",
     pushUnavailable: "Push ist serverseitig noch nicht konfiguriert.",
+    emailRecipientUnavailable: "Für dein Konto ist keine verwendbare E-Mail-Adresse hinterlegt. Der Betreiber verwaltet diese Adresse über die Anmeldung.",
     whenTitle: "Wann? ",
     whenDescription: "Geplante Betreuung wird nach dem Termin zur Bestätigung vorgemerkt. „Später erinnern“ plant eine erneute Erinnerung.",
     editableTitle: "Was ist editierbar? ",
-    editableDescription: "In-App bleibt immer aktiv. Push kann je Gerät ein- oder ausgeschaltet werden."
+    editableDescription: "In-App bleibt immer aktiv. Push kann je Gerät ein- oder ausgeschaltet werden.",
+    editableDescriptionWithEmail: "In-App bleibt immer aktiv. Push und E-Mail können unabhängig ein- oder ausgeschaltet werden."
   },
   confirmation: {
     title: "Offene Bestätigungen",
@@ -980,15 +983,18 @@ const en = {
     "event": "Event",
     "inApp": "In-app",
     "push": "Push",
+    "email": "Email",
     "careConfirmationDue": "Confirm care",
     "careConfirmationReminder": "Remind later",
     "enablePush": "Enable push on this device",
     "pushActive": "Push is active on {count} device(s).",
     "pushUnavailable": "Push is not configured on the server.",
+    "emailRecipientUnavailable": "No usable email address is stored for your account. The operator manages this address through sign-in.",
     "whenTitle": "When? ",
     "whenDescription": "Planned care is queued for confirmation after the date. “Remind later” schedules another reminder.",
     "editableTitle": "What can be edited? ",
-    "editableDescription": "In-app is always active. Push can be enabled or disabled per device."
+    "editableDescription": "In-app is always active. Push can be enabled or disabled per device.",
+    "editableDescriptionWithEmail": "In-app is always active. Push and email can be enabled or disabled independently."
   },
   "confirmation": {
     "title": "Open confirmations",

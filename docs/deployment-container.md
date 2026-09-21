@@ -225,6 +225,7 @@ WEB_PUSH_PUBLIC_KEY=
 WEB_PUSH_PRIVATE_KEY=
 WEB_PUSH_ALLOWED_ENDPOINT_HOSTS=fcm.googleapis.com,updates.push.services.mozilla.com,web.push.apple.com,webpush.push.apple.com
 INVITATION_EMAIL_ENABLED=false
+NOTIFICATION_EMAIL_ENABLED=false
 INVITATION_PUBLIC_BASE_URL=https://app.example.net
 SMTP_HOST=
 SMTP_PORT=587
@@ -247,6 +248,12 @@ Invitation email delivery is optional. Leave `INVITATION_EMAIL_ENABLED=false`
 unless a reviewed SMTP relay is available. If enabled, keep `SMTP_PASSWORD`
 only in private deployment state and set `INVITATION_PUBLIC_BASE_URL` to the
 public HTTPS app origin that invited users open.
+
+Care-confirmation email is independently optional. Leave
+`NOTIFICATION_EMAIL_ENABLED=false` unless the same reviewed SMTP relay may send
+generic task notices to current account addresses. Users must opt in inside the
+application. The message link is derived from `ALLOWED_ORIGIN`; no care details
+or credentials are included.
 
 Recovery admin is optional and disabled by default. If you deliberately enable
 it as an emergency identity-provider fallback, prefer a mounted secret file over

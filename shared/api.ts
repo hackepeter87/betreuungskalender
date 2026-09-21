@@ -304,6 +304,8 @@ export interface ApiNotificationPreferencesResponse {
   preferences: ApiNotificationPreference[];
   pushAvailable: boolean;
   pushConfigured: boolean;
+  emailAvailable: boolean;
+  emailRecipientAvailable: boolean;
   vapidPublicKey?: string;
   activePushSubscriptions: number;
 }

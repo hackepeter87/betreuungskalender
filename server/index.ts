@@ -35,6 +35,11 @@ import { applyLegacyPreOwnerMembershipRole } from "./services/memberships.js";
 import { publicSetupState } from "./services/setupState.js";
 import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "./services/users.js";
 import { runCareConfirmationSweep } from "./services/careConfirmations.js";
+import { processCareConfirmationEmailDeliveries } from "./services/careConfirmationEmails.js";
+import {
+  runtimeNotificationEmailAvailable,
+  sendCareConfirmationEmail
+} from "./services/notificationEmail.js";
 import { disableLocalDevelopmentIdentityAccess } from "./services/localDevelopmentIdentity.js";
 import { RuntimeMetrics, startMetricsListener } from "./metrics.js";
 import { omitUndefinedValues } from "../shared/objects.js";
@@ -459,8 +464,26 @@ await app.register(setupRoutes, {
 await app.register(legalRoutes, { legalContentDir: config.legalContentDir });
 await registerProtectedApplicationRoutes(app);
 
+async function runNotificationSweep(): Promise<void> {
+  const referenceTime = new Date();
+  await runCareConfirmationSweep(persistence, referenceTime);
+  if (!runtimeNotificationEmailAvailable()) return;
+  await processCareConfirmationEmailDeliveries(
+    persistence,
+    referenceTime,
+    async (batch) => {
+      try {
+        await sendCareConfirmationEmail(batch.recipientEmail);
+        return true;
+      } catch {
+        return false;
+      }
+    }
+  );
+}
+
 const confirmationSweep = setInterval(() => {
-  void runCareConfirmationSweep(persistence).then(() => {
+  void runNotificationSweep().then(() => {
     metrics.recordBackgroundJob("success");
   }).catch((error) => {
     metrics.recordBackgroundJob("failure");
@@ -471,7 +494,7 @@ const confirmationSweep = setInterval(() => {
   });
 }, 15 * 60 * 1000);
 confirmationSweep.unref();
-void runCareConfirmationSweep(persistence).then(() => {
+void runNotificationSweep().then(() => {
   metrics.recordBackgroundJob("success");
 }).catch((error) => {
   metrics.recordBackgroundJob("failure");

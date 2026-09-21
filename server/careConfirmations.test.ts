@@ -913,6 +913,8 @@ test("removed care-party assignments hide and block stale confirmations", async 
 test("notification preferences default to in-app and push while email stays opt-in", async () => {
   const defaults = await getNotificationPreferences(persistence.query, "local-dev");
   assert.equal(defaults.pushAvailable, false);
+  assert.equal(defaults.emailAvailable, false);
+  assert.equal(defaults.emailRecipientAvailable, false);
   assert.equal(defaults.preferences.length, 2);
   assert.deepEqual(
     defaults.preferences.map((preference) => ({
@@ -937,16 +939,94 @@ test("notification preferences default to in-app and push while email stays opt-
     ]
   );
 
+  db.prepare("UPDATE app_users SET email = ? WHERE id = 'local-dev'")
+    .run("local-dev@example.invalid");
   const updated = await updateNotificationPreferences(persistence, "local-dev", [{
     eventType: "care_confirmation_due",
     inAppEnabled: true,
     pushEnabled: false,
     emailEnabled: true
-  }]);
+  }], { emailAvailable: true });
   const due = updated.preferences.find((preference) => preference.eventType === "care_confirmation_due");
 
   assert.equal(due?.pushEnabled, false);
   assert.equal(due?.emailEnabled, true);
+  assert.equal(updated.emailAvailable, true);
+  assert.equal(updated.emailRecipientAvailable, true);
+
+  const disabled = await updateNotificationPreferences(persistence, "local-dev", [{
+    eventType: "care_confirmation_due",
+    inAppEnabled: true,
+    pushEnabled: false,
+    emailEnabled: false
+  }], { emailAvailable: true });
+  assert.equal(
+    disabled.preferences.find((preference) => preference.eventType === "care_confirmation_due")?.emailEnabled,
+    false
+  );
+});
+
+test("rejects email opt-in when the channel or current account address is unavailable", async () => {
+  const emailPreference = [{
+    eventType: "care_confirmation_due" as const,
+    inAppEnabled: true,
+    pushEnabled: true,
+    emailEnabled: true
+  }];
+
+  await assert.rejects(
+    updateNotificationPreferences(
+      persistence,
+      "local-dev",
+      emailPreference,
+      { emailAvailable: false }
+    ),
+    (error) => error instanceof Error &&
+      "code" in error &&
+      error.code === "email_notifications_unavailable"
+  );
+
+  db.prepare("UPDATE app_users SET email = ? WHERE id = 'local-dev'")
+    .run("not-an-email");
+  await assert.rejects(
+    updateNotificationPreferences(
+      persistence,
+      "local-dev",
+      emailPreference,
+      { emailAvailable: true }
+    ),
+    (error) => error instanceof Error &&
+      "code" in error &&
+      error.code === "email_notifications_unavailable"
+  );
+});
+
+test("notification preference API rejects unavailable email opt-in without details", async () => {
+  const app = Fastify();
+  app.decorate("persistence", persistence);
+  app.decorateRequest("userEmail", "local-dev");
+  await careConfirmationRoutes(app);
+  try {
+    const response = await app.inject({
+      method: "PUT",
+      url: "/api/notification-preferences",
+      payload: {
+        preferences: [{
+          eventType: "care_confirmation_due",
+          inAppEnabled: true,
+          pushEnabled: true,
+          emailEnabled: true
+        }]
+      }
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.headers["cache-control"], "no-store");
+    assert.deepEqual(response.json(), { error: "email_notifications_unavailable" });
+    assert.doesNotMatch(response.body, /local-dev|smtp|example/i);
+  } finally {
+    await app.close();
+  }
 });
 
 test("push subscriptions only allow configured public push service endpoints", async () => {

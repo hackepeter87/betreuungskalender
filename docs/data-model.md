@@ -378,8 +378,9 @@ runtime state; native database backup behavior remains unchanged.
 Notification preferences are intentionally small. `notification_preferences`
 stores per-user choices for the supported confirmation events:
 `care_confirmation_due` and `care_confirmation_reminder`. In-app notification is
-always available, Web Push can be enabled when the server has VAPID keys, and
-email is stored as a user preference for a later mail transport implementation.
+always available. Web Push can be enabled when the server has VAPID keys.
+Generic email delivery requires an explicit operator capability, a valid current
+account email, and a per-event user opt-in.
 
 `push_subscriptions` stores browser-provided Web Push endpoint data for an
 authenticated app user: endpoint URL, `p256dh`, `auth`, optional user agent, and

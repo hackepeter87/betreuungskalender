@@ -713,7 +713,7 @@ async function confirmationEmailDeliverySummary(runtime: PersistenceRuntime) {
     inAppEnabled: true,
     pushEnabled: false,
     emailEnabled: true
-  }]);
+  }], { emailAvailable: true });
   const batches: string[][] = [];
   const result = await processCareConfirmationEmailDeliveries(
     runtime,

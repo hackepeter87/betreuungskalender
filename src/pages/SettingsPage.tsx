@@ -113,6 +113,7 @@ function NotificationPreferencesSection() {
     isSaving
   } = useAppStore();
   const preferences = notificationPreferences?.preferences ?? [];
+  const showEmailPreferences = Boolean(notificationPreferences?.emailAvailable);
   const canManageNotifications = session.permissions
     ? session.permissions.includes("notifications:manage-own")
     : true;
@@ -140,9 +141,9 @@ function NotificationPreferencesSection() {
       </div>
       <div className="notification-rules">
         <p><strong>{copy(locale, "notifications", "whenTitle")}</strong>{copy(locale, "notifications", "whenDescription")}</p>
-        <p><strong>{copy(locale, "notifications", "editableTitle")}</strong>{copy(locale, "notifications", "editableDescription")}</p>
+        <p><strong>{copy(locale, "notifications", "editableTitle")}</strong>{copy(locale, "notifications", catalogKey("notifications", showEmailPreferences ? "editableDescriptionWithEmail" : "editableDescription"))}</p>
       </div>
-      <div className="notification-preferences-table">
+      <div className={`notification-preferences-table${showEmailPreferences ? " notification-preferences-table--email" : ""}`}>
         <div className="notification-preferences-row notification-preferences-row--head">
           <span>{copy(locale, "notifications", "event")}</span>
           <span>{copy(locale, "notifications", "inApp")}</span>
@@ -150,6 +151,7 @@ function NotificationPreferencesSection() {
             {copy(locale, "notifications", "push")}
             <FieldHelpButton fieldId="settings.notificationChannels" showRequirement={false} />
           </span>
+          {showEmailPreferences ? <span>{copy(locale, "notifications", "email")}</span> : null}
         </div>
         {preferences.map((preference) => (
           <div className="notification-preferences-row" key={preference.eventType}>
@@ -165,6 +167,18 @@ function NotificationPreferencesSection() {
               />
               <span />
             </label>
+            {showEmailPreferences ? (
+              <label className="toggle toggle--compact">
+                <input
+                  type="checkbox"
+                  aria-label={`${notificationEventLabel(preference.eventType, locale)}: ${copy(locale, "notifications", "email")}`}
+                  checked={preference.emailEnabled}
+                  disabled={!canManageNotifications || isSaving || !notificationPreferences?.emailRecipientAvailable}
+                  onChange={(event) => patchPreference(preference.eventType, { emailEnabled: event.target.checked })}
+                />
+                <span />
+              </label>
+            ) : null}
           </div>
         ))}
       </div>
@@ -173,6 +187,11 @@ function NotificationPreferencesSection() {
           ? copy(locale, "notifications", "pushActive", { count: notificationPreferences.activePushSubscriptions })
           : copy(locale, "notifications", "pushUnavailable")}
       </p>
+      {showEmailPreferences && !notificationPreferences?.emailRecipientAvailable ? (
+        <p className="settings-note" role="status">
+          {copy(locale, "notifications", "emailRecipientUnavailable")}
+        </p>
+      ) : null}
     </section>
   );
 }

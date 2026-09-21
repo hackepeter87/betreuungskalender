@@ -1009,7 +1009,7 @@ export const fieldHelpById = {
     shortHelp: "Legt fest, über welche Wege du an offene Bestätigungen erinnert wirst.",
     whyRelevant: "Bestätigungserinnerungen sollen nützlich sein, ohne sensible Details unnötig zu verbreiten.",
     usedFor: "In-App-Aufgaben und PWA-Push auf aktivierten Geräten.",
-    inputGuidance: "In-App bleibt immer aktiv. Push nutzt nur Geräte, auf denen du Benachrichtigungen ausdrücklich erlaubst.",
+    inputGuidance: "In-App bleibt immer aktiv. Push nutzt nur ausdrücklich freigegebene Geräte. E-Mail erscheint nur bei Betreiberfreigabe und einer gültigen Konto-Adresse.",
     commonMistakes: "Push muss pro Gerät erlaubt werden und kann je Gerät unterschiedlich aktiv sein.",
     requirementLevel: recommended
   }),

@@ -5,6 +5,7 @@ import {
   answerCareConfirmation,
   deletePushSubscription,
   getNotificationPreferences,
+  isEmailNotificationsUnavailableError,
   isCareConfirmationNoLongerActionableError,
   isInvalidCareConfirmationRangeError,
   isNotificationProcessingLimitError,
@@ -96,14 +97,29 @@ export async function careConfirmationRoutes(app: FastifyInstance): Promise<void
     return result ?? reply.code(404).send({ error: "not_found" });
   });
 
-  app.get("/api/notification-preferences", readLimit, async (request) =>
-    getNotificationPreferences(app.persistence.query, request.userEmail)
-  );
+  app.get("/api/notification-preferences", readLimit, async (request, reply) => {
+    reply.header("cache-control", "no-store");
+    return getNotificationPreferences(app.persistence.query, request.userEmail);
+  });
 
   app.put("/api/notification-preferences", writeLimit, async (request, reply) => {
     const parsed = notificationPreferencesSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
-    return updateNotificationPreferences(app.persistence, request.userEmail, parsed.data.preferences);
+    try {
+      const preferences = await updateNotificationPreferences(
+        app.persistence,
+        request.userEmail,
+        parsed.data.preferences
+      );
+      return reply.header("cache-control", "no-store").send(preferences);
+    } catch (error) {
+      if (isEmailNotificationsUnavailableError(error)) {
+        return reply.header("cache-control", "no-store").code(400).send({
+          error: "email_notifications_unavailable"
+        });
+      }
+      throw error;
+    }
   });
 
   app.post("/api/push-subscriptions", writeLimit, async (request, reply) => {

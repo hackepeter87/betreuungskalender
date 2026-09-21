@@ -179,6 +179,8 @@ export interface NotificationPreferencesResponse {
   preferences: NotificationPreference[];
   pushAvailable: boolean;
   pushConfigured: boolean;
+  emailAvailable: boolean;
+  emailRecipientAvailable: boolean;
   vapidPublicKey?: string;
   activePushSubscriptions: number;
 }

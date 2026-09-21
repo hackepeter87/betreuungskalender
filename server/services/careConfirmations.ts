@@ -34,6 +34,10 @@ import {
   syncPersistedChildJunction
 } from "./domainPersistence.js";
 import { userHasWorkspacePermission } from "./memberships.js";
+import {
+  runtimeNotificationEmailAvailable,
+  usableNotificationEmailAddress
+} from "./notificationEmail.js";
 import { findAuthenticatedUserBySubject } from "./users.js";
 
 const notificationEvents: ApiNotificationEventType[] = [
@@ -526,9 +530,45 @@ function defaultPreference(eventType: ApiNotificationEventType): ApiNotification
   return { eventType, inAppEnabled: true, pushEnabled: true, emailEnabled: false };
 }
 
-export async function getNotificationPreferences(
+export interface NotificationEmailCapability {
+  emailAvailable: boolean;
+}
+
+export class EmailNotificationsUnavailableError extends Error {
+  readonly code = "email_notifications_unavailable";
+
+  constructor() {
+    super("E-Mail-Benachrichtigungen sind für dieses Nutzerkonto nicht verfügbar.");
+    this.name = "EmailNotificationsUnavailableError";
+  }
+}
+
+export function isEmailNotificationsUnavailableError(
+  error: unknown
+): error is EmailNotificationsUnavailableError {
+  return error instanceof EmailNotificationsUnavailableError;
+}
+
+function runtimeNotificationEmailCapability(): NotificationEmailCapability {
+  return { emailAvailable: runtimeNotificationEmailAvailable() };
+}
+
+async function notificationEmailRecipientAvailable(
   database: DatabaseExecutor,
   userId: string
+): Promise<boolean> {
+  const user = await database.selectFrom("app_users")
+    .select("email")
+    .where("id", "=", userId)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst();
+  return Boolean(usableNotificationEmailAddress(user?.email));
+}
+
+export async function getNotificationPreferences(
+  database: DatabaseExecutor,
+  userId: string,
+  emailCapability: NotificationEmailCapability = runtimeNotificationEmailCapability()
 ): Promise<ApiNotificationPreferencesResponse> {
   const rows = await database.selectFrom("notification_preferences")
     .select(["event_type", "push_enabled", "email_enabled"])
@@ -554,6 +594,8 @@ export async function getNotificationPreferences(
     preferences,
     pushAvailable: pushConfigured,
     pushConfigured,
+    emailAvailable: emailCapability.emailAvailable,
+    emailRecipientAvailable: await notificationEmailRecipientAvailable(database, userId),
     ...(config.webPushPublicKey ? { vapidPublicKey: config.webPushPublicKey } : {}),
     activePushSubscriptions: Number(subscriptionCount?.count ?? 0)
   };
@@ -562,8 +604,16 @@ export async function getNotificationPreferences(
 export async function updateNotificationPreferences(
   runtime: PersistenceRuntime,
   userId: string,
-  preferences: ApiNotificationPreference[]
+  preferences: ApiNotificationPreference[],
+  emailCapability: NotificationEmailCapability = runtimeNotificationEmailCapability()
 ): Promise<ApiNotificationPreferencesResponse> {
+  if (
+    preferences.some((preference) => preference.emailEnabled) &&
+    (!emailCapability.emailAvailable ||
+      !await notificationEmailRecipientAvailable(runtime.query, userId))
+  ) {
+    throw new EmailNotificationsUnavailableError();
+  }
   const timestamp = nowIso();
   await runtime.transaction(async (database) => {
     for (const preference of preferences) {
@@ -587,7 +637,7 @@ export async function updateNotificationPreferences(
         })).execute();
     }
   });
-  return getNotificationPreferences(runtime.query, userId);
+  return getNotificationPreferences(runtime.query, userId, emailCapability);
 }
 
 async function preferenceAllowsPush(

@@ -434,6 +434,30 @@ test("marks an unavailable current recipient without attempting delivery", async
   });
 });
 
+test("rejects a malformed current recipient before delivery", async () => {
+  enableEmailPreference();
+  await createSingleDueRequest();
+  database.prepare("UPDATE app_users SET email = ? WHERE id = 'local-dev'")
+    .run("not-an-email");
+  let deliveries = 0;
+
+  const result = await processCareConfirmationEmailDeliveries(
+    persistence,
+    new Date("2026-07-03T08:05:00.000Z"),
+    async () => {
+      deliveries += 1;
+      return true;
+    }
+  );
+
+  assert.deepEqual(result, { batchesAttempted: 0, batchesSent: 0, occurrencesSent: 0 });
+  assert.equal(deliveries, 0);
+  assert.deepEqual(database.prepare(`
+    SELECT status, error_code AS errorCode
+    FROM care_confirmation_email_deliveries
+  `).get(), { status: "failed", errorCode: "recipient_unavailable" });
+});
+
 test("suppresses email delivery while the care entry has an open conflict", async () => {
   enableEmailPreference();
   await createSingleDueRequest();

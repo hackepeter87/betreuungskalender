@@ -60,13 +60,14 @@ Configuration is read from environment variables. `dotenv` loads a local
 | `WEB_PUSH_PRIVATE_KEY` | VAPID private key for optional Web Push | Secret value | Required only when Web Push is enabled | None | Secret; keep only in private environment files |
 | `WEB_PUSH_ALLOWED_ENDPOINT_HOSTS` | Comma-separated allowed browser push service hosts | `fcm.googleapis.com,updates.push.services.mozilla.com` | Optional when Web Push is enabled | Browser push-provider allowlist | Prevents user-controlled push endpoints from causing SSRF |
 | `INVITATION_EMAIL_ENABLED` | Enable optional invitation email delivery | `true` | Optional | `false` | Leave disabled unless outbound SMTP is configured and reviewed |
+| `NOTIFICATION_EMAIL_ENABLED` | Enable optional generic care-confirmation email delivery | `true` | Optional | `false` | Independent from invitation delivery; requires SMTP and a usable account email |
 | `INVITATION_PUBLIC_BASE_URL` | Public app URL used in invitation links | `https://betreuung.example.net` | Required when invitation email is enabled | `ALLOWED_ORIGIN` | Must be the exact public HTTPS origin users open in the browser |
-| `SMTP_HOST` | Provider-neutral SMTP relay host for invitation emails | `smtp.example.net` | Required when invitation email is enabled | None | Configure only trusted outbound mail infrastructure |
+| `SMTP_HOST` | Provider-neutral SMTP relay host for enabled application email | `smtp.example.net` | Required when either email feature is enabled | None | Configure only trusted outbound mail infrastructure |
 | `SMTP_PORT` | SMTP relay port | `587` | Optional | `587` | Use the relay port required by the operator's mail service |
 | `SMTP_SECURE` | Use implicit TLS for SMTP transport | `false` for STARTTLS on 587, `true` for 465 | Optional | `false` | Prefer encrypted transport according to the relay configuration |
 | `SMTP_USER` | Optional SMTP username | Service account name | Optional | None | Secret-adjacent; keep out of committed files |
 | `SMTP_PASSWORD` | Optional SMTP password | Secret value | Optional | None | Secret; keep only in private environment files or mounted secrets |
-| `SMTP_FROM` | Sender mailbox for invitation emails | `no-reply@example.net` | Required when invitation email is enabled | None | Use an operator-controlled sender accepted by the SMTP relay; the setup installation label is used as display name when available |
+| `SMTP_FROM` | Sender mailbox for enabled application email | `no-reply@example.net` | Required when either email feature is enabled | None | Use an operator-controlled sender accepted by the SMTP relay; invitation email may use the setup installation label as display name |
 | `OIDC_USER_ID_HEADER` | Trusted header containing the stable OIDC subject or user ID | `x-auth-request-user` | Recommended with OIDC | `x-auth-request-user` | Must be stable across email/name changes |
 | `OIDC_EMAIL_HEADER` | Trusted header containing the OIDC email claim | `x-auth-request-email` | Optional with OIDC | `x-auth-request-email` | Stored on the internal user record when present |
 | `OIDC_DISPLAY_NAME_HEADER` | Trusted header containing the OIDC display-name claim | `x-auth-request-preferred-username` | Optional with OIDC | `x-auth-request-preferred-username` | Shown compactly in the app shell |
@@ -329,6 +330,7 @@ still create an invitation and copy the one-time link manually.
 
 ```dotenv
 INVITATION_EMAIL_ENABLED=false
+NOTIFICATION_EMAIL_ENABLED=false
 INVITATION_PUBLIC_BASE_URL=https://betreuung.example.net
 SMTP_HOST=
 SMTP_PORT=587
@@ -353,6 +355,25 @@ failure message and can copy the link manually; SMTP hostnames, usernames,
 passwords, and raw provider errors are not returned to the browser.
 Invitation-creation responses expose only the complete link and do not return
 the underlying token as a separate API field.
+
+### Care-confirmation email delivery
+
+Care-confirmation email is a separate optional channel and remains disabled by
+default. It uses the same provider-neutral SMTP connection but does not depend
+on invitation email delivery.
+
+```dotenv
+NOTIFICATION_EMAIL_ENABLED=false
+ALLOWED_ORIGIN=https://betreuung.example.net
+```
+
+Set `NOTIFICATION_EMAIL_ENABLED=true` only after SMTP is configured and the
+operator has reviewed the recipient data flow. Users must then opt in per
+supported event. The recipient is always the current valid email address on the
+authenticated application account; users cannot enter an arbitrary recipient.
+Messages contain only a generic notice and a link derived from
+`ALLOWED_ORIGIN`. They contain no child names, care periods, locations, notes,
+evidence references, conflicts, tokens, or tracking content.
 
 ## CORS and same-origin operation
 

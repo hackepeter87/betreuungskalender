@@ -113,6 +113,7 @@ WEB_PUSH_PUBLIC_KEY=
 WEB_PUSH_PRIVATE_KEY=
 WEB_PUSH_ALLOWED_ENDPOINT_HOSTS=fcm.googleapis.com,updates.push.services.mozilla.com,web.push.apple.com,webpush.push.apple.com
 INVITATION_EMAIL_ENABLED=false
+NOTIFICATION_EMAIL_ENABLED=false
 INVITATION_PUBLIC_BASE_URL=https://app.example.net
 SMTP_HOST=
 SMTP_PORT=587
@@ -142,6 +143,12 @@ Invitation email delivery is optional. Leave `INVITATION_EMAIL_ENABLED=false`
 unless a reviewed SMTP relay is configured. If enabled, keep `SMTP_PASSWORD`
 only in private deployment state and set `INVITATION_PUBLIC_BASE_URL` to the
 public HTTPS app origin; invitation links contain one-time bearer tokens.
+
+Care-confirmation email is a separate opt-in channel. Leave
+`NOTIFICATION_EMAIL_ENABLED=false` unless an operator-controlled SMTP relay is
+approved for generic task notices. The current OIDC account email is used only
+at delivery time, and the message contains no care details or authentication
+token.
 
 For a fresh installation, create and mount the one-time owner setup value. The
 standard Compose file does not require this mount so existing installations can
