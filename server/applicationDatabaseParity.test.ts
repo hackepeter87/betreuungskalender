@@ -27,6 +27,7 @@ import {
   retireOpenCareConfirmationRequests,
   updateNotificationPreferences
 } from "./services/careConfirmations.js";
+import { processCareConfirmationEmailDeliveries } from "./services/careConfirmationEmails.js";
 import {
   previewContactRuleSync,
   syncContactRule,
@@ -667,6 +668,78 @@ async function confirmationRetirementSummary(runtime: PersistenceRuntime) {
   };
 }
 
+async function confirmationEmailDeliverySummary(runtime: PersistenceRuntime) {
+  const actor = user("confirmation-email-parity-user", "admin");
+  await upsertAuthenticatedUser(actor, runtime.query, timestamp);
+  await completeFirstUseSetup(actor, {
+    careParty: { name: "Email parity care", kind: "other" },
+    defaultCareParty: "primary",
+    children: []
+  }, runtime, timestamp);
+  await runtime.query.insertInto("care_entries").values({
+    id: "confirmation-email-parity-entry",
+    start_datetime: "2026-07-02T16:00:00.000Z",
+    end_datetime: "2026-07-02T18:00:00.000Z",
+    status: "planned",
+    care_scope: "hourly",
+    overnight: 0,
+    school_handover: 0,
+    holiday: 0,
+    weekend: 0,
+    additional_care: 0,
+    duration_minutes: 120,
+    is_contact_time: 0,
+    created_by: actor.id,
+    updated_by: actor.id,
+    created_at: timestamp,
+    updated_at: timestamp
+  }).execute();
+  await runtime.query.insertInto("care_confirmation_requests").values({
+    id: "confirmation-email-parity-request",
+    care_entry_id: "confirmation-email-parity-entry",
+    user_id: actor.id,
+    due_at: "2026-07-03T08:00:00.000Z",
+    sent_at: null,
+    answered_at: null,
+    status: "open",
+    reminder_count: 0,
+    next_reminder_at: null,
+    created_at: timestamp,
+    updated_at: timestamp,
+    deleted_at: null
+  }).execute();
+  await updateNotificationPreferences(runtime, actor.id, [{
+    eventType: "care_confirmation_due",
+    inAppEnabled: true,
+    pushEnabled: false,
+    emailEnabled: true
+  }]);
+  const batches: string[][] = [];
+  const result = await processCareConfirmationEmailDeliveries(
+    runtime,
+    new Date("2026-07-03T08:05:00.000Z"),
+    async (batch) => {
+      batches.push([...batch.requestIds]);
+      return true;
+    }
+  );
+  const state = await runtime.query
+    .selectFrom("care_confirmation_email_deliveries")
+    .select(["event_type", "status", "attempt_count", "sent_at", "error_code"])
+    .executeTakeFirstOrThrow();
+  return {
+    result,
+    batchSizes: batches.map((batch) => batch.length),
+    state: {
+      eventType: state.event_type,
+      status: state.status,
+      attemptCount: state.attempt_count,
+      sent: Boolean(state.sent_at),
+      errorCode: state.error_code
+    }
+  };
+}
+
 test("SQLite exercises the complete application parity scenario", async () => {
   const runtime = await sqliteRuntime();
   try {
@@ -718,6 +791,33 @@ test("care-confirmation retirement remains equivalent on SQLite and PostgreSQL",
       confirmed: true,
       requestStatus: "snoozed",
       retired: true
+    });
+  } finally {
+    await Promise.all([sqlite.close(), postgres.close()]);
+  }
+});
+
+test("care-confirmation email delivery state remains equivalent on SQLite and PostgreSQL", {
+  skip: !postgresConfigured
+}, async () => {
+  const sqlite = await sqliteRuntime();
+  const postgres = await postgresRuntime();
+  try {
+    const [sqliteResult, postgresResult] = await Promise.all([
+      confirmationEmailDeliverySummary(sqlite),
+      confirmationEmailDeliverySummary(postgres)
+    ]);
+    assert.deepEqual(postgresResult, sqliteResult);
+    assert.deepEqual(sqliteResult, {
+      result: { batchesAttempted: 1, batchesSent: 1, occurrencesSent: 1 },
+      batchSizes: [1],
+      state: {
+        eventType: "care_confirmation_due",
+        status: "sent",
+        attemptCount: 1,
+        sent: true,
+        errorCode: null
+      }
     });
   } finally {
     await Promise.all([sqlite.close(), postgres.close()]);

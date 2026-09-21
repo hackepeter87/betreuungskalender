@@ -385,6 +385,28 @@ function entryCanBeConfirmed(entry: EntryRow): boolean {
   return entry.status === "planned" && !entry.confirmed_at;
 }
 
+export async function isCareConfirmationRequestActionable(
+  database: DatabaseExecutor,
+  requestId: string,
+  userId: string,
+  knownConflictIds?: ReadonlySet<string>
+): Promise<boolean> {
+  const request = await database.selectFrom("care_confirmation_requests")
+    .select(["care_entry_id", "status"])
+    .where("id", "=", requestId)
+    .where("user_id", "=", userId)
+    .where("deleted_at", "is", null)
+    .where("answered_at", "is", null)
+    .where("status", "in", ["open", "snoozed"])
+    .executeTakeFirst();
+  if (!request) return false;
+  const entry = await getEntry(database, request.care_entry_id);
+  if (!entry || !entryCanBeConfirmed(entry)) return false;
+  const conflictIds = knownConflictIds ?? await careConflictEntryIds(database);
+  if (!conflictIds || conflictIds.has(entry.id)) return false;
+  return canAccessConfirmation(database, await currentUserForId(database, userId), entry);
+}
+
 export async function retireOpenCareConfirmationRequests(
   database: DatabaseExecutor,
   entryId: string,
