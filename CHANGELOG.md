@@ -6,6 +6,39 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.32.0] - 2026-09-21
+
+### Added
+
+- Add an operator-controlled email channel for care-confirmation notifications,
+  disabled by default and independent from invitation email delivery.
+- Add bounded, idempotent delivery state for due notifications and explicit
+  reminders without storing recipient addresses or message content.
+
+### Changed
+
+- Retire pending confirmation tasks atomically when planned care is completed,
+  partially completed, or cancelled through the entry editor.
+- Recheck task state, permissions, conflicts, preferences, and the current
+  account email immediately before notification delivery.
+- Share the hardened SMTP transport between invitations and notification mail
+  while keeping both operator capabilities independent.
+
+### Security and privacy
+
+- Keep notification messages generic and free of child names, care periods,
+  locations, notes, conflict details, tokens, and tracking resources.
+- Reject stale confirmation and reminder actions without changing domain data.
+- Preserve equivalent confirmation and delivery behavior across SQLite and
+  PostgreSQL.
+
+### Compatibility
+
+- Apply migration `034` to add technical notification delivery state for both
+  supported database backends.
+- Existing notification preferences and invitation email behavior remain
+  compatible; notification email remains opt-in and disabled by default.
+
 ## [1.31.0] - 2026-09-21
 
 ### Added
