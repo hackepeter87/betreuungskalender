@@ -43,7 +43,8 @@ const expectedMigrations = [
   "030_portable_data_transfer",
   "031_historical_contact_rule_sync",
   "032_audit_pagination_index",
-  "033_oidc_browser_marker"
+  "033_oidc_browser_marker",
+  "034_care_confirmation_email_deliveries"
 ];
 
 async function withTemporaryDirectory(

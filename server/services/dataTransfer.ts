@@ -971,7 +971,8 @@ async function lockPostgresTransferTarget(database: DatabaseExecutor): Promise<v
     unavailable_period_children, contact_patterns, contact_pattern_children, contact_rules,
     contact_rule_children, external_calendar_sources, external_calendar_events,
     monthly_closings, audit_log, settings, app_user_care_party_assignments,
-    care_confirmation_requests, notification_preferences, push_subscriptions,
+    care_confirmation_email_deliveries, care_confirmation_requests,
+    notification_preferences, push_subscriptions,
     calendar_feed_tokens, data_transfer_runs, data_transfer_actors,
     data_transfer_actor_care_parties, app_invitations
     IN SHARE ROW EXCLUSIVE MODE`).execute(database);

@@ -104,6 +104,18 @@ interface CareConfirmationRequestsTable extends SoftDeleteColumns {
   next_reminder_at: NullableText;
 }
 
+interface CareConfirmationEmailDeliveriesTable extends TimestampColumns {
+  id: string;
+  care_confirmation_request_id: string;
+  event_type: string;
+  occurrence_key: string;
+  status: DefaultText;
+  attempt_count: DefaultInteger;
+  next_attempt_at: NullableText;
+  sent_at: NullableText;
+  error_code: NullableText;
+}
+
 interface CareEntriesTable extends SoftDeleteColumns, ActorColumns {
   id: string;
   start_datetime: string;
@@ -432,6 +444,7 @@ export interface DatabaseSchema {
   app_users: AppUsersTable;
   audit_log: AuditLogTable;
   calendar_feed_tokens: CalendarFeedTokensTable;
+  care_confirmation_email_deliveries: CareConfirmationEmailDeliveriesTable;
   care_confirmation_requests: CareConfirmationRequestsTable;
   care_entries: CareEntriesTable;
   care_entry_actual_children: CareEntryActualChildrenTable;
@@ -473,6 +486,7 @@ export const databaseTableNames = [
   "app_users",
   "audit_log",
   "calendar_feed_tokens",
+  "care_confirmation_email_deliveries",
   "care_confirmation_requests",
   "care_entries",
   "care_entry_actual_children",

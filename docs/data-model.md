@@ -52,6 +52,7 @@ documented in [database backends](database-backends.md).
 | `care_entries` | Planned, completed, partially completed, or cancelled care periods and details |
 | `care_entry_children` | Many-to-many child assignment for care entries |
 | `care_entry_actual_children` | Actual child assignment for partially completed care entries |
+| `care_confirmation_email_deliveries` | Bounded, content-free delivery state for confirmation email occurrences |
 | `care_confirmation_requests` | Follow-up confirmation tasks for past planned care entries |
 | `trips` | Multiple trips belonging to a care entry |
 | `costs` | Multiple cost items belonging to a care entry |
@@ -362,6 +363,17 @@ entry has not yet been confirmed. Its status is `open`, `snoozed`, or
 `answered`; snoozed requests store `next_reminder_at`. Answering a request
 updates the linked care entry to `completed`, `partial`, or `cancelled`, records
 confirmation metadata, and closes the request so it is not sent again.
+
+`care_confirmation_email_deliveries` stores only bounded technical state for
+an individual due or reminder occurrence: the referenced confirmation request,
+event type, stable occurrence key, status, attempt count, next attempt, send
+time, and an abstract error code. It does not store a recipient address,
+message content, application URL, SMTP configuration, child data, or care
+details. The unique occurrence constraint and conditional attempt claims prevent
+parallel sweeps from sending the same successful occurrence twice. Failed
+delivery is limited to three attempts (immediate, after 15 minutes, and after a
+further hour). Portable transfers and legacy JSON data do not include this
+runtime state; native database backup behavior remains unchanged.
 
 Notification preferences are intentionally small. `notification_preferences`
 stores per-user choices for the supported confirmation events:
