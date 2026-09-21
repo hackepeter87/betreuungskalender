@@ -115,7 +115,7 @@ export default defineConfig({
     })),
     ...visualViewports.map(({ name, width, height }) => ({
       name,
-      testMatch: [/visual-regression\.spec\.ts/, /appearance\.spec\.ts/],
+      testMatch: [/visual-regression\.spec\.ts/, /appearance\.spec\.ts/, /contact-editor\.spec\.ts/],
       use: {
         ...devices["Desktop Chrome"],
         browserName: "chromium" as const,
