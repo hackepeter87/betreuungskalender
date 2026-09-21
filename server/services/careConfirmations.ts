@@ -100,6 +100,19 @@ export function isInvalidCareConfirmationRangeError(error: unknown): boolean {
   return error instanceof Error && (error as { code?: string }).code === "invalid_actual_range";
 }
 
+export function isCareConfirmationNoLongerActionableError(error: unknown): boolean {
+  return error instanceof Error &&
+    (error as { code?: string }).code === "confirmation_no_longer_actionable";
+}
+
+function confirmationNoLongerActionableError(): Error & { code: string; statusCode: number } {
+  return httpError(
+    "confirmation_no_longer_actionable",
+    409,
+    "Die Bestätigungsanfrage ist nicht mehr aktuell."
+  );
+}
+
 function assertValidActualRange(startDateTime: string, endDateTime: string): void {
   if (
     !isSupportedDateKey(startDateTime.slice(0, 10)) ||
@@ -366,6 +379,24 @@ async function getRequest(database: DatabaseExecutor, id: string): Promise<Reque
     .selectAll()
     .where("id", "=", id)
     .executeTakeFirst() as RequestRow | undefined;
+}
+
+function entryCanBeConfirmed(entry: EntryRow): boolean {
+  return entry.status === "planned" && !entry.confirmed_at;
+}
+
+export async function retireOpenCareConfirmationRequests(
+  database: DatabaseExecutor,
+  entryId: string,
+  timestamp = nowIso()
+): Promise<number> {
+  const result = await database.updateTable("care_confirmation_requests")
+    .set({ deleted_at: timestamp, updated_at: timestamp })
+    .where("care_entry_id", "=", entryId)
+    .where("answered_at", "is", null)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst();
+  return Number(result.numUpdatedRows);
 }
 
 export async function invalidateInaccessibleCareConfirmations(
@@ -698,12 +729,27 @@ export async function sendDueCareConfirmationPushes(
     .execute() as RequestRow[];
   assertWithinLimit(rows.length, limits.maximumRequests);
   const rowsByUser = new Map<string, RequestRow[]>();
+  const staleRequestIds: string[] = [];
   for (const row of rows) {
     if (conflictIds.has(row.care_entry_id)) continue;
     const entry = await getEntry(runtime.query, row.care_entry_id);
     const user = await currentUserForId(runtime.query, row.user_id);
-    if (!entry || !(await canAccessConfirmation(runtime.query, user, entry))) continue;
+    if (!entry || !entryCanBeConfirmed(entry)) {
+      staleRequestIds.push(row.id);
+      continue;
+    }
+    if (!(await canAccessConfirmation(runtime.query, user, entry))) continue;
     rowsByUser.set(row.user_id, [...(rowsByUser.get(row.user_id) ?? []), row]);
+  }
+
+  if (staleRequestIds.length) {
+    const timestamp = nowIso();
+    await runtime.query.updateTable("care_confirmation_requests")
+      .set({ deleted_at: timestamp, updated_at: timestamp })
+      .where("id", "in", staleRequestIds)
+      .where("answered_at", "is", null)
+      .where("deleted_at", "is", null)
+      .execute();
   }
 
   let sent = 0;
@@ -781,12 +827,27 @@ export async function listOpenCareConfirmations(
       .execute();
   }
   const visible: ApiCareConfirmationRequest[] = [];
+  const staleRequestIds: string[] = [];
   for (const row of rows) {
     if (conflictIds.has(row.care_entry_id)) continue;
     const entry = await getEntry(runtime.query, row.care_entry_id);
-    if (entry && await canAccessConfirmation(runtime.query, user, entry)) {
+    if (!entry || !entryCanBeConfirmed(entry)) {
+      staleRequestIds.push(row.id);
+      continue;
+    }
+    if (await canAccessConfirmation(runtime.query, user, entry)) {
       visible.push(await mapRequest(runtime.query, row, entry));
     }
+  }
+  if (staleRequestIds.length) {
+    const timestamp = nowIso();
+    await runtime.query.updateTable("care_confirmation_requests")
+      .set({ deleted_at: timestamp, updated_at: timestamp })
+      .where("user_id", "=", user.id)
+      .where("id", "in", staleRequestIds)
+      .where("answered_at", "is", null)
+      .where("deleted_at", "is", null)
+      .execute();
   }
   return visible;
 }
@@ -798,47 +859,48 @@ export async function answerCareConfirmation(
   answer: ApiCareConfirmationAnswer
 ): Promise<ApiCareConfirmationRequest | undefined> {
   const userId = typeof userOrId === "string" ? userOrId : userOrId.id;
-  const request = await runtime.query.selectFrom("care_confirmation_requests")
-    .selectAll()
-    .where("id", "=", requestId)
-    .where("user_id", "=", userId)
-    .where("deleted_at", "is", null)
-    .where("answered_at", "is", null)
-    .executeTakeFirst() as RequestRow | undefined;
-  if (!request) return undefined;
-  const before = await getEntry(runtime.query, request.care_entry_id);
-  if (!before) return undefined;
-  const conflictIds = await careConflictEntryIds(runtime.query);
-  if (!conflictIds || conflictIds.has(before.id)) throw new CareEntryConflictError();
-  if (typeof userOrId !== "string" && !(await canAccessConfirmation(runtime.query, userOrId, before))) {
-    return undefined;
-  }
   const timestamp = nowIso();
-  const note = answer.note?.trim() || answer.cancellationReason?.trim() || null;
-  const actualStartDateTime = answer.status === "partial"
-    ? answer.actualStartDateTime ?? before.start_datetime
-    : null;
-  const actualEndDateTime = answer.status === "partial"
-    ? answer.actualEndDateTime ?? before.end_datetime
-    : null;
-  const actualResponsiblePartyId = answer.status === "partial"
-    ? answer.actualResponsiblePartyId ?? before.responsible_party_id
-    : null;
-  if (actualStartDateTime && actualEndDateTime) {
-    assertValidActualRange(actualStartDateTime, actualEndDateTime);
-  }
-  const plannedChildIds = await linkedChildIds(runtime.query, "care_entry_children", before.id);
-  const resolvedActualChildIds = answer.status === "partial"
-    ? [...new Set(answer.actualChildIds ?? plannedChildIds)]
-    : [];
-  if (answer.status === "partial") {
-    await assertPersistedChildren(runtime.query, resolvedActualChildIds);
-    await assertPersistedCareParty(runtime.query, actualResponsiblePartyId ?? undefined);
-    if (typeof userOrId !== "string") {
-      await assertCanUsePersistedCareParty(runtime.query, userOrId, actualResponsiblePartyId ?? undefined);
-    }
-  }
   const result = await runtime.transaction(async (database) => {
+    const request = await database.selectFrom("care_confirmation_requests")
+      .selectAll()
+      .where("id", "=", requestId)
+      .where("user_id", "=", userId)
+      .where("deleted_at", "is", null)
+      .where("answered_at", "is", null)
+      .executeTakeFirst() as RequestRow | undefined;
+    if (!request) return undefined;
+    const before = await getEntry(database, request.care_entry_id);
+    if (!before) return undefined;
+    if (!entryCanBeConfirmed(before)) throw confirmationNoLongerActionableError();
+    const conflictIds = await careConflictEntryIds(database);
+    if (!conflictIds || conflictIds.has(before.id)) throw new CareEntryConflictError();
+    const currentUser = await currentUserForId(database, userId);
+    if (!(await canAccessConfirmation(database, currentUser, before))) return undefined;
+
+    const note = answer.note?.trim() || answer.cancellationReason?.trim() || null;
+    const actualStartDateTime = answer.status === "partial"
+      ? answer.actualStartDateTime ?? before.start_datetime
+      : null;
+    const actualEndDateTime = answer.status === "partial"
+      ? answer.actualEndDateTime ?? before.end_datetime
+      : null;
+    const actualResponsiblePartyId = answer.status === "partial"
+      ? answer.actualResponsiblePartyId ?? before.responsible_party_id
+      : null;
+    if (actualStartDateTime && actualEndDateTime) {
+      assertValidActualRange(actualStartDateTime, actualEndDateTime);
+    }
+    const plannedChildIds = await linkedChildIds(database, "care_entry_children", before.id);
+    const resolvedActualChildIds = answer.status === "partial"
+      ? [...new Set(answer.actualChildIds ?? plannedChildIds)]
+      : [];
+    if (answer.status === "partial") {
+      await assertPersistedChildren(database, resolvedActualChildIds);
+      await assertPersistedCareParty(database, actualResponsiblePartyId ?? undefined);
+      if (currentUser) {
+        await assertCanUsePersistedCareParty(database, currentUser, actualResponsiblePartyId ?? undefined);
+      }
+    }
     await assertNoActualCareConflict(omitUndefinedValues({
       id: before.id,
       status: answer.status,
@@ -882,6 +944,12 @@ export async function answerCareConfirmation(
       .where("user_id", "=", userId)
       .where("deleted_at", "is", null)
       .execute();
+    await database.updateTable("care_confirmation_requests")
+      .set({ deleted_at: timestamp, updated_at: timestamp })
+      .where("care_entry_id", "=", before.id)
+      .where("answered_at", "is", null)
+      .where("deleted_at", "is", null)
+      .execute();
     const after = await getEntry(database, before.id);
     if (!after) throw new Error("Betreuungseintrag wurde nicht gefunden.");
     await recordDomainFieldChanges(
@@ -923,25 +991,30 @@ export async function remindCareConfirmationLater(
   nextReminderAt?: string
 ): Promise<ApiCareConfirmationRequest | undefined> {
   const userId = typeof userOrId === "string" ? userOrId : userOrId.id;
-  const request = await runtime.query.selectFrom("care_confirmation_requests")
-    .selectAll()
-    .where("id", "=", requestId)
-    .where("user_id", "=", userId)
-    .where("deleted_at", "is", null)
-    .where("answered_at", "is", null)
-    .executeTakeFirst() as RequestRow | undefined;
-  if (!request) return undefined;
-  const entry = await getEntry(runtime.query, request.care_entry_id);
-  if (!entry) return undefined;
-  if (typeof userOrId !== "string" && !(await canAccessConfirmation(runtime.query, userOrId, entry))) {
-    return undefined;
-  }
   const next = nextReminderAt ?? new Date(Date.now() + 4 * 60 * 60 * 1000).toISOString();
   const timestamp = nowIso();
-  await runtime.query.updateTable("care_confirmation_requests")
-    .set({ status: "snoozed", next_reminder_at: next, updated_at: timestamp })
-    .where("id", "=", requestId)
-    .execute();
-  const updated = await getRequest(runtime.query, requestId);
-  return updated ? mapRequest(runtime.query, updated, entry) : undefined;
+  return runtime.transaction(async (database) => {
+    const request = await database.selectFrom("care_confirmation_requests")
+      .selectAll()
+      .where("id", "=", requestId)
+      .where("user_id", "=", userId)
+      .where("deleted_at", "is", null)
+      .where("answered_at", "is", null)
+      .executeTakeFirst() as RequestRow | undefined;
+    if (!request) return undefined;
+    const entry = await getEntry(database, request.care_entry_id);
+    if (!entry) return undefined;
+    if (!entryCanBeConfirmed(entry)) throw confirmationNoLongerActionableError();
+    const currentUser = await currentUserForId(database, userId);
+    if (!(await canAccessConfirmation(database, currentUser, entry))) return undefined;
+    const result = await database.updateTable("care_confirmation_requests")
+      .set({ status: "snoozed", next_reminder_at: next, updated_at: timestamp })
+      .where("id", "=", requestId)
+      .where("deleted_at", "is", null)
+      .where("answered_at", "is", null)
+      .executeTakeFirst();
+    if (result.numUpdatedRows === 0n) throw confirmationNoLongerActionableError();
+    const updated = await getRequest(database, requestId);
+    return updated ? mapRequest(database, updated, entry) : undefined;
+  });
 }

@@ -37,6 +37,7 @@ import {
   listCareConflicts
 } from "../services/careConflicts.js";
 import { bool, makeId, nowIso } from "../services/common.js";
+import { retireOpenCareConfirmationRequests } from "../services/careConfirmations.js";
 import {
   careConflictPreviewInputSchema,
   careEntryInputSchema,
@@ -795,6 +796,7 @@ async function persistEntry(
     const plannedEndDateTime = deviationType
       ? input.plannedEndDateTime ?? existing.plannedEndDateTime ?? existing.endDateTime
       : null;
+    const resolved = input.status !== "planned";
     await database.updateTable("care_entries").set({
       generated_by_pattern_id: generatedByPatternId,
       rule_occurrence_date: ruleOccurrenceDate,
@@ -812,9 +814,9 @@ async function persistEntry(
       deviation_note: input.deviationNote?.trim() || null,
       care_scope: input.careScope,
       cancellation_reason: input.status === "cancelled" ? input.cancellationReason ?? null : null,
-      confirmation_note: input.status === "planned" ? null : existing.confirmationNote ?? null,
-      confirmed_at: input.status === "planned" ? null : existing.confirmedAt ?? null,
-      confirmed_by: input.status === "planned" ? null : existing.confirmedBy ?? null,
+      confirmation_note: resolved ? existing.confirmationNote ?? null : null,
+      confirmed_at: resolved ? existing.confirmedAt ?? timestamp : null,
+      confirmed_by: resolved ? existing.confirmedBy ?? userEmail : null,
       actual_start_datetime: input.status === "partial" ? input.actualStartDateTime ?? existing.actualStartDateTime ?? input.startDateTime : null,
       actual_end_datetime: input.status === "partial" ? input.actualEndDateTime ?? existing.actualEndDateTime ?? input.endDateTime : null,
       actual_responsible_party_id: actualResponsiblePartyId ?? null,
@@ -836,6 +838,9 @@ async function persistEntry(
       updated_at: timestamp,
       deleted_at: null
     }).where("id", "=", id).execute();
+    if (resolved) {
+      await retireOpenCareConfirmationRequests(database, id, timestamp);
+    }
   } else {
     await database.insertInto("care_entries").values({
       id,

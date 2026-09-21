@@ -1017,7 +1017,21 @@ test("shows a no-access page for a revoked workspace membership", async ({ page 
   await expect(page.getByTestId("auth-logout")).toBeVisible();
 });
 
-test("shows open care confirmations in the notification center", async ({ page }, testInfo) => {
+test("shows open care confirmations in the notification center", async ({ page, request }, testInfo) => {
+  const childResponse = await request.post("/api/children", {
+    data: {
+      name: "Bestätigung Testkind",
+      birthMonth: 4,
+      birthYear: 2018,
+      color: "#087f7b"
+    }
+  });
+  expect(childResponse.ok()).toBeTruthy();
+  const child = await childResponse.json() as { id: string };
+  const partiesResponse = await request.get("/api/care-parties");
+  expect(partiesResponse.ok()).toBeTruthy();
+  const parties = await partiesResponse.json() as Array<{ id: string }>;
+  expect(parties[0]?.id).toBeTruthy();
   const end = new Date(Date.now() - 86_400_000);
   end.setHours(18, 0, 0, 0);
   const start = new Date(end);
@@ -1028,7 +1042,8 @@ test("shows open care confirmations in the notification center", async ({ page }
     date,
     startDateTime: start.toISOString().slice(0, 16),
     endDateTime: end.toISOString().slice(0, 16),
-    childIds: ["child_notification_e2e"],
+    childIds: [child.id],
+    responsiblePartyId: parties[0]!.id,
     status: "planned",
     confirmationState: "unconfirmed",
     additionalCare: false,
@@ -1050,13 +1065,16 @@ test("shows open care confirmations in the notification center", async ({ page }
 
   await page.addInitScript((confirmationEntry) => {
     const originalFetch = window.fetch.bind(window);
+    let resolvedEntryId: string | undefined;
     window.fetch = (input, init) => {
       const url = typeof input === "string"
         ? input
         : input instanceof Request
           ? input.url
           : String(input);
-      if (new URL(url, window.location.href).pathname === "/api/care-confirmations/open") {
+      const pathname = new URL(url, window.location.href).pathname;
+      const method = init?.method ?? (input instanceof Request ? input.method : "GET");
+      if (pathname === "/api/care-confirmations/open") {
         const requests = Array.from({ length: 3 }, (_, index) => ({
           id: `confirm_notification_e2e_${index}`,
           careEntryId: `${confirmationEntry.id}_${index}`,
@@ -1067,8 +1085,22 @@ test("shows open care confirmations in the notification center", async ({ page }
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
           entry: { ...confirmationEntry, id: `${confirmationEntry.id}_${index}` }
-        }));
+        })).filter((request) => request.careEntryId !== resolvedEntryId);
         return Promise.resolve(new Response(JSON.stringify(requests), {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }));
+      }
+      if (method === "PUT" && pathname === `/api/care-entries/${confirmationEntry.id}_0`) {
+        resolvedEntryId = `${confirmationEntry.id}_0`;
+        return Promise.resolve(new Response(JSON.stringify({
+          ...confirmationEntry,
+          id: resolvedEntryId,
+          status: "completed",
+          confirmationState: "confirmed",
+          confirmedAt: new Date().toISOString(),
+          confirmedBy: "local-dev"
+        }), {
           status: 200,
           headers: { "content-type": "application/json" }
         }));
@@ -1109,7 +1141,15 @@ test("shows open care confirmations in the notification center", async ({ page }
   await expect(popover).toContainText("Offene Bestätigungen");
   await expect(popover.getByTestId("confirmation-card")).toHaveCount(3);
   await popover.getByText("Geplante Betreuung nachträglich bestätigen").first().click();
-  await expect(page.getByRole("dialog", { name: "Betreuungseintrag bearbeiten" })).toBeVisible();
+  const editor = page.getByRole("dialog", { name: "Betreuungseintrag bearbeiten" });
+  await expect(editor).toBeVisible();
+  await editor.getByRole("radio", { name: "Durchgeführt", exact: true }).check({ force: true });
+  await editor.getByTestId("entry-submit").click();
+  await expect(editor).toBeHidden();
+  await expect(page.getByTestId("sidebar-notification-center-badge")).toHaveText("2");
+  await page.getByTestId("sidebar-notification-center-trigger").click();
+  await expect(page.getByTestId("sidebar-notification-center-popover").getByTestId("confirmation-card"))
+    .toHaveCount(2);
 });
 
 test("shows native OIDC login action when authentication is required", async ({

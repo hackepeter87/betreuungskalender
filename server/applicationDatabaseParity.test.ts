@@ -24,6 +24,7 @@ import {
 import { listCareConflicts, previewPlannedCareConflicts } from "./services/careConflicts.js";
 import {
   getNotificationPreferences,
+  retireOpenCareConfirmationRequests,
   updateNotificationPreferences
 } from "./services/careConfirmations.js";
 import {
@@ -601,6 +602,71 @@ async function runLegacyAdditiveMigration(runtime: PersistenceRuntime) {
   };
 }
 
+async function confirmationRetirementSummary(runtime: PersistenceRuntime) {
+  const actor = user("confirmation-parity-user", "admin");
+  await upsertAuthenticatedUser(actor, runtime.query, timestamp);
+  await runtime.query.insertInto("care_entries").values({
+    id: "confirmation-parity-entry",
+    start_datetime: "2026-07-02T16:00:00.000Z",
+    end_datetime: "2026-07-02T18:00:00.000Z",
+    status: "planned",
+    care_scope: "hourly",
+    overnight: 0,
+    school_handover: 0,
+    holiday: 0,
+    weekend: 0,
+    additional_care: 0,
+    duration_minutes: 120,
+    is_contact_time: 0,
+    created_by: actor.id,
+    updated_by: actor.id,
+    created_at: timestamp,
+    updated_at: timestamp
+  }).execute();
+  await runtime.query.insertInto("care_confirmation_requests").values({
+    id: "confirmation-parity-request",
+    care_entry_id: "confirmation-parity-entry",
+    user_id: actor.id,
+    due_at: "2026-07-03T08:00:00.000Z",
+    sent_at: null,
+    answered_at: null,
+    status: "snoozed",
+    reminder_count: 1,
+    next_reminder_at: "2026-07-03T12:00:00.000Z",
+    created_at: timestamp,
+    updated_at: timestamp,
+    deleted_at: null
+  }).execute();
+
+  await runtime.transaction(async (database) => {
+    await database.updateTable("care_entries").set({
+      status: "completed",
+      confirmed_at: timestamp,
+      confirmed_by: actor.id,
+      updated_by: actor.id,
+      updated_at: timestamp
+    }).where("id", "=", "confirmation-parity-entry").execute();
+    await retireOpenCareConfirmationRequests(database, "confirmation-parity-entry", timestamp);
+  });
+
+  const [entry, request] = await Promise.all([
+    runtime.query.selectFrom("care_entries")
+      .select(["status", "confirmed_at", "confirmed_by"])
+      .where("id", "=", "confirmation-parity-entry")
+      .executeTakeFirstOrThrow(),
+    runtime.query.selectFrom("care_confirmation_requests")
+      .select(["status", "deleted_at"])
+      .where("id", "=", "confirmation-parity-request")
+      .executeTakeFirstOrThrow()
+  ]);
+  return {
+    entryStatus: entry.status,
+    confirmed: entry.confirmed_at === timestamp && entry.confirmed_by === actor.id,
+    requestStatus: request.status,
+    retired: request.deleted_at === timestamp
+  };
+}
+
 test("SQLite exercises the complete application parity scenario", async () => {
   const runtime = await sqliteRuntime();
   try {
@@ -631,6 +697,28 @@ test("PostgreSQL produces the same application results as SQLite", {
       runApplicationScenario(postgres)
     ]);
     assert.deepEqual(withoutDriver(postgresResult), withoutDriver(sqliteResult));
+  } finally {
+    await Promise.all([sqlite.close(), postgres.close()]);
+  }
+});
+
+test("care-confirmation retirement remains equivalent on SQLite and PostgreSQL", {
+  skip: !postgresConfigured
+}, async () => {
+  const sqlite = await sqliteRuntime();
+  const postgres = await postgresRuntime();
+  try {
+    const [sqliteResult, postgresResult] = await Promise.all([
+      confirmationRetirementSummary(sqlite),
+      confirmationRetirementSummary(postgres)
+    ]);
+    assert.deepEqual(postgresResult, sqliteResult);
+    assert.deepEqual(sqliteResult, {
+      entryStatus: "completed",
+      confirmed: true,
+      requestStatus: "snoozed",
+      retired: true
+    });
   } finally {
     await Promise.all([sqlite.close(), postgres.close()]);
   }
