@@ -1966,6 +1966,11 @@ test("creates a weekly multi-day care series with calendar preview", async ({
   await expect(page.getByTestId("contact-message")).toContainText(
     "Betreuungsserie gespeichert"
   );
+  const historicalManagement = page.getByTestId("contact-historical-sync");
+  await expect(historicalManagement).not.toHaveAttribute("open", "");
+  await historicalManagement.locator("summary").click();
+  await expect(historicalManagement).toHaveAttribute("open", "");
+  await expect(historicalManagement).toContainText("Vergangene Regeltermine ergänzen");
 
   const entriesResponse = await request.get("/api/care-entries");
   expect(entriesResponse.ok()).toBeTruthy();
