@@ -14,6 +14,11 @@ import {
   upsertContactRule,
   upsertContactRuleFromPattern
 } from "./services/contactRules.js";
+import {
+  applyContactRuleChange,
+  isContactRuleChangePreviewChangedError,
+  previewContactRuleChange
+} from "./services/contactRuleChanges.js";
 import { expandContactRule as expandContactRuleInClient } from "../src/lib/contactRules.js";
 import { expandContactRule } from "../shared/contactRuleExpansion.js";
 import {
@@ -900,5 +905,320 @@ test("historical sync requires a current preview and suppresses automatic confir
       now: "2026-08-26T12:00:00.000Z"
     });
     assert.deepEqual([repeated.create, repeated.alreadyPresent], [0, 3]);
+  });
+});
+
+async function createChangeTestRule(persistence: DatabaseExecutor): Promise<void> {
+  await upsertContactRule({
+    id: "rule-change",
+    rule: {
+      name: "Wöchentliche Testregel",
+      startDate: "2026-07-03",
+      endDate: "2026-07-31",
+      timezone: "Europe/Berlin",
+      recurrence: { kind: "weekly", intervalWeeks: 1, weekdays: ["FR"] },
+      segments: [{
+        id: "visit",
+        startDayOffset: 0,
+        startTime: "16:00",
+        endDayOffset: 0,
+        endTime: "18:00"
+      }],
+      syncHorizonMonths: 12,
+      childIds: ["child-a"],
+      active: true
+    },
+    createdBy: "tester",
+    updatedBy: "tester",
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    database: persistence
+  });
+  await syncContactRule("rule-change", {
+    database: persistence,
+    userEmail: "tester",
+    now: timestamp
+  });
+}
+
+test("recurring-care change preview is write-free and binds persisted evidence", async () => {
+  await withDatabase(async (database, persistence) => {
+    insertChild(database);
+    await createChangeTestRule(persistence);
+    const selected = database.prepare(`
+      SELECT id FROM care_entries
+      WHERE contact_rule_id = 'rule-change' AND rule_occurrence_date = '2026-07-10'
+    `).get() as { id: string };
+    const before = database.serialize();
+    const request = {
+      selectedEntryId: selected.id,
+      scope: "series" as const,
+      proposedRule: {
+        name: "Zweiwöchentliche Testregel",
+        startDate: "2026-07-03",
+        endDate: "2026-07-31",
+        timezone: "Europe/Berlin" as const,
+        recurrence: { kind: "weekly" as const, intervalWeeks: 2, weekdays: ["FR" as const] },
+        segments: [{
+          id: "visit",
+          startDayOffset: 0,
+          startTime: "16:00",
+          endDayOffset: 0,
+          endTime: "18:00"
+        }],
+        syncHorizonMonths: 12,
+        childIds: ["child-a"],
+        active: true
+      }
+    };
+    const preview = await previewContactRuleChange("rule-change", request, persistence, timestamp);
+    assert.deepEqual(
+      [preview.scope, preview.affected, preview.retired, preview.preserved],
+      ["series", 3, 2, 0]
+    );
+    assert.deepEqual(database.serialize(), before);
+
+    database.prepare(`
+      UPDATE care_entries SET updated_at = '2026-07-01T11:00:00.000Z'
+      WHERE id = ?
+    `).run(selected.id);
+    await assert.rejects(
+      () => applyContactRuleChange({
+        ruleId: "rule-change",
+        request: { ...request, previewFingerprint: preview.fingerprint },
+        userEmail: "tester",
+        database: persistence,
+        now: timestamp
+      }),
+      isContactRuleChangePreviewChangedError
+    );
+  });
+});
+
+test("recurring-care change fingerprint includes persisted child assignments", async () => {
+  await withDatabase(async (database, persistence) => {
+    insertChild(database);
+    insertChild(database, "child-b", "Weiteres Testkind");
+    await createChangeTestRule(persistence);
+    const selected = database.prepare(`
+      SELECT id FROM care_entries
+      WHERE contact_rule_id = 'rule-change' AND rule_occurrence_date = '2026-07-10'
+    `).get() as { id: string };
+    const request = {
+      selectedEntryId: selected.id,
+      scope: "series" as const,
+      proposedRule: {
+        name: "Zweiwoechentliche Testregel",
+        startDate: "2026-07-03",
+        endDate: "2026-07-31",
+        timezone: "Europe/Berlin" as const,
+        recurrence: { kind: "weekly" as const, intervalWeeks: 2, weekdays: ["FR" as const] },
+        segments: [{ id: "visit", startDayOffset: 0, startTime: "16:00", endDayOffset: 0, endTime: "18:00" }],
+        syncHorizonMonths: 12,
+        childIds: ["child-a"],
+        active: true
+      }
+    };
+    const preview = await previewContactRuleChange("rule-change", request, persistence, timestamp);
+    database.prepare(`
+      UPDATE care_entry_children SET child_id = ?
+      WHERE care_entry_id = ? AND deleted_at IS NULL
+    `).run("child-b", selected.id);
+
+    await assert.rejects(
+      () => applyContactRuleChange({
+        ruleId: "rule-change",
+        request: { ...request, previewFingerprint: preview.fingerprint },
+        userEmail: "tester",
+        database: persistence,
+        now: timestamp
+      }),
+      isContactRuleChangePreviewChangedError
+    );
+  });
+});
+
+test("following change uses the canonical month-boundary horizon", async () => {
+  await withDatabase(async (database, persistence) => {
+    insertChild(database);
+    await upsertContactRule({
+      id: "rule-month-end",
+      rule: {
+        name: "Offene Monatsendregel",
+        startDate: "2026-07-31",
+        timezone: "Europe/Berlin",
+        recurrence: { kind: "weekly", intervalWeeks: 1, weekdays: ["FR"] },
+        segments: [{ id: "visit", startDayOffset: 0, startTime: "16:00", endDayOffset: 0, endTime: "18:00" }],
+        syncHorizonMonths: 1,
+        childIds: ["child-a"],
+        active: true
+      },
+      createdBy: "tester",
+      updatedBy: "tester",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      database: persistence
+    });
+    await syncContactRule("rule-month-end", { database: persistence, userEmail: "tester", now: timestamp });
+    const selected = database.prepare(`
+      SELECT id FROM care_entries
+      WHERE contact_rule_id = 'rule-month-end' AND rule_occurrence_date = '2026-07-31'
+    `).get() as { id: string };
+    const preview = await previewContactRuleChange("rule-month-end", {
+      selectedEntryId: selected.id,
+      scope: "following",
+      proposedRule: {
+        name: "Offene Folgeregel",
+        startDate: "2026-07-31",
+        timezone: "Europe/Berlin",
+        recurrence: { kind: "weekly", intervalWeeks: 1, weekdays: ["FR"] },
+        segments: [{ id: "visit", startDayOffset: 0, startTime: "18:00", endDayOffset: 0, endTime: "20:00" }],
+        syncHorizonMonths: 2,
+        childIds: ["child-a"],
+        active: true
+      }
+    }, persistence, timestamp);
+
+    assert.equal(preview.endDate, "2026-08-31");
+  });
+});
+
+test("single recurring-care change becomes a preserved manual occurrence", async () => {
+  await withDatabase(async (database, persistence) => {
+    insertChild(database);
+    await createChangeTestRule(persistence);
+    const selected = database.prepare(`
+      SELECT id FROM care_entries
+      WHERE contact_rule_id = 'rule-change' AND rule_occurrence_date = '2026-07-10'
+    `).get() as { id: string };
+    const request = {
+      selectedEntryId: selected.id,
+      scope: "occurrence" as const,
+      proposedEntry: {
+        startDateTime: "2026-07-10T17:00",
+        endDateTime: "2026-07-10T20:00",
+        childIds: ["child-a"]
+      }
+    };
+    const preview = await previewContactRuleChange("rule-change", request, persistence, timestamp);
+    await applyContactRuleChange({
+      ruleId: "rule-change",
+      request: { ...request, previewFingerprint: preview.fingerprint },
+      userEmail: "tester",
+      database: persistence,
+      now: timestamp
+    });
+    const changed = database.prepare(`
+      SELECT start_datetime AS startDateTime, end_datetime AS endDateTime,
+             contact_rule_sync_state AS syncState
+      FROM care_entries WHERE id = ?
+    `).get(selected.id);
+    assert.deepEqual(changed, {
+      startDateTime: "2026-07-10T17:00",
+      endDateTime: "2026-07-10T20:00",
+      syncState: "manual_override"
+    });
+    await syncContactRule("rule-change", { database: persistence, userEmail: "tester", now: timestamp });
+    assert.equal((database.prepare(`SELECT COUNT(*) AS count FROM care_entries WHERE id = ?`).get(selected.id) as { count: number }).count, 1);
+  });
+});
+
+test("whole-series reconciliation retires obsolete plans and preserves history", async () => {
+  await withDatabase(async (database, persistence) => {
+    insertChild(database);
+    await createChangeTestRule(persistence);
+    database.prepare(`
+      UPDATE care_entries SET status = 'completed', confirmed_at = ?, confirmed_by = 'tester'
+      WHERE contact_rule_id = 'rule-change' AND rule_occurrence_date = '2026-07-17'
+    `).run(timestamp);
+    const selected = database.prepare(`
+      SELECT id FROM care_entries
+      WHERE contact_rule_id = 'rule-change' AND rule_occurrence_date = '2026-07-10'
+    `).get() as { id: string };
+    const request = {
+      selectedEntryId: selected.id,
+      scope: "series" as const,
+      proposedRule: {
+        name: "Zweiwöchentliche Testregel",
+        startDate: "2026-07-03",
+        endDate: "2026-07-31",
+        timezone: "Europe/Berlin" as const,
+        recurrence: { kind: "weekly" as const, intervalWeeks: 2, weekdays: ["FR" as const] },
+        segments: [{ id: "visit", startDayOffset: 0, startTime: "16:00", endDayOffset: 0, endTime: "18:00" }],
+        syncHorizonMonths: 12,
+        childIds: ["child-a"],
+        active: true
+      }
+    };
+    const preview = await previewContactRuleChange("rule-change", request, persistence, timestamp);
+    assert.equal(preview.historical, 1);
+    await applyContactRuleChange({
+      ruleId: "rule-change",
+      request: { ...request, previewFingerprint: preview.fingerprint },
+      userEmail: "tester",
+      database: persistence,
+      now: timestamp
+    });
+    const completed = database.prepare(`
+      SELECT status, deleted_at AS deletedAt FROM care_entries
+      WHERE contact_rule_id = 'rule-change' AND rule_occurrence_date = '2026-07-17'
+    `).get();
+    assert.deepEqual(completed, { status: "completed", deletedAt: null });
+    const activeDates = (database.prepare(`
+      SELECT rule_occurrence_date AS date FROM care_entries
+      WHERE contact_rule_id = 'rule-change' AND deleted_at IS NULL
+      ORDER BY rule_occurrence_date
+    `).all() as Array<{ date: string }>).map(({ date }) => date);
+    assert.deepEqual(activeDates, ["2026-07-03", "2026-07-17", "2026-07-31"]);
+  });
+});
+
+test("following recurring-care change splits the rule atomically", async () => {
+  await withDatabase(async (database, persistence) => {
+    insertChild(database);
+    await createChangeTestRule(persistence);
+    const selected = database.prepare(`
+      SELECT id FROM care_entries
+      WHERE contact_rule_id = 'rule-change' AND rule_occurrence_date = '2026-07-17'
+    `).get() as { id: string };
+    const request = {
+      selectedEntryId: selected.id,
+      scope: "following" as const,
+      proposedRule: {
+        name: "Spätere Testregel",
+        startDate: "2026-07-17",
+        endDate: "2026-07-31",
+        timezone: "Europe/Berlin" as const,
+        recurrence: { kind: "weekly" as const, intervalWeeks: 1, weekdays: ["FR" as const] },
+        segments: [{ id: "visit", startDayOffset: 0, startTime: "18:00", endDayOffset: 0, endTime: "20:00" }],
+        syncHorizonMonths: 12,
+        childIds: ["child-a"],
+        active: true
+      }
+    };
+    const preview = await previewContactRuleChange("rule-change", request, persistence, timestamp);
+    await applyContactRuleChange({
+      ruleId: "rule-change",
+      request: { ...request, previewFingerprint: preview.fingerprint },
+      userEmail: "tester",
+      database: persistence,
+      now: timestamp
+    });
+    const oldRule = database.prepare(`SELECT end_date AS endDate FROM contact_rules WHERE id = 'rule-change'`).get();
+    assert.deepEqual(oldRule, { endDate: "2026-07-16" });
+    const successor = database.prepare(`
+      SELECT id, start_date AS startDate FROM contact_rules
+      WHERE id != 'rule-change' AND deleted_at IS NULL
+    `).get() as { id: string; startDate: string };
+    assert.equal(successor.startDate, "2026-07-17");
+    const successorEntries = database.prepare(`
+      SELECT start_datetime AS startDateTime FROM care_entries
+      WHERE contact_rule_id = ? AND deleted_at IS NULL ORDER BY start_datetime
+    `).all(successor.id) as Array<{ startDateTime: string }>;
+    assert.deepEqual(successorEntries.map(({ startDateTime }) => startDateTime), [
+      "2026-07-17T18:00",
+      "2026-07-24T18:00",
+      "2026-07-31T18:00"
+    ]);
   });
 });

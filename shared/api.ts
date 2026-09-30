@@ -672,6 +672,58 @@ export interface ApiContactRuleSyncPreview {
   pastOccurrences: number;
 }
 
+export type ApiContactRuleChangeScope = "occurrence" | "following" | "series";
+
+export interface ApiContactRuleWritable {
+  name: string;
+  startDate: string;
+  endDate?: string | undefined;
+  timezone: "Europe/Berlin";
+  recurrence: ContactRuleRecurrence;
+  segments: ApiContactRuleSegment[];
+  syncHorizonMonths: number;
+  responsiblePartyId?: string | undefined;
+  childIds: string[];
+  active: boolean;
+}
+
+export interface ApiContactRuleOccurrenceChange {
+  startDateTime: string;
+  endDateTime: string;
+  responsiblePartyId?: string | undefined;
+  childIds: string[];
+}
+
+export type ApiContactRuleChangeRequest =
+  | {
+      selectedEntryId: string;
+      scope: "occurrence";
+      proposedEntry: ApiContactRuleOccurrenceChange;
+    }
+  | {
+      selectedEntryId: string;
+      scope: "following" | "series";
+      proposedRule: ApiContactRuleWritable;
+    };
+
+export type ApiContactRuleChangeApplyRequest = ApiContactRuleChangeRequest & {
+  previewFingerprint: string;
+};
+
+export interface ApiContactRuleChangePreview {
+  fingerprint: string;
+  scope: ApiContactRuleChangeScope;
+  startDate: string;
+  endDate: string;
+  affected: number;
+  created: number;
+  retired: number;
+  preserved: number;
+  historical: number;
+  conflicts: number;
+  warnings: string[];
+}
+
 export interface ApiContactRule {
   id: string;
   name: string;

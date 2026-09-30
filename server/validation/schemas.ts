@@ -463,6 +463,40 @@ export const contactRuleInputSchema = z
     }
   });
 
+const contactRuleOccurrenceChangeSchema = z.object({
+  startDateTime: domainDateTime,
+  endDateTime: domainDateTime,
+  responsiblePartyId: z.string().trim().min(1).max(200).optional(),
+  childIds
+}).refine((entry) => Date.parse(entry.endDateTime) > Date.parse(entry.startDateTime), {
+  path: ["endDateTime"],
+  message: "Das Ende muss nach dem Beginn liegen."
+});
+
+const contactRuleChangeBaseSchema = z.object({
+  selectedEntryId: z.string().trim().min(1).max(200)
+});
+
+export const contactRuleChangePreviewSchema = z.discriminatedUnion("scope", [
+  contactRuleChangeBaseSchema.extend({
+    scope: z.literal("occurrence"),
+    proposedEntry: contactRuleOccurrenceChangeSchema
+  }),
+  contactRuleChangeBaseSchema.extend({
+    scope: z.literal("following"),
+    proposedRule: contactRuleInputSchema
+  }),
+  contactRuleChangeBaseSchema.extend({
+    scope: z.literal("series"),
+    proposedRule: contactRuleInputSchema
+  })
+]);
+
+export const contactRuleChangeApplySchema = z.intersection(
+  contactRuleChangePreviewSchema,
+  z.object({ previewFingerprint: z.string().regex(/^[a-f0-9]{64}$/) })
+);
+
 export const settingsInputSchema = z.object({
   kilometerRate: z.number().finite().nonnegative().optional(),
   defaultLocation: z.enum(careLocations).optional(),

@@ -21,7 +21,16 @@ import {
   syncContactRule,
   upsertContactRule
 } from "../services/contactRules.js";
-import { contactRuleInputSchema } from "../validation/schemas.js";
+import {
+  applyContactRuleChange,
+  isContactRuleChangePreviewChangedError,
+  previewContactRuleChange
+} from "../services/contactRuleChanges.js";
+import {
+  contactRuleChangeApplySchema,
+  contactRuleChangePreviewSchema,
+  contactRuleInputSchema
+} from "../validation/schemas.js";
 
 const readLimit = {
   config: { permission: "planning:view" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
@@ -220,6 +229,64 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
         error: "invalid_relation",
         message: error instanceof Error ? error.message : String(error)
       });
+    }
+  });
+
+  app.post<{ Params: { id: string } }>("/api/contact-rules/:id/change-preview", writeLimit, async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const rule = await getContactRule(request.params.id, app.persistence.query);
+    if (!rule) return reply.code(404).send({ error: "not_found" });
+    const parsed = contactRuleChangePreviewSchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
+    try {
+      await assertCanUsePersistedCareParty(app.persistence.query, request.user, rule.responsiblePartyId);
+      const proposedPartyId = parsed.data.scope === "occurrence"
+        ? parsed.data.proposedEntry.responsiblePartyId
+        : parsed.data.proposedRule.responsiblePartyId;
+      const proposedChildIds = parsed.data.scope === "occurrence"
+        ? parsed.data.proposedEntry.childIds
+        : parsed.data.proposedRule.childIds;
+      await assertPersistedChildren(app.persistence.query, proposedChildIds);
+      await assertPersistedCareParty(app.persistence.query, proposedPartyId);
+      await assertCanUsePersistedCareParty(app.persistence.query, request.user, proposedPartyId);
+      return await previewContactRuleChange(request.params.id, parsed.data, app.persistence.query);
+    } catch (error) {
+      if (isCarePartyAccessError(error)) return reply.code(403).send({ error: "forbidden" });
+      return reply.code(400).send({ error: "invalid_contact_rule_change" });
+    }
+  });
+
+  app.post<{ Params: { id: string } }>("/api/contact-rules/:id/change", writeLimit, async (request, reply) => {
+    reply.header("Cache-Control", "no-store");
+    const parsed = contactRuleChangeApplySchema.safeParse(request.body);
+    if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
+    try {
+      return await app.persistence.transaction(async (database) => {
+        const rule = await getContactRule(request.params.id, database);
+        if (!rule) return reply.code(404).send({ error: "not_found" });
+        await assertCanUsePersistedCareParty(database, request.user, rule.responsiblePartyId);
+        const proposedPartyId = parsed.data.scope === "occurrence"
+          ? parsed.data.proposedEntry.responsiblePartyId
+          : parsed.data.proposedRule.responsiblePartyId;
+        const proposedChildIds = parsed.data.scope === "occurrence"
+          ? parsed.data.proposedEntry.childIds
+          : parsed.data.proposedRule.childIds;
+        await assertPersistedChildren(database, proposedChildIds);
+        await assertPersistedCareParty(database, proposedPartyId);
+        await assertCanUsePersistedCareParty(database, request.user, proposedPartyId);
+        return await applyContactRuleChange({
+          ruleId: request.params.id,
+          request: parsed.data,
+          userEmail: request.userEmail,
+          database
+        });
+      });
+    } catch (error) {
+      if (isContactRuleChangePreviewChangedError(error)) {
+        return reply.code(409).send({ error: "contact_rule_change_preview_changed" });
+      }
+      if (isCarePartyAccessError(error)) return reply.code(403).send({ error: "forbidden" });
+      return reply.code(400).send({ error: "invalid_contact_rule_change" });
     }
   });
 
