@@ -48,7 +48,7 @@ indicators are calculated from that same authorized result set.
 | `POST /api/unavailable-periods`, `PUT/DELETE /api/unavailable-periods/:id` | `planning:manage` |
 | `GET /api/contact-patterns`, `GET /api/contact-rules` | `planning:view` |
 | `POST /api/contact-patterns`, `PUT/DELETE /api/contact-patterns/:id` | `planning:manage` |
-| `POST /api/contact-rules`, `PUT/DELETE /api/contact-rules/:id`, `POST /api/contact-rules/:id/sync`, `POST /api/contact-rules/:id/sync-preview` | `planning:manage` |
+| `POST /api/contact-rules`, `PUT/DELETE /api/contact-rules/:id`, `POST /api/contact-rules/:id/sync`, `POST /api/contact-rules/:id/sync-preview`, `POST /api/contact-rules/:id/change`, `POST /api/contact-rules/:id/change-preview` | `planning:manage` |
 | `GET /api/month-closings` | `reports:view` |
 | `POST /api/month-closings` | `reports:view` |
 
@@ -165,6 +165,8 @@ POST /api/care-parties | planning:manage
 POST /api/children | children:manage
 POST /api/contact-patterns | planning:manage
 POST /api/contact-rules | planning:manage
+POST /api/contact-rules/:id/change | planning:manage
+POST /api/contact-rules/:id/change-preview | planning:manage
 POST /api/contact-rules/:id/sync | planning:manage
 POST /api/contact-rules/:id/sync-preview | planning:manage
 POST /api/data-transfer/actors/:id/invitation | admin:destructive

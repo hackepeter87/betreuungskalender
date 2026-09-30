@@ -11,6 +11,8 @@ import { availableMigrationVersions } from "./migrationRunner.js";
 import { runPersistenceMigrations } from "./migrate.js";
 import { postgresMigrationVersions } from "./postgresMigrationRunner.js";
 import { databaseTableNames } from "./schema.js";
+import { syncContactRule, upsertContactRule } from "../services/contactRules.js";
+import { applyContactRuleChange, previewContactRuleChange } from "../services/contactRuleChanges.js";
 
 const configured = Boolean(
   process.env.TEST_POSTGRES_HOST && process.env.TEST_POSTGRES_PASSWORD_FILE
@@ -236,6 +238,137 @@ test("PostgreSQL runtime owns migrations, transactions, constraints, and close",
         .offset(0)
         .execute(),
       [{ id: "active-child" }]
+    );
+
+    const recurringRule = await upsertContactRule({
+      id: "postgres-change-rule",
+      rule: {
+        name: "PostgreSQL Testregel",
+        startDate: "2027-01-08",
+        endDate: "2027-01-29",
+        timezone: "Europe/Berlin",
+        recurrence: { kind: "weekly", intervalWeeks: 1, weekdays: ["FR"] },
+        segments: [{
+          id: "visit",
+          startDayOffset: 0,
+          startTime: "16:00",
+          endDayOffset: 0,
+          endTime: "18:00"
+        }],
+        syncHorizonMonths: 12,
+        childIds: ["active-child"],
+        active: true
+      },
+      createdBy: "runtime-actor",
+      updatedBy: "runtime-actor",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      database: first.query
+    });
+    await syncContactRule(recurringRule.id, {
+      database: first.query,
+      userEmail: "runtime-actor",
+      now: timestamp
+    });
+    const selectedOccurrence = await first.query.selectFrom("care_entries")
+      .select("id")
+      .where("contact_rule_id", "=", recurringRule.id)
+      .where("rule_occurrence_date", "=", "2027-01-15")
+      .executeTakeFirstOrThrow();
+    const occurrenceRequest = {
+      selectedEntryId: selectedOccurrence.id,
+      scope: "occurrence" as const,
+      proposedEntry: {
+        startDateTime: "2027-01-15T17:00",
+        endDateTime: "2027-01-15T19:00",
+        childIds: ["active-child"]
+      }
+    };
+    const occurrencePreview = await previewContactRuleChange(
+      recurringRule.id,
+      occurrenceRequest,
+      first.query,
+      timestamp
+    );
+    await first.transaction(async (database) => applyContactRuleChange({
+      ruleId: recurringRule.id,
+      request: { ...occurrenceRequest, previewFingerprint: occurrencePreview.fingerprint },
+      userEmail: "runtime-actor",
+      database,
+      now: timestamp
+    }));
+    assert.deepEqual(
+      await first.query.selectFrom("care_entries")
+        .select(["start_datetime", "end_datetime", "contact_rule_sync_state"])
+        .where("id", "=", selectedOccurrence.id)
+        .executeTakeFirstOrThrow(),
+      {
+        start_datetime: "2027-01-15T17:00",
+        end_datetime: "2027-01-15T19:00",
+        contact_rule_sync_state: "manual_override"
+      }
+    );
+
+    const followingOccurrence = await first.query.selectFrom("care_entries")
+      .select("id")
+      .where("contact_rule_id", "=", recurringRule.id)
+      .where("rule_occurrence_date", "=", "2027-01-22")
+      .executeTakeFirstOrThrow();
+    const followingRequest = {
+      selectedEntryId: followingOccurrence.id,
+      scope: "following" as const,
+      proposedRule: {
+        name: "PostgreSQL Folgeregel",
+        startDate: "2027-01-22",
+        endDate: "2027-01-29",
+        timezone: "Europe/Berlin" as const,
+        recurrence: { kind: "weekly" as const, intervalWeeks: 1, weekdays: ["FR" as const] },
+        segments: [{
+          id: "visit",
+          startDayOffset: 0,
+          startTime: "18:00",
+          endDayOffset: 0,
+          endTime: "20:00"
+        }],
+        syncHorizonMonths: 12,
+        childIds: ["active-child"],
+        active: true
+      }
+    };
+    const followingPreview = await previewContactRuleChange(
+      recurringRule.id,
+      followingRequest,
+      first.query,
+      timestamp
+    );
+    await first.transaction(async (database) => applyContactRuleChange({
+      ruleId: recurringRule.id,
+      request: { ...followingRequest, previewFingerprint: followingPreview.fingerprint },
+      userEmail: "runtime-actor",
+      database,
+      now: timestamp
+    }));
+    assert.deepEqual(
+      await first.query.selectFrom("contact_rules")
+        .select("end_date")
+        .where("id", "=", recurringRule.id)
+        .executeTakeFirstOrThrow(),
+      { end_date: "2027-01-21" }
+    );
+    const successorRule = await first.query.selectFrom("contact_rules")
+      .select(["id", "start_date"])
+      .where("id", "!=", recurringRule.id)
+      .where("deleted_at", "is", null)
+      .executeTakeFirstOrThrow();
+    assert.equal(successorRule.start_date, "2027-01-22");
+    assert.deepEqual(
+      (await first.query.selectFrom("care_entries")
+        .select("start_datetime")
+        .where("contact_rule_id", "=", successorRule.id)
+        .where("deleted_at", "is", null)
+        .orderBy("start_datetime")
+        .execute()).map(({ start_datetime }) => start_datetime),
+      ["2027-01-22T18:00", "2027-01-29T18:00"]
     );
 
     await first.query.insertInto("care_entries").values({

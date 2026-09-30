@@ -415,6 +415,22 @@ overlaps, and past occurrences together with a preview fingerprint. The write
 recomputes the preview transactionally and accepts only the unchanged
 fingerprint.
 
+Recurring-care edits use the same expansion and conflict services as normal
+rule synchronization. A write-free preview reports only aggregate affected,
+created, retired, preserved, historical, and conflicting occurrence counts.
+The resulting fingerprint covers the selected occurrence, proposed values,
+current rule revision, relevant persisted occurrences, child assignments, and
+conflict evidence. The write repeats this complete calculation inside the
+selected database transaction and rejects changed evidence.
+
+Single-occurrence edits mark the generated entry as `manual_override`. A
+whole-series edit reconciles only generated entries that are still planned;
+completed, partial, cancelled, deleted, and manually changed entries remain
+unchanged. A "this and following" edit ends the earlier rule before the chosen
+occurrence and creates a successor rule for the remaining range. The split is
+represented by those two normal rules and audit metadata, so no additional
+schema or recurrence engine is required.
+
 ## Holidays and unavailable periods
 
 Holiday blocks document official or agreed holiday periods for one or more
