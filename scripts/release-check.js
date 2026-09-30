@@ -577,7 +577,7 @@ function checkDeploymentExamples(cwd, version, report) {
 
   const dockerfiles = `${dockerfile}\n${releaseDockerfile}`;
   const buildImage =
-    "node:24.21.0-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553";
+    "node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6";
   const runtimeImage =
     "gcr.io/distroless/nodejs24-debian13:nonroot@sha256:bb6b03d81066993293a10feda7250e8e1cc034035fe9b61cfceededa7c8bf04d";
   const runtimeStages = [dockerfile, releaseDockerfile].map((content) =>

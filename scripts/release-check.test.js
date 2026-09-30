@@ -345,11 +345,11 @@ test("direct Compose example does not trust proxy identity headers", () => {
   assert.equal(parseEnvValue(oidcEnvExample, "TRUST_PROXY_AUTH"), "true");
   assert.match(
     dockerfile,
-    /FROM node:24\.21\.0-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS build/
+    /FROM node:24\.21\.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS build/
   );
   assert.match(
     releaseDockerfile,
-    /FROM node:24\.21\.0-bookworm-slim@sha256:2fe369e969550cde8e867afc3fe370b260140cab4a23d467074295b42163d553 AS production-deps/
+    /FROM node:24\.21\.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS production-deps/
   );
   assert.match(
     dockerfile,
