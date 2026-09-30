@@ -1022,6 +1022,8 @@ test("shows only capability-appropriate settings to restricted workspace roles",
   });
 
   await openApp(page);
+  await expect(page.getByTestId("dashboard-backup-status")).toHaveCount(1);
+  await expect(page.getByTestId("dashboard-open-backup")).toHaveCount(0);
   await expect(page.getByTestId("nav-contact")).toHaveCount(0);
   await expect(page.getByTestId("nav-report")).toHaveCount(0);
   await navigate(page, "settings");
@@ -1174,19 +1176,23 @@ test("shows open care confirmations in the notification center", async ({ page, 
   const summaries = page.getByTestId("dashboard-summary-grid");
   await expect(confirmations).toBeVisible();
   await expect(summaries).toBeVisible();
-  await expect(summaries.locator(":scope > *")).toHaveCount(3);
+  await expect(summaries.locator(":scope > *")).toHaveCount(2);
 
   const calendarBox = await calendar.boundingBox();
   const confirmationBox = await confirmations.boundingBox();
   const summaryBox = await summaries.boundingBox();
-  const backupBox = await page.getByTestId("dashboard-backup-status").boundingBox();
+  const backupStatus = page.getByTestId("dashboard-backup-status");
+  await expect(backupStatus).toHaveCount(1);
+  const backupBox = await backupStatus.boundingBox();
   expect(calendarBox).not.toBeNull();
   expect(confirmationBox).not.toBeNull();
   expect(summaryBox).not.toBeNull();
   expect(backupBox).not.toBeNull();
   expect(confirmationBox!.y).toBeGreaterThanOrEqual(calendarBox!.y + calendarBox!.height);
   expect(summaryBox!.y).toBeGreaterThanOrEqual(confirmationBox!.y + confirmationBox!.height);
+  expect(backupBox!.y).toBeGreaterThanOrEqual(summaryBox!.y + summaryBox!.height);
   expect(backupBox!.height).toBeLessThan(220);
+  await expect(backupStatus.getByTestId("dashboard-open-backup")).toBeVisible();
   await testInfo.attach("dashboard-confirmation-layout.png", {
     body: await page.screenshot({ animations: "disabled", caret: "hide", fullPage: false }),
     contentType: "image/png"
@@ -1207,6 +1213,9 @@ test("shows open care confirmations in the notification center", async ({ page, 
   await page.getByTestId("sidebar-notification-center-trigger").click();
   await expect(page.getByTestId("sidebar-notification-center-popover").getByTestId("confirmation-card"))
     .toHaveCount(2);
+
+  await backupStatus.getByTestId("dashboard-open-backup").click();
+  await expect(page.getByTestId("page-backup")).toBeVisible();
 });
 
 test("shows native OIDC login action when authentication is required", async ({

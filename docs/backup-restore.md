@@ -7,6 +7,12 @@ export is a portable application-data transfer for either backend; it does not
 replace an operational database backup. Browser local storage contains only UI
 preferences and is not an operational data store.
 
+The overview shows the latest documented portable JSON export once, after the
+care and data-quality summaries. This is an application-level reminder only:
+it does not inspect operator-managed SQLite or PostgreSQL backup storage and
+does not replace the backend-specific procedures below. Users with export
+permission can open the existing **Export & Import** workflow from that status.
+
 ## SQLite backup
 
 The backup script uses the `better-sqlite3` backup API. It does not copy the

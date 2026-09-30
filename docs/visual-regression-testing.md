@@ -45,7 +45,7 @@ docker run --rm --user "$(id -u):$(id -g)" \
   -v "$PWD:/work" \
   -v /tmp/betreuungskalender-visual-node_modules:/work/node_modules \
   -w /work \
-  mcr.microsoft.com/playwright:v1.62.0-noble \
+  mcr.microsoft.com/playwright:v1.63.0-noble \
   bash -lc 'npm ci && npx playwright test e2e/visual-regression.spec.ts --update-snapshots'
 ```
 
