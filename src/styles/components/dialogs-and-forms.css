@@ -365,7 +365,7 @@
 }
 
 .choice-card--stacked span {
-  color: var(--muted);
+  color: inherit;
   font-size: 0.7rem;
   font-weight: 700;
 }

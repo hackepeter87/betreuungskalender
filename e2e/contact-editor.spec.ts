@@ -56,4 +56,44 @@ test("keeps the event-first care series editor responsive and accessible", async
     accessibility.violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))
   ).toEqual([]);
 
+  await page.getByTestId("contact-pattern-save").click();
+  await expect(page.getByTestId("contact-message")).toContainText("Betreuungsserie gespeichert");
+  const entriesResponse = await page.request.get("/api/care-entries");
+  expect(entriesResponse.ok(), await entriesResponse.text()).toBe(true);
+  const recurringEntry = (await entriesResponse.json() as Array<{
+    id: string;
+    generatedByPatternId?: string;
+    startDateTime: string;
+  }>).find((entry) => entry.generatedByPatternId);
+  expect(recurringEntry).toBeTruthy();
+
+  await navigate(page, "calendar");
+  await page.getByTestId("month-picker").fill(recurringEntry!.startDateTime.slice(0, 7));
+  const entryTrigger = mobile
+    ? page.getByTestId(`agenda-entry-${recurringEntry!.id}`).first()
+    : page.getByTestId(`calendar-entry-${recurringEntry!.id}`).first();
+  await entryTrigger.click();
+  const scopeChoice = page.getByTestId("rule-entry-edit-choice");
+  await expect(scopeChoice).toBeVisible();
+  await expect(scopeChoice.getByTestId("rule-entry-scope-occurrence")).toBeVisible();
+  await expect(scopeChoice.getByTestId("rule-entry-scope-following")).toBeVisible();
+  await expect(scopeChoice.getByTestId("rule-entry-scope-series")).toBeVisible();
+  await expect(page.getByRole("dialog").locator(":focus")).toHaveCount(1);
+  await expectNoDocumentHorizontalOverflow(page);
+  const scopeAccessibility = await new AxeBuilder({ page })
+    .include('[data-testid="rule-entry-edit-choice"]')
+    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"])
+    .analyze();
+  expect(
+    scopeAccessibility.violations.filter((violation) => ["serious", "critical"].includes(violation.impact ?? ""))
+  ).toEqual([]);
+
+  await scopeChoice.getByTestId("rule-entry-scope-following").click();
+  const followingForm = page.getByTestId("recurring-care-series-form");
+  await expect(followingForm).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Diesen und folgende Termine ändern" })).toBeVisible();
+  await expectNoDocumentHorizontalOverflow(page);
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("dialog")).toBeHidden();
+  await expect(entryTrigger).toBeFocused();
 });
