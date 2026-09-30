@@ -1036,6 +1036,35 @@ test("shows only capability-appropriate settings to restricted workspace roles",
   await expectNoDocumentHorizontalOverflow(page);
 });
 
+test("shows one consolidated dashboard backup status for every supported state", async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-09-30T10:00:00.000Z"));
+  let lastJsonBackupAt: string | undefined;
+  await page.route("**/api/settings", async (route) => {
+    if (route.request().method() !== "GET") return route.continue();
+    const response = await route.fetch();
+    const settings = await response.json() as Record<string, unknown>;
+    if (lastJsonBackupAt) settings.lastJsonBackupAt = lastJsonBackupAt;
+    else delete settings.lastJsonBackupAt;
+    await route.fulfill({ response, json: settings });
+  });
+
+  const assertState = async (timestamp: string | undefined, title: string, description: RegExp) => {
+    lastJsonBackupAt = timestamp;
+    await page.reload();
+    const status = page.getByTestId("dashboard-backup-status");
+    await expect(status).toHaveCount(1);
+    await expect(status.locator("strong")).toHaveText(title);
+    await expect(status).toContainText(description);
+    await expectNoDocumentHorizontalOverflow(page);
+  };
+
+  await openApp(page);
+  await assertState(undefined, "Backup erforderlich", /Noch keine JSON-Sicherung dokumentiert/);
+  await assertState("2026-09-29T10:00:00.000Z", "Backup aktuell", /Letzte JSON-Sicherung/);
+  await assertState("2026-09-15T10:00:00.000Z", "Backup erforderlich", /vor 15 Tagen/);
+  await assertState("2026-10-01T10:00:00.000Z", "Backup-Status nicht verfügbar", /Sicherungszeitpunkt ist ungültig/);
+});
+
 test("shows a no-access page for a revoked workspace membership", async ({ page }) => {
   await page.addInitScript(() => {
     const originalFetch = window.fetch.bind(window);
