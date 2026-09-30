@@ -5,6 +5,10 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -12,28 +16,68 @@ jobs:
   validation:
     name: Validation
     runs-on: ubuntu-latest
+    outputs:
+      application: ${{ steps.scope.outputs.application }}
+      browser: ${{ steps.scope.outputs.browser }}
+      database: ${{ steps.scope.outputs.database }}
+      dependencies: ${{ steps.scope.outputs.dependencies }}
+      helm: ${{ steps.scope.outputs.helm }}
+      security: ${{ steps.scope.outputs.security }}
+      update: ${{ steps.scope.outputs.update }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Classify changed files
+        id: scope
+        env:
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci-change-scope.mjs
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24.18.0
           cache: npm
       - run: npm install --global npm@12.0.1
       - run: npm ci
-      - run: npm audit
+      - name: Audit dependency changes
+        if: steps.scope.outputs.dependencies == 'true'
+        run: npm audit
       - run: npm run release:check
       - run: npm run test:docs
-      - run: npm run lint
-      - run: npm run build
-      - run: npm test
+      - run: npm run test:workflow-contracts
+      - name: Typecheck application
+        if: steps.scope.outputs.application == 'true'
+        run: npm run typecheck
+      - name: Lint application
+        if: steps.scope.outputs.application == 'true'
+        run: npm run lint:eslint
+      - name: Run unit and integration tests
+        if: steps.scope.outputs.application == 'true'
+        run: npm run test:unit
+      - name: Build application
+        if: steps.scope.outputs.application == 'true'
+        run: npm run build
+      - name: Upload application build
+        if: steps.scope.outputs.browser == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: application-build
+          path: |
+            dist/
+            dist-server/
+          if-no-files-found: error
+          retention-days: 1
 
   postgres-runtime:
     name: PostgreSQL ${{ matrix.postgres }} runtime
+    needs: validation
+    if: needs.validation.outputs.database == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        postgres: [16, 18]
+        postgres: ${{ fromJSON(github.event_name == 'pull_request' && '[18]' || '[16,18]') }}
     services:
       postgres:
         image: postgres:${{ matrix.postgres }}-bookworm
@@ -68,6 +112,7 @@ jobs:
   e2e:
     name: End-to-end tests
     needs: validation
+    if: needs.validation.outputs.browser == 'true'
     runs-on: ubuntu-latest
     env:
       LANG: C.UTF-8
@@ -80,7 +125,10 @@ jobs:
           cache: npm
       - run: npm install --global npm@12.0.1
       - run: npm ci
-      - run: npm run build
+      - name: Download validated application build
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v8
+        with:
+          name: application-build
       - run: npx playwright install --with-deps chromium webkit
       - run: npm run test:e2e
       - name: Upload Playwright artifacts
@@ -96,6 +144,8 @@ jobs:
 
   security-runtime:
     name: Runtime security and CORS
+    needs: validation
+    if: needs.validation.outputs.security == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -109,6 +159,8 @@ jobs:
 
   helm:
     name: Helm chart
+    needs: validation
+    if: needs.validation.outputs.helm == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -119,6 +171,8 @@ jobs:
 
   update-workflow:
     name: Update and rollback workflow
+    needs: validation
+    if: needs.validation.outputs.update == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -129,3 +183,23 @@ jobs:
       - run: npm install --global npm@12.0.1
       - run: npm ci
       - run: npx tsx --test scripts/update.test.js
+
+  required-gates:
+    name: Required quality gates
+    if: always()
+    needs: [validation, postgres-runtime, e2e, security-runtime, helm, update-workflow]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify required and selected gates
+        env:
+          VALIDATION: ${{ needs.validation.result }}
+          POSTGRES: ${{ needs.postgres-runtime.result }}
+          E2E: ${{ needs.e2e.result }}
+          SECURITY: ${{ needs.security-runtime.result }}
+          HELM: ${{ needs.helm.result }}
+          UPDATE: ${{ needs.update-workflow.result }}
+        run: |
+          test "$VALIDATION" = "success"
+          for result in "$POSTGRES" "$E2E" "$SECURITY" "$HELM" "$UPDATE"; do
+            test "$result" = "success" || test "$result" = "skipped"
+          done

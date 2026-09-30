@@ -44,6 +44,7 @@ repeatable capture procedure.
 [Database backends](docs/database-backends.md) · [Backup](docs/backup-restore.md) · [Legacy migration](docs/migration.md) ·
 [Calendar feed](docs/personal-calendar-feed.md) ·
 [Testing](docs/testing.md) ·
+[GitHub Actions](docs/github-actions.md) ·
 [Internationalization](docs/internationalization.md)
 
 The README and the current guides directly below `docs/` describe the current

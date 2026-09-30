@@ -8,11 +8,43 @@ name: trivy
 on:
   push:
     branches: [ "main" ]
+    paths:
+      - Dockerfile
+      - Dockerfile.release
+      - package.json
+      - package-lock.json
+      - index.html
+      - tsconfig*.json
+      - vite.config.*
+      - public/**
+      - server/**
+      - shared/**
+      - src/**
+      - scripts/**
+      - .github/workflows/trivy.yml
   pull_request:
     # The branches below must be a subset of the branches above
     branches: [ "main" ]
+    paths:
+      - Dockerfile
+      - Dockerfile.release
+      - package.json
+      - package-lock.json
+      - index.html
+      - tsconfig*.json
+      - vite.config.*
+      - public/**
+      - server/**
+      - shared/**
+      - src/**
+      - scripts/**
+      - .github/workflows/trivy.yml
   schedule:
     - cron: '24 7 * * 4'
+
+concurrency:
+  group: trivy-${{ github.event.pull_request.number || github.ref || github.event_name }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
