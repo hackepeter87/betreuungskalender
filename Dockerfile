@@ -13,7 +13,7 @@ COPY server ./server
 COPY shared ./shared
 COPY src ./src
 COPY e2e/*.ts ./e2e/
-COPY scripts/*.ts scripts/copy-migrations.js scripts/check-frontend-bundle.js ./scripts/
+COPY scripts/*.ts scripts/ci-change-scope.d.mts scripts/ci-change-scope.mjs scripts/copy-migrations.js scripts/check-frontend-bundle.js ./scripts/
 RUN npm run build
 
 FROM build AS production-deps
