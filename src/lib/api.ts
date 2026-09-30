@@ -18,6 +18,9 @@ import type {
   ApiChild,
   ApiChildSummary,
   ApiContactRule,
+  ApiContactRuleChangeApplyRequest,
+  ApiContactRuleChangePreview,
+  ApiContactRuleChangeRequest,
   ApiContactRuleSyncPreview,
   ApiLogout,
   ApiSession,
@@ -756,6 +759,18 @@ export const api = {
     return request<ApiContactRule>(
       `/api/contact-rules/${encodeURIComponent(id)}`,
       { method: "PUT", body: JSON.stringify(input) }
+    );
+  },
+  previewContactRuleChange(id: string, input: ApiContactRuleChangeRequest) {
+    return request<ApiContactRuleChangePreview>(
+      `/api/contact-rules/${encodeURIComponent(id)}/change-preview`,
+      { method: "POST", body: JSON.stringify(input) }
+    );
+  },
+  applyContactRuleChange(id: string, input: ApiContactRuleChangeApplyRequest) {
+    return request<ApiContactRuleChangePreview>(
+      `/api/contact-rules/${encodeURIComponent(id)}/change`,
+      { method: "POST", body: JSON.stringify(input) }
     );
   },
   previewContactRuleSync(id: string, input: { startDate: string; endDate: string }) {

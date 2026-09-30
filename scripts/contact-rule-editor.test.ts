@@ -7,6 +7,11 @@ import {
   effectiveContactRuleEndDate,
   inferRepeatPreset
 } from "../src/lib/contactRuleEditor";
+import {
+  buildSeriesChangeRequest,
+  canChooseRecurringCareScope
+} from "../src/lib/recurringCareChange";
+import type { CareEntry, ContactRule } from "../src/types";
 
 const childIds = ["child_demo"];
 
@@ -119,4 +124,98 @@ test("applies explicit and implicit series end conditions", () => {
   assert.equal(effectiveContactRuleEndDate("never", "2026-10-02", "never", ""), "2026-10-02");
   assert.equal(effectiveContactRuleEndDate("weekly", "2026-10-02", "never", ""), undefined);
   assert.equal(effectiveContactRuleEndDate("weekly", "2026-10-02", "on-date", "2026-12-31"), "2026-12-31");
+});
+
+const recurringRule: ContactRule = {
+  id: "rule-1",
+  name: "Fiktive Wochenserie",
+  startDate: "2026-01-02",
+  timezone: "Europe/Berlin",
+  recurrence: { kind: "rrule", rrules: ["FREQ=WEEKLY;INTERVAL=1;BYDAY=FR"] },
+  segments: [{
+    id: "segment-1",
+    startDayOffset: 0,
+    startTime: "16:00",
+    endDayOffset: 2,
+    endTime: "18:00"
+  }],
+  syncHorizonMonths: 12,
+  responsiblePartyId: "party-1",
+  childIds: ["child-1"],
+  active: true,
+  createdBy: "test",
+  updatedBy: "test",
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z"
+};
+
+const recurringEntry: CareEntry = {
+  id: "entry-1",
+  date: "2026-07-03",
+  startDateTime: "2026-07-03T16:00",
+  endDateTime: "2026-07-05T18:00",
+  childIds: ["child-1"],
+  status: "planned",
+  additionalCare: false,
+  generatedByPatternId: "rule-1",
+  ruleOccurrenceDate: "2026-07-03",
+  contactRuleId: "rule-1",
+  contactRuleSegmentId: "segment-1",
+  contactRuleOccurrenceKey: "2026-07-03:segment-1",
+  responsiblePartyId: "party-1",
+  contactRuleSyncState: "generated",
+  overnight: true,
+  schoolHandover: false,
+  holiday: false,
+  weekend: true,
+  location: "other",
+  handoverFrom: "father",
+  handoverTo: "mother",
+  hasEvidence: false,
+  trips: [],
+  costs: [],
+  createdBy: "test",
+  updatedBy: "test",
+  createdAt: "2026-01-01T00:00:00.000Z",
+  updatedAt: "2026-01-01T00:00:00.000Z"
+};
+
+test("offers a scope choice only for unresolved generated occurrences", () => {
+  assert.equal(canChooseRecurringCareScope(recurringEntry, recurringRule), true);
+  assert.equal(canChooseRecurringCareScope({ ...recurringEntry, status: "completed" }, recurringRule), false);
+  assert.equal(canChooseRecurringCareScope({ ...recurringEntry, contactRuleSyncState: "manual_override" }, recurringRule), false);
+  assert.equal(canChooseRecurringCareScope(recurringEntry, undefined), false);
+});
+
+test("maps the edited occurrence range to the matching series segment", () => {
+  const request = buildSeriesChangeRequest(recurringEntry, recurringRule, {
+    startDateTime: "2026-07-04T15:30",
+    endDateTime: "2026-07-06T08:00",
+    childIds: ["child-1", "child-2"],
+    responsiblePartyId: "party-2"
+  });
+
+  assert.equal(request.scope, "series");
+  if (request.scope !== "series") assert.fail("expected a series request");
+  assert.deepEqual(request.proposedRule.segments, [{
+    id: "segment-1",
+    startDayOffset: 1,
+    startTime: "15:30",
+    endDayOffset: 3,
+    endTime: "08:00"
+  }]);
+  assert.deepEqual(request.proposedRule.childIds, ["child-1", "child-2"]);
+  assert.equal(request.proposedRule.responsiblePartyId, "party-2");
+  assert.deepEqual(request.proposedRule.recurrence, recurringRule.recurrence);
+});
+
+test("rejects series edits when the originating segment is unavailable", () => {
+  assert.throws(
+    () => buildSeriesChangeRequest({ ...recurringEntry, contactRuleSegmentId: "missing" }, recurringRule, {
+      startDateTime: recurringEntry.startDateTime,
+      endDateTime: recurringEntry.endDateTime,
+      childIds: recurringEntry.childIds
+    }),
+    /contact_rule_segment_missing/
+  );
 });

@@ -659,7 +659,8 @@ test("shows link-based onboarding completion once without retaining the query", 
 });
 
 test("guides a custom care series through the mobile flow", async ({
-  page
+  page,
+  request
 }) => {
   await openApp(page);
   await createChild(page, "Regel Layout Kind");
@@ -718,6 +719,28 @@ test("guides a custom care series through the mobile flow", async ({
   const generatedEntryBox = await generatedEntry.boundingBox();
   expect(generatedEntryBox).toBeTruthy();
   await expect(generatedEntry.locator(".rule-entry__actions")).toHaveCount(0);
+
+  const entriesResponse = await request.get("/api/care-entries");
+  expect(entriesResponse.ok()).toBeTruthy();
+  const recurringEntry = (await entriesResponse.json() as Array<{
+    id: string;
+    generatedByPatternId?: string;
+    startDateTime: string;
+  }>).find((entry) => entry.generatedByPatternId);
+  expect(recurringEntry).toBeTruthy();
+
+  await navigate(page, "calendar");
+  await page.getByTestId("month-picker").fill(recurringEntry!.startDateTime.slice(0, 7));
+  await page.getByTestId(`agenda-entry-${recurringEntry!.id}`).first().click();
+  const scopeChoice = page.getByTestId("rule-entry-edit-choice");
+  await expect(scopeChoice).toBeVisible();
+  await expectNoDocumentHorizontalOverflow(page);
+  await scopeChoice.getByTestId("rule-entry-scope-series").click();
+  await expect(page.getByTestId("recurring-care-series-form")).toBeVisible();
+  await expectNoDocumentHorizontalOverflow(page);
+  await page.getByRole("button", { name: "Zurück zur Auswahl" }).click();
+  await page.getByTestId("rule-entry-scope-occurrence").click();
+  await expect(page.getByTestId("entry-form")).toBeVisible();
   await expectNoDocumentHorizontalOverflow(page);
 });
 
