@@ -222,6 +222,22 @@ test("uses mobile navigation and the agenda for entry creation", async ({
   await expectNoDocumentHorizontalOverflow(page);
 });
 
+test("places one backup status after dashboard summaries on mobile", async ({ page }) => {
+  await openApp(page);
+  const dashboardBackup = page.getByTestId("dashboard-backup-status");
+  const dashboardSummary = page.getByTestId("dashboard-summary-grid");
+  await expect(dashboardBackup).toHaveCount(1);
+  await expect(dashboardSummary.locator(":scope > *")).toHaveCount(2);
+  const dashboardBackupBox = await dashboardBackup.boundingBox();
+  const dashboardSummaryBox = await dashboardSummary.boundingBox();
+  expect(dashboardBackupBox).toBeTruthy();
+  expect(dashboardSummaryBox).toBeTruthy();
+  expect(dashboardBackupBox!.y).toBeGreaterThanOrEqual(
+    dashboardSummaryBox!.y + dashboardSummaryBox!.height
+  );
+  await expectNoDocumentHorizontalOverflow(page);
+});
+
 test("keeps mobile agenda scoped to the selected month", async ({
   page,
   request

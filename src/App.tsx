@@ -247,6 +247,7 @@ export function App() {
           onOpenSettings={() => setActivePage("settings")}
           onOpenCalendar={() => setActivePage("calendar")}
           onOpenEntries={() => setActivePage("entries")}
+          onOpenBackup={() => setActivePage("backup")}
         />
       );
   }

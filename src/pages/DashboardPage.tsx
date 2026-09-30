@@ -26,7 +26,8 @@ export function DashboardPage({
   onEditEntry,
   onOpenSettings,
   onOpenCalendar,
-  onOpenEntries
+  onOpenEntries,
+  onOpenBackup
 }: {
   monthKey: string;
   onMonthChange: (month: string) => void;
@@ -35,6 +36,7 @@ export function DashboardPage({
   onOpenSettings: () => void;
   onOpenCalendar: () => void;
   onOpenEntries: () => void;
+  onOpenBackup: () => void;
 }) {
   const { locale, intlLocale } = useI18n();
   const {
@@ -49,6 +51,7 @@ export function DashboardPage({
   const canManageChildren = session.permissions?.includes("children:manage") ?? true;
   const canViewPlanning = session.permissions?.includes("planning:view") ?? true;
   const canCloseMonth = session.permissions?.includes("reports:view") ?? true;
+  const canRunExports = session.permissions?.includes("exports:run") ?? true;
   const [showClosure, setShowClosure] = useState(false);
   const [closureConfirmed, setClosureConfirmed] = useState(false);
   const [externalEvents, setExternalEvents] = useState<ExternalCalendarEvent[]>([]);
@@ -85,12 +88,18 @@ export function DashboardPage({
     [data, monthKey]
   );
   const closure = data.monthClosures.find((item) => item.monthKey === monthKey);
-  const backupAgeDays = data.lastJsonBackupAt
-    ? Math.floor(
-        (Date.now() - new Date(data.lastJsonBackupAt).getTime()) / 86_400_000
-      )
+  const backupTimestamp = data.lastJsonBackupAt ? Date.parse(data.lastJsonBackupAt) : null;
+  const backupAgeDays = backupTimestamp !== null && Number.isFinite(backupTimestamp)
+    ? Math.floor((Date.now() - backupTimestamp) / 86_400_000)
     : null;
-  const backupIsCurrent = backupAgeDays !== null && backupAgeDays <= 7;
+  const backupState = !data.lastJsonBackupAt
+    ? "never"
+    : backupAgeDays === null || backupAgeDays < 0
+      ? "unavailable"
+      : backupAgeDays <= 7
+        ? "current"
+        : "overdue";
+  const backupIsCurrent = backupState === "current";
 
   useEffect(() => {
     if (!canViewPlanning) {
@@ -125,8 +134,7 @@ export function DashboardPage({
     { label: copy(locale, "dashboard", "overnights"), value: String(stats.overnights), detail: copy(locale, "dashboard", "selectedMonth"), icon: "moon", tone: "violet" },
     { label: copy(locale, "dashboard", "additionalCare"), value: String(monthEntries.filter((entry) => (entry.status === "completed" || entry.status === "partial") && entry.additionalCare).length), detail: copy(locale, "dashboard", "completedDates"), icon: "plus", tone: "teal" },
     { label: copy(locale, "dashboard", "openDates"), value: String(monthEntries.filter((entry) => entry.status === "planned" && entry.generatedByPatternId).length), detail: copy(locale, "dashboard", "plannedDates"), icon: "calendar", tone: "amber", onClick: onOpenEntries, testId: "dashboard-open-dates-card" },
-    { label: copy(locale, "dashboard", "dataQuality"), value: String(dataQuality.totalIssues), detail: dataQuality.totalIssues ? copy(locale, "dashboard", "openHints") : copy(locale, "dashboard", "noHints"), icon: dataQuality.totalIssues ? "alert" : "check", tone: dataQuality.totalIssues ? "coral" : "teal" },
-    { label: copy(locale, "dashboard", "lastBackup"), value: backupAgeDays === null ? "–" : backupAgeDays === 0 ? copy(locale, "common", "today") : `${backupAgeDays} ${locale === "en" ? "d" : "T."}`, detail: backupIsCurrent ? copy(locale, "dashboard", "backupCurrent") : copy(locale, "dashboard", "backupRequired"), icon: backupIsCurrent ? "backup" : "alert", tone: backupIsCurrent ? "teal" : "coral" }
+    { label: copy(locale, "dashboard", "dataQuality"), value: String(dataQuality.totalIssues), detail: dataQuality.totalIssues ? copy(locale, "dashboard", "openHints") : copy(locale, "dashboard", "noHints"), icon: dataQuality.totalIssues ? "alert" : "check", tone: dataQuality.totalIssues ? "coral" : "teal" }
   ];
 
   const openClosureDialog = () => {
@@ -343,20 +351,47 @@ export function DashboardPage({
             </dl>
           </section>
 
-          <section className={`privacy-card ${backupIsCurrent ? "" : "privacy-card--warning"}`} data-testid="dashboard-backup-status">
-            <Icon name={backupIsCurrent ? "check" : "alert"} size={19} />
-            <div>
-              <strong>{backupIsCurrent ? copy(locale, "dashboard", "backupUpToDate") : copy(locale, "dashboard", "backupNeeded")}</strong>
-              <p>
-                {backupIsCurrent && data.lastJsonBackupAt
-                  ? copy(locale, "dashboard", "latestBackup", { date: formatDate(data.lastJsonBackupAt, intlLocale) })
-                  : data.lastJsonBackupAt
-                    ? copy(locale, "dashboard", "backupDaysAgo", { days: backupAgeDays ?? 0 })
-                    : copy(locale, "dashboard", "noBackup")}
-              </p>
-            </div>
-          </section>
         </aside>
+
+        <section
+          className={`privacy-card dashboard-backup-status ${backupIsCurrent ? "" : "privacy-card--warning"}`}
+          data-testid="dashboard-backup-status"
+          aria-labelledby="dashboard-backup-status-title"
+        >
+          <Icon name={backupIsCurrent ? "check" : "alert"} size={19} />
+          <div>
+            <strong id="dashboard-backup-status-title">
+              {backupState === "current"
+                ? copy(locale, "dashboard", "backupUpToDate")
+                : backupState === "unavailable"
+                  ? copy(locale, "dashboard", "backupUnavailable")
+                  : copy(locale, "dashboard", "backupNeeded")}
+            </strong>
+            <p>
+              {backupState === "current" && data.lastJsonBackupAt
+                ? copy(locale, "dashboard", "latestBackup", { date: formatDate(data.lastJsonBackupAt, intlLocale) })
+                : backupState === "overdue"
+                  ? copy(locale, "dashboard", "backupDaysAgo", { days: backupAgeDays ?? 0 })
+                  : backupState === "unavailable"
+                    ? copy(locale, "dashboard", "backupUnavailableDescription")
+                    : copy(locale, "dashboard", "noBackup")}
+              {canRunExports ? (
+                <>
+                  <br />
+                  <button
+                    className="button button--quiet"
+                    type="button"
+                    data-testid="dashboard-open-backup"
+                    onClick={onOpenBackup}
+                  >
+                    <Icon name="backup" size={16} />
+                    {copy(locale, "dashboard", "openBackup")}
+                  </button>
+                </>
+              ) : null}
+            </p>
+          </div>
+        </section>
       </div>
 
       {showClosure ? (
