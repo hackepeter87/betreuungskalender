@@ -57,7 +57,7 @@
     "ipaddr.js": "^2.5.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
-    "kysely": "^0.29.5",
+    "kysely": "^0.29.6",
     "nodemailer": "^10.0.10",
     "openid-client": "^6.8.8",
     "pg": "^8.23.0",
