@@ -209,6 +209,26 @@ test("maps the edited occurrence range to the matching series segment", () => {
   assert.deepEqual(request.proposedRule.recurrence, recurringRule.recurrence);
 });
 
+test("uses the selected recurring-care rule scope without changing the proposal", () => {
+  const following = buildSeriesChangeRequest(recurringEntry, recurringRule, {
+    startDateTime: recurringEntry.startDateTime,
+    endDateTime: recurringEntry.endDateTime,
+    childIds: recurringEntry.childIds
+  }, "following");
+  const series = buildSeriesChangeRequest(recurringEntry, recurringRule, {
+    startDateTime: recurringEntry.startDateTime,
+    endDateTime: recurringEntry.endDateTime,
+    childIds: recurringEntry.childIds
+  });
+
+  assert.equal(following.scope, "following");
+  assert.equal(series.scope, "series");
+  if (following.scope !== "following" || series.scope !== "series") {
+    assert.fail("expected rule-level change requests");
+  }
+  assert.deepEqual(following.proposedRule, series.proposedRule);
+});
+
 test("rejects series edits when the originating segment is unavailable", () => {
   assert.throws(
     () => buildSeriesChangeRequest({ ...recurringEntry, contactRuleSegmentId: "missing" }, recurringRule, {

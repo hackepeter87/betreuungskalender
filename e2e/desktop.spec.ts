@@ -1957,6 +1957,35 @@ test("generates recurring weekend contact dates and shows them in the calendar",
   expect(seriesChangedEntries.find((item) => item.id === julyGeneratedEntries[2].id)?.startDateTime)
     .toContain("T15:00");
 
+  await page.getByTestId(`calendar-entry-${julyGeneratedEntries[1].id}`).first().click();
+  await page.getByTestId("rule-entry-scope-following").click();
+  const followingForm = page.getByTestId("recurring-care-series-form");
+  await expect(followingForm).toBeVisible();
+  await followingForm.getByTestId("series-start-time").fill("18:00");
+  await followingForm.getByTestId("recurring-care-change-preview-submit").click();
+  const followingPreview = followingForm.getByTestId("recurring-care-change-preview");
+  await expect(followingPreview.getByTestId("recurring-impact-affected")).toHaveText("2");
+  await expect(followingPreview.getByTestId("recurring-impact-preserved")).toHaveText("0");
+  await followingForm.getByTestId("recurring-care-change-apply").click();
+  await expect(followingForm).toBeHidden();
+
+  const splitResponse = await request.get("/api/care-entries");
+  expect(splitResponse.ok()).toBeTruthy();
+  const splitEntries = (await splitResponse.json() as Array<{
+    id: string;
+    generatedByPatternId?: string;
+    startDateTime: string;
+    contactRuleSyncState?: string;
+  }>).filter((item) => item.generatedByPatternId && item.startDateTime.startsWith("2026-07"));
+  expect(splitEntries).toHaveLength(3);
+  expect(splitEntries.find((item) => item.id === changedEntry.id)?.startDateTime)
+    .toContain("T17:00");
+  const followingEntries = splitEntries.filter((item) => item.id !== changedEntry.id);
+  expect(followingEntries).toHaveLength(2);
+  expect(followingEntries.every((item) => item.startDateTime.includes("T18:00"))).toBe(true);
+  expect(followingEntries.every((item) => !julyGeneratedEntries.some((original) => original.id === item.id))).toBe(true);
+  expect(new Set(splitEntries.map((item) => item.generatedByPatternId)).size).toBe(2);
+
   await navigate(page, "contact");
   await expect(page.getByTestId("page-contact")).toBeVisible();
   await expect(page.getByTestId("contact-generated-entry").first().locator(".rule-entry__actions")).toHaveCount(0);

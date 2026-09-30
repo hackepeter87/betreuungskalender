@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import type { ApiContactRuleChangePreview } from "../../shared/api";
-import { copy } from "../i18n/catalog";
+import { catalogKey, copy } from "../i18n/catalog";
 import { useI18n } from "../i18n/I18nProvider";
 import { api, ApiError } from "../lib/api";
 import { formatDate } from "../lib/date";
@@ -17,10 +17,12 @@ function dateTimeParts(value: string): { date: string; time: string } {
 
 export function RecurringCareScopeChoice({
   onOccurrence,
+  onFollowing,
   onSeries,
   onCancel
 }: {
   onOccurrence: () => void;
+  onFollowing: () => void;
   onSeries: () => void;
   onCancel: () => void;
 }) {
@@ -37,6 +39,10 @@ export function RecurringCareScopeChoice({
         <button className="choice-card choice-card--stacked" data-testid="rule-entry-scope-occurrence" type="button" onClick={onOccurrence}>
           <strong>{copy(locale, "recurringCareChange", "occurrenceTitle")}</strong>
           <span>{copy(locale, "recurringCareChange", "occurrenceDescription")}</span>
+        </button>
+        <button className="choice-card choice-card--stacked" data-testid="rule-entry-scope-following" type="button" onClick={onFollowing}>
+          <strong>{copy(locale, "recurringCareChange", "followingTitle")}</strong>
+          <span>{copy(locale, "recurringCareChange", "followingDescription")}</span>
         </button>
         <button className="choice-card choice-card--stacked" data-testid="rule-entry-scope-series" type="button" onClick={onSeries}>
           <strong>{copy(locale, "recurringCareChange", "seriesTitle")}</strong>
@@ -56,11 +62,13 @@ export function RecurringCareScopeChoice({
 export function RecurringCareSeriesForm({
   entry,
   rule,
+  scope,
   onSaved,
   onBack
 }: {
   entry: CareEntry;
   rule: ContactRule;
+  scope: "following" | "series";
   onSaved: () => void;
   onBack: () => void;
 }) {
@@ -91,7 +99,7 @@ export function RecurringCareSeriesForm({
     endDateTime,
     childIds,
     ...(responsiblePartyId ? { responsiblePartyId } : {})
-  });
+  }, scope);
 
   const previewChange = async (event: FormEvent) => {
     event.preventDefault();
@@ -141,7 +149,10 @@ export function RecurringCareSeriesForm({
       <div className="notice notice--warning">
         <Icon name="repeat" />
         <div>
-          <p>{copy(locale, "recurringCareChange", "seriesFormDescription")}</p>
+          <p>{copy(locale, "recurringCareChange", catalogKey(
+            "recurringCareChange",
+            scope === "following" ? "followingFormDescription" : "seriesFormDescription"
+          ))}</p>
         </div>
       </div>
 
@@ -239,7 +250,10 @@ export function RecurringCareSeriesForm({
           {preview ? (
             <button className="button button--danger" data-testid="recurring-care-change-apply" type="button" disabled={!canWrite || busy} onClick={() => void applyChange()}>
               <Icon name="repeat" size={17} />
-              {copy(locale, "recurringCareChange", "applySeries")}
+              {copy(locale, "recurringCareChange", catalogKey(
+                "recurringCareChange",
+                scope === "following" ? "applyFollowing" : "applySeries"
+              ))}
             </button>
           ) : (
             <button className="button button--primary" data-testid="recurring-care-change-preview-submit" type="submit" disabled={!canWrite || busy || !childIds.length || rangeInvalid}>

@@ -37,7 +37,8 @@ export function canChooseRecurringCareScope(
 export function buildSeriesChangeRequest(
   entry: CareEntry,
   rule: ContactRule,
-  change: RecurringCareScheduleChange
+  change: RecurringCareScheduleChange,
+  scope: "following" | "series" = "series"
 ): ApiContactRuleChangeRequest {
   const occurrenceDate = entry.ruleOccurrenceDate ?? datePart(entry.startDateTime);
   const segmentId = entry.contactRuleSegmentId;
@@ -70,7 +71,7 @@ export function buildSeriesChangeRequest(
 
   return {
     selectedEntryId: entry.id,
-    scope: "series",
+    scope,
     proposedRule
   };
 }
