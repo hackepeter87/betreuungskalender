@@ -29,8 +29,13 @@ import {
 } from "./services/careConfirmations.js";
 import { processCareConfirmationEmailDeliveries } from "./services/careConfirmationEmails.js";
 import {
+  applyContactRuleChange,
+  previewContactRuleChange
+} from "./services/contactRuleChanges.js";
+import {
   previewContactRuleSync,
   syncContactRule,
+  upsertContactRule,
   upsertContactRuleFromPattern
 } from "./services/contactRules.js";
 import {
@@ -740,6 +745,177 @@ async function confirmationEmailDeliverySummary(runtime: PersistenceRuntime) {
   };
 }
 
+async function recurringCareChangeSummary(runtime: PersistenceRuntime) {
+  const summaries = [];
+  for (const scope of ["occurrence", "series", "following"] as const) {
+    const childId = `change-parity-child-${scope}`;
+    const ruleId = `change-parity-rule-${scope}`;
+    await runtime.query.insertInto("children").values({
+      id: childId,
+      name: `Recurring care parity ${scope}`,
+      birth_month: 1,
+      birth_year: 2018,
+      color: "#0d9488",
+      created_at: timestamp,
+      updated_at: timestamp,
+      deleted_at: null
+    }).execute();
+    await runtime.transaction((database) => upsertContactRule({
+      id: ruleId,
+      rule: {
+        name: `Recurring care parity ${scope}`,
+        startDate: "2026-07-03",
+        endDate: "2026-07-31",
+        timezone: "Europe/Berlin",
+        recurrence: { kind: "weekly", intervalWeeks: 1, weekdays: ["FR"] },
+        segments: [{
+          id: "visit",
+          startDayOffset: 0,
+          startTime: "16:00",
+          endDayOffset: 0,
+          endTime: "18:00"
+        }],
+        syncHorizonMonths: 12,
+        childIds: [childId],
+        active: true
+      },
+      createdBy: "parity-test",
+      updatedBy: "parity-test",
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      database
+    }));
+    await runtime.transaction((database) => syncContactRule(ruleId, {
+      database,
+      userEmail: "parity-test",
+      now: timestamp,
+      startDate: "2026-07-03",
+      endDate: "2026-07-31"
+    }));
+    const selected = await runtime.query.selectFrom("care_entries")
+      .select(["id", "start_datetime", "end_datetime"])
+      .where("contact_rule_id", "=", ruleId)
+      .where("rule_occurrence_date", "=", scope === "occurrence" ? "2026-07-10" : "2026-07-17")
+      .executeTakeFirstOrThrow();
+    const request = scope === "occurrence"
+      ? {
+          selectedEntryId: selected.id,
+          scope,
+          proposedEntry: {
+            startDateTime: "2026-07-10T17:00",
+            endDateTime: "2026-07-10T19:00",
+            childIds: [childId]
+          }
+        }
+      : {
+          selectedEntryId: selected.id,
+          scope,
+          proposedRule: {
+            name: `Changed recurring care parity ${scope}`,
+            startDate: scope === "following" ? "2026-07-17" : "2026-07-03",
+            endDate: "2026-07-31",
+            timezone: "Europe/Berlin" as const,
+            recurrence: {
+              kind: "weekly" as const,
+              intervalWeeks: scope === "series" ? 2 : 1,
+              weekdays: ["FR" as const]
+            },
+            segments: [{
+              id: "visit",
+              startDayOffset: 0,
+              startTime: "18:00",
+              endDayOffset: 0,
+              endTime: "20:00"
+            }],
+            syncHorizonMonths: 12,
+            childIds: [childId],
+            active: true
+          }
+        };
+    const preview = await previewContactRuleChange(ruleId, request, runtime.query, timestamp);
+    await runtime.transaction((database) => applyContactRuleChange({
+      ruleId,
+      request: { ...request, previewFingerprint: preview.fingerprint },
+      userEmail: "parity-test",
+      database,
+      now: timestamp
+    }));
+    const ruleRows = await runtime.query.selectFrom("contact_rules")
+      .select(["id", "start_date", "end_date", "active"])
+      .where((expression) => expression.or([
+        expression("id", "=", ruleId),
+        expression("name", "=", `Changed recurring care parity ${scope}`)
+      ]))
+      .where("deleted_at", "is", null)
+      .orderBy("start_date")
+      .execute();
+    const ruleIds = ruleRows.map(({ id }) => id);
+    const entries = await runtime.query.selectFrom("care_entries")
+      .select([
+        "rule_occurrence_date", "start_datetime", "end_datetime",
+        "contact_rule_sync_state", "status"
+      ])
+      .where("contact_rule_id", "in", ruleIds)
+      .where("deleted_at", "is", null)
+      .orderBy("start_datetime")
+      .execute();
+    const auditScopes = (await runtime.query.selectFrom("audit_log")
+      .select("metadata_json")
+      .where("metadata_json", "is not", null)
+      .execute())
+      .flatMap(({ metadata_json }) => {
+        const metadata = JSON.parse(metadata_json ?? "{}") as { recurringCareChangeScope?: string };
+        return metadata.recurringCareChangeScope === scope ? [scope] : [];
+      });
+    summaries.push({
+      scope,
+      preview: {
+        affected: preview.affected,
+        created: preview.created,
+        retired: preview.retired,
+        preserved: preview.preserved,
+        conflicts: preview.conflicts
+      },
+      rules: ruleRows.map(({ id: _id, ...rule }) => rule),
+      entries,
+      auditCount: auditScopes.length
+    });
+  }
+  return summaries;
+}
+
+function assertRecurringCareChangeSummary(
+  summary: Awaited<ReturnType<typeof recurringCareChangeSummary>>
+) {
+  assert.deepEqual(summary.map(({ scope, entries, auditCount }) => ({
+    scope,
+    starts: entries.map(({ start_datetime }) => start_datetime),
+    auditCount
+  })), [
+    {
+      scope: "occurrence",
+      starts: [
+        "2026-07-03T16:00", "2026-07-10T17:00", "2026-07-17T16:00",
+        "2026-07-24T16:00", "2026-07-31T16:00"
+      ],
+      auditCount: 1
+    },
+    {
+      scope: "series",
+      starts: ["2026-07-03T18:00", "2026-07-17T18:00", "2026-07-31T18:00"],
+      auditCount: 3
+    },
+    {
+      scope: "following",
+      starts: [
+        "2026-07-03T16:00", "2026-07-10T16:00", "2026-07-17T18:00",
+        "2026-07-24T18:00", "2026-07-31T18:00"
+      ],
+      auditCount: 5
+    }
+  ]);
+}
+
 test("SQLite exercises the complete application parity scenario", async () => {
   const runtime = await sqliteRuntime();
   try {
@@ -819,6 +995,32 @@ test("care-confirmation email delivery state remains equivalent on SQLite and Po
         errorCode: null
       }
     });
+  } finally {
+    await Promise.all([sqlite.close(), postgres.close()]);
+  }
+});
+
+test("recurring-care changes preserve expected occurrences and audit scopes on SQLite", async () => {
+  const sqlite = await sqliteRuntime();
+  try {
+    assertRecurringCareChangeSummary(await recurringCareChangeSummary(sqlite));
+  } finally {
+    await sqlite.close();
+  }
+});
+
+test("recurring-care changes remain equivalent on SQLite and PostgreSQL", {
+  skip: !postgresConfigured
+}, async () => {
+  const sqlite = await sqliteRuntime();
+  const postgres = await postgresRuntime();
+  try {
+    const [sqliteResult, postgresResult] = await Promise.all([
+      recurringCareChangeSummary(sqlite),
+      recurringCareChangeSummary(postgres)
+    ]);
+    assert.deepEqual(postgresResult, sqliteResult);
+    assertRecurringCareChangeSummary(sqliteResult);
   } finally {
     await Promise.all([sqlite.close(), postgres.close()]);
   }
