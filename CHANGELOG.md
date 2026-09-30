@@ -6,6 +6,39 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.33.0] - 2026-09-30
+
+### Added
+
+- Add explicit preview and confirmation for changing one recurring-care
+  occurrence, the selected and following occurrences, or the whole series.
+- Add an atomic series-splitting workflow for changes from a selected
+  occurrence onward.
+
+### Changed
+
+- Preserve completed, partially completed, cancelled, and manually changed
+  care records when recurring rules are reconciled.
+- Consolidate backup health into one status at the end of the overview instead
+  of showing separate and duplicated indicators.
+- Refresh compatible patch-level runtime, persistence, static-file, container,
+  and workflow dependencies.
+
+### Security and reliability
+
+- Revalidate recurring-care previews inside the write transaction and reject
+  stale fingerprints without partial changes.
+- Keep recurring-care changes equivalent across SQLite and PostgreSQL 16 and
+  18, with explicit audit attribution for each change scope.
+- Improve contrast and keyboard/focus coverage for the recurring-care scope
+  selection across supported mobile, tablet, and desktop widths.
+
+### Compatibility
+
+- No database migration or authentication change is required.
+- Existing rules, historical outcomes, manual exceptions, backups, and
+  portable transfers remain compatible.
+
 ## [1.32.0] - 2026-09-21
 
 ### Added
