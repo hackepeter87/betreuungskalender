@@ -735,6 +735,11 @@ test("guides a custom care series through the mobile flow", async ({
   const scopeChoice = page.getByTestId("rule-entry-edit-choice");
   await expect(scopeChoice).toBeVisible();
   await expectNoDocumentHorizontalOverflow(page);
+  await scopeChoice.getByTestId("rule-entry-scope-following").click();
+  await expect(page.getByTestId("recurring-care-series-form")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Diesen und folgende Termine ändern" })).toBeVisible();
+  await expectNoDocumentHorizontalOverflow(page);
+  await page.getByRole("button", { name: "Zurück zur Auswahl" }).click();
   await scopeChoice.getByTestId("rule-entry-scope-series").click();
   await expect(page.getByTestId("recurring-care-series-form")).toBeVisible();
   await expectNoDocumentHorizontalOverflow(page);

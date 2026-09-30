@@ -32,7 +32,7 @@ interface EntryDialogState {
   entry?: CareEntry;
   date?: string;
   additionalCare?: boolean;
-  mode?: "scope" | "occurrence" | "series";
+  mode?: "scope" | "occurrence" | "following" | "series";
 }
 
 type OnboardingNotice = "owner-setup" | "invitation";
@@ -299,8 +299,11 @@ export function App() {
         <Modal
           title={entryDialog.mode === "scope"
             ? copy(locale, "recurringCareChange", "scopeTitle")
-            : entryDialog.mode === "series"
-              ? copy(locale, "recurringCareChange", "seriesFormTitle")
+            : entryDialog.mode === "following" || entryDialog.mode === "series"
+              ? copy(locale, "recurringCareChange", catalogKey(
+                  "recurringCareChange",
+                  entryDialog.mode === "following" ? "followingFormTitle" : "seriesFormTitle"
+                ))
               : entryDialog.entry
                 ? copy(locale, "app", "editCareEntry")
                 : copy(locale, "app", "createCareEntry")}
@@ -310,13 +313,15 @@ export function App() {
           {entryDialog.entry && entryDialog.mode === "scope" ? (
             <RecurringCareScopeChoice
               onOccurrence={() => setEntryDialog((current) => current ? { ...current, mode: "occurrence" } : null)}
+              onFollowing={() => setEntryDialog((current) => current ? { ...current, mode: "following" } : null)}
               onSeries={() => setEntryDialog((current) => current ? { ...current, mode: "series" } : null)}
               onCancel={() => setEntryDialog(null)}
             />
-          ) : entryDialog.entry && entryDialog.mode === "series" && entryDialogRule ? (
+          ) : entryDialog.entry && (entryDialog.mode === "following" || entryDialog.mode === "series") && entryDialogRule ? (
             <RecurringCareSeriesForm
               entry={entryDialog.entry}
               rule={entryDialogRule}
+              scope={entryDialog.mode}
               onSaved={() => setEntryDialog(null)}
               onBack={() => setEntryDialog((current) => current ? { ...current, mode: "scope" } : null)}
             />
