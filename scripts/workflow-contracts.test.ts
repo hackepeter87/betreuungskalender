@@ -91,6 +91,17 @@ test("CI keeps a stable aggregate gate and starts expensive jobs after validatio
   assert.match(serialized, /actions\/download-artifact@/u);
   assert.doesNotMatch(serialized, /npm run build/u);
 
+  const validationSteps = list(validation.steps, "Validation steps are required");
+  const uploadStep = validationSteps
+    .map((step) => record(step, "Validation steps must be objects"))
+    .find((step) => String(step.uses).startsWith("actions/upload-artifact@"));
+  assert.ok(uploadStep, "Validation must upload the application build");
+  assert.equal(
+    record(uploadStep.with, "Build artifact settings are required")["include-hidden-files"],
+    true,
+    "Vite's dist/.vite/manifest.json must be included in the shared build artifact"
+  );
+
   const postgres = record(jobs["postgres-runtime"], "PostgreSQL job is required");
   assert.match(JSON.stringify(postgres), /\[16,18\]/u);
   assert.match(JSON.stringify(postgres), /\[18\]/u);
