@@ -2,6 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import { AppShell, canAccessPage, type PageId } from "./components/AppShell";
 import { DeferredDialogContent, DeferredPage } from "./components/DeferredPage";
 import { EntryForm } from "./components/EntryForm";
+import {
+  RecurringCareScopeChoice,
+  RecurringCareSeriesForm
+} from "./components/RecurringCareChange";
 import { Modal } from "./components/Modal";
 import { api } from "./lib/api";
 import { useI18n } from "./i18n/I18nProvider";
@@ -22,11 +26,13 @@ import type {
   LegacyMigrationCapabilities
 } from "../shared/migration";
 import { useAppStore } from "./store/AppStore";
+import { canChooseRecurringCareScope } from "./lib/recurringCareChange";
 
 interface EntryDialogState {
   entry?: CareEntry;
   date?: string;
   additionalCare?: boolean;
+  mode?: "scope" | "occurrence" | "series";
 }
 
 type OnboardingNotice = "owner-setup" | "invitation";
@@ -121,7 +127,7 @@ export function App() {
       : undefined;
     if (!entry) return;
     setActivePage("dashboard");
-    setEntryDialog({ entry });
+    setEntryDialog({ entry, mode: "occurrence" });
     params.delete("confirmation");
     const nextQuery = params.toString();
     window.history.replaceState({}, "", `${window.location.pathname}${nextQuery ? `?${nextQuery}` : ""}`);
@@ -131,11 +137,18 @@ export function App() {
   const canEditAppointments = session.permissions?.includes("appointments:edit") ?? true;
   const openNewEntry = (date?: string, additionalCare = false) => {
     if (canCreateAppointments) {
-      setEntryDialog({ ...(date ? { date } : {}), additionalCare });
+      setEntryDialog({ ...(date ? { date } : {}), additionalCare, mode: "occurrence" });
     }
   };
   const openEditEntry = (entry: CareEntry) => {
-    if (canEditAppointments) setEntryDialog({ entry });
+    if (!canEditAppointments) return;
+    const rule = entry.contactRuleId
+      ? data.contactRules.find((item) => item.id === entry.contactRuleId)
+      : undefined;
+    setEntryDialog({
+      entry,
+      mode: canChooseRecurringCareScope(entry, rule) ? "scope" : "occurrence"
+    });
   };
 
   const setupMode = Boolean(
@@ -252,6 +265,10 @@ export function App() {
       );
   }
 
+  const entryDialogRule = entryDialog?.entry?.contactRuleId
+    ? data.contactRules.find((item) => item.id === entryDialog.entry?.contactRuleId)
+    : undefined;
+
   return (
     <>
       <AppShell
@@ -280,23 +297,40 @@ export function App() {
       </AppShell>
       {entryDialog ? (
         <Modal
-          title={
-            entryDialog.entry
-              ? copy(locale, "app", "editCareEntry")
-              : copy(locale, "app", "createCareEntry")
-          }
+          title={entryDialog.mode === "scope"
+            ? copy(locale, "recurringCareChange", "scopeTitle")
+            : entryDialog.mode === "series"
+              ? copy(locale, "recurringCareChange", "seriesFormTitle")
+              : entryDialog.entry
+                ? copy(locale, "app", "editCareEntry")
+                : copy(locale, "app", "createCareEntry")}
           size="large"
           onClose={() => setEntryDialog(null)}
         >
-          <EntryForm
-            {...(entryDialog.entry ? { entry: entryDialog.entry } : {})}
-            {...(entryDialog.date ? { initialDate: entryDialog.date } : {})}
-            {...(entryDialog.additionalCare !== undefined
-              ? { initialAdditionalCare: entryDialog.additionalCare }
-              : {})}
-            onSaved={() => setEntryDialog(null)}
-            onCancel={() => setEntryDialog(null)}
-          />
+          {entryDialog.entry && entryDialog.mode === "scope" ? (
+            <RecurringCareScopeChoice
+              onOccurrence={() => setEntryDialog((current) => current ? { ...current, mode: "occurrence" } : null)}
+              onSeries={() => setEntryDialog((current) => current ? { ...current, mode: "series" } : null)}
+              onCancel={() => setEntryDialog(null)}
+            />
+          ) : entryDialog.entry && entryDialog.mode === "series" && entryDialogRule ? (
+            <RecurringCareSeriesForm
+              entry={entryDialog.entry}
+              rule={entryDialogRule}
+              onSaved={() => setEntryDialog(null)}
+              onBack={() => setEntryDialog((current) => current ? { ...current, mode: "scope" } : null)}
+            />
+          ) : (
+            <EntryForm
+              {...(entryDialog.entry ? { entry: entryDialog.entry } : {})}
+              {...(entryDialog.date ? { initialDate: entryDialog.date } : {})}
+              {...(entryDialog.additionalCare !== undefined
+                ? { initialAdditionalCare: entryDialog.additionalCare }
+                : {})}
+              onSaved={() => setEntryDialog(null)}
+              onCancel={() => setEntryDialog(null)}
+            />
+          )}
         </Modal>
       ) : null}
       {legacyMigration ? (

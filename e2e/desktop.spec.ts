@@ -1886,8 +1886,9 @@ test("generates recurring weekend contact dates and shows them in the calendar",
 
   const changedEntry = julyGeneratedEntries[0];
   await page.getByTestId(`calendar-entry-${changedEntry.id}`).first().click();
+  await expect(page.getByTestId("rule-entry-edit-choice")).toBeVisible();
+  await page.getByTestId("rule-entry-scope-occurrence").click();
   await expect(page.getByTestId("entry-form")).toBeVisible();
-  await expect(page.getByTestId("rule-entry-edit-choice")).toHaveCount(0);
   await page.getByTestId("entry-start-time").fill("17:00");
   await page.getByTestId("entry-submit").click();
   await expect(page.getByTestId("entry-form")).toBeHidden();
@@ -1929,8 +1930,33 @@ test("generates recurring weekend contact dates and shows them in the calendar",
   await navigate(page, "calendar");
   await page.getByTestId("month-picker").fill("2026-07");
   await page.getByTestId(`calendar-entry-${julyGeneratedEntries[1].id}`).first().click();
-  await expect(page.getByTestId("entry-form")).toBeVisible();
-  await page.getByTestId("entry-form").getByRole("button", { name: "Abbrechen" }).click();
+  await expect(page.getByTestId("rule-entry-edit-choice")).toBeVisible();
+  await page.getByTestId("rule-entry-scope-series").click();
+  const seriesForm = page.getByTestId("recurring-care-series-form");
+  await expect(seriesForm).toBeVisible();
+  await seriesForm.getByTestId("series-start-time").fill("15:00");
+  await seriesForm.getByTestId("recurring-care-change-preview-submit").click();
+  const changePreview = seriesForm.getByTestId("recurring-care-change-preview");
+  await expect(changePreview).toBeVisible();
+  await expect(changePreview.getByTestId("recurring-impact-affected")).toHaveText("2");
+  await expect(changePreview.getByTestId("recurring-impact-preserved")).toHaveText("1");
+  await seriesForm.getByTestId("recurring-care-change-apply").click();
+  await expect(seriesForm).toBeHidden();
+
+  const seriesChangedResponse = await request.get("/api/care-entries");
+  expect(seriesChangedResponse.ok()).toBeTruthy();
+  const seriesChangedEntries = await seriesChangedResponse.json() as Array<{
+    id: string;
+    startDateTime: string;
+    contactRuleSyncState?: string;
+  }>;
+  expect(seriesChangedEntries.find((item) => item.id === changedEntry.id)?.startDateTime)
+    .toContain("T17:00");
+  expect(seriesChangedEntries.find((item) => item.id === julyGeneratedEntries[1].id)?.startDateTime)
+    .toContain("T15:00");
+  expect(seriesChangedEntries.find((item) => item.id === julyGeneratedEntries[2].id)?.startDateTime)
+    .toContain("T15:00");
+
   await navigate(page, "contact");
   await expect(page.getByTestId("page-contact")).toBeVisible();
   await expect(page.getByTestId("contact-generated-entry").first().locator(".rule-entry__actions")).toHaveCount(0);
