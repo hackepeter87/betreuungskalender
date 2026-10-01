@@ -2,6 +2,19 @@ name: Dependency review
 
 on:
   pull_request:
+    paths:
+      - package.json
+      - package-lock.json
+      - Dockerfile
+      - Dockerfile.release
+      - charts/**
+      - .github/actions/**
+      - .github/dependabot.yml
+      - .github/workflows/**
+
+concurrency:
+  group: dependency-review-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read

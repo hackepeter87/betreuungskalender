@@ -15,6 +15,10 @@ on:
         default: false
         type: boolean
 
+concurrency:
+  group: publish-release-image-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
 permissions:
   contents: read
 
