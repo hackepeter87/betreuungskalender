@@ -6,6 +6,22 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.33.1] - 2026-10-01
+
+### Security and reliability
+
+- Update the PDF sanitization dependency to its patched maintenance release.
+- Refresh the digest-pinned distroless Node.js runtime with the corrected
+  distribution packages while preserving the non-root runtime contract.
+- Revalidate the final application image with dependency, container, runtime,
+  SQLite, and PostgreSQL security checks.
+
+### Compatibility
+
+- No product behavior, API, database schema, authentication, or configuration
+  change is required.
+- Existing SQLite and PostgreSQL installations remain compatible.
+
 ## [1.33.0] - 2026-09-30
 
 ### Added
