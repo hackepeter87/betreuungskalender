@@ -353,11 +353,11 @@ test("direct Compose example does not trust proxy identity headers", () => {
   );
   assert.match(
     dockerfile,
-    /FROM gcr\.io\/distroless\/nodejs24-debian13:nonroot@sha256:bb6b03d81066993293a10feda7250e8e1cc034035fe9b61cfceededa7c8bf04d AS runtime/
+    /FROM gcr\.io\/distroless\/nodejs24-debian13:nonroot@sha256:9eeb7f5887d0e239e78264b06f7f11d2e14be534050481803a9e4728fcdd278e AS runtime/
   );
   assert.match(
     releaseDockerfile,
-    /FROM gcr\.io\/distroless\/nodejs24-debian13:nonroot@sha256:bb6b03d81066993293a10feda7250e8e1cc034035fe9b61cfceededa7c8bf04d AS runtime/
+    /FROM gcr\.io\/distroless\/nodejs24-debian13:nonroot@sha256:9eeb7f5887d0e239e78264b06f7f11d2e14be534050481803a9e4728fcdd278e AS runtime/
   );
   assert.match(`${dockerfile}\n${releaseDockerfile}`, /npm install -g npm@12\.0\.1/);
   assert.doesNotMatch(`${dockerfile}\n${releaseDockerfile}`, /CMD \["npm", "run", "start"\]/);
