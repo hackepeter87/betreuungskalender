@@ -579,7 +579,7 @@ function checkDeploymentExamples(cwd, version, report) {
   const buildImage =
     "node:24.21.0-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6";
   const runtimeImage =
-    "gcr.io/distroless/nodejs24-debian13:nonroot@sha256:bb6b03d81066993293a10feda7250e8e1cc034035fe9b61cfceededa7c8bf04d";
+    "gcr.io/distroless/nodejs24-debian13:nonroot@sha256:9eeb7f5887d0e239e78264b06f7f11d2e14be534050481803a9e4728fcdd278e";
   const runtimeStages = [dockerfile, releaseDockerfile].map((content) =>
     content.slice(content.lastIndexOf(" AS runtime"))
   );
