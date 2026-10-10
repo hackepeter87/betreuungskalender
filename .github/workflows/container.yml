@@ -3,6 +3,7 @@ name: Container
 on:
   workflow_call:
   push:
+    branches: [main]
     paths:
       - Dockerfile
       - Dockerfile.release
@@ -10,6 +11,9 @@ on:
       - deploy/**
       - package.json
       - package-lock.json
+      - index.html
+      - tsconfig*.json
+      - vite.config.*
       - server/**
       - shared/**
       - src/**
@@ -25,6 +29,9 @@ on:
       - deploy/**
       - package.json
       - package-lock.json
+      - index.html
+      - tsconfig*.json
+      - vite.config.*
       - server/**
       - shared/**
       - src/**
@@ -33,18 +40,36 @@ on:
       - .github/actions/validate-container/**
       - .github/workflows/container.yml
 
+concurrency:
+  group: container-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
 jobs:
   validate:
+    name: Validate container inputs
     runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.scope.outputs.image }}
+      postgres_container: ${{ steps.scope.outputs.postgres_container }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - name: Classify changed files
+        id: scope
+        env:
+          CI_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          CI_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: node scripts/ci-change-scope.mjs
       - uses: ./.github/actions/validate-container
 
   validate-release-runtime:
     name: Validate release runtime image
+    needs: validate
+    if: needs.validate.outputs.image == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -59,6 +84,8 @@ jobs:
 
   validate-postgres-compose-runtime:
     name: Validate optional PostgreSQL Compose runtime
+    needs: validate
+    if: needs.validate.outputs.postgres_container == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

@@ -188,14 +188,19 @@ historical evidence rather than rewriting them to reflect current behavior.
 
 ## CI jobs
 
-Pull requests run these relevant jobs:
+Pull requests always run `Validation`, including the release, documentation,
+workflow-contract, type, lint, unit, and build checks applicable to the changed
+files. Expensive browser, database, security, Helm, update, and container jobs
+start only after Validation succeeds and only when their maintained inputs
+changed. `Required quality gates` then reports one stable aggregate result and
+fails if a selected job failed.
 
-- `Validation`: dependency audit, release check, lint, build, and unit tests.
-- `End-to-end tests`: desktop, iPhone, and iPad Playwright coverage.
-- `Runtime security and CORS`: isolated HTTP assertions.
-- `PostgreSQL runtime`: PostgreSQL 16 and 18 migration, adapter, application,
-  and bidirectional transfer parity.
-- `Update and rollback workflow`: synthetic verified-update and rollback scenarios.
-- `Container / validate`: Docker startup, restart, persistence, and cleanup.
-- `Validate optional PostgreSQL Compose runtime`: opt-in Compose configuration,
-  transfer, restart, persistence, failure handling, and cleanup.
+Pull requests with persistence changes exercise PostgreSQL 18. The corresponding
+merged `main` commit exercises both supported PostgreSQL versions, 16 and 18.
+Weekly Trivy scanning, tag validation, release publication, and promotion remain
+fail-closed and are not weakened by path-based pull-request selection.
+
+Older runs of the same pull request are cancelled. Release and promotion jobs
+are serialized without cancellation. The complete trigger matrix, measured
+usage baseline, expected savings, and deliberate exceptions are documented in
+[GitHub Actions usage](github-actions.md).
