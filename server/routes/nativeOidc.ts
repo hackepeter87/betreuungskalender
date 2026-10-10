@@ -20,7 +20,7 @@ import {
   OwnerSetupTokenError,
   OwnerSetupTokenStore
 } from "../services/ownerSetupTokens.js";
-import { upsertAuthenticatedUser } from "../services/users.js";
+import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "../services/users.js";
 import {
   acceptInvitationByHashInTransaction,
   InvitationError,
@@ -74,7 +74,7 @@ interface NativeOidcRoutesOptions {
     ): Awaitable<{ token: string; session: OidcSessionRecord }>;
     revokeByToken(token: string | undefined): Awaitable<boolean>;
   };
-  upsertUser?: (user: RequestUser) => Awaitable<void>;
+  upsertUser?: (user: RequestUser) => Awaitable<string | void>;
   applyMembershipRole?: (
     user: RequestUser,
     database?: DatabaseExecutor
@@ -529,7 +529,15 @@ export async function nativeOidcRoutes(
           } else {
             await invitationFlow.accept(loginContext.tokenHash, user, database);
           }
-          const resolvedMembership = await resolveMembership(user, database);
+          const persistedUser = await findAuthenticatedUserBySubject(user.externalSubject, database);
+          if (!persistedUser) {
+            throw new NativeOidcError(
+              "authorization_required",
+              403,
+              "Für diese Installation besteht keine aktive Mitgliedschaft."
+            );
+          }
+          const resolvedMembership = await resolveMembership(persistedUser, database);
           if (!resolvedMembership.workspaceAccess) {
             throw new NativeOidcError(
               "authorization_required",

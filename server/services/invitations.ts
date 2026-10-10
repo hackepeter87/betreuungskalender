@@ -164,11 +164,11 @@ async function acceptSelectedInvitation(
   if (!isWorkspaceRole(invitation.role)) {
     throw new InvitationError("invalid_invitation", 500, "Die Einladung enthält eine ungültige Rolle.");
   }
-  await upsertAuthenticatedUser(user, database, timestamp);
-  await setMembershipRole(user.id, invitation.role, user.id, database, timestamp);
+  const persistedUserId = await upsertAuthenticatedUser(user, database, timestamp);
+  await setMembershipRole(persistedUserId, invitation.role, persistedUserId, database, timestamp);
   if (invitation.data_transfer_actor_id) {
     await database.updateTable("data_transfer_actors")
-      .set({ mapped_user_id: user.id, updated_by: user.id, updated_at: timestamp })
+      .set({ mapped_user_id: persistedUserId, updated_by: persistedUserId, updated_at: timestamp })
       .where("id", "=", invitation.data_transfer_actor_id)
       .execute();
     const assignments = await database.selectFrom("data_transfer_actor_care_parties")
@@ -180,10 +180,10 @@ async function acceptSelectedInvitation(
       if (!assignment.target_care_party_id) continue;
       await database.insertInto("app_user_care_party_assignments").values({
         id: randomUUID(),
-        user_id: user.id,
+        user_id: persistedUserId,
         care_party_id: assignment.target_care_party_id,
-        created_by: user.id,
-        updated_by: user.id,
+        created_by: persistedUserId,
+        updated_by: persistedUserId,
         created_at: timestamp,
         updated_at: timestamp,
         deleted_at: null
@@ -192,9 +192,9 @@ async function acceptSelectedInvitation(
   }
   const update = await database.updateTable("app_invitations")
     .set({
-      accepted_user_id: user.id,
+      accepted_user_id: persistedUserId,
       accepted_at: timestamp,
-      updated_by: user.id,
+      updated_by: persistedUserId,
       updated_at: timestamp
     })
     .where("id", "=", invitation.id)

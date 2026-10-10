@@ -424,8 +424,11 @@ app.get("/api/session", readLimit, async (request) => {
       fallbackRoleOnMissing: "readonly"
     });
     if (auth.authenticated && auth.user) {
-      await upsertAuthenticatedUser(auth.user, persistence.query);
-      const membership = await applyLegacyPreOwnerMembershipRole(auth.user, persistence.query);
+      const persistedUserId = await upsertAuthenticatedUser(auth.user, persistence.query);
+      const membership = await applyLegacyPreOwnerMembershipRole(
+        persistedUserId === auth.user.id ? auth.user : { ...auth.user, id: persistedUserId },
+        persistence.query
+      );
       if (auth.reason !== "missing_role" || membership.membershipRole) {
         return {
           authRequired: config.requireAuth,

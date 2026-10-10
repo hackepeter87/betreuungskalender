@@ -32,6 +32,11 @@ Workspace membership is the authorization source for native OIDC users.
 Removing a membership also invalidates that identity's active application
 sessions; restoring membership requires a new login.
 
+Owner-approved privacy actions require a fresh no-store preview and execute in
+one transaction. Their technical result records contain stable action codes
+and aggregate counts, not previous authentication subjects or personal
+content.
+
 When shared care-party assignments are enabled, non-admin planning and reduced
 schedule access is limited to the user's assigned care parties.
 

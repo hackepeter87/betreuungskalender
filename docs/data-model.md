@@ -502,6 +502,23 @@ The detailed review result is browser-local and is not stored as transfer
 history. The successful import replaces any previous `data_transfer_runs`
 state, retaining only the current run needed for historical actor mapping.
 
+## Privacy actions
+
+Privacy-action previews inventory direct relationships without persisting a
+run or copying subject attributes. Executed actions store one minimal
+`privacy_action_runs` record containing a generated action ID, the tested
+fingerprint, executing owner ID, stable action codes, aggregate affected-row
+counts, status, and timestamps. The record does not contain the prior
+authentication subject, names, email addresses, free-text justification, or
+domain content.
+
+Identity detachment replaces the active authentication subject with a reserved
+non-authenticating tombstone and removes current access and delivery state
+selected in the preview. The historical `app_users.id` remains available to
+existing foreign keys. If the former external identity later accepts a new
+invitation, it receives a new internal user ID and no historical membership or
+assignment is inherited.
+
 ## Migrations
 
 SQLite SQL files in `server/migrations/` and PostgreSQL SQL files in
@@ -531,3 +548,7 @@ change existing domain records or authentication identities.
 
 Migration `032_audit_pagination_index` adds the active-row timestamp and ID
 index used by stable cursor pagination. It does not alter or remove audit data.
+
+Migration `035_privacy_action_runs` adds the minimal idempotency and result
+record for owner-approved privacy actions. It contains no copied subject
+attributes or legal reasoning.

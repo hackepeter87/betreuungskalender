@@ -1,8 +1,15 @@
+import { randomUUID } from "node:crypto";
 import { sql } from "kysely";
 import { permissionsForRole, type AuthRole, type RequestUser } from "../auth.js";
 import type { DatabaseExecutor } from "../db/runtime.js";
 import { applyMembershipRole, type MembershipResolutionPolicy } from "./memberships.js";
 import { isLocalDevelopmentIdentity } from "./localDevelopmentIdentity.js";
+
+export const detachedAuthenticationSubjectPrefix = "urn:betreuungskalender:detached:";
+
+export function isDetachedAuthenticationSubject(subject: string): boolean {
+  return subject.startsWith(detachedAuthenticationSubjectPrefix);
+}
 
 function parseGroups(value: string): string[] {
   try {
@@ -23,9 +30,19 @@ export async function upsertAuthenticatedUser(
   user: RequestUser,
   database: DatabaseExecutor,
   timestamp = new Date().toISOString()
-): Promise<void> {
-  await database.insertInto("app_users").values({
-    id: user.id,
+): Promise<string> {
+  if (isDetachedAuthenticationSubject(user.externalSubject)) {
+    throw new Error("Reserved authentication subject.");
+  }
+  const idCollision = await database.selectFrom("app_users")
+    .select("external_subject")
+    .where("id", "=", user.id)
+    .executeTakeFirst();
+  const userId = idCollision && idCollision.external_subject !== user.externalSubject
+    ? `user_${randomUUID()}`
+    : user.id;
+  const row = await database.insertInto("app_users").values({
+    id: userId,
     external_subject: user.externalSubject,
     email: user.email ?? null,
     display_name: user.displayName,
@@ -43,7 +60,8 @@ export async function upsertAuthenticatedUser(
     last_seen_at: timestamp,
     updated_at: timestamp,
     deleted_at: null
-  })).execute();
+  })).returning("id").executeTakeFirstOrThrow();
+  return row.id;
 }
 
 export async function findAuthenticatedUserBySubject(
@@ -51,6 +69,7 @@ export async function findAuthenticatedUserBySubject(
   database: DatabaseExecutor,
   policy: MembershipResolutionPolicy = "strict"
 ): Promise<RequestUser | undefined> {
+  if (isDetachedAuthenticationSubject(externalSubject)) return undefined;
   const row = await database.selectFrom("app_users")
     .select(["id", "external_subject", "email", "display_name", "role", "groups_json"])
     .where("external_subject", "=", externalSubject)

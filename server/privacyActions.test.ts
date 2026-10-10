@@ -5,10 +5,17 @@ import type { RequestUser } from "./auth.js";
 import { createSqlitePersistenceRuntime } from "./db/runtime.js";
 import { privacyActionRoutes } from "./routes/privacyActions.js";
 import {
+  executePrivacyAction,
+  getPrivacyActionResult,
+  parsePrivacyActionExecuteRequest,
   parsePrivacyActionPreviewRequest,
   previewPrivacyAction,
+  PrivacyActionError,
   privacyActionPreviewMatches
 } from "./services/privacyActions.js";
+import { hasWorkspaceAccess } from "./services/memberships.js";
+import { acceptInvitation, createInvitation } from "./services/invitations.js";
+import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "./services/users.js";
 
 async function database() {
   const runtime = createSqlitePersistenceRuntime(":memory:");
@@ -29,6 +36,143 @@ function insertOwner(runtime: Awaited<ReturnType<typeof database>>) {
     VALUES ('setup.ownerUserId', '"owner-user"', 'owner-user', 'owner-user', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL);
   `);
 }
+
+function insertRevocationFixture(runtime: Awaited<ReturnType<typeof database>>) {
+  insertOwner(runtime);
+  runtime.sqliteDatabase.exec(`
+    INSERT INTO app_users (
+      id, external_subject, email, display_name, role, groups_json,
+      last_seen_at, created_at, updated_at, deleted_at
+    ) VALUES (
+      'target-user', 'target-subject', 'target@example.invalid', 'Fictional target',
+      'parent', '["fixture"]', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
+    );
+    INSERT INTO app_memberships (
+      id, user_id, role, created_by, updated_by, created_at, updated_at, deleted_at
+    ) VALUES (
+      'membership-1', 'target-user', 'editor', 'owner-user', 'owner-user',
+      CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
+    );
+    INSERT INTO care_parties (
+      id, name, kind, created_by, updated_by, created_at, updated_at, deleted_at
+    ) VALUES (
+      'party-1', 'Fictional party', 'other', 'owner-user', 'owner-user',
+      CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
+    );
+    INSERT INTO app_user_care_party_assignments (
+      id, user_id, care_party_id, created_by, updated_by, created_at, updated_at, deleted_at
+    ) VALUES (
+      'assignment-1', 'target-user', 'party-1', 'owner-user', 'owner-user',
+      CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
+    );
+    INSERT INTO calendar_feed_tokens (id, user_id, token_hash, created_at, scope_type)
+    VALUES ('feed-1', 'target-user', 'fixture-token-hash', CURRENT_TIMESTAMP, 'all');
+    INSERT INTO push_subscriptions (
+      id, user_id, endpoint, p256dh, auth, created_at, updated_at, deleted_at
+    ) VALUES (
+      'push-1', 'target-user', 'https://push.example.invalid/fixture', 'fixture-key',
+      'fixture-auth', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
+    );
+    INSERT INTO native_oidc_sessions (
+      id, session_hash, external_subject, created_at, expires_at, revoked_at
+    ) VALUES (
+      'session-1', 'fixture-session-hash', 'target-subject', CURRENT_TIMESTAMP,
+      '2099-01-01T00:00:00.000Z', NULL
+    );
+    INSERT INTO notification_preferences (
+      id, user_id, event_type, in_app_enabled, push_enabled, email_enabled,
+      created_at, updated_at, deleted_at
+    ) VALUES (
+      'preference-1', 'target-user', 'care_confirmation_due', 1, 1, 1,
+      CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
+    );
+    INSERT INTO app_invitations (
+      id, token_hash, role, expires_at, accepted_user_id, accepted_at,
+      created_by, updated_by, created_at, updated_at, deleted_at
+    ) VALUES (
+      'accepted-invitation-1', 'accepted-invitation-token-hash', 'editor',
+      '2099-01-01T00:00:00.000Z', 'target-user', CURRENT_TIMESTAMP,
+      'owner-user', 'owner-user', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
+    );
+    INSERT INTO care_entries (
+      id, start_datetime, end_datetime, status, care_scope, duration_minutes,
+      created_by, updated_by, created_at, updated_at, deleted_at
+    ) VALUES (
+      'entry-1', '2026-01-01T10:00:00.000Z', '2026-01-01T12:00:00.000Z',
+      'planned', 'full_day', 120, 'owner-user', 'owner-user', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
+    );
+    INSERT INTO care_confirmation_requests (
+      id, care_entry_id, user_id, due_at, status, reminder_count,
+      created_at, updated_at, deleted_at
+    ) VALUES (
+      'confirmation-1', 'entry-1', 'target-user', CURRENT_TIMESTAMP, 'open', 0,
+      CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
+    );
+    INSERT INTO care_confirmation_email_deliveries (
+      id, care_confirmation_request_id, event_type, occurrence_key, status,
+      attempt_count, next_attempt_at, created_at, updated_at
+    ) VALUES (
+      'delivery-1', 'confirmation-1', 'care_confirmation_due', 'fixture-occurrence',
+      'pending', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+    );
+  `);
+}
+
+function completeRevocationRequest() {
+  return parsePrivacyActionPreviewRequest({
+    subjectType: "user",
+    subjectId: "target-user",
+    actions: [
+      { category: "access", action: "revoke" },
+      { category: "authentication_identity", action: "detach" },
+      { category: "domain_relationships", action: "delete" },
+      { category: "runtime_channels", action: "revoke" }
+    ]
+  });
+}
+
+test("identity detachment blocks transfer anonymization until historical attributes are supported", async () => {
+  const runtime = await database();
+  try {
+    insertRevocationFixture(runtime);
+    runtime.sqliteDatabase.exec(`
+      INSERT INTO data_transfer_runs (
+        id, package_fingerprint, format_version, source_version, result,
+        counts_json, created_by, created_at
+      ) VALUES (
+        'transfer-1', 'fixture-fingerprint', 1, '1.0.0', 'imported', '{}',
+        'owner-user', CURRENT_TIMESTAMP
+      );
+      INSERT INTO data_transfer_actors (
+        id, transfer_run_id, source_ref, display_name, mapped_user_id,
+        created_by, updated_by, created_at, updated_at
+      ) VALUES (
+        'transfer-actor-1', 'transfer-1', 'fixture-ref', 'Historical fixture',
+        'target-user', 'owner-user', 'owner-user', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      );
+    `);
+    const request = parsePrivacyActionPreviewRequest({
+      subjectType: "user",
+      subjectId: "target-user",
+      actions: [
+        { category: "access", action: "revoke" },
+        { category: "authentication_identity", action: "detach" },
+        { category: "domain_relationships", action: "delete" },
+        { category: "runtime_channels", action: "revoke" },
+        { category: "transfer_state", action: "anonymize" }
+      ]
+    });
+    const preview = await previewPrivacyAction(request, "owner-user", runtime.query);
+    assert.equal(preview.result, "blocked");
+    assert.equal(preview.blockerCodes.includes("identity_detachment_requires_transfer_resolution"), true);
+    await assert.rejects(
+      executePrivacyAction({ ...request, fingerprint: preview.fingerprint }, "owner-user", runtime),
+      (error: unknown) => error instanceof PrivacyActionError && error.code === "privacy_action_invalid"
+    );
+  } finally {
+    await runtime.close();
+  }
+});
 
 test("privacy preview inventories aggregate user categories without writes or identity leakage", async () => {
   const runtime = await database();
@@ -64,7 +208,6 @@ test("privacy preview inventories aggregate user categories without writes or id
       subjectId: "target-user",
       actions: [
         { category: "access", action: "revoke" },
-        { category: "authentication_identity", action: "detach" },
         { category: "historical_attribution", action: "anonymize" }
       ]
     });
@@ -146,6 +289,148 @@ test("privacy preview fingerprints do not depend on action ordering", async () =
       previewPrivacyAction(second, "owner-user", runtime.query)
     ]);
     assert.equal(firstPreview.fingerprint, secondPreview.fingerprint);
+  } finally {
+    await runtime.close();
+  }
+});
+
+test("privacy execution revokes access and detaches identity atomically and idempotently", async () => {
+  const runtime = await database();
+  try {
+    insertRevocationFixture(runtime);
+    const request = completeRevocationRequest();
+    const preview = await previewPrivacyAction(request, "owner-user", runtime.query);
+    assert.equal(preview.result, "ready");
+    const execution = parsePrivacyActionExecuteRequest({ ...request, fingerprint: preview.fingerprint });
+    const first = await executePrivacyAction(
+      execution,
+      "owner-user",
+      runtime,
+      "2026-10-10T12:00:00.000Z"
+    );
+    const second = await executePrivacyAction(
+      execution,
+      "owner-user",
+      runtime,
+      "2026-10-10T12:01:00.000Z"
+    );
+    assert.deepEqual(second, first);
+    assert.equal((await getPrivacyActionResult(first.id, runtime.query)).id, first.id);
+    assert.equal(first.status, "completed");
+    assert.deepEqual(first.actionCodes, [
+      "access:revoke",
+      "authentication_identity:detach",
+      "domain_relationships:delete",
+      "runtime_channels:revoke"
+    ]);
+    assert.equal(await findAuthenticatedUserBySubject("target-subject", runtime.query), undefined);
+    assert.equal(await hasWorkspaceAccess("target-user", runtime.query), false);
+    const target = await runtime.query.selectFrom("app_users")
+      .select(["external_subject", "email", "display_name", "groups_json", "role"])
+      .where("id", "=", "target-user").executeTakeFirstOrThrow();
+    assert.match(target.external_subject, /^urn:betreuungskalender:detached:/);
+    assert.equal(target.email, null);
+    assert.equal(target.display_name.includes("Fictional"), false);
+    assert.equal(target.groups_json, "[]");
+    assert.equal(target.role, "readonly");
+    assert.equal(Number((await runtime.query.selectFrom("app_memberships")
+      .select(({ fn }) => fn.count<number>("id").as("count"))
+      .where("user_id", "=", "target-user").where("deleted_at", "is", null)
+      .executeTakeFirstOrThrow()).count), 0);
+    assert.equal(Number((await runtime.query.selectFrom("native_oidc_sessions")
+      .select(({ fn }) => fn.count<number>("id").as("count"))
+      .where("external_subject", "=", "target-subject").where("revoked_at", "is", null)
+      .executeTakeFirstOrThrow()).count), 0);
+    assert.equal((await runtime.query.selectFrom("app_invitations")
+      .select("accepted_user_id").where("id", "=", "accepted-invitation-1")
+      .executeTakeFirstOrThrow()).accepted_user_id, null);
+    assert.equal((await runtime.query.selectFrom("care_confirmation_email_deliveries")
+      .select("error_code").where("id", "=", "delivery-1")
+      .executeTakeFirstOrThrow()).error_code, "subject_revoked");
+    assert.equal(Number((await runtime.query.selectFrom("privacy_action_runs")
+      .select(({ fn }) => fn.count<number>("id").as("count"))
+      .executeTakeFirstOrThrow()).count), 1);
+
+    const returningIdentity: RequestUser = {
+      id: "target-user",
+      externalSubject: "target-subject",
+      email: "new-target@example.invalid",
+      displayName: "New fictional target",
+      groups: [],
+      role: "readonly",
+      permissions: ["read"]
+    };
+    const newUserId = await upsertAuthenticatedUser(
+      returningIdentity,
+      runtime.query,
+      "2026-10-10T12:01:00.000Z"
+    );
+    assert.notEqual(newUserId, "target-user");
+    assert.equal(await hasWorkspaceAccess(newUserId, runtime.query), false);
+    const invitation = await createInvitation({
+      role: "viewer",
+      expiresAt: "2026-10-11T12:00:00.000Z",
+      actorId: "owner-user",
+      token: "fictional-privacy-rejoin-token",
+      timestamp: "2026-10-10T12:01:30.000Z"
+    }, runtime.query);
+    const accepted = await acceptInvitation(
+      invitation.token,
+      returningIdentity,
+      runtime,
+      "2026-10-10T12:02:00.000Z"
+    );
+    assert.equal(accepted.acceptedUserId, newUserId);
+    assert.equal(await hasWorkspaceAccess(newUserId, runtime.query), true);
+  } finally {
+    await runtime.close();
+  }
+});
+
+test("privacy execution rejects stale previews without partial changes", async () => {
+  const runtime = await database();
+  try {
+    insertRevocationFixture(runtime);
+    const request = completeRevocationRequest();
+    const preview = await previewPrivacyAction(request, "owner-user", runtime.query);
+    await runtime.query.updateTable("app_memberships")
+      .set({ updated_at: "2026-10-10T12:05:00.000Z" })
+      .where("id", "=", "membership-1").execute();
+    await assert.rejects(
+      executePrivacyAction({ ...request, fingerprint: preview.fingerprint }, "owner-user", runtime),
+      (error) => error instanceof PrivacyActionError && error.code === "privacy_action_preview_changed"
+    );
+    assert.equal(await hasWorkspaceAccess("target-user", runtime.query), true);
+    assert.equal(Number((await runtime.query.selectFrom("privacy_action_runs")
+      .select(({ fn }) => fn.count<number>("id").as("count"))
+      .executeTakeFirstOrThrow()).count), 0);
+  } finally {
+    await runtime.close();
+  }
+});
+
+test("privacy execution rolls back access revocation when identity detachment fails", async () => {
+  const runtime = await database();
+  try {
+    insertRevocationFixture(runtime);
+    const request = completeRevocationRequest();
+    const preview = await previewPrivacyAction(request, "owner-user", runtime.query);
+    runtime.sqliteDatabase.exec(`
+      CREATE TRIGGER fail_privacy_identity_update
+      BEFORE UPDATE OF external_subject ON app_users
+      BEGIN
+        SELECT RAISE(ABORT, 'PRIVATE_TRIGGER_DETAIL');
+      END;
+    `);
+    await assert.rejects(
+      executePrivacyAction({ ...request, fingerprint: preview.fingerprint }, "owner-user", runtime)
+    );
+    assert.equal(await hasWorkspaceAccess("target-user", runtime.query), true);
+    assert.equal((await runtime.query.selectFrom("calendar_feed_tokens")
+      .select("revoked_at").where("id", "=", "feed-1").executeTakeFirstOrThrow()).revoked_at, null);
+    assert.equal(Number((await runtime.query.selectFrom("privacy_action_runs")
+      .select(({ fn }) => fn.count<number>("id").as("count"))
+      .executeTakeFirstOrThrow()).count), 0);
   } finally {
     await runtime.close();
   }
@@ -257,5 +542,51 @@ test("privacy preview route reports unexpected failures as generic server errors
     assert.match(response.headers["cache-control"] ?? "", /no-store/);
   } finally {
     await app.close();
+  }
+});
+
+test("privacy execution and result routes are no-store and reject stale fingerprints generically", async () => {
+  const runtime = await database();
+  insertRevocationFixture(runtime);
+  const app = Fastify();
+  app.decorate("persistence", runtime);
+  app.addHook("onRequest", async (request) => {
+    request.userEmail = "owner-user";
+    request.user = { id: "owner-user" } as RequestUser;
+  });
+  await privacyActionRoutes(app);
+  try {
+    const request = completeRevocationRequest();
+    const preview = await previewPrivacyAction(request, "owner-user", runtime.query);
+    const changed = await app.inject({
+      method: "POST",
+      url: "/api/privacy-actions/execute",
+      payload: { ...request, fingerprint: "0".repeat(64) }
+    });
+    assert.equal(changed.statusCode, 409);
+    assert.deepEqual(changed.json(), {
+      error: "privacy_action_preview_changed",
+      message: "The privacy action could not be completed."
+    });
+    assert.match(changed.headers["cache-control"] ?? "", /no-store/);
+
+    const executed = await app.inject({
+      method: "POST",
+      url: "/api/privacy-actions/execute",
+      payload: { ...request, fingerprint: preview.fingerprint }
+    });
+    assert.equal(executed.statusCode, 200);
+    assert.match(executed.headers["cache-control"] ?? "", /no-store/);
+    const result = executed.json<{ id: string }>();
+    const loaded = await app.inject({
+      method: "GET",
+      url: `/api/privacy-actions/${result.id}/result`
+    });
+    assert.equal(loaded.statusCode, 200);
+    assert.equal(loaded.json<{ id: string }>().id, result.id);
+    assert.match(loaded.headers["cache-control"] ?? "", /no-store/);
+  } finally {
+    await app.close();
+    await runtime.close();
   }
 });

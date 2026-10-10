@@ -45,7 +45,7 @@ interface NativeAuthOptions {
   };
   findUserByExternalSubject?: (externalSubject: string) => Awaitable<RequestUser | undefined>;
   findRecoveryUserByToken?: (token: string | undefined) => Awaitable<RequestUser | undefined>;
-  upsertAuthenticatedUser?: (user: RequestUser) => Awaitable<void>;
+  upsertAuthenticatedUser?: (user: RequestUser) => Awaitable<string | void>;
   applyMembershipRole?: (
     user: RequestUser,
     policy?: MembershipResolutionPolicy
@@ -200,11 +200,14 @@ export function createApiAuthHook(
           : "Authentifizierung erforderlich."
         );
     }
-    await (options.upsertAuthenticatedUser ?? ((user) =>
+    const persistedUserId = await (options.upsertAuthenticatedUser ?? ((user) =>
       upsertAuthenticatedUser(user, requiredDatabase())))(auth.user);
+    const persistedUser = persistedUserId && persistedUserId !== auth.user.id
+      ? { ...auth.user, id: persistedUserId }
+      : auth.user;
     const membership = options.applyMembershipRole
-      ? await options.applyMembershipRole(auth.user, "legacy-pre-owner")
-      : await applyLegacyPreOwnerMembershipRole(auth.user, requiredDatabase());
+      ? await options.applyMembershipRole(persistedUser, "legacy-pre-owner")
+      : await applyLegacyPreOwnerMembershipRole(persistedUser, requiredDatabase());
     if (auth.reason === "missing_role" && !membership.membershipRole) {
       throw httpError(
         "authorization_required",
