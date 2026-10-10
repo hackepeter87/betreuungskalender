@@ -160,5 +160,6 @@ test("keeps editor domain workflows available without administrative settings", 
   await expect(page.getByTestId("calendar-feed-manager")).toBeVisible();
   await expect(page.getByTestId("instance-readiness")).toHaveCount(0);
   await expect(page.getByTestId("member-invitations")).toHaveCount(0);
+  await expect(page.getByTestId("privacy-action-workflow")).toHaveCount(0);
   await expectNoDocumentHorizontalOverflow(page);
 });

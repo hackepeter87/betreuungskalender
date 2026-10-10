@@ -5,6 +5,7 @@ import { AppearanceControl } from "../components/AppearanceControl";
 import { FieldHelpButton, FieldHelpLabel } from "../components/FieldHelp";
 import { Modal } from "../components/Modal";
 import { ExternalCalendarManager } from "../components/ExternalCalendarManager";
+import { PrivacyActionWorkflow } from "../components/PrivacyActionWorkflow";
 import { useHelpPreferences } from "../context/HelpPreferences";
 import { useI18n } from "../i18n/I18nProvider";
 import { catalogKey, copy } from "../i18n/catalog";
@@ -1041,6 +1042,8 @@ export function SettingsPage() {
       <MemberInvitationManager />
 
       <UserCarePartyAssignmentManager />
+
+      <PrivacyActionWorkflow children={data.children} careParties={data.careParties} />
 
       {canManagePlanning ? <section className="panel settings-section">
         <div className="panel__header">

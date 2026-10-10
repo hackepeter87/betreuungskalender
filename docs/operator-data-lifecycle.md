@@ -68,9 +68,11 @@ obligations and the establishment, exercise, or defence of legal claims.
    exceptions, preservation duties, other affected persons, and whether
    deletion or effective anonymization is appropriate for each category.
 5. Document the approved action outside the application, then use the fresh
-   technical preview for the selected categories. Ordinary application soft
-   delete is not sufficient by itself where actual erasure or anonymization is
-   required.
+   owner-only preview under **Settings > Review privacy request** for the
+   selected categories. The interface reports technical blockers, shared-data
+   effects, retained categories, and external-copy follow-up; it does not make
+   the legal decision. Ordinary application soft delete is not sufficient by
+   itself where actual erasure or anonymization is required.
 6. Revoke active access, sessions, invitations, feeds, and push subscriptions
    when their purpose has ended. Handle identity-provider records separately.
 7. Apply the approved action to controlled live and exported copies. For
