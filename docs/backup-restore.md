@@ -81,6 +81,12 @@ podman exec APP_CONTAINER /nodejs/bin/node scripts/restore-check.js
 Test restoration periodically in an isolated environment. A successful backup
 command alone does not prove recoverability.
 
+If the restored backup predates an owner-approved privacy action, do not return
+the installation to users after the ordinary smoke test. Keep it isolated and
+follow the [backup and restore reconciliation](operator-data-lifecycle.md#backup-and-restore-reconciliation)
+procedure first. Existing backup files are expired as whole generations under
+the operator policy; the application does not rewrite them selectively.
+
 ## PostgreSQL backup and restore
 
 The SQLite scripts refuse PostgreSQL and do not create a PostgreSQL backup.
@@ -97,6 +103,13 @@ replacement database, then start exactly one application instance and verify
 `/api/health` and `/api/ready`. Application and Helm rollbacks do not reverse
 schema migrations. The complete commands, update order, and unsupported
 operations are documented in [database backends](database-backends.md).
+
+Logical dumps, snapshots, and point-in-time recovery archives remain under the
+operator's retention controls. A restore to a point before an approved privacy
+action reintroduces the older state. Keep the restored database isolated and
+complete the same
+[restore reconciliation](operator-data-lifecycle.md#backup-and-restore-reconciliation)
+before restoring user, feed, or integration access.
 
 ## Portable instance transfer
 
@@ -147,3 +160,9 @@ are not retained.
 JSON, CSV, and PDF files may contain sensitive personal data. Encrypt transfer
 files at rest and in transit, remove temporary copies after verification, and
 never attach them to public issues.
+
+Downloaded reports, CSV files, and transfer packages are not updated when the
+live database is anonymized or erased. Record their controlled locations and
+recipients, securely remove copies whose purpose has ended, and restrict any
+copy that must be retained. Do not reuse a transfer package created before an
+approved privacy action without reviewing it against the current source state.
