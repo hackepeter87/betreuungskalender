@@ -245,12 +245,12 @@ export async function previewPrivacyAction(
     if ((categories.find(({ code }) => code === "domain_relationships")?.references.length ?? 0) > 0) {
       requiredSelections.push(["domain_relationships", ["delete"]]);
     }
-    if ((categories.find(({ code }) => code === "transfer_state")?.references.length ?? 0) > 0) {
-      requiredSelections.push(["transfer_state", ["delete"]]);
-    }
     for (const [category, actions] of requiredSelections) {
       const selected = selections.get(category);
       if (!selected || !actions.includes(selected)) blockerCodes.add("identity_detachment_requires_full_revocation");
+    }
+    if ((categories.find(({ code }) => code === "transfer_state")?.references.length ?? 0) > 0) {
+      blockerCodes.add("identity_detachment_requires_transfer_resolution");
     }
   }
   if (blockerCodes.size > 0) for (const category of categoryResponse) category.status = "blocked";
@@ -339,8 +339,7 @@ async function applyUserAccessActions(
     "authentication_identity:detach",
     "domain_relationships:delete",
     "runtime_channels:delete",
-    "runtime_channels:revoke",
-    "transfer_state:delete"
+    "runtime_channels:revoke"
   ]);
   if (request.actions.some(({ category, action }) => !supported.has(`${category}:${action}`))) {
     throw new PrivacyActionError("privacy_action_invalid", 400);
@@ -382,11 +381,6 @@ async function applyUserAccessActions(
       .set({ accepted_user_id: null, revoked_at: timestamp, updated_by: actorId, updated_at: timestamp })
       .where("accepted_user_id", "=", user.id).executeTakeFirst());
     counts.runtime_channels = total;
-  }
-  if (selected.has("transfer_state")) {
-    counts.transfer_state = changed(await database.updateTable("data_transfer_actors")
-      .set({ mapped_user_id: null, updated_by: actorId, updated_at: timestamp })
-      .where("mapped_user_id", "=", user.id).executeTakeFirst());
   }
   if (selected.get("authentication_identity") === "detach") {
     counts.authentication_identity = changed(await database.updateTable("app_users").set({

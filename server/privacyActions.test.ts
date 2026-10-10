@@ -115,20 +115,6 @@ function insertRevocationFixture(runtime: Awaited<ReturnType<typeof database>>) 
       'delivery-1', 'confirmation-1', 'care_confirmation_due', 'fixture-occurrence',
       'pending', 0, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
     );
-    INSERT INTO data_transfer_runs (
-      id, package_fingerprint, format_version, source_version, result,
-      counts_json, created_by, created_at
-    ) VALUES (
-      'transfer-1', 'fixture-fingerprint', 1, '1.0.0', 'imported', '{}',
-      'owner-user', CURRENT_TIMESTAMP
-    );
-    INSERT INTO data_transfer_actors (
-      id, transfer_run_id, source_ref, display_name, mapped_user_id,
-      created_by, updated_by, created_at, updated_at
-    ) VALUES (
-      'transfer-actor-1', 'transfer-1', 'fixture-ref', 'Historical fixture',
-      'target-user', 'owner-user', 'owner-user', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
-    );
   `);
 }
 
@@ -140,8 +126,7 @@ function completeRevocationRequest() {
       { category: "access", action: "revoke" },
       { category: "authentication_identity", action: "detach" },
       { category: "domain_relationships", action: "delete" },
-      { category: "runtime_channels", action: "revoke" },
-      { category: "transfer_state", action: "delete" }
+      { category: "runtime_channels", action: "revoke" }
     ]
   });
 }
@@ -150,6 +135,22 @@ test("identity detachment blocks transfer anonymization until historical attribu
   const runtime = await database();
   try {
     insertRevocationFixture(runtime);
+    runtime.sqliteDatabase.exec(`
+      INSERT INTO data_transfer_runs (
+        id, package_fingerprint, format_version, source_version, result,
+        counts_json, created_by, created_at
+      ) VALUES (
+        'transfer-1', 'fixture-fingerprint', 1, '1.0.0', 'imported', '{}',
+        'owner-user', CURRENT_TIMESTAMP
+      );
+      INSERT INTO data_transfer_actors (
+        id, transfer_run_id, source_ref, display_name, mapped_user_id,
+        created_by, updated_by, created_at, updated_at
+      ) VALUES (
+        'transfer-actor-1', 'transfer-1', 'fixture-ref', 'Historical fixture',
+        'target-user', 'owner-user', 'owner-user', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      );
+    `);
     const request = parsePrivacyActionPreviewRequest({
       subjectType: "user",
       subjectId: "target-user",
@@ -163,7 +164,7 @@ test("identity detachment blocks transfer anonymization until historical attribu
     });
     const preview = await previewPrivacyAction(request, "owner-user", runtime.query);
     assert.equal(preview.result, "blocked");
-    assert.equal(preview.blockerCodes.includes("identity_detachment_requires_full_revocation"), true);
+    assert.equal(preview.blockerCodes.includes("identity_detachment_requires_transfer_resolution"), true);
     await assert.rejects(
       executePrivacyAction({ ...request, fingerprint: preview.fingerprint }, "owner-user", runtime),
       (error: unknown) => error instanceof PrivacyActionError && error.code === "privacy_action_invalid"
@@ -320,8 +321,7 @@ test("privacy execution revokes access and detaches identity atomically and idem
       "access:revoke",
       "authentication_identity:detach",
       "domain_relationships:delete",
-      "runtime_channels:revoke",
-      "transfer_state:delete"
+      "runtime_channels:revoke"
     ]);
     assert.equal(await findAuthenticatedUserBySubject("target-subject", runtime.query), undefined);
     assert.equal(await hasWorkspaceAccess("target-user", runtime.query), false);
@@ -341,9 +341,6 @@ test("privacy execution revokes access and detaches identity atomically and idem
       .select(({ fn }) => fn.count<number>("id").as("count"))
       .where("external_subject", "=", "target-subject").where("revoked_at", "is", null)
       .executeTakeFirstOrThrow()).count), 0);
-    assert.equal((await runtime.query.selectFrom("data_transfer_actors")
-      .select("mapped_user_id").where("id", "=", "transfer-actor-1")
-      .executeTakeFirstOrThrow()).mapped_user_id, null);
     assert.equal((await runtime.query.selectFrom("app_invitations")
       .select("accepted_user_id").where("id", "=", "accepted-invitation-1")
       .executeTakeFirstOrThrow()).accepted_user_id, null);
