@@ -297,6 +297,16 @@ that identity within the membership transaction. Restoring access later
 requires a new login; previously revoked sessions remain invalid. Sessions for
 other members are not affected.
 
+Owner-approved privacy actions use a separate preview fingerprint and recheck
+the current owner, selected subject, dependencies, and database state inside
+one transaction. Identity detachment revokes selected memberships, sessions,
+feeds, notification channels, and current assignments before replacing the
+authentication subject with a reserved non-authenticating tombstone. The
+previous subject, address, and display values are not copied into the technical
+result record, API error, or normal log output. A later invitation for the same
+external identity creates a new internal user without inheriting historical
+access.
+
 Trusted-proxy first-use setup requires the configured admin group while no
 owner exists. Parent, viewer, and missing-role fallback identities cannot
 establish the owner. Once ownership is established, an unfinished first-use

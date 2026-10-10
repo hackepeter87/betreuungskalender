@@ -38,3 +38,19 @@ export interface PrivacyActionPreviewResponse {
   blockerCodes: string[];
   externalFollowUpCodes: string[];
 }
+
+export interface PrivacyActionExecuteRequest extends PrivacyActionPreviewRequest {
+  fingerprint: string;
+}
+
+export interface PrivacyActionResultResponse {
+  id: string;
+  status: "completed" | "failed";
+  subjectType: PrivacySubjectType;
+  actionCodes: string[];
+  affectedCounts: Record<string, number>;
+  startedAt: string;
+  completedAt?: string;
+  errorCode?: string;
+  externalFollowUpCodes: string[];
+}

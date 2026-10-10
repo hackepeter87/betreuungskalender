@@ -56,6 +56,7 @@ import {
 import { listMembers, updateMemberRole } from "./services/memberManagement.js";
 import { createReportSnapshot } from "./services/reportSnapshots.js";
 import {
+  executePrivacyAction,
   parsePrivacyActionPreviewRequest,
   previewPrivacyAction
 } from "./services/privacyActions.js";
@@ -552,6 +553,75 @@ async function privacyActionPreviewSummary(runtime: PersistenceRuntime) {
   };
 }
 
+async function privacyActionExecutionSummary(runtime: PersistenceRuntime) {
+  const owner = user("privacy-execution-owner", "admin");
+  const target = user("privacy-execution-target", "parent");
+  await upsertAuthenticatedUser(owner, runtime.query, timestamp);
+  await upsertAuthenticatedUser(target, runtime.query, timestamp);
+  await insertOwnerSetting(runtime, owner.id);
+  await runtime.query.insertInto("app_memberships").values({
+    id: "privacy-execution-membership",
+    user_id: target.id,
+    role: "editor",
+    created_by: owner.id,
+    updated_by: owner.id,
+    created_at: timestamp,
+    updated_at: timestamp,
+    deleted_at: null
+  }).execute();
+  await runtime.query.insertInto("calendar_feed_tokens").values({
+    id: "privacy-execution-feed",
+    user_id: target.id,
+    token_hash: "privacy-execution-token-hash",
+    created_at: timestamp,
+    last_used_at: null,
+    revoked_at: null,
+    scope_type: "all",
+    scope_party_id: null
+  }).execute();
+  const request = parsePrivacyActionPreviewRequest({
+    subjectType: "user",
+    subjectId: target.id,
+    actions: [
+      { category: "access", action: "revoke" },
+      { category: "authentication_identity", action: "detach" },
+      { category: "runtime_channels", action: "revoke" }
+    ]
+  });
+  const preview = await previewPrivacyAction(request, owner.id, runtime.query);
+  const result = await executePrivacyAction(
+    { ...request, fingerprint: preview.fingerprint },
+    owner.id,
+    runtime,
+    "2026-07-01T09:00:00.000Z"
+  );
+  const detached = await runtime.query.selectFrom("app_users")
+    .select(["external_subject", "email", "role", "groups_json"])
+    .where("id", "=", target.id).executeTakeFirstOrThrow();
+  return {
+    result: {
+      status: result.status,
+      actionCodes: result.actionCodes,
+      affectedCounts: result.affectedCounts,
+      externalFollowUpCodes: result.externalFollowUpCodes
+    },
+    detached: {
+      subjectPrefix: detached.external_subject.split(":").slice(0, 3).join(":"),
+      email: detached.email,
+      role: detached.role,
+      groups: detached.groups_json
+    },
+    activeMemberships: Number((await runtime.query.selectFrom("app_memberships")
+      .select(({ fn }) => fn.count<number>("id").as("count"))
+      .where("user_id", "=", target.id).where("deleted_at", "is", null)
+      .executeTakeFirstOrThrow()).count),
+    activeFeeds: Number((await runtime.query.selectFrom("calendar_feed_tokens")
+      .select(({ fn }) => fn.count<number>("id").as("count"))
+      .where("user_id", "=", target.id).where("revoked_at", "is", null)
+      .executeTakeFirstOrThrow()).count)
+  };
+}
+
 async function transferBetween(source: PersistenceRuntime, target: PersistenceRuntime) {
   await prepareTransferSource(source);
   await setTransferTargetOwner(target);
@@ -1024,6 +1094,30 @@ test("privacy action previews remain equivalent on SQLite and PostgreSQL", {
     assert.deepEqual(postgresResult, sqliteResult);
     assert.equal(sqliteResult.result, "ready");
     assert.equal(sqliteResult.categories.find(({ code }) => code === "access")?.count, 1);
+  } finally {
+    await Promise.all([sqlite.close(), postgres.close()]);
+  }
+});
+
+test("privacy access revocation remains equivalent on SQLite and PostgreSQL", {
+  skip: !postgresConfigured
+}, async () => {
+  const sqlite = await sqliteRuntime();
+  const postgres = await postgresRuntime();
+  try {
+    const [sqliteResult, postgresResult] = await Promise.all([
+      privacyActionExecutionSummary(sqlite),
+      privacyActionExecutionSummary(postgres)
+    ]);
+    assert.deepEqual(postgresResult, sqliteResult);
+    assert.deepEqual(sqliteResult.detached, {
+      subjectPrefix: "urn:betreuungskalender:detached",
+      email: null,
+      role: "readonly",
+      groups: "[]"
+    });
+    assert.equal(sqliteResult.activeMemberships, 0);
+    assert.equal(sqliteResult.activeFeeds, 0);
   } finally {
     await Promise.all([sqlite.close(), postgres.close()]);
   }

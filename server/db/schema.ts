@@ -377,6 +377,21 @@ interface PushSubscriptionsTable extends SoftDeleteColumns {
   user_agent: NullableText;
 }
 
+interface PrivacyActionRunsTable {
+  id: string;
+  preview_fingerprint: string;
+  actor_user_id: string;
+  subject_type: string;
+  action_codes_json: string;
+  affected_counts_json: string;
+  status: string;
+  error_code: NullableText;
+  started_at: string;
+  completed_at: NullableText;
+  created_at: string;
+  updated_at: string;
+}
+
 interface RecoveryAdminCredentialsTable extends TimestampColumns {
   username: string;
   password_hash: string;
@@ -470,6 +485,7 @@ export interface DatabaseSchema {
   notification_preferences: NotificationPreferencesTable;
   owner_setup_tokens: OwnerSetupTokensTable;
   push_subscriptions: PushSubscriptionsTable;
+  privacy_action_runs: PrivacyActionRunsTable;
   recovery_admin_credentials: RecoveryAdminCredentialsTable;
   recovery_admin_sessions: RecoveryAdminSessionsTable;
   schema_migrations: SchemaMigrationsTable;
@@ -512,6 +528,7 @@ export const databaseTableNames = [
   "notification_preferences",
   "owner_setup_tokens",
   "push_subscriptions",
+  "privacy_action_runs",
   "recovery_admin_credentials",
   "recovery_admin_sessions",
   "schema_migrations",

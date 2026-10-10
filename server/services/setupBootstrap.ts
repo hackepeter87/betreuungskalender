@@ -192,16 +192,16 @@ export async function completeFirstUseSetup(
         "Die Installation wurde bereits eingerichtet."
       );
     }
-    await upsertAuthenticatedUser(user, database, timestamp);
-    await assertKnownUser(user.id, database);
-    await claimOrAssertOwner(database, user.id, timestamp);
+    const userId = await upsertAuthenticatedUser(user, database, timestamp);
+    await assertKnownUser(userId, database);
+    await claimOrAssertOwner(database, userId, timestamp);
     const carePartyId = await createCareParty(
-      database, user.id, timestamp, input.careParty, "care_party_created"
+      database, userId, timestamp, input.careParty, "care_party_created"
     );
     const secondaryCarePartyId = input.secondaryCareParty
       ? await createCareParty(
         database,
-        user.id,
+        userId,
         timestamp,
         input.secondaryCareParty,
         "secondary_care_party_created"
@@ -222,21 +222,21 @@ export async function completeFirstUseSetup(
         birth_month: child.birthMonth,
         birth_year: child.birthYear,
         color: child.color,
-        created_by: user.id,
-        updated_by: user.id,
+        created_by: userId,
+        updated_by: userId,
         created_at: timestamp,
         updated_at: timestamp,
         deleted_at: null
       }).execute();
-      await recordBootstrapAudit(database, user.id, "child_created", { childId }, timestamp);
+      await recordBootstrapAudit(database, userId, "child_created", { childId }, timestamp);
       childIds.push(childId);
     }
-    await upsertSetting(database, "primaryCarePartyId", primaryCarePartyId, user.id, timestamp);
-    await upsertSetting(database, "defaultResponsiblePartyId", defaultCarePartyId, user.id, timestamp);
+    await upsertSetting(database, "primaryCarePartyId", primaryCarePartyId, userId, timestamp);
+    await upsertSetting(database, "defaultResponsiblePartyId", defaultCarePartyId, userId, timestamp);
     if (input.installationLabel) {
-      await upsertSetting(database, "setup.installationLabel", input.installationLabel, user.id, timestamp);
+      await upsertSetting(database, "setup.installationLabel", input.installationLabel, userId, timestamp);
     }
-    const completed = await recordSetupComplete(database, user, timestamp);
+    const completed = await recordSetupComplete(database, { ...user, id: userId }, timestamp);
     return {
       ...completed,
       created: {

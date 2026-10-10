@@ -197,9 +197,9 @@ export class OwnerSetupTokenStore {
         );
       }
       const timestamp = now.toISOString();
-      await upsertAuthenticatedUser(user, database, timestamp);
+      const userId = await upsertAuthenticatedUser(user, database, timestamp);
       const update = await database.updateTable("owner_setup_tokens")
-        .set({ consumed_at: timestamp, consumed_by: user.id })
+        .set({ consumed_at: timestamp, consumed_by: userId })
         .where("token_hash", "=", tokenDigest)
         .where("consumed_at", "is", null)
         .where("expires_at", ">", timestamp)
@@ -211,10 +211,10 @@ export class OwnerSetupTokenStore {
           "Der Owner-Setup-Link ist ungültig, abgelaufen oder bereits verwendet."
         );
       }
-      await setMembershipRole(user.id, "admin", user.id, database, timestamp);
-      await upsertSetting(database, "setup.ownerUserId", user.id, user.id, timestamp);
-      await recordAudit(database, user.id, "owner_setup_token_consumed", timestamp);
-      await recordAudit(database, user.id, "owner_bootstrap", timestamp);
+      await setMembershipRole(userId, "admin", userId, database, timestamp);
+      await upsertSetting(database, "setup.ownerUserId", userId, userId, timestamp);
+      await recordAudit(database, userId, "owner_setup_token_consumed", timestamp);
+      await recordAudit(database, userId, "owner_bootstrap", timestamp);
     };
     if (activeTransaction) {
       await claim(activeTransaction);

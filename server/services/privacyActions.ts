@@ -1,15 +1,19 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import type {
   PrivacyActionCategoryCode,
   PrivacyActionCategoryPreview,
   PrivacyActionKind,
+  PrivacyActionExecuteRequest,
   PrivacyActionPreviewRequest,
   PrivacyActionPreviewResponse,
+  PrivacyActionResultResponse,
   PrivacyActionSelection,
   PrivacySubjectType
 } from "../../shared/privacyActions.js";
 import type { DatabaseExecutor } from "../db/runtime.js";
+import type { PersistenceRuntime } from "../db/runtime.js";
 import { installationOwnerId } from "./memberManagement.js";
+import { detachedAuthenticationSubjectPrefix } from "./users.js";
 
 interface InventoryCategory {
   code: PrivacyActionCategoryCode;
@@ -20,12 +24,18 @@ interface InventoryCategory {
 
 export class PrivacyActionError extends Error {
   constructor(
-    public readonly code: "privacy_action_invalid" | "privacy_subject_not_found",
-    public readonly statusCode: 400 | 404
+    public readonly code:
+      | "privacy_action_invalid"
+      | "privacy_action_not_found"
+      | "privacy_action_preview_changed"
+      | "privacy_subject_not_found",
+    public readonly statusCode: 400 | 404 | 409
   ) {
     super(code);
   }
 }
+
+const externalFollowUpCodes = ["backups", "exports", "identity_provider", "logs"];
 
 const subjectTypes = new Set<PrivacySubjectType>(["user", "care_party", "child"]);
 const actionKinds = new Set<PrivacyActionKind>(["revoke", "detach", "anonymize", "delete"]);
@@ -79,6 +89,15 @@ export function parsePrivacyActionPreviewRequest(value: unknown): PrivacyActionP
   }
   actions.sort((left, right) => left.category.localeCompare(right.category) || left.action.localeCompare(right.action));
   return { subjectType: input.subjectType as PrivacySubjectType, subjectId: input.subjectId, actions };
+}
+
+export function parsePrivacyActionExecuteRequest(value: unknown): PrivacyActionExecuteRequest {
+  const request = parsePrivacyActionPreviewRequest(value);
+  const fingerprintValue = (value as Record<string, unknown>).fingerprint;
+  if (typeof fingerprintValue !== "string" || !/^[a-f0-9]{64}$/.test(fingerprintValue)) {
+    throw new PrivacyActionError("privacy_action_invalid", 400);
+  }
+  return { ...request, fingerprint: fingerprintValue };
 }
 
 function ref(id: string, ...state: Array<string | number | null>): string {
@@ -214,6 +233,26 @@ export async function previewPrivacyAction(
   for (const selection of request.actions) {
     if (!categories.some((category) => category.code === selection.category)) blockerCodes.add("unsupported_action");
   }
+  if (
+    request.subjectType === "user" &&
+    selections.get("authentication_identity") === "detach" &&
+    !blockerCodes.has("current_owner_protected")
+  ) {
+    const requiredSelections: Array<[PrivacyActionCategoryCode, PrivacyActionKind[]]> = [
+      ["access", ["revoke"]],
+      ["runtime_channels", ["revoke", "delete"]]
+    ];
+    if ((categories.find(({ code }) => code === "domain_relationships")?.references.length ?? 0) > 0) {
+      requiredSelections.push(["domain_relationships", ["delete"]]);
+    }
+    if ((categories.find(({ code }) => code === "transfer_state")?.references.length ?? 0) > 0) {
+      requiredSelections.push(["transfer_state", ["anonymize", "delete"]]);
+    }
+    for (const [category, actions] of requiredSelections) {
+      const selected = selections.get(category);
+      if (!selected || !actions.includes(selected)) blockerCodes.add("identity_detachment_requires_full_revocation");
+    }
+  }
   if (blockerCodes.size > 0) for (const category of categoryResponse) category.status = "blocked";
   const canonicalState = categories.map((category) => ({ code: category.code, references: [...category.references].sort() }));
   const result = blockerCodes.size > 0 ? "blocked" : warningCodes.size > 0 ? "warnings" : "ready";
@@ -224,7 +263,7 @@ export async function previewPrivacyAction(
     categories: categoryResponse,
     warningCodes: [...warningCodes].sort(),
     blockerCodes: [...blockerCodes].sort(),
-    externalFollowUpCodes: ["backups", "exports", "identity_provider", "logs"]
+    externalFollowUpCodes
   };
 }
 
@@ -235,4 +274,203 @@ export async function privacyActionPreviewMatches(
   database: DatabaseExecutor
 ): Promise<boolean> {
   return (await previewPrivacyAction(request, actorId, database)).fingerprint === expectedFingerprint;
+}
+
+function changed(result: { numUpdatedRows: bigint | number }): number {
+  return Number(result.numUpdatedRows);
+}
+
+function resultFromRow(row: {
+  id: string;
+  status: string;
+  subject_type: string;
+  action_codes_json: string;
+  affected_counts_json: string;
+  started_at: string;
+  completed_at: string | null;
+  error_code: string | null;
+}): PrivacyActionResultResponse {
+  const actionCodes = JSON.parse(row.action_codes_json) as unknown;
+  const affectedCounts = JSON.parse(row.affected_counts_json) as unknown;
+  return {
+    id: row.id,
+    status: row.status === "failed" ? "failed" : "completed",
+    subjectType: row.subject_type as PrivacySubjectType,
+    actionCodes: Array.isArray(actionCodes) ? actionCodes.filter((value): value is string => typeof value === "string") : [],
+    affectedCounts: affectedCounts && typeof affectedCounts === "object" && !Array.isArray(affectedCounts)
+      ? Object.fromEntries(Object.entries(affectedCounts).filter((entry): entry is [string, number] =>
+        typeof entry[1] === "number" && Number.isInteger(entry[1]) && entry[1] >= 0))
+      : {},
+    startedAt: row.started_at,
+    ...(row.completed_at ? { completedAt: row.completed_at } : {}),
+    ...(row.error_code ? { errorCode: row.error_code } : {}),
+    externalFollowUpCodes
+  };
+}
+
+async function completedResultByFingerprint(
+  fingerprintValue: string,
+  actorId: string,
+  database: DatabaseExecutor
+): Promise<PrivacyActionResultResponse | undefined> {
+  const row = await database.selectFrom("privacy_action_runs")
+    .select([
+      "id", "status", "subject_type", "action_codes_json", "affected_counts_json",
+      "started_at", "completed_at", "error_code"
+    ])
+    .where("preview_fingerprint", "=", fingerprintValue)
+    .where("actor_user_id", "=", actorId)
+    .where("status", "=", "completed")
+    .executeTakeFirst();
+  return row ? resultFromRow(row) : undefined;
+}
+
+async function applyUserAccessActions(
+  request: PrivacyActionExecuteRequest,
+  actorId: string,
+  actionId: string,
+  timestamp: string,
+  database: DatabaseExecutor
+): Promise<Record<string, number>> {
+  if (request.subjectType !== "user") throw new PrivacyActionError("privacy_action_invalid", 400);
+  const selected = new Map(request.actions.map((selection) => [selection.category, selection.action]));
+  const supported = new Set([
+    "access:revoke",
+    "authentication_identity:detach",
+    "domain_relationships:delete",
+    "runtime_channels:delete",
+    "runtime_channels:revoke",
+    "transfer_state:anonymize",
+    "transfer_state:delete"
+  ]);
+  if (request.actions.some(({ category, action }) => !supported.has(`${category}:${action}`))) {
+    throw new PrivacyActionError("privacy_action_invalid", 400);
+  }
+  const user = await database.selectFrom("app_users")
+    .select(["id", "external_subject"])
+    .where("id", "=", request.subjectId)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst();
+  if (!user) throw new PrivacyActionError("privacy_subject_not_found", 404);
+  const counts: Record<string, number> = {};
+  if (selected.get("access") === "revoke") {
+    counts.access = changed(await database.updateTable("app_memberships")
+      .set({ deleted_at: timestamp, updated_by: actorId, updated_at: timestamp })
+      .where("user_id", "=", user.id).where("deleted_at", "is", null).executeTakeFirst());
+  }
+  if (selected.get("domain_relationships") === "delete") {
+    counts.domain_relationships = changed(await database.updateTable("app_user_care_party_assignments")
+      .set({ deleted_at: timestamp, updated_by: actorId, updated_at: timestamp })
+      .where("user_id", "=", user.id).where("deleted_at", "is", null).executeTakeFirst());
+  }
+  if (selected.has("runtime_channels")) {
+    let total = 0;
+    total += changed(await database.updateTable("calendar_feed_tokens")
+      .set({ revoked_at: timestamp }).where("user_id", "=", user.id).where("revoked_at", "is", null).executeTakeFirst());
+    total += changed(await database.updateTable("push_subscriptions")
+      .set({ deleted_at: timestamp, updated_at: timestamp }).where("user_id", "=", user.id).where("deleted_at", "is", null).executeTakeFirst());
+    total += changed(await database.updateTable("native_oidc_sessions")
+      .set({ revoked_at: timestamp }).where("external_subject", "=", user.external_subject).where("revoked_at", "is", null).executeTakeFirst());
+    const requestIds = database.selectFrom("care_confirmation_requests").select("id").where("user_id", "=", user.id);
+    total += changed(await database.updateTable("care_confirmation_email_deliveries")
+      .set({ status: "failed", error_code: "subject_revoked", next_attempt_at: null, updated_at: timestamp })
+      .where("care_confirmation_request_id", "in", requestIds).where("status", "=", "pending").executeTakeFirst());
+    total += changed(await database.updateTable("care_confirmation_requests")
+      .set({ deleted_at: timestamp, updated_at: timestamp }).where("user_id", "=", user.id).where("deleted_at", "is", null).executeTakeFirst());
+    total += changed(await database.updateTable("notification_preferences")
+      .set({ deleted_at: timestamp, updated_at: timestamp }).where("user_id", "=", user.id).where("deleted_at", "is", null).executeTakeFirst());
+    total += changed(await database.updateTable("app_invitations")
+      .set({ accepted_user_id: null, revoked_at: timestamp, updated_by: actorId, updated_at: timestamp })
+      .where("accepted_user_id", "=", user.id).executeTakeFirst());
+    counts.runtime_channels = total;
+  }
+  if (selected.has("transfer_state")) {
+    counts.transfer_state = changed(await database.updateTable("data_transfer_actors")
+      .set({ mapped_user_id: null, updated_by: actorId, updated_at: timestamp })
+      .where("mapped_user_id", "=", user.id).executeTakeFirst());
+  }
+  if (selected.get("authentication_identity") === "detach") {
+    counts.authentication_identity = changed(await database.updateTable("app_users").set({
+      external_subject: `${detachedAuthenticationSubjectPrefix}${actionId}`,
+      email: null,
+      display_name: `Former workspace member ${actionId.slice(0, 8)}`,
+      role: "readonly",
+      groups_json: "[]",
+      updated_at: timestamp
+    }).where("id", "=", user.id).executeTakeFirst());
+  }
+  return counts;
+}
+
+export async function executePrivacyAction(
+  request: PrivacyActionExecuteRequest,
+  actorId: string,
+  persistence: PersistenceRuntime,
+  timestamp = new Date().toISOString()
+): Promise<PrivacyActionResultResponse> {
+  const existing = await completedResultByFingerprint(request.fingerprint, actorId, persistence.query);
+  if (existing) return existing;
+  try {
+    return await persistence.transaction(async (database) => {
+      const repeated = await completedResultByFingerprint(request.fingerprint, actorId, database);
+      if (repeated) return repeated;
+      const previewRequest: PrivacyActionPreviewRequest = {
+        subjectType: request.subjectType,
+        subjectId: request.subjectId,
+        actions: request.actions
+      };
+      const preview = await previewPrivacyAction(previewRequest, actorId, database);
+      if (preview.fingerprint !== request.fingerprint) {
+        throw new PrivacyActionError("privacy_action_preview_changed", 409);
+      }
+      if (preview.result === "blocked") throw new PrivacyActionError("privacy_action_invalid", 400);
+      const actionId = randomUUID();
+      const actionCodes = request.actions.map(({ category, action }) => `${category}:${action}`).sort();
+      await database.insertInto("privacy_action_runs").values({
+        id: actionId,
+        preview_fingerprint: request.fingerprint,
+        actor_user_id: actorId,
+        subject_type: request.subjectType,
+        action_codes_json: JSON.stringify(actionCodes),
+        affected_counts_json: "{}",
+        status: "pending",
+        error_code: null,
+        started_at: timestamp,
+        completed_at: null,
+        created_at: timestamp,
+        updated_at: timestamp
+      }).execute();
+      const affectedCounts = await applyUserAccessActions(request, actorId, actionId, timestamp, database);
+      await database.updateTable("privacy_action_runs").set({
+        affected_counts_json: JSON.stringify(affectedCounts),
+        status: "completed",
+        completed_at: timestamp,
+        updated_at: timestamp
+      }).where("id", "=", actionId).execute();
+      const result = await completedResultByFingerprint(request.fingerprint, actorId, database);
+      if (!result) throw new Error("Privacy action result was not stored.");
+      return result;
+    });
+  } catch (error) {
+    const repeated = await completedResultByFingerprint(request.fingerprint, actorId, persistence.query);
+    if (repeated) return repeated;
+    throw error;
+  }
+}
+
+export async function getPrivacyActionResult(
+  actionId: string,
+  database: DatabaseExecutor
+): Promise<PrivacyActionResultResponse> {
+  if (!boundedIdentifier(actionId)) throw new PrivacyActionError("privacy_action_invalid", 400);
+  const row = await database.selectFrom("privacy_action_runs")
+    .select([
+      "id", "status", "subject_type", "action_codes_json", "affected_counts_json",
+      "started_at", "completed_at", "error_code"
+    ])
+    .where("id", "=", actionId)
+    .where("status", "in", ["completed", "failed"])
+    .executeTakeFirst();
+  if (!row) throw new PrivacyActionError("privacy_action_not_found", 404);
+  return resultFromRow(row);
 }
