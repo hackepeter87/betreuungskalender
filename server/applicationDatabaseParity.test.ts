@@ -55,6 +55,10 @@ import {
 } from "./services/legacyMigration.js";
 import { listMembers, updateMemberRole } from "./services/memberManagement.js";
 import { createReportSnapshot } from "./services/reportSnapshots.js";
+import {
+  parsePrivacyActionPreviewRequest,
+  previewPrivacyAction
+} from "./services/privacyActions.js";
 import { completeFirstUseSetup } from "./services/setupBootstrap.js";
 import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "./services/users.js";
 
@@ -514,6 +518,40 @@ async function setTransferTargetOwner(runtime: PersistenceRuntime): Promise<void
   await insertOwnerSetting(runtime, owner.id);
 }
 
+async function privacyActionPreviewSummary(runtime: PersistenceRuntime) {
+  const owner = user("privacy-owner", "admin");
+  const target = user("privacy-target", "parent");
+  await upsertAuthenticatedUser(owner, runtime.query, timestamp);
+  await upsertAuthenticatedUser(target, runtime.query, timestamp);
+  await insertOwnerSetting(runtime, owner.id);
+  await runtime.query.insertInto("app_memberships").values({
+    id: "privacy-membership",
+    user_id: target.id,
+    role: "editor",
+    created_by: owner.id,
+    updated_by: owner.id,
+    created_at: timestamp,
+    updated_at: timestamp,
+    deleted_at: null
+  }).execute();
+  const request = parsePrivacyActionPreviewRequest({
+    subjectType: "user",
+    subjectId: target.id,
+    actions: [
+      { category: "authentication_identity", action: "detach" },
+      { category: "access", action: "revoke" }
+    ]
+  });
+  const preview = await previewPrivacyAction(request, owner.id, runtime.query);
+  return {
+    ...preview,
+    categories: preview.categories.map((category) => ({
+      ...category,
+      availableActions: [...category.availableActions].sort()
+    }))
+  };
+}
+
 async function transferBetween(source: PersistenceRuntime, target: PersistenceRuntime) {
   await prepareTransferSource(source);
   await setTransferTargetOwner(target);
@@ -968,6 +1006,24 @@ test("care-confirmation retirement remains equivalent on SQLite and PostgreSQL",
       requestStatus: "snoozed",
       retired: true
     });
+  } finally {
+    await Promise.all([sqlite.close(), postgres.close()]);
+  }
+});
+
+test("privacy action previews remain equivalent on SQLite and PostgreSQL", {
+  skip: !postgresConfigured
+}, async () => {
+  const sqlite = await sqliteRuntime();
+  const postgres = await postgresRuntime();
+  try {
+    const [sqliteResult, postgresResult] = await Promise.all([
+      privacyActionPreviewSummary(sqlite),
+      privacyActionPreviewSummary(postgres)
+    ]);
+    assert.deepEqual(postgresResult, sqliteResult);
+    assert.equal(sqliteResult.result, "ready");
+    assert.equal(sqliteResult.categories.find(({ code }) => code === "access")?.count, 1);
   } finally {
     await Promise.all([sqlite.close(), postgres.close()]);
   }

@@ -89,6 +89,7 @@ writable through this route.
 | `PUT/DELETE /api/app-data`, `POST /api/demo-data/edge-cases` | `admin:destructive` |
 | `GET /api/data-transfer/export`, `POST /api/data-transfer/preview`, `POST /api/data-transfer/dry-run`, `PUT /api/data-transfer/import` | `admin:destructive` |
 | `GET /api/data-transfer/actors`, `PUT /api/data-transfer/actors/:id/mapping`, `POST /api/data-transfer/actors/:id/invitation` | `admin:destructive` |
+| `POST /api/privacy-actions/preview` | `admin:destructive` |
 
 `admin:destructive` additionally requires the authenticated installation
 owner. Possession of an admin role or a permission-shaped client value cannot
@@ -184,6 +185,7 @@ POST /api/migration/legacy-import | admin:destructive
 POST /api/migration/legacy-preview | admin:destructive
 POST /api/migration/legacy-skip | admin:destructive
 POST /api/month-closings | reports:view
+POST /api/privacy-actions/preview | admin:destructive
 POST /api/push-subscriptions | notifications:manage-own
 POST /api/unavailable-periods | planning:manage
 PUT /api/app-data | admin:destructive
