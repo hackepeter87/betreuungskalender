@@ -52,8 +52,8 @@ export interface FieldHelp {
 export interface Child {
   id: string;
   name: string;
-  birthMonth: number;
-  birthYear: number;
+  birthMonth: number | null;
+  birthYear: number | null;
   color: string;
   createdBy: string;
   updatedBy: string;

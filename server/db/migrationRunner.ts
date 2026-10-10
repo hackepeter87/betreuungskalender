@@ -34,9 +34,15 @@ export function migrateDatabase(
 
   const files = availableMigrationVersions(directory).map((version) => `${version}.sql`);
 
-  const applyMigration = database.transaction((file: string) => {
+  const applyMigration = database.transaction((file: string, sql: string, verifyForeignKeys: boolean) => {
     const version = basename(file, ".sql");
-    database.exec(readFileSync(join(directory, file), "utf8"));
+    database.exec(sql);
+    if (verifyForeignKeys) {
+      const violations = database.pragma("foreign_key_check") as unknown[];
+      if (violations.length > 0) {
+        throw new Error(`Migration ${version} introduced foreign key violations.`);
+      }
+    }
     database.prepare(
       "INSERT INTO schema_migrations (version, applied_at) VALUES (?, ?)"
     ).run(version, new Date().toISOString());
@@ -44,6 +50,18 @@ export function migrateDatabase(
 
   for (const file of files) {
     const version = basename(file, ".sql");
-    if (!applied.has(version)) applyMigration(file);
+    if (applied.has(version)) continue;
+    const sql = readFileSync(join(directory, file), "utf8");
+    const requiresForeignKeysOff = sql.startsWith("-- migration: foreign-keys-off\n");
+    if (!requiresForeignKeysOff) {
+      applyMigration(file, sql, false);
+      continue;
+    }
+    database.pragma("foreign_keys = OFF");
+    try {
+      applyMigration(file, sql, true);
+    } finally {
+      database.pragma("foreign_keys = ON");
+    }
   }
 }

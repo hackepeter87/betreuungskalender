@@ -45,7 +45,8 @@ const expectedMigrations = [
   "032_audit_pagination_index",
   "033_oidc_browser_marker",
   "034_care_confirmation_email_deliveries",
-  "035_privacy_action_runs"
+  "035_privacy_action_runs",
+  "036_nullable_child_birth_attributes"
 ];
 
 async function withTemporaryDirectory(

@@ -70,6 +70,21 @@ export const childInputSchema = z.object({
   color: z.string().trim().min(1).max(50)
 });
 
+export const persistedChildInputSchema = z.object({
+  name: z.string().trim().min(1, "Name ist erforderlich.").max(200),
+  birthMonth: z.number().int().min(1).max(12).nullable(),
+  birthYear: z.number().int().min(1900).max(2200).nullable(),
+  color: z.string().trim().min(1).max(50)
+}).superRefine((child, context) => {
+  if ((child.birthMonth === null) !== (child.birthYear === null)) {
+    context.addIssue({
+      code: "custom",
+      path: [child.birthMonth === null ? "birthYear" : "birthMonth"],
+      message: "Geburtsmonat und Geburtsjahr müssen gemeinsam gesetzt oder entfernt sein."
+    });
+  }
+});
+
 export const carePartyInputSchema = z.object({
   name: z.string().trim().min(1, "Name ist erforderlich.").max(200),
   kind: z.enum(carePartyKinds).default("other")

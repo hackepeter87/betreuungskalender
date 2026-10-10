@@ -19,8 +19,8 @@ function isChild(value: unknown): value is Child {
     isObject(value) &&
     typeof value.id === "string" &&
     typeof value.name === "string" &&
-    typeof value.birthMonth === "number" &&
-    typeof value.birthYear === "number" &&
+    (typeof value.birthMonth === "number" || value.birthMonth === null) &&
+    (typeof value.birthYear === "number" || value.birthYear === null) &&
     typeof value.color === "string"
   );
 }

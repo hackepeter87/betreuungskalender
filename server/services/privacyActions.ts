@@ -109,7 +109,10 @@ async function userInventory(userId: string, database: DatabaseExecutor): Promis
     .select(["id", "external_subject", "updated_at", "deleted_at"])
     .where("id", "=", userId).where("deleted_at", "is", null).executeTakeFirst();
   if (!user) throw new PrivacyActionError("privacy_subject_not_found", 404);
-  const [memberships, assignments, feeds, pushes, confirmations, sessions, preferences, invitations, audit, transfers] = await Promise.all([
+  const [
+    memberships, assignments, feeds, pushes, confirmations, sessions,
+    preferences, invitations, actorAudit, profileAudit, transfers
+  ] = await Promise.all([
     database.selectFrom("app_memberships").select(["id", "updated_at", "deleted_at"]).where("user_id", "=", userId).execute(),
     database.selectFrom("app_user_care_party_assignments").select(["id", "updated_at", "deleted_at"]).where("user_id", "=", userId).execute(),
     database.selectFrom("calendar_feed_tokens").select(["id", "revoked_at", "last_used_at"]).where("user_id", "=", userId).execute(),
@@ -119,8 +122,12 @@ async function userInventory(userId: string, database: DatabaseExecutor): Promis
     database.selectFrom("notification_preferences").select(["event_type", "updated_at"]).where("user_id", "=", userId).execute(),
     database.selectFrom("app_invitations").select(["id", "updated_at", "revoked_at", "accepted_at"]).where("accepted_user_id", "=", userId).execute(),
     database.selectFrom("audit_log").select(["id", "updated_at", "deleted_at"]).where("user_email", "=", userId).execute(),
+    database.selectFrom("audit_log").select(["id", "updated_at", "deleted_at"])
+      .where("entity_id", "=", userId)
+      .where("entity_type", "in", ["app_member", "user_care_party_assignment"]).execute(),
     database.selectFrom("data_transfer_actors").select(["id", "updated_at"]).where("mapped_user_id", "=", userId).execute()
   ]);
+  const audit = [...new Map([...actorAudit, ...profileAudit].map((row) => [row.id, row])).values()];
   return [
     { code: "authentication_identity", availableActions: ["detach", "anonymize"], references: [ref(user.id, user.updated_at)] },
     { code: "access", availableActions: ["revoke"], references: memberships.map((row) => ref(row.id, row.updated_at, row.deleted_at)) },
@@ -148,13 +155,15 @@ async function childInventory(childId: string, database: DatabaseExecutor): Prom
   const profile = await database.selectFrom("children").select(["id", "updated_at"])
     .where("id", "=", childId).where("deleted_at", "is", null).executeTakeFirst();
   if (!profile) throw new PrivacyActionError("privacy_subject_not_found", 404);
-  const [entries, actualEntries, holidays, patterns, rules, unavailable] = await Promise.all([
+  const [entries, actualEntries, holidays, patterns, rules, unavailable, audit] = await Promise.all([
     database.selectFrom("care_entry_children").select(["care_entry_id", "updated_at", "deleted_at"]).where("child_id", "=", childId).execute(),
     database.selectFrom("care_entry_actual_children").select(["care_entry_id", "updated_at", "deleted_at"]).where("child_id", "=", childId).execute(),
     database.selectFrom("holiday_period_children").select(["holiday_period_id", "updated_at", "deleted_at"]).where("child_id", "=", childId).execute(),
     database.selectFrom("contact_pattern_children").select(["contact_pattern_id", "updated_at", "deleted_at"]).where("child_id", "=", childId).execute(),
     database.selectFrom("contact_rule_children").select(["contact_rule_id", "updated_at", "deleted_at"]).where("child_id", "=", childId).execute(),
-    database.selectFrom("unavailable_period_children").select(["unavailable_period_id", "updated_at", "deleted_at"]).where("child_id", "=", childId).execute()
+    database.selectFrom("unavailable_period_children").select(["unavailable_period_id", "updated_at", "deleted_at"]).where("child_id", "=", childId).execute(),
+    database.selectFrom("audit_log").select(["id", "updated_at", "deleted_at"])
+      .where("entity_type", "=", "child").where("entity_id", "=", childId).execute()
   ]);
   const relationships = [
     ...entries.map((row) => ref(`entry:${row.care_entry_id}`, row.updated_at, row.deleted_at)),
@@ -166,6 +175,10 @@ async function childInventory(childId: string, database: DatabaseExecutor): Prom
   ];
   return [
     { code: "profile", availableActions: ["anonymize", "delete"], references: [ref(profile.id, profile.updated_at)] },
+    {
+      code: "historical_attribution", availableActions: ["anonymize"],
+      references: audit.map((row) => ref(String(row.id), row.updated_at, row.deleted_at))
+    },
     { code: "domain_relationships", availableActions: ["delete"], references: relationships },
     {
       code: "domain_records", availableActions: ["delete"],
@@ -179,12 +192,14 @@ async function carePartyInventory(carePartyId: string, database: DatabaseExecuto
   const profile = await database.selectFrom("care_parties").select(["id", "updated_at"])
     .where("id", "=", carePartyId).where("deleted_at", "is", null).executeTakeFirst();
   if (!profile) throw new PrivacyActionError("privacy_subject_not_found", 404);
-  const [assignments, entries, actualEntries, rules, unavailable] = await Promise.all([
+  const [assignments, entries, actualEntries, rules, unavailable, audit] = await Promise.all([
     database.selectFrom("app_user_care_party_assignments").select(["id", "updated_at", "deleted_at"]).where("care_party_id", "=", carePartyId).execute(),
     database.selectFrom("care_entries").select(["id", "updated_at", "deleted_at"]).where("responsible_party_id", "=", carePartyId).execute(),
     database.selectFrom("care_entries").select(["id", "updated_at", "deleted_at"]).where("actual_responsible_party_id", "=", carePartyId).execute(),
     database.selectFrom("contact_rules").select(["id", "updated_at", "deleted_at"]).where("responsible_party_id", "=", carePartyId).execute(),
-    database.selectFrom("unavailable_periods").select(["id", "updated_at", "deleted_at"]).where("responsible_party_id", "=", carePartyId).execute()
+    database.selectFrom("unavailable_periods").select(["id", "updated_at", "deleted_at"]).where("responsible_party_id", "=", carePartyId).execute(),
+    database.selectFrom("audit_log").select(["id", "updated_at", "deleted_at"])
+      .where("entity_type", "=", "care_party").where("entity_id", "=", carePartyId).execute()
   ]);
   const domainRecords = [
     ...entries.map((row) => ref(`entry:${row.id}`, row.updated_at, row.deleted_at)),
@@ -194,6 +209,10 @@ async function carePartyInventory(carePartyId: string, database: DatabaseExecuto
   ];
   return [
     { code: "profile", availableActions: ["anonymize", "delete"], references: [ref(profile.id, profile.updated_at)] },
+    {
+      code: "historical_attribution", availableActions: ["anonymize"],
+      references: audit.map((row) => ref(String(row.id), row.updated_at, row.deleted_at))
+    },
     { code: "domain_relationships", availableActions: ["delete"], references: assignments.map((row) => ref(row.id, row.updated_at, row.deleted_at)) },
     { code: "domain_records", availableActions: ["delete"], references: domainRecords, requiresManualReview: domainRecords.length > 0 }
   ];
@@ -233,11 +252,8 @@ export async function previewPrivacyAction(
   for (const selection of request.actions) {
     if (!categories.some((category) => category.code === selection.category)) blockerCodes.add("unsupported_action");
   }
-  if (
-    request.subjectType === "user" &&
-    selections.get("authentication_identity") === "detach" &&
-    !blockerCodes.has("current_owner_protected")
-  ) {
+  const identityAction = selections.get("authentication_identity");
+  if (request.subjectType === "user" && identityAction && !blockerCodes.has("current_owner_protected")) {
     const requiredSelections: Array<[PrivacyActionCategoryCode, PrivacyActionKind[]]> = [
       ["access", ["revoke"]],
       ["runtime_channels", ["revoke", "delete"]]
@@ -249,9 +265,26 @@ export async function previewPrivacyAction(
       const selected = selections.get(category);
       if (!selected || !actions.includes(selected)) blockerCodes.add("identity_detachment_requires_full_revocation");
     }
-    if ((categories.find(({ code }) => code === "transfer_state")?.references.length ?? 0) > 0) {
+    if (
+      (categories.find(({ code }) => code === "historical_attribution")?.references.length ?? 0) > 0 &&
+      selections.get("historical_attribution") !== "anonymize"
+    ) {
+      blockerCodes.add("identity_anonymization_requires_history_resolution");
+    }
+    if (
+      (categories.find(({ code }) => code === "transfer_state")?.references.length ?? 0) > 0 &&
+      selections.get("transfer_state") !== "anonymize"
+    ) {
       blockerCodes.add("identity_detachment_requires_transfer_resolution");
     }
+  }
+  if (
+    request.subjectType !== "user" &&
+    selections.get("profile") === "anonymize" &&
+    (categories.find(({ code }) => code === "historical_attribution")?.references.length ?? 0) > 0 &&
+    selections.get("historical_attribution") !== "anonymize"
+  ) {
+    blockerCodes.add("profile_anonymization_requires_history_resolution");
   }
   if (blockerCodes.size > 0) for (const category of categoryResponse) category.status = "blocked";
   const canonicalState = categories.map((category) => ({ code: category.code, references: [...category.references].sort() }));
@@ -278,6 +311,28 @@ export async function privacyActionPreviewMatches(
 
 function changed(result: { numUpdatedRows: bigint | number }): number {
   return Number(result.numUpdatedRows);
+}
+
+function neutralSuffix(value: string): string {
+  return createHash("sha256").update(value, "utf8").digest("hex").slice(0, 10);
+}
+
+async function clearDirectAuditSnapshots(
+  entityTypes: string[],
+  entityId: string,
+  timestamp: string,
+  database: DatabaseExecutor
+): Promise<number> {
+  let count = 0;
+  for (const entityType of entityTypes) {
+    count += changed(await database.updateTable("audit_log").set({
+      old_value: null,
+      new_value: null,
+      metadata_json: null,
+      updated_at: timestamp
+    }).where("entity_type", "=", entityType).where("entity_id", "=", entityId).executeTakeFirst());
+  }
+  return count;
 }
 
 function resultFromRow(row: {
@@ -325,7 +380,7 @@ async function completedResultByFingerprint(
   return row ? resultFromRow(row) : undefined;
 }
 
-async function applyUserAccessActions(
+async function applyUserActions(
   request: PrivacyActionExecuteRequest,
   actorId: string,
   actionId: string,
@@ -337,9 +392,12 @@ async function applyUserAccessActions(
   const supported = new Set([
     "access:revoke",
     "authentication_identity:detach",
+    "authentication_identity:anonymize",
     "domain_relationships:delete",
+    "historical_attribution:anonymize",
     "runtime_channels:delete",
-    "runtime_channels:revoke"
+    "runtime_channels:revoke",
+    "transfer_state:anonymize"
   ]);
   if (request.actions.some(({ category, action }) => !supported.has(`${category}:${action}`))) {
     throw new PrivacyActionError("privacy_action_invalid", 400);
@@ -382,17 +440,108 @@ async function applyUserAccessActions(
       .where("accepted_user_id", "=", user.id).executeTakeFirst());
     counts.runtime_channels = total;
   }
-  if (selected.get("authentication_identity") === "detach") {
+  if (selected.get("historical_attribution") === "anonymize") {
+    counts.historical_attribution = await clearDirectAuditSnapshots(
+      ["app_member", "user_care_party_assignment"],
+      user.id,
+      timestamp,
+      database
+    );
+  }
+  if (selected.get("transfer_state") === "anonymize") {
+    const actors = await database.selectFrom("data_transfer_actors")
+      .select("id").where("mapped_user_id", "=", user.id).execute();
+    const actorIds = actors.map(({ id }) => id);
+    let total = 0;
+    if (actorIds.length > 0) {
+      total += changed(await database.updateTable("app_invitations").set({
+        email_hint: null,
+        data_transfer_actor_id: null,
+        revoked_at: timestamp,
+        updated_by: actorId,
+        updated_at: timestamp
+      }).where("data_transfer_actor_id", "in", actorIds).executeTakeFirst());
+      total += Number((await database.deleteFrom("data_transfer_actor_care_parties")
+        .where("actor_id", "in", actorIds).executeTakeFirst()).numDeletedRows);
+      for (const { id } of actors) {
+        total += changed(await database.updateTable("data_transfer_actors").set({
+          source_ref: `anonymized:${neutralSuffix(id)}`,
+          display_name: `Anonymized historical actor ${neutralSuffix(id)}`,
+          email_hint: null,
+          suggested_role: null,
+          mapped_user_id: null,
+          invitation_id: null,
+          updated_by: actorId,
+          updated_at: timestamp
+        }).where("id", "=", id).executeTakeFirst());
+      }
+    }
+    counts.transfer_state = total;
+  }
+  const identityAction = selected.get("authentication_identity");
+  if (identityAction === "detach" || identityAction === "anonymize") {
+    const alreadyDetached = user.external_subject.startsWith(detachedAuthenticationSubjectPrefix);
     counts.authentication_identity = changed(await database.updateTable("app_users").set({
-      external_subject: `${detachedAuthenticationSubjectPrefix}${actionId}`,
+      external_subject: alreadyDetached
+        ? user.external_subject
+        : `${detachedAuthenticationSubjectPrefix}${neutralSuffix(user.id)}`,
       email: null,
-      display_name: `Former workspace member ${actionId.slice(0, 8)}`,
+      display_name: identityAction === "anonymize"
+        ? `Anonymized workspace member ${neutralSuffix(user.id)}`
+        : `Former workspace member ${actionId.slice(0, 8)}`,
       role: "readonly",
       groups_json: "[]",
       updated_at: timestamp
     }).where("id", "=", user.id).executeTakeFirst());
   }
   return counts;
+}
+
+async function applyProfileAnonymization(
+  request: PrivacyActionExecuteRequest,
+  actorId: string,
+  timestamp: string,
+  database: DatabaseExecutor
+): Promise<Record<string, number>> {
+  const selected = new Map(request.actions.map((selection) => [selection.category, selection.action]));
+  const supported = new Set(["profile:anonymize", "historical_attribution:anonymize"]);
+  if (request.actions.some(({ category, action }) => !supported.has(`${category}:${action}`))) {
+    throw new PrivacyActionError("privacy_action_invalid", 400);
+  }
+  const counts: Record<string, number> = {};
+  if (request.subjectType === "child") {
+    if (selected.get("profile") === "anonymize") {
+      counts.profile = changed(await database.updateTable("children").set({
+        name: `Anonymized child ${neutralSuffix(request.subjectId)}`,
+        birth_month: null,
+        birth_year: null,
+        updated_by: actorId,
+        updated_at: timestamp
+      }).where("id", "=", request.subjectId).where("deleted_at", "is", null).executeTakeFirst());
+    }
+    if (selected.get("historical_attribution") === "anonymize") {
+      counts.historical_attribution = await clearDirectAuditSnapshots(
+        ["child"], request.subjectId, timestamp, database
+      );
+    }
+    return counts;
+  }
+  if (request.subjectType === "care_party") {
+    if (selected.get("profile") === "anonymize") {
+      counts.profile = changed(await database.updateTable("care_parties").set({
+        name: `Anonymized care party ${neutralSuffix(request.subjectId)}`,
+        updated_by: actorId,
+        updated_at: timestamp
+      }).where("id", "=", request.subjectId).where("deleted_at", "is", null).executeTakeFirst());
+    }
+    if (selected.get("historical_attribution") === "anonymize") {
+      counts.historical_attribution = await clearDirectAuditSnapshots(
+        ["care_party"], request.subjectId, timestamp, database
+      );
+    }
+    return counts;
+  }
+  throw new PrivacyActionError("privacy_action_invalid", 400);
 }
 
 export async function executePrivacyAction(
@@ -433,7 +582,9 @@ export async function executePrivacyAction(
         created_at: timestamp,
         updated_at: timestamp
       }).execute();
-      const affectedCounts = await applyUserAccessActions(request, actorId, actionId, timestamp, database);
+      const affectedCounts = request.subjectType === "user"
+        ? await applyUserActions(request, actorId, actionId, timestamp, database)
+        : await applyProfileAnonymization(request, actorId, timestamp, database);
       await database.updateTable("privacy_action_runs").set({
         affected_counts_json: JSON.stringify(affectedCounts),
         status: "completed",

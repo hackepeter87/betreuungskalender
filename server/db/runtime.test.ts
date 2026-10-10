@@ -1,15 +1,16 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import test from "node:test";
+import Database from "better-sqlite3";
 import {
   classifyDatabaseError,
   createPersistenceRuntime,
   createSqlitePersistenceRuntime
 } from "./runtime.js";
 import { runPersistenceMigrations } from "./migrate.js";
-import { availableMigrationVersions } from "./migrationRunner.js";
+import { availableMigrationVersions, migrateDatabase } from "./migrationRunner.js";
 import { databaseTableNames } from "./schema.js";
 
 const migrationsDirectory = resolve(process.cwd(), "server/migrations");
@@ -89,6 +90,39 @@ test("SQLite runtime owns migrations, readiness, transactions, and close", async
     await assert.rejects(runtime.transaction(async () => undefined), {
       code: "database_runtime_closed"
     });
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("foreign-key-off SQLite migrations roll back violations and restore enforcement", () => {
+  const root = mkdtempSync(join(tmpdir(), "betreuungskalender-migration-safety-"));
+  const database = new Database(":memory:");
+  database.pragma("foreign_keys = ON");
+  try {
+    writeFileSync(join(root, "001_base.sql"), `
+      CREATE TABLE parent (id TEXT PRIMARY KEY);
+      CREATE TABLE child (id TEXT PRIMARY KEY, parent_id TEXT REFERENCES parent(id));
+      INSERT INTO parent (id) VALUES ('parent-1');
+      INSERT INTO child (id, parent_id) VALUES ('child-1', 'parent-1');
+    `);
+    writeFileSync(join(root, "002_invalid_rebuild.sql"), `-- migration: foreign-keys-off
+      CREATE TABLE parent_new (id TEXT PRIMARY KEY);
+      DROP TABLE parent;
+      ALTER TABLE parent_new RENAME TO parent;
+    `);
+
+    assert.throws(
+      () => migrateDatabase(database, root),
+      /introduced foreign key violations/
+    );
+    assert.equal(database.pragma("foreign_keys", { simple: true }), 1);
+    assert.deepEqual(database.pragma("foreign_key_check"), []);
+    assert.deepEqual(database.prepare("SELECT id FROM parent").all(), [{ id: "parent-1" }]);
+    assert.equal(database.prepare(
+      "SELECT 1 FROM schema_migrations WHERE version = '002_invalid_rebuild'"
+    ).get(), undefined);
+  } finally {
+    database.close();
     rmSync(root, { recursive: true, force: true });
   }
 });

@@ -182,8 +182,8 @@ interface CarePartiesTable extends DefaultActorColumns {
 interface ChildrenTable extends SoftDeleteColumns, DefaultActorColumns {
   id: string;
   name: string;
-  birth_month: number;
-  birth_year: number;
+  birth_month: number | null;
+  birth_year: number | null;
   color: string;
 }
 

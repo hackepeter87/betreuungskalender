@@ -307,6 +307,13 @@ result record, API error, or normal log output. A later invitation for the same
 external identity creates a new internal user without inheriting historical
 access.
 
+Approved anonymization clears the selected profile attributes and directly
+linked before/after audit snapshots, and uses stable neutral labels for retained
+application and transfer references. It does not inspect notes, locations,
+evidence references, imported calendar text, or other free text. Such records
+remain an explicit operator review item rather than being changed by name
+matching or another heuristic.
+
 Trusted-proxy first-use setup requires the configured admin group while no
 owner exists. Parent, viewer, and missing-role fallback identities cannot
 establish the owner. Once ownership is established, an unfinished first-use

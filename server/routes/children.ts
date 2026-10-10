@@ -24,8 +24,8 @@ const summaryLimit = {
 interface ChildRow {
   id: string;
   name: string;
-  birth_month: number;
-  birth_year: number;
+  birth_month: number | null;
+  birth_year: number | null;
   color: string;
   created_by: string;
   updated_by: string;

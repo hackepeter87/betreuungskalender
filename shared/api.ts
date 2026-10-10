@@ -113,8 +113,8 @@ export type ApiCarePartyKind = (typeof carePartyKinds)[number];
 export interface ApiChild {
   id: string;
   name: string;
-  birthMonth: number;
-  birthYear: number;
+  birthMonth: number | null;
+  birthYear: number | null;
   color: string;
   createdBy: string;
   updatedBy: string;
