@@ -85,6 +85,54 @@ system cannot perform it safely. The operator policy should instead define
 access restriction, generation expiry, restore reconciliation, and the actual
 maximum period until all controlled backup generations expire.
 
+## Backup and restore reconciliation
+
+An approved action changes the live database only. It does not rewrite an
+existing SQLite backup, PostgreSQL dump, storage snapshot, point-in-time
+recovery archive, or copy held outside the application. Treat those generations
+as restricted recovery material and expire them as whole generations under the
+documented operator policy.
+
+Keep a separate, access-controlled request record containing only the minimum
+information needed to repeat the approved outcome after a restore: the request
+reference, affected subject, approved action categories, completion time, and
+reviewer. Do not copy notes, schedules, evidence, authentication values, or
+export contents into that record.
+
+Whenever a database generation created before the approved action is restored:
+
+1. Keep the restored installation unavailable to ordinary users and external
+   feeds.
+2. Verify the restored database and application version using the normal
+   backend-specific procedure.
+3. Compare the controlled request record with privacy actions present in the
+   restored database.
+4. Run a fresh owner preview for every approved action that is absent or no
+   longer reflected in the restored data. Recheck shared records, preservation
+   duties, and the current decision before execution.
+5. Apply only the still-approved actions, verify their aggregate results, and
+   complete any external-copy follow-up.
+6. Re-enable access only after the reconciliation has been reviewed and
+   recorded.
+
+This procedure applies equally to SQLite and PostgreSQL. It does not authorize
+editing backup files or database dumps in place. If a restored generation
+cannot be reconciled safely, keep it isolated and restore another verified
+generation or obtain a new decision.
+
+## Downloaded and transferred copies
+
+PDF reports, CSV exports, portable transfer packages, and files downloaded by
+users are separate controlled copies. The application cannot discover, recall,
+or selectively edit them after download. The operator must identify locations
+and recipients within its control, delete copies when their approved purpose
+ends, and document any copy that must be retained with restricted access.
+
+Do not reuse a portable transfer package created before an approved privacy
+action without a new review. Prefer a fresh export from the reconciled source.
+If an old package must be imported for recovery, keep the target isolated and
+apply the same post-restore reconciliation before allowing access.
+
 ## Controller and processor checklist
 
 Self-hosting alone does not determine the legal role. Record the actual

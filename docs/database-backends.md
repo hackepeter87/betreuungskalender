@@ -79,6 +79,13 @@ A minimum procedure is:
 6. Record the test time and retain the last verified pre-update generation
    according to the operator's retention policy.
 
+When a restored generation predates an approved privacy action, keep the
+restored database isolated and repeat the approved outcome through a fresh
+preview before reopening access. Follow the shared
+[backup and restore reconciliation](operator-data-lifecycle.md#backup-and-restore-reconciliation)
+procedure; do not edit logical dumps, snapshots, or point-in-time archives in
+place.
+
 For example, a custom-format dump can be created without placing a password in
 the command line:
 
