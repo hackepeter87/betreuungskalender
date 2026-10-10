@@ -139,10 +139,12 @@ audit history is complete up to 50,000 matching entries. Larger selections are
 rejected instead of returning an incomplete report.
 
 Audit history remains in the same operational database and can contain
-historical identifiers or values needed for traceability. The current
-application does not selectively anonymize those records. Retention and any
-approved erasure treatment therefore require an operator decision rather than
-an ordinary record-delete action.
+historical identifiers or values needed for traceability. An owner-approved
+privacy action can clear before/after values and metadata for the directly
+selected profile while retaining a minimized event. It does not search other
+audit payloads or free text heuristically. Retention and any wider erasure
+treatment therefore require an operator decision rather than an ordinary
+record-delete action.
 
 Domain views resolve display names separately for at most 200 actor IDs already
 referenced by the loaded domain records. That response contains only the stable
@@ -519,6 +521,14 @@ existing foreign keys. If the former external identity later accepts a new
 invitation, it receives a new internal user ID and no historical membership or
 assignment is inherited.
 
+Approved anonymization replaces application-user, child, care-party, and
+historical-actor display attributes with stable neutral labels. Child birth
+month and year become `NULL` together. Direct audit snapshots for the selected
+profile are cleared while the event, actor reference, action, field name, and
+timestamps remain available. The workflow does not search or rewrite free
+text heuristically; records that require such review remain an operator
+follow-up.
+
 ## Migrations
 
 SQLite SQL files in `server/migrations/` and PostgreSQL SQL files in
@@ -552,3 +562,10 @@ index used by stable cursor pagination. It does not alter or remove audit data.
 Migration `035_privacy_action_runs` adds the minimal idempotency and result
 record for owner-approved privacy actions. It contains no copied subject
 attributes or legal reasoning.
+
+Migration `036_nullable_child_birth_attributes` makes child birth month and
+year nullable as a pair so an approved anonymization can remove those
+attributes without inventing a replacement date. The SQLite migration rebuilds
+only the `children` table under the migration runner's explicit
+foreign-key-off mode and verifies all foreign keys before committing. The
+PostgreSQL migration drops the two `NOT NULL` constraints.

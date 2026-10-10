@@ -55,6 +55,51 @@ test("portable transfer dry run validates through the import core without target
   }
 });
 
+test("portable transfer preserves anonymized child profiles without reintroducing removed birth attributes", async () => {
+  const source = await database();
+  const target = await database();
+  try {
+    await source.transaction((database) => importData(createEdgeCaseDemoData(), "fixture-actor", database));
+    const original = source.sqliteDatabase.prepare(
+      "SELECT id, name FROM children ORDER BY id LIMIT 1"
+    ).get() as { id: string; name: string };
+    source.sqliteDatabase.prepare(`
+      UPDATE children
+      SET name = ?, birth_month = NULL, birth_year = NULL, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run("Anonymized child transferfixture", original.id);
+    target.sqliteDatabase.prepare(`
+      INSERT INTO settings (key, value_json, created_by, updated_by, created_at, updated_at)
+      VALUES ('setup.ownerUserId', '"target-owner"', 'target-owner', 'target-owner', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+    `).run();
+
+    const transfer = await createPortableTransfer(source);
+    const serialized = JSON.stringify(transfer);
+    assert.equal(serialized.includes(original.name), false);
+    const dryRun = await dryRunPortableTransfer(transfer, target);
+    assert.equal(dryRun.result, "ready");
+    await importPortableTransfer({
+      package: transfer,
+      fingerprint: dryRun.fingerprint,
+      dryRunReceipt: dryRun.dryRunReceipt!,
+      confirmWarnings: false,
+      actorId: "target-owner"
+    }, target);
+    const imported = target.sqliteDatabase.prepare(`
+      SELECT name, birth_month AS birthMonth, birth_year AS birthYear
+      FROM children WHERE id = ?
+    `).get(original.id);
+    assert.deepEqual(imported, {
+      name: "Anonymized child transferfixture",
+      birthMonth: null,
+      birthYear: null
+    });
+  } finally {
+    await source.close();
+    await target.close();
+  }
+});
+
 test("portable transfer rejects excessive nesting and oversized text before import", async () => {
   const target = await database();
   let nested: unknown = "value";

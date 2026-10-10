@@ -1098,7 +1098,9 @@ export function SettingsPage() {
               </span>
               <span>
                 <strong>{child.name}</strong>
-                <small>{copy(locale, "settings", "born", { month: String(child.birthMonth).padStart(2, "0"), year: child.birthYear })}</small>
+                {child.birthMonth !== null && child.birthYear !== null
+                  ? <small>{copy(locale, "settings", "born", { month: String(child.birthMonth).padStart(2, "0"), year: child.birthYear })}</small>
+                  : null}
                 <small>
                   {copy(locale, "common", "updatedBy", {
                     actor: actorDisplayName(actorLabels, child.updatedBy),

@@ -12,7 +12,7 @@ import {
   appDataImportSchema,
   carePartyInputSchema,
   careEntryInputSchema,
-  childInputSchema,
+  persistedChildInputSchema,
   contactRuleInputSchema,
   contactPatternInputSchema,
   holidayInputSchema,
@@ -137,7 +137,7 @@ export async function insertChild(
   userEmail: string,
   database: DatabaseExecutor
 ): Promise<void> {
-  const input = childInputSchema.parse({
+  const input = persistedChildInputSchema.parse({
     name: record.name,
     birthMonth: record.birthMonth,
     birthYear: record.birthYear,

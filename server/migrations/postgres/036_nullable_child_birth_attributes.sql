@@ -1,0 +1,2 @@
+ALTER TABLE children ALTER COLUMN birth_month DROP NOT NULL;
+ALTER TABLE children ALTER COLUMN birth_year DROP NOT NULL;

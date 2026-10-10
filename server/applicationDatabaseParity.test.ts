@@ -623,6 +623,129 @@ async function privacyActionExecutionSummary(runtime: PersistenceRuntime) {
   };
 }
 
+async function privacyAnonymizationSummary(runtime: PersistenceRuntime) {
+  const owner = user("privacy-anonymization-owner", "admin");
+  const target = user("privacy-anonymization-target", "parent");
+  await upsertAuthenticatedUser(owner, runtime.query, timestamp);
+  await upsertAuthenticatedUser(target, runtime.query, timestamp);
+  await insertOwnerSetting(runtime, owner.id);
+  await runtime.query.insertInto("app_memberships").values({
+    id: "privacy-anonymization-membership",
+    user_id: target.id,
+    role: "editor",
+    created_by: owner.id,
+    updated_by: owner.id,
+    created_at: timestamp,
+    updated_at: timestamp,
+    deleted_at: null
+  }).execute();
+  await runtime.query.insertInto("data_transfer_runs").values({
+    id: "privacy-anonymization-transfer",
+    package_fingerprint: "privacy-anonymization-fingerprint",
+    format_version: 1,
+    source_version: "1.0.0",
+    result: "imported",
+    counts_json: "{}",
+    warnings_json: "[]",
+    created_by: owner.id,
+    created_at: timestamp,
+    imported_at: timestamp
+  }).execute();
+  await runtime.query.insertInto("data_transfer_actors").values({
+    id: "privacy-anonymization-actor",
+    transfer_run_id: "privacy-anonymization-transfer",
+    source_ref: "private-source-ref",
+    display_name: "Private historical actor",
+    email_hint: "private@example.invalid",
+    suggested_role: "editor",
+    mapped_user_id: target.id,
+    invitation_id: null,
+    created_by: owner.id,
+    updated_by: owner.id,
+    created_at: timestamp,
+    updated_at: timestamp
+  }).execute();
+  await runtime.query.insertInto("audit_log").values({
+    timestamp,
+    user_email: owner.id,
+    entity_type: "app_member",
+    entity_id: target.id,
+    action: "updated",
+    field_name: "display_name",
+    old_value: '"Private historical actor"',
+    new_value: '"Private target"',
+    metadata_json: '{"email":"private@example.invalid"}',
+    created_at: timestamp,
+    updated_at: timestamp,
+    deleted_at: null
+  }).execute();
+  await runtime.query.insertInto("children").values({
+    id: "privacy-anonymization-child",
+    name: "Private child",
+    birth_month: 3,
+    birth_year: 2018,
+    color: "#0d9488",
+    created_by: owner.id,
+    updated_by: owner.id,
+    created_at: timestamp,
+    updated_at: timestamp,
+    deleted_at: null
+  }).execute();
+
+  const userRequest = parsePrivacyActionPreviewRequest({
+    subjectType: "user",
+    subjectId: target.id,
+    actions: [
+      { category: "access", action: "revoke" },
+      { category: "authentication_identity", action: "anonymize" },
+      { category: "historical_attribution", action: "anonymize" },
+      { category: "runtime_channels", action: "revoke" },
+      { category: "transfer_state", action: "anonymize" }
+    ]
+  });
+  const userPreview = await previewPrivacyAction(userRequest, owner.id, runtime.query);
+  await executePrivacyAction(
+    { ...userRequest, fingerprint: userPreview.fingerprint }, owner.id, runtime, timestamp
+  );
+  const childRequest = parsePrivacyActionPreviewRequest({
+    subjectType: "child",
+    subjectId: "privacy-anonymization-child",
+    actions: [{ category: "profile", action: "anonymize" }]
+  });
+  const childPreview = await previewPrivacyAction(childRequest, owner.id, runtime.query);
+  await executePrivacyAction(
+    { ...childRequest, fingerprint: childPreview.fingerprint }, owner.id, runtime, timestamp
+  );
+
+  const [anonymizedUser, actor, child, audit] = await Promise.all([
+    runtime.query.selectFrom("app_users").select(["display_name", "email", "external_subject"])
+      .where("id", "=", target.id).executeTakeFirstOrThrow(),
+    runtime.query.selectFrom("data_transfer_actors")
+      .select(["source_ref", "display_name", "email_hint", "mapped_user_id"])
+      .where("id", "=", "privacy-anonymization-actor").executeTakeFirstOrThrow(),
+    runtime.query.selectFrom("children").select(["name", "birth_month", "birth_year"])
+      .where("id", "=", "privacy-anonymization-child").executeTakeFirstOrThrow(),
+    runtime.query.selectFrom("audit_log").select(["old_value", "new_value", "metadata_json"])
+      .where("entity_type", "=", "app_member").where("entity_id", "=", target.id)
+      .executeTakeFirstOrThrow()
+  ]);
+  return {
+    user: {
+      displayName: anonymizedUser.display_name,
+      email: anonymizedUser.email,
+      detached: anonymizedUser.external_subject.startsWith("urn:betreuungskalender:detached:")
+    },
+    actor: {
+      sourceRef: actor.source_ref,
+      displayName: actor.display_name,
+      emailHint: actor.email_hint,
+      mappedUserId: actor.mapped_user_id
+    },
+    child,
+    audit
+  };
+}
+
 async function transferBetween(source: PersistenceRuntime, target: PersistenceRuntime) {
   await prepareTransferSource(source);
   await setTransferTargetOwner(target);
@@ -1119,6 +1242,33 @@ test("privacy access revocation remains equivalent on SQLite and PostgreSQL", {
     });
     assert.equal(sqliteResult.activeMemberships, 0);
     assert.equal(sqliteResult.activeFeeds, 0);
+  } finally {
+    await Promise.all([sqlite.close(), postgres.close()]);
+  }
+});
+
+test("privacy anonymization remains equivalent on SQLite and PostgreSQL", {
+  skip: !postgresConfigured
+}, async () => {
+  const sqlite = await sqliteRuntime();
+  const postgres = await postgresRuntime();
+  try {
+    const [sqliteResult, postgresResult] = await Promise.all([
+      privacyAnonymizationSummary(sqlite),
+      privacyAnonymizationSummary(postgres)
+    ]);
+    assert.deepEqual(postgresResult, sqliteResult);
+    assert.equal(sqliteResult.user.email, null);
+    assert.equal(sqliteResult.user.detached, true);
+    assert.equal(sqliteResult.actor.emailHint, null);
+    assert.equal(sqliteResult.actor.mappedUserId, null);
+    assert.equal(sqliteResult.child.birth_month, null);
+    assert.equal(sqliteResult.child.birth_year, null);
+    assert.deepEqual(sqliteResult.audit, {
+      old_value: null,
+      new_value: null,
+      metadata_json: null
+    });
   } finally {
     await Promise.all([sqlite.close(), postgres.close()]);
   }

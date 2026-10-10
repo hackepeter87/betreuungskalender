@@ -131,7 +131,7 @@ function completeRevocationRequest() {
   });
 }
 
-test("identity detachment blocks transfer anonymization until historical attributes are supported", async () => {
+test("identity detachment blocks while a mapped historical actor has no selected resolution", async () => {
   const runtime = await database();
   try {
     insertRevocationFixture(runtime);
@@ -158,8 +158,7 @@ test("identity detachment blocks transfer anonymization until historical attribu
         { category: "access", action: "revoke" },
         { category: "authentication_identity", action: "detach" },
         { category: "domain_relationships", action: "delete" },
-        { category: "runtime_channels", action: "revoke" },
-        { category: "transfer_state", action: "anonymize" }
+        { category: "runtime_channels", action: "revoke" }
       ]
     });
     const preview = await previewPrivacyAction(request, "owner-user", runtime.query);
@@ -476,6 +475,258 @@ test("privacy preview classifies child relationships for manual review", async (
     assert.equal(preview.result, "warnings");
     assert.equal(preview.categories.find(({ code }) => code === "domain_records")?.status, "manual_review");
     assert.deepEqual(preview.warningCodes, ["shared_records_require_review"]);
+  } finally {
+    await runtime.close();
+  }
+});
+
+test("privacy execution anonymizes a revoked user and mapped historical actor without retaining identifiers", async () => {
+  const runtime = await database();
+  try {
+    insertRevocationFixture(runtime);
+    runtime.sqliteDatabase.exec(`
+      INSERT INTO data_transfer_runs (
+        id, package_fingerprint, format_version, source_version, result,
+        counts_json, created_by, created_at
+      ) VALUES (
+        'transfer-anonymize', 'fixture-fingerprint-anonymize', 1, '1.0.0',
+        'imported', '{}', 'owner-user', CURRENT_TIMESTAMP
+      );
+      INSERT INTO data_transfer_actors (
+        id, transfer_run_id, source_ref, display_name, email_hint,
+        suggested_role, mapped_user_id, created_by, updated_by, created_at, updated_at
+      ) VALUES (
+        'transfer-actor-anonymize', 'transfer-anonymize', 'private-source-ref',
+        'Historical private name', 'historical@example.invalid', 'editor',
+        'target-user', 'owner-user', 'owner-user', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+      );
+      INSERT INTO audit_log (
+        timestamp, user_email, entity_type, entity_id, action, field_name,
+        old_value, new_value, metadata_json, created_at, updated_at, deleted_at
+      ) VALUES (
+        CURRENT_TIMESTAMP, 'owner-user', 'app_member', 'target-user', 'updated',
+        'display_name', '"Historical private name"', '"Fictional target"',
+        '{"email":"historical@example.invalid"}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
+      );
+    `);
+    const request = parsePrivacyActionPreviewRequest({
+      subjectType: "user",
+      subjectId: "target-user",
+      actions: [
+        { category: "access", action: "revoke" },
+        { category: "authentication_identity", action: "anonymize" },
+        { category: "domain_relationships", action: "delete" },
+        { category: "historical_attribution", action: "anonymize" },
+        { category: "runtime_channels", action: "revoke" },
+        { category: "transfer_state", action: "anonymize" }
+      ]
+    });
+    const preview = await previewPrivacyAction(request, "owner-user", runtime.query);
+    assert.notEqual(preview.result, "blocked");
+    assert.equal(preview.categories.find(({ code }) => code === "historical_attribution")?.count, 1);
+    const result = await executePrivacyAction(
+      { ...request, fingerprint: preview.fingerprint },
+      "owner-user",
+      runtime,
+      "2026-10-10T13:00:00.000Z"
+    );
+    assert.equal(result.status, "completed");
+
+    const user = runtime.sqliteDatabase.prepare(`
+      SELECT external_subject AS externalSubject, email, display_name AS displayName,
+             groups_json AS groupsJson, role
+      FROM app_users WHERE id = 'target-user'
+    `).get() as Record<string, unknown>;
+    assert.match(String(user.externalSubject), /^urn:betreuungskalender:detached:/);
+    assert.equal(user.email, null);
+    assert.match(String(user.displayName), /^Anonymized workspace member /);
+    assert.equal(user.groupsJson, "[]");
+    assert.equal(user.role, "readonly");
+
+    const historicalActor = runtime.sqliteDatabase.prepare(`
+      SELECT source_ref AS sourceRef, display_name AS displayName, email_hint AS emailHint,
+             suggested_role AS suggestedRole, mapped_user_id AS mappedUserId,
+             invitation_id AS invitationId
+      FROM data_transfer_actors WHERE id = 'transfer-actor-anonymize'
+    `).get() as Record<string, unknown>;
+    assert.match(String(historicalActor.sourceRef), /^anonymized:/);
+    assert.match(String(historicalActor.displayName), /^Anonymized historical actor /);
+    assert.equal(historicalActor.emailHint, null);
+    assert.equal(historicalActor.suggestedRole, null);
+    assert.equal(historicalActor.mappedUserId, null);
+    assert.equal(historicalActor.invitationId, null);
+
+    const audit = runtime.sqliteDatabase.prepare(`
+      SELECT old_value AS oldValue, new_value AS newValue, metadata_json AS metadataJson
+      FROM audit_log WHERE entity_type = 'app_member' AND entity_id = 'target-user'
+    `).get() as Record<string, unknown>;
+    assert.deepEqual(audit, { oldValue: null, newValue: null, metadataJson: null });
+    const serialized = JSON.stringify({ user, historicalActor, audit });
+    for (const prohibited of [
+      "target-subject", "target@example.invalid", "Fictional target",
+      "Historical private name", "historical@example.invalid", "private-source-ref"
+    ]) assert.equal(serialized.includes(prohibited), false);
+
+    const repeated = await executePrivacyAction(
+      { ...request, fingerprint: preview.fingerprint },
+      "owner-user",
+      runtime,
+      "2026-10-10T13:05:00.000Z"
+    );
+    assert.equal(repeated.id, result.id);
+  } finally {
+    await runtime.close();
+  }
+});
+
+test("privacy execution anonymizes child attributes and direct audit snapshots while preserving relationships", async () => {
+  const runtime = await database();
+  try {
+    insertOwner(runtime);
+    runtime.sqliteDatabase.exec(`
+      INSERT INTO children (
+        id, name, birth_month, birth_year, color, created_by, updated_by,
+        created_at, updated_at, deleted_at
+      ) VALUES (
+        'child-anonymize', 'Private child name', 4, 2018, '#123456',
+        'owner-user', 'owner-user', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
+      );
+      INSERT INTO care_entries (
+        id, start_datetime, end_datetime, status, care_scope, duration_minutes,
+        created_by, updated_by, created_at, updated_at, deleted_at
+      ) VALUES (
+        'entry-child-anonymize', '2026-01-01T10:00:00.000Z', '2026-01-01T12:00:00.000Z',
+        'completed', 'full_day', 120, 'owner-user', 'owner-user',
+        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
+      );
+      INSERT INTO care_entry_children (
+        care_entry_id, child_id, created_at, updated_at, deleted_at
+      ) VALUES (
+        'entry-child-anonymize', 'child-anonymize', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
+      );
+      INSERT INTO audit_log (
+        timestamp, user_email, entity_type, entity_id, action, field_name,
+        old_value, new_value, metadata_json, created_at, updated_at, deleted_at
+      ) VALUES (
+        CURRENT_TIMESTAMP, 'owner-user', 'child', 'child-anonymize', 'updated',
+        'name', '"Private child name"', '"Other private child name"',
+        '{"birthMonth":4,"birthYear":2018}', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
+      );
+    `);
+    const request = parsePrivacyActionPreviewRequest({
+      subjectType: "child",
+      subjectId: "child-anonymize",
+      actions: [
+        { category: "profile", action: "anonymize" },
+        { category: "historical_attribution", action: "anonymize" }
+      ]
+    });
+    const preview = await previewPrivacyAction(request, "owner-user", runtime.query);
+    assert.notEqual(preview.result, "blocked");
+    await executePrivacyAction(
+      { ...request, fingerprint: preview.fingerprint },
+      "owner-user",
+      runtime,
+      "2026-10-10T13:10:00.000Z"
+    );
+    const child = runtime.sqliteDatabase.prepare(`
+      SELECT name, birth_month AS birthMonth, birth_year AS birthYear
+      FROM children WHERE id = 'child-anonymize'
+    `).get() as Record<string, unknown>;
+    assert.match(String(child.name), /^Anonymized child /);
+    assert.equal(child.birthMonth, null);
+    assert.equal(child.birthYear, null);
+    assert.equal(Number((runtime.sqliteDatabase.prepare(`
+      SELECT COUNT(*) AS count FROM care_entry_children
+      WHERE child_id = 'child-anonymize' AND deleted_at IS NULL
+    `).get() as { count: number }).count), 1);
+    const audit = runtime.sqliteDatabase.prepare(`
+      SELECT old_value AS oldValue, new_value AS newValue, metadata_json AS metadataJson
+      FROM audit_log WHERE entity_type = 'child' AND entity_id = 'child-anonymize'
+    `).get();
+    assert.deepEqual(audit, { oldValue: null, newValue: null, metadataJson: null });
+  } finally {
+    await runtime.close();
+  }
+});
+
+test("privacy preview blocks profile anonymization that would retain direct identifying audit snapshots", async () => {
+  const runtime = await database();
+  try {
+    insertOwner(runtime);
+    runtime.sqliteDatabase.exec(`
+      INSERT INTO children (
+        id, name, birth_month, birth_year, color, created_by, updated_by,
+        created_at, updated_at, deleted_at
+      ) VALUES (
+        'child-history-block', 'Private child history', 5, 2017, '#123456',
+        'owner-user', 'owner-user', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
+      );
+      INSERT INTO audit_log (
+        timestamp, user_email, entity_type, entity_id, action, old_value,
+        created_at, updated_at, deleted_at
+      ) VALUES (
+        CURRENT_TIMESTAMP, 'owner-user', 'child', 'child-history-block', 'updated',
+        '"Private child history"', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
+      );
+    `);
+    const preview = await previewPrivacyAction(parsePrivacyActionPreviewRequest({
+      subjectType: "child",
+      subjectId: "child-history-block",
+      actions: [{ category: "profile", action: "anonymize" }]
+    }), "owner-user", runtime.query);
+    assert.equal(preview.result, "blocked");
+    assert.deepEqual(preview.blockerCodes, ["profile_anonymization_requires_history_resolution"]);
+  } finally {
+    await runtime.close();
+  }
+});
+
+test("privacy execution anonymizes a care-party profile and direct audit snapshots", async () => {
+  const runtime = await database();
+  try {
+    insertOwner(runtime);
+    runtime.sqliteDatabase.exec(`
+      INSERT INTO care_parties (
+        id, name, kind, created_by, updated_by, created_at, updated_at, deleted_at
+      ) VALUES (
+        'party-anonymize', 'Private caregiver name', 'other', 'owner-user',
+        'owner-user', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
+      );
+      INSERT INTO audit_log (
+        timestamp, user_email, entity_type, entity_id, action, field_name,
+        old_value, new_value, metadata_json, created_at, updated_at, deleted_at
+      ) VALUES (
+        CURRENT_TIMESTAMP, 'owner-user', 'care_party', 'party-anonymize', 'updated',
+        'name', '"Private caregiver name"', '"Another caregiver name"', NULL,
+        CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL
+      );
+    `);
+    const request = parsePrivacyActionPreviewRequest({
+      subjectType: "care_party",
+      subjectId: "party-anonymize",
+      actions: [
+        { category: "profile", action: "anonymize" },
+        { category: "historical_attribution", action: "anonymize" }
+      ]
+    });
+    const preview = await previewPrivacyAction(request, "owner-user", runtime.query);
+    assert.notEqual(preview.result, "blocked");
+    await executePrivacyAction(
+      { ...request, fingerprint: preview.fingerprint },
+      "owner-user",
+      runtime,
+      "2026-10-10T13:15:00.000Z"
+    );
+    const party = runtime.sqliteDatabase.prepare(
+      "SELECT name FROM care_parties WHERE id = 'party-anonymize'"
+    ).get() as { name: string };
+    assert.match(party.name, /^Anonymized care party /);
+    const audit = runtime.sqliteDatabase.prepare(`
+      SELECT old_value AS oldValue, new_value AS newValue, metadata_json AS metadataJson
+      FROM audit_log WHERE entity_type = 'care_party' AND entity_id = 'party-anonymize'
+    `).get();
+    assert.deepEqual(audit, { oldValue: null, newValue: null, metadataJson: null });
   } finally {
     await runtime.close();
   }

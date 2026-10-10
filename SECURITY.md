@@ -35,7 +35,10 @@ sessions; restoring membership requires a new login.
 Owner-approved privacy actions require a fresh no-store preview and execute in
 one transaction. Their technical result records contain stable action codes
 and aggregate counts, not previous authentication subjects or personal
-content.
+content. Approved profile anonymization uses collision-resistant neutral labels,
+removes child birth attributes, clears directly linked identifying audit
+snapshots, and neutralizes mapped transfer actors. It never searches or
+rewrites free text heuristically.
 
 When shared care-party assignments are enabled, non-admin planning and reduced
 schedule access is limited to the user's assigned care parties.

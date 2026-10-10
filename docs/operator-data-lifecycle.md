@@ -6,13 +6,15 @@ bases or retention periods. Complete the matrix for the actual installation
 and have it reviewed before publishing legal information or processing an
 erasure request.
 
-The application currently supports soft deletion for many domain records. A
-normal delete action hides a record from active views but can retain the record,
-its references, and audit history in the selected operational database. The
-application does not currently provide a selective GDPR erasure or
-anonymization workflow. That future design is tracked in
-[RFC #487](https://github.com/hackepeter87/betreuungskalender/issues/487). Do
-not describe the current delete buttons as a complete erasure mechanism.
+The application supports soft deletion for many domain records. A normal delete
+action hides a record from active views but can retain the record, its
+references, and audit history in the selected operational database. The
+separate owner-approved privacy workflow can preview direct relationships,
+revoke access, detach authentication identities, and anonymize explicitly
+selected profile and historical-actor attributes. It does not make the legal
+decision, search free text heuristically, or modify external copies. Do not
+describe ordinary delete buttons or a single privacy action as a complete
+erasure mechanism.
 
 ## Retention decision matrix
 
@@ -65,9 +67,10 @@ obligations and the establishment, exercise, or defence of legal claims.
 4. Review the purpose, legal basis, applicable Article 17 grounds and
    exceptions, preservation duties, other affected persons, and whether
    deletion or effective anonymization is appropriate for each category.
-5. Document the approved action. Until #487 is implemented, use a reviewed
-   operator procedure; ordinary application soft delete is not sufficient by
-   itself where actual erasure or anonymization is required.
+5. Document the approved action outside the application, then use the fresh
+   technical preview for the selected categories. Ordinary application soft
+   delete is not sufficient by itself where actual erasure or anonymization is
+   required.
 6. Revoke active access, sessions, invitations, feeds, and push subscriptions
    when their purpose has ended. Handle identity-provider records separately.
 7. Apply the approved action to controlled live and exported copies. For
