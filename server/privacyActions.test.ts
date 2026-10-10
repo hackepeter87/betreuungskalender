@@ -146,6 +146,33 @@ function completeRevocationRequest() {
   });
 }
 
+test("identity detachment blocks transfer anonymization until historical attributes are supported", async () => {
+  const runtime = await database();
+  try {
+    insertRevocationFixture(runtime);
+    const request = parsePrivacyActionPreviewRequest({
+      subjectType: "user",
+      subjectId: "target-user",
+      actions: [
+        { category: "access", action: "revoke" },
+        { category: "authentication_identity", action: "detach" },
+        { category: "domain_relationships", action: "delete" },
+        { category: "runtime_channels", action: "revoke" },
+        { category: "transfer_state", action: "anonymize" }
+      ]
+    });
+    const preview = await previewPrivacyAction(request, "owner-user", runtime.query);
+    assert.equal(preview.result, "blocked");
+    assert.equal(preview.blockerCodes.includes("identity_detachment_requires_full_revocation"), true);
+    await assert.rejects(
+      executePrivacyAction({ ...request, fingerprint: preview.fingerprint }, "owner-user", runtime),
+      (error: unknown) => error instanceof PrivacyActionError && error.code === "privacy_action_invalid"
+    );
+  } finally {
+    await runtime.close();
+  }
+});
+
 test("privacy preview inventories aggregate user categories without writes or identity leakage", async () => {
   const runtime = await database();
   try {

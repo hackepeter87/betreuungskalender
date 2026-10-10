@@ -246,7 +246,7 @@ export async function previewPrivacyAction(
       requiredSelections.push(["domain_relationships", ["delete"]]);
     }
     if ((categories.find(({ code }) => code === "transfer_state")?.references.length ?? 0) > 0) {
-      requiredSelections.push(["transfer_state", ["anonymize", "delete"]]);
+      requiredSelections.push(["transfer_state", ["delete"]]);
     }
     for (const [category, actions] of requiredSelections) {
       const selected = selections.get(category);
@@ -340,7 +340,6 @@ async function applyUserAccessActions(
     "domain_relationships:delete",
     "runtime_channels:delete",
     "runtime_channels:revoke",
-    "transfer_state:anonymize",
     "transfer_state:delete"
   ]);
   if (request.actions.some(({ category, action }) => !supported.has(`${category}:${action}`))) {
