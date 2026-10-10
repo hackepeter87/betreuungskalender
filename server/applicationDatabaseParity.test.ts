@@ -540,7 +540,8 @@ async function privacyActionPreviewSummary(runtime: PersistenceRuntime) {
     subjectId: target.id,
     actions: [
       { category: "authentication_identity", action: "detach" },
-      { category: "access", action: "revoke" }
+      { category: "access", action: "revoke" },
+      { category: "runtime_channels", action: "revoke" }
     ]
   });
   const preview = await previewPrivacyAction(request, owner.id, runtime.query);
