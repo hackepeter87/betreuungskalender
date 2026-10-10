@@ -32,6 +32,7 @@ async function collectApiRoutes(plugins: readonly ProtectedApplicationRoutePlugi
 test("every protected API route declares a known workspace permission", async () => {
   const pluginNames = protectedApplicationRoutePlugins.map(({ name }) => name);
   assert(pluginNames.includes("dataTransferRoutes"));
+  assert(pluginNames.includes("privacyActionRoutes"));
   assert(pluginNames.includes("reportRoutes"));
 
   const routes = await collectApiRoutes(protectedApplicationRoutePlugins);

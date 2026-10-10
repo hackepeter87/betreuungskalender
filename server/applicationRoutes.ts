@@ -19,6 +19,7 @@ import { instanceReadinessRoutes } from "./routes/instanceReadiness.js";
 import { invitationRoutes } from "./routes/invitations.js";
 import { migrationRoutes } from "./routes/migration.js";
 import { monthClosingRoutes } from "./routes/monthClosings.js";
+import { privacyActionRoutes } from "./routes/privacyActions.js";
 import { reportRoutes } from "./routes/reports.js";
 import { settingsRoutes } from "./routes/settings.js";
 import { unavailablePeriodRoutes } from "./routes/unavailablePeriods.js";
@@ -43,6 +44,7 @@ export const protectedApplicationRoutePlugins: readonly ProtectedApplicationRout
   { name: "externalCalendarRoutes", plugin: externalCalendarRoutes },
   { name: "calendarFeedRoutes", plugin: calendarFeedRoutes },
   { name: "monthClosingRoutes", plugin: monthClosingRoutes },
+  { name: "privacyActionRoutes", plugin: privacyActionRoutes },
   { name: "migrationRoutes", plugin: migrationRoutes },
   { name: "auditRoutes", plugin: auditRoutes },
   { name: "appUserRoutes", plugin: appUserRoutes },
