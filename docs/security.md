@@ -314,6 +314,14 @@ evidence references, imported calendar text, or other free text. Such records
 remain an explicit operator review item rather than being changed by name
 matching or another heuristic.
 
+Approved domain erasure uses the same fingerprinted transaction. It physically
+deletes only the selected profile, relationship, or complete record graph after
+rechecking dependencies. Records shared with unaffected subjects are retained;
+ambiguous free text and care-party records linked to child data block automatic
+execution. Foreign-key failures, stale previews, and consistency failures roll
+back the complete action. The result exposes only stable action codes and
+aggregate counts.
+
 Trusted-proxy first-use setup requires the configured admin group while no
 owner exists. Parent, viewer, and missing-role fallback identities cannot
 establish the owner. Once ownership is established, an unfinished first-use

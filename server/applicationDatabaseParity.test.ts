@@ -746,6 +746,128 @@ async function privacyAnonymizationSummary(runtime: PersistenceRuntime) {
   };
 }
 
+async function privacyDomainErasureSummary(runtime: PersistenceRuntime) {
+  const owner = user("privacy-erasure-owner", "admin");
+  await upsertAuthenticatedUser(owner, runtime.query, timestamp);
+  await insertOwnerSetting(runtime, owner.id);
+  await runtime.query.insertInto("children").values([
+    {
+      id: "privacy-erasure-child",
+      name: "Fictional selected child",
+      birth_month: 3,
+      birth_year: 2018,
+      color: "#0d9488",
+      created_by: owner.id,
+      updated_by: owner.id,
+      created_at: timestamp,
+      updated_at: timestamp,
+      deleted_at: null
+    },
+    {
+      id: "privacy-erasure-retained-child",
+      name: "Fictional retained child",
+      birth_month: 4,
+      birth_year: 2019,
+      color: "#2563eb",
+      created_by: owner.id,
+      updated_by: owner.id,
+      created_at: timestamp,
+      updated_at: timestamp,
+      deleted_at: null
+    }
+  ]).execute();
+  await runtime.query.insertInto("care_entries").values({
+    id: "privacy-erasure-shared-entry",
+    start_datetime: "2026-03-01T10:00:00.000Z",
+    end_datetime: "2026-03-01T12:00:00.000Z",
+    status: "completed",
+    care_scope: "full_day",
+    cancellation_reason: null,
+    confirmation_note: null,
+    confirmed_at: null,
+    confirmed_by: null,
+    overnight: 0,
+    school_handover: 0,
+    holiday: 0,
+    weekend: 0,
+    additional_care: 0,
+    location: null,
+    handover_from: null,
+    handover_to: null,
+    notes: null,
+    evidence_reference: null,
+    has_evidence: 0,
+    duration_minutes: 120,
+    is_contact_time: 0,
+    created_by: owner.id,
+    updated_by: owner.id,
+    created_at: timestamp,
+    updated_at: timestamp,
+    deleted_at: null,
+    generated_by_pattern_id: null,
+    rule_occurrence_date: null,
+    custom_location: null,
+    contact_rule_id: null,
+    contact_rule_segment_id: null,
+    contact_rule_occurrence_key: null,
+    responsible_party_id: null,
+    contact_rule_sync_state: null,
+    actual_start_datetime: null,
+    actual_end_datetime: null,
+    actual_responsible_party_id: null,
+    planned_start_datetime: null,
+    planned_end_datetime: null,
+    deviation_type: null,
+    deviation_note: null,
+    confirmation_suppressed: 0
+  }).execute();
+  await runtime.query.insertInto("care_entry_children").values([
+    {
+      care_entry_id: "privacy-erasure-shared-entry",
+      child_id: "privacy-erasure-child",
+      created_at: timestamp,
+      updated_at: timestamp,
+      deleted_at: null
+    },
+    {
+      care_entry_id: "privacy-erasure-shared-entry",
+      child_id: "privacy-erasure-retained-child",
+      created_at: timestamp,
+      updated_at: timestamp,
+      deleted_at: null
+    }
+  ]).execute();
+  const request = parsePrivacyActionPreviewRequest({
+    subjectType: "child",
+    subjectId: "privacy-erasure-child",
+    actions: [
+      { category: "domain_records", action: "delete" },
+      { category: "domain_relationships", action: "delete" },
+      { category: "profile", action: "delete" }
+    ]
+  });
+  const preview = await previewPrivacyAction(request, owner.id, runtime.query);
+  const result = await executePrivacyAction(
+    { ...request, fingerprint: preview.fingerprint }, owner.id, runtime, timestamp
+  );
+  return {
+    result: {
+      status: result.status,
+      actionCodes: result.actionCodes,
+      affectedCounts: result.affectedCounts
+    },
+    selectedChildren: Number((await runtime.query.selectFrom("children")
+      .select(({ fn }) => fn.count<number>("id").as("count"))
+      .where("id", "=", "privacy-erasure-child").executeTakeFirstOrThrow()).count),
+    retainedEntries: Number((await runtime.query.selectFrom("care_entries")
+      .select(({ fn }) => fn.count<number>("id").as("count"))
+      .where("id", "=", "privacy-erasure-shared-entry").executeTakeFirstOrThrow()).count),
+    retainedLinks: (await runtime.query.selectFrom("care_entry_children").select("child_id")
+      .where("care_entry_id", "=", "privacy-erasure-shared-entry")
+      .orderBy("child_id").execute()).map((row) => row.child_id)
+  };
+}
+
 async function transferBetween(source: PersistenceRuntime, target: PersistenceRuntime) {
   await prepareTransferSource(source);
   await setTransferTargetOwner(target);
@@ -1269,6 +1391,25 @@ test("privacy anonymization remains equivalent on SQLite and PostgreSQL", {
       new_value: null,
       metadata_json: null
     });
+  } finally {
+    await Promise.all([sqlite.close(), postgres.close()]);
+  }
+});
+
+test("privacy domain erasure remains equivalent on SQLite and PostgreSQL", {
+  skip: !postgresConfigured
+}, async () => {
+  const sqlite = await sqliteRuntime();
+  const postgres = await postgresRuntime();
+  try {
+    const [sqliteResult, postgresResult] = await Promise.all([
+      privacyDomainErasureSummary(sqlite),
+      privacyDomainErasureSummary(postgres)
+    ]);
+    assert.deepEqual(postgresResult, sqliteResult);
+    assert.equal(sqliteResult.selectedChildren, 0);
+    assert.equal(sqliteResult.retainedEntries, 1);
+    assert.deepEqual(sqliteResult.retainedLinks, ["privacy-erasure-retained-child"]);
   } finally {
     await Promise.all([sqlite.close(), postgres.close()]);
   }
