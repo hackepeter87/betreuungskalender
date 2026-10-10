@@ -72,6 +72,12 @@ import type {
   ExternalCalendarSource
 } from "../types";
 import { isUnknownRecord, omitUndefinedValues } from "../../shared/objects";
+import type {
+  PrivacyActionExecuteRequest,
+  PrivacyActionPreviewRequest,
+  PrivacyActionPreviewResponse,
+  PrivacyActionResultResponse
+} from "../../shared/privacyActions";
 
 export const SERVER_UNAVAILABLE_MESSAGE =
   "Die Serververbindung ist nicht verfügbar. Änderungen können derzeit nicht gespeichert werden.";
@@ -935,6 +941,18 @@ export const api = {
       `/api/user-care-party-assignments/${encodeURIComponent(userId)}`,
       { method: "PUT", body: JSON.stringify({ carePartyIds }) }
     );
+  },
+  previewPrivacyAction(input: PrivacyActionPreviewRequest) {
+    return request<PrivacyActionPreviewResponse>("/api/privacy-actions/preview", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
+  },
+  executePrivacyAction(input: PrivacyActionExecuteRequest) {
+    return request<PrivacyActionResultResponse>("/api/privacy-actions/execute", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
   },
   exportPortableTransfer() {
     return request<unknown>("/api/data-transfer/export", undefined, 30_000);
