@@ -2,8 +2,9 @@
 
 ## Status
 
-Proposed for `v1.34.0`. This decision must be reviewed and accepted before any
-privacy-action API, database migration, or user interface is implemented.
+Accepted for `v1.34.0` on 2026-10-10. Privacy-action APIs, database migrations,
+and user interfaces must follow this responsibility boundary and category
+matrix.
 
 ## Context
 
