@@ -6,6 +6,28 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.33.2] - 2026-10-11
+
+### Changed
+
+- Update the supported PostgreSQL client, mail transport, and static asset
+  delivery dependencies within their existing major versions.
+- Refresh compatible development tools used for linting, local orchestration,
+  stylesheet processing, TypeScript execution, and frontend builds.
+
+### Security and reliability
+
+- Restore the dependency security gate so high-severity production dependency
+  findings continue to fail the automated quality checks.
+- Revalidate database, mail, static delivery, build, and release behavior on
+  the supported Node.js 24 baseline.
+
+### Compatibility
+
+- No product behavior, API, database schema, authentication, or configuration
+  change is required.
+- Existing SQLite and PostgreSQL installations remain compatible.
+
 ## [1.33.1] - 2026-10-01
 
 ### Security and reliability
