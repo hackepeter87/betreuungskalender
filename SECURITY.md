@@ -40,6 +40,10 @@ removes child birth attributes, clears directly linked identifying audit
 snapshots, and neutralizes mapped transfer actors. It never searches or
 rewrites free text heuristically.
 
+Approved erasure actions physically delete only the selected live-database
+records and relationships after dependency and shared-record checks. Ambiguous
+shared content is blocked, and any failure rolls back the full transaction.
+
 When shared care-party assignments are enabled, non-admin planning and reduced
 schedule access is limited to the user's assigned care parties.
 

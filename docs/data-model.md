@@ -529,6 +529,19 @@ timestamps remain available. The workflow does not search or rewrite free
 text heuristically; records that require such review remain an operator
 follow-up.
 
+Approved erasure actions physically remove the selected live-database profile,
+relationships, or complete domain records instead of using the ordinary soft
+delete mechanism. Dependent confirmation deliveries, trips, costs, and child
+junction rows are removed in the same transaction. A shared record is retained
+for unaffected children and only the selected relationship is removed when the
+remaining structured record is unambiguous. Shared records containing free
+text, and care-party records that also belong to a child or another care party,
+block automatic execution and require a separately reviewed resolution.
+Care-party relationship removal also clears direct assignments, transfer
+mappings, party-scoped feed tokens, and matching default-setting references.
+Changed monthly closures are marked stale. Direct audit events remain only
+after their selected identifying snapshots have been cleared.
+
 ## Migrations
 
 SQLite SQL files in `server/migrations/` and PostgreSQL SQL files in
