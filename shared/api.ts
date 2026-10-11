@@ -39,6 +39,69 @@ export type ApiWorkspacePermission =
   | "members:manage"
   | "exports:run"
   | "admin:destructive";
+export type ApiMemberCareDataScope =
+  | { type: "all" }
+  | { type: "selected"; carePartyIds: string[] };
+export type ApiMemberAccessCapabilityCategory = "view" | "edit" | "administer";
+export type ApiMemberAccessCapabilityCode =
+  | "care_entries_view"
+  | "care_entries_create"
+  | "care_entries_edit"
+  | "care_entries_delete"
+  | "care_entries_confirm"
+  | "children_basic_view"
+  | "children_sensitive_view"
+  | "children_manage"
+  | "care_notes_view"
+  | "planning_view"
+  | "planning_manage"
+  | "reports_view"
+  | "settings_view"
+  | "settings_manage"
+  | "own_notifications_manage"
+  | "personal_feeds_manage"
+  | "audit_view"
+  | "instance_inspect"
+  | "members_manage"
+  | "exports_run"
+  | "destructive_operations";
+export type ApiMemberAccessGlobalDataCode =
+  | "child_identity"
+  | "sensitive_child_details"
+  | "holiday_periods"
+  | "external_calendar_overlays"
+  | "application_settings"
+  | "audit_history"
+  | "instance_information";
+
+export interface ApiMemberAccessCapabilityGroups {
+  view: ApiMemberAccessCapabilityCode[];
+  edit: ApiMemberAccessCapabilityCode[];
+  administer: ApiMemberAccessCapabilityCode[];
+  denied: ApiMemberAccessCapabilityCode[];
+}
+
+export interface ApiMemberAccessState {
+  role: ApiWorkspaceRole;
+  careDataScope: ApiMemberCareDataScope;
+  capabilities: ApiMemberAccessCapabilityGroups;
+  globalData: ApiMemberAccessGlobalDataCode[];
+}
+
+export interface ApiMemberAccessPreview {
+  target: { type: "member"; userId: string } | { type: "invitation" };
+  roleModelVersion: string;
+  before?: ApiMemberAccessState;
+  after: ApiMemberAccessState;
+  careParties: Array<{ id: string; name: string }>;
+  changes: {
+    gainedCapabilities: ApiMemberAccessCapabilityCode[];
+    lostCapabilities: ApiMemberAccessCapabilityCode[];
+    gainedCarePartyIds: string[];
+    lostCarePartyIds: string[];
+  };
+  fingerprint: string;
+}
 export type ApiCareDeviationType =
   | "cancelled"
   | "partial"
@@ -401,6 +464,7 @@ export interface ApiInvitation {
   acceptedUserId?: string;
   acceptedAt?: string;
   revokedAt?: string;
+  careDataScope: ApiMemberCareDataScope;
 }
 
 export interface ApiCreatedInvitation {
@@ -505,6 +569,12 @@ export interface ApiMember {
   membershipRole?: ApiWorkspaceRole;
   email?: string;
   lastSeenAt?: string;
+  careDataScope?: ApiMemberCareDataScope;
+}
+
+export interface ApiMemberAccessUpdateResult {
+  member: ApiMember;
+  access: ApiMemberAccessState;
 }
 
 export interface ApiPushSubscriptionInput {

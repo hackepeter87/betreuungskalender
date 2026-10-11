@@ -66,6 +66,10 @@ access control, and incident response.
   access. Owner and Admin use `all`; other roles are restricted independently
   of assignments belonging to other members. After an owner is established,
   a missing or revoked membership grants no workspace access.
+- Owner-managed membership and invitation changes require a server-derived
+  preview fingerprint before role and care-data scope are applied together.
+  Stale previews fail without partial writes, and access narrowing revokes
+  affected personal delivery state in the same transaction.
 - Personal calendar feeds use bearer URLs only for the `.ics` endpoint. They do
   not authenticate general API routes and exclude notes, evidence references,
   trips, costs, audit metadata, deleted entries, and cancelled entries.

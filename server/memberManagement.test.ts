@@ -4,16 +4,28 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import Database from "better-sqlite3";
-import { permissionsForRole, type AuthRole, type RequestUser } from "./auth.js";
+import Fastify from "fastify";
+import {
+  permissionsForRole,
+  workspacePermissionValues,
+  type AuthRole,
+  type RequestUser
+} from "./auth.js";
 import { migrateDatabase } from "./db/migrationRunner.js";
 import { createSqlitePersistenceRuntime, type PersistenceRuntime } from "./db/runtime.js";
+import { appUserRoutes } from "./routes/appUsers.js";
 import {
   canAdministerMembers,
   listMembers,
   MemberManagementError,
+  previewInvitationAccess,
+  previewMemberAccess,
   removeMember,
+  updateMemberAccess,
   updateMemberRole
 } from "./services/memberManagement.js";
+import { memberAccessState } from "./services/memberAccessModel.js";
+import { membershipCareDataScope } from "./services/careDataScopes.js";
 import { membershipRoleForUser } from "./services/memberships.js";
 import { OidcSessionStore } from "./services/oidcSessions.js";
 import { listAppUsers } from "./services/users.js";
@@ -71,6 +83,305 @@ function setOwner(database: Database.Database, ownerId: string): void {
     VALUES ('setup.ownerUserId', ?, ?, ?, ?, ?)
   `).run(JSON.stringify(ownerId), ownerId, ownerId, timestamp, timestamp);
 }
+
+function insertCareParty(database: Database.Database, id: string, name: string): void {
+  database.prepare(`
+    INSERT INTO care_parties (
+      id, name, kind, created_by, updated_by, created_at, updated_at
+    ) VALUES (?, ?, 'other', 'fixture', 'fixture', ?, ?)
+  `).run(id, name, timestamp, timestamp);
+}
+
+function insertDeliveryState(
+  database: Database.Database,
+  userId: string,
+  suffix: string
+): void {
+  database.prepare(`
+    INSERT INTO calendar_feed_tokens (
+      id, user_id, token_hash, created_at, scope_type
+    ) VALUES (?, ?, ?, ?, 'all')
+  `).run(`feed-${suffix}`, userId, `feed-hash-${suffix}`, timestamp);
+  database.prepare(`
+    INSERT INTO care_entries (
+      id, start_datetime, end_datetime, status, care_scope,
+      duration_minutes, created_by, updated_by, created_at, updated_at
+    ) VALUES (?, '2026-07-04T16:00:00.000Z', '2026-07-04T18:00:00.000Z',
+      'planned', 'hourly', 120, 'fixture', 'fixture', ?, ?)
+  `).run(`entry-${suffix}`, timestamp, timestamp);
+  database.prepare(`
+    INSERT INTO care_confirmation_requests (
+      id, care_entry_id, user_id, due_at, status, reminder_count, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, 'open', 0, ?, ?)
+  `).run(`confirmation-${suffix}`, `entry-${suffix}`, userId, timestamp, timestamp, timestamp);
+}
+
+test("member access capability groups cover every permission exactly once", () => {
+  for (const role of ["admin", "editor", "scheduler", "viewer"] as const) {
+    const state = memberAccessState(role, { type: "selected", carePartyIds: [] });
+    const codes = [
+      ...state.capabilities.view,
+      ...state.capabilities.edit,
+      ...state.capabilities.administer,
+      ...state.capabilities.denied
+    ];
+    assert.equal(codes.length, workspacePermissionValues.length);
+    assert.equal(new Set(codes).size, workspacePermissionValues.length);
+  }
+});
+
+test("member access preview explains role and care-party changes before atomic apply", async () => {
+  await withDatabase(async (database, persistence) => {
+    const owner = user("user_owner", "admin");
+    const target = user("user_target", "parent");
+    insertUser(database, owner);
+    insertUser(database, target);
+    setOwner(database, owner.id);
+    insertCareParty(database, "party-a", "Care party A");
+    insertCareParty(database, "party-b", "Care party B");
+    await updateMemberRole(owner, target.id, "editor", persistence, timestamp);
+    insertDeliveryState(database, target.id, "access-change");
+
+    const preview = await previewMemberAccess(
+      owner,
+      target.id,
+      "scheduler",
+      { type: "selected", carePartyIds: ["party-a"] },
+      persistence.query
+    );
+
+    assert.equal(preview.target.type, "member");
+    assert.equal(preview.before?.role, "editor");
+    assert.equal(preview.after.role, "scheduler");
+    assert.deepEqual(preview.after.careDataScope, {
+      type: "selected",
+      carePartyIds: ["party-a"]
+    });
+    assert(preview.changes.lostCapabilities.includes("care_entries_delete"));
+    assert.deepEqual(preview.changes.lostCarePartyIds, ["party-b"]);
+
+    const result = await updateMemberAccess(
+      owner,
+      target.id,
+      "scheduler",
+      { type: "selected", carePartyIds: ["party-a"] },
+      preview.fingerprint,
+      persistence,
+      "2026-07-05T12:00:00.000Z"
+    );
+
+    assert.equal(result.member.membershipRole, "scheduler");
+    assert.deepEqual(await membershipCareDataScope(target.id, persistence.query), {
+      type: "selected",
+      carePartyIds: ["party-a"]
+    });
+    assert.deepEqual(database.prepare(`
+      SELECT revoked_at AS revokedAt FROM calendar_feed_tokens WHERE id = 'feed-access-change'
+    `).get(), { revokedAt: "2026-07-05T12:00:00.000Z" });
+    assert.deepEqual(database.prepare(`
+      SELECT deleted_at AS deletedAt
+      FROM care_confirmation_requests WHERE id = 'confirmation-access-change'
+    `).get(), { deletedAt: "2026-07-05T12:00:00.000Z" });
+  });
+});
+
+test("member access updates reject stale membership and care-party previews without writes", async () => {
+  await withDatabase(async (database, persistence) => {
+    const owner = user("user_owner", "admin");
+    const target = user("user_target", "parent");
+    insertUser(database, owner);
+    insertUser(database, target);
+    setOwner(database, owner.id);
+    insertCareParty(database, "party-a", "Care party A");
+    await updateMemberRole(owner, target.id, "editor", persistence, timestamp);
+
+    const staleMembershipPreview = await previewMemberAccess(
+      owner,
+      target.id,
+      "viewer",
+      { type: "selected", carePartyIds: [] },
+      persistence.query
+    );
+    await updateMemberRole(
+      owner,
+      target.id,
+      "scheduler",
+      persistence,
+      "2026-07-05T11:00:00.000Z"
+    );
+    await assert.rejects(
+      updateMemberAccess(
+        owner,
+        target.id,
+        "viewer",
+        { type: "selected", carePartyIds: [] },
+        staleMembershipPreview.fingerprint,
+        persistence
+      ),
+      (error) => error instanceof MemberManagementError &&
+        error.code === "member_access_preview_changed" && error.statusCode === 409
+    );
+    assert.equal(await membershipRoleForUser(target.id, persistence.query), "scheduler");
+
+    const stalePartyPreview = await previewMemberAccess(
+      owner,
+      target.id,
+      "viewer",
+      { type: "selected", carePartyIds: ["party-a"] },
+      persistence.query
+    );
+    database.prepare("UPDATE care_parties SET updated_at = ? WHERE id = 'party-a'")
+      .run("2026-07-05T11:30:00.000Z");
+    await assert.rejects(
+      updateMemberAccess(
+        owner,
+        target.id,
+        "viewer",
+        { type: "selected", carePartyIds: ["party-a"] },
+        stalePartyPreview.fingerprint,
+        persistence
+      ),
+      (error) => error instanceof MemberManagementError &&
+        error.code === "member_access_preview_changed"
+    );
+    assert.equal(await membershipRoleForUser(target.id, persistence.query), "scheduler");
+  });
+});
+
+test("member access changes roll back membership scope and delivery cleanup after audit failure", async () => {
+  await withDatabase(async (database, persistence) => {
+    const owner = user("user_owner", "admin");
+    const target = user("user_target", "parent");
+    insertUser(database, owner);
+    insertUser(database, target);
+    setOwner(database, owner.id);
+    insertCareParty(database, "party-a", "Care party A");
+    await updateMemberRole(owner, target.id, "editor", persistence, timestamp);
+    insertDeliveryState(database, target.id, "rollback");
+    const preview = await previewMemberAccess(
+      owner,
+      target.id,
+      "viewer",
+      { type: "selected", carePartyIds: ["party-a"] },
+      persistence.query
+    );
+    database.exec(`
+      CREATE TRIGGER reject_member_access_audit
+      BEFORE INSERT ON audit_log
+      WHEN NEW.entity_type = 'app_member' AND NEW.field_name = 'membershipAccess'
+      BEGIN
+        SELECT RAISE(ABORT, 'forced access audit failure');
+      END
+    `);
+
+    await assert.rejects(updateMemberAccess(
+      owner,
+      target.id,
+      "viewer",
+      { type: "selected", carePartyIds: ["party-a"] },
+      preview.fingerprint,
+      persistence,
+      "2026-07-05T12:00:00.000Z"
+    ), /forced access audit failure/);
+
+    assert.equal(await membershipRoleForUser(target.id, persistence.query), "editor");
+    assert.deepEqual(await membershipCareDataScope(target.id, persistence.query), { type: "all" });
+    assert.deepEqual(database.prepare(`
+      SELECT revoked_at AS revokedAt FROM calendar_feed_tokens WHERE id = 'feed-rollback'
+    `).get(), { revokedAt: null });
+    assert.deepEqual(database.prepare(`
+      SELECT deleted_at AS deletedAt
+      FROM care_confirmation_requests WHERE id = 'confirmation-rollback'
+    `).get(), { deletedAt: null });
+  });
+});
+
+test("invitation previews normalize admin scope and preserve an empty selected scope", async () => {
+  await withDatabase(async (database, persistence) => {
+    const owner = user("user_owner", "admin");
+    insertUser(database, owner);
+    setOwner(database, owner.id);
+    insertCareParty(database, "party-a", "Care party A");
+
+    const selected = await previewInvitationAccess(
+      owner,
+      "viewer",
+      { type: "selected", carePartyIds: [] },
+      persistence.query
+    );
+    assert.deepEqual(selected.after.careDataScope, { type: "selected", carePartyIds: [] });
+    assert.deepEqual(selected.changes.gainedCarePartyIds, []);
+
+    const admin = await previewInvitationAccess(
+      owner,
+      "admin",
+      { type: "selected", carePartyIds: [] },
+      persistence.query
+    );
+    assert.deepEqual(admin.after.careDataScope, { type: "all" });
+    assert.deepEqual(admin.changes.gainedCarePartyIds, ["party-a"]);
+  });
+});
+
+test("member access routes are non-cacheable and reject stale previews with a stable error", async () => {
+  await withDatabase(async (database, persistence) => {
+    const owner = user("user_owner", "admin");
+    const target = user("user_target", "parent");
+    insertUser(database, owner);
+    insertUser(database, target);
+    setOwner(database, owner.id);
+    await updateMemberRole(owner, target.id, "editor", persistence, timestamp);
+    const app = Fastify({ logger: false });
+    app.decorate("persistence", persistence);
+    app.addHook("onRequest", async (request) => {
+      request.user = owner;
+      request.userEmail = owner.id;
+    });
+    await appUserRoutes(app);
+
+    const previewResponse = await app.inject({
+      method: "POST",
+      url: `/api/members/${target.id}/access-preview`,
+      payload: {
+        role: "viewer",
+        careDataScope: { type: "selected", carePartyIds: [] }
+      }
+    });
+    assert.equal(previewResponse.statusCode, 200);
+    assert.equal(previewResponse.headers["cache-control"], "no-store");
+    const preview = previewResponse.json<{ fingerprint: string }>();
+
+    await updateMemberRole(
+      owner,
+      target.id,
+      "scheduler",
+      persistence,
+      "2026-07-05T11:00:00.000Z"
+    );
+    const staleResponse = await app.inject({
+      method: "PUT",
+      url: `/api/members/${target.id}/access`,
+      payload: {
+        role: "viewer",
+        careDataScope: { type: "selected", carePartyIds: [] },
+        previewFingerprint: preview.fingerprint
+      }
+    });
+    assert.equal(staleResponse.statusCode, 409);
+    assert.equal(staleResponse.headers["cache-control"], "no-store");
+    assert.equal(staleResponse.json().error, "member_access_preview_changed");
+
+    const legacyResponse = await app.inject({
+      method: "PUT",
+      url: `/api/members/${target.id}/role`,
+      payload: { role: "editor" }
+    });
+    assert.equal(legacyResponse.statusCode, 200);
+    assert.equal(legacyResponse.headers.deprecation, "true");
+    assert.match(String(legacyResponse.headers.link), /\/api\/members\/user_target\/access/);
+    await app.close();
+  });
+});
 
 test("explicit installation owner can update another member role", async () => {
   await withDatabase(async (database, persistence) => {

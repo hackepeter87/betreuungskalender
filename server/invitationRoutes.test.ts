@@ -74,6 +74,7 @@ async function createApp(
 
 beforeEach(() => {
   db.prepare("UPDATE data_transfer_actors SET invitation_id = NULL").run();
+  db.prepare("DELETE FROM app_invitation_care_party_assignments").run();
   db.prepare("DELETE FROM app_invitations").run();
   db.prepare("DELETE FROM data_transfer_actors").run();
   db.prepare("DELETE FROM data_transfer_runs").run();
@@ -95,10 +96,89 @@ test("manual invitation responses expose only the complete invitation URL", asyn
 
   assert.equal(response.statusCode, 201);
   assert.equal(response.headers["cache-control"], "no-store, max-age=0");
+  assert.equal(response.headers.deprecation, "true");
+  assert.match(String(response.headers.link), /\/api\/invitations\/access-preview/);
   const body = response.json();
   assertNoTokenField(body);
   assert.equal(new URL(body.invitationUrl).origin, "https://calendar.example.invalid");
   assert.equal(body.emailDelivery.status, "not_requested");
+  await instance.close();
+});
+
+test("previewed invitation access is fingerprint-bound and exposes the selected scope", async () => {
+  db.prepare(`
+    INSERT INTO care_parties (
+      id, name, kind, created_by, updated_by, created_at, updated_at
+    ) VALUES ('party-invitation-preview', 'Preview care party', 'other',
+      'local-dev', 'local-dev', ?, ?)
+  `).run(timestamp, timestamp);
+  const instance = await createApp();
+  const proposal = {
+    role: "viewer",
+    careDataScope: { type: "selected", carePartyIds: ["party-invitation-preview"] }
+  };
+  const previewResponse = await instance.inject({
+    method: "POST",
+    url: "/api/invitations/access-preview",
+    payload: proposal
+  });
+
+  assert.equal(previewResponse.statusCode, 200);
+  assert.equal(previewResponse.headers["cache-control"], "no-store, max-age=0");
+  const preview = previewResponse.json<{ fingerprint: string }>();
+  const createResponse = await instance.inject({
+    method: "POST",
+    url: "/api/invitations",
+    payload: {
+      ...proposal,
+      previewFingerprint: preview.fingerprint,
+      expiresAt,
+      sendEmail: false
+    }
+  });
+
+  assert.equal(createResponse.statusCode, 201);
+  assert.equal(createResponse.headers.deprecation, undefined);
+  assert.deepEqual(createResponse.json().invitation.careDataScope, proposal.careDataScope);
+  await instance.close();
+});
+
+test("invitation creation rejects a preview after active care parties change", async () => {
+  const instance = await createApp();
+  const proposal = {
+    role: "viewer",
+    careDataScope: { type: "selected", carePartyIds: [] }
+  };
+  const previewResponse = await instance.inject({
+    method: "POST",
+    url: "/api/invitations/access-preview",
+    payload: proposal
+  });
+  const preview = previewResponse.json<{ fingerprint: string }>();
+  db.prepare(`
+    INSERT INTO care_parties (
+      id, name, kind, created_by, updated_by, created_at, updated_at
+    ) VALUES ('party-stale-invitation', 'Changed preview basis', 'other',
+      'local-dev', 'local-dev', ?, ?)
+  `).run(timestamp, timestamp);
+
+  const createResponse = await instance.inject({
+    method: "POST",
+    url: "/api/invitations",
+    payload: {
+      ...proposal,
+      previewFingerprint: preview.fingerprint,
+      expiresAt,
+      sendEmail: false
+    }
+  });
+
+  assert.equal(createResponse.statusCode, 409);
+  assert.deepEqual(createResponse.json(), {
+    error: "member_access_preview_changed",
+    message: "Die Zugriffsgrundlage hat sich geändert. Bitte prüfe die Einladung erneut."
+  });
+  assert.equal((db.prepare("SELECT COUNT(*) AS count FROM app_invitations").get() as { count: number }).count, 0);
   await instance.close();
 });
 

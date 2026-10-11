@@ -120,23 +120,48 @@ export const setupFirstUseInputSchema = z.object({
   };
 });
 
+const workspaceRoleInputSchema = z.enum(["admin", "editor", "scheduler", "viewer", "parent", "readonly"])
+  .transform((role) => role === "parent" ? "editor" as const : role === "readonly" ? "viewer" as const : role);
+
+export const memberCareDataScopeInputSchema = z.discriminatedUnion("type", [
+  z.object({ type: z.literal("all") }),
+  z.object({
+    type: z.literal("selected"),
+    carePartyIds: z.array(z.string().trim().min(1).max(200)).max(200)
+  })
+]);
+
+export const memberAccessProposalSchema = z.object({
+  role: workspaceRoleInputSchema,
+  careDataScope: memberCareDataScopeInputSchema
+});
+
+export const memberAccessUpdateSchema = memberAccessProposalSchema.extend({
+  previewFingerprint: z.string().regex(/^[0-9a-f]{64}$/)
+});
+
+export const invitationAccessPreviewSchema = memberAccessProposalSchema;
+
 export const invitationInputSchema = z.object({
-  role: z.enum(["admin", "editor", "scheduler", "viewer", "parent", "readonly"])
-    .transform((role) => role === "parent" ? "editor" as const : role === "readonly" ? "viewer" as const : role),
+  role: workspaceRoleInputSchema,
   emailHint: z.string().trim().email().max(320).optional(),
   expiresAt: isoDateTime,
-  sendEmail: z.boolean().default(false)
+  sendEmail: z.boolean().default(false),
+  careDataScope: memberCareDataScopeInputSchema.optional(),
+  previewFingerprint: z.string().regex(/^[0-9a-f]{64}$/).optional()
 }).refine((invitation) => Date.parse(invitation.expiresAt) > Date.now(), {
   path: ["expiresAt"],
   message: "Die Einladung muss in der Zukunft ablaufen."
 }).refine((invitation) => !invitation.sendEmail || Boolean(invitation.emailHint), {
   path: ["emailHint"],
   message: "Für den E-Mail-Versand ist eine Empfängeradresse erforderlich."
-});
+}).refine(
+  (invitation) => Boolean(invitation.careDataScope) === Boolean(invitation.previewFingerprint),
+  { path: ["previewFingerprint"], message: "Datenzugriff und Vorschau müssen gemeinsam angegeben werden." }
+);
 
 export const memberRoleInputSchema = z.object({
-  role: z.enum(["admin", "editor", "scheduler", "viewer", "parent", "readonly"])
-    .transform((role) => role === "parent" ? "editor" as const : role === "readonly" ? "viewer" as const : role)
+  role: workspaceRoleInputSchema
 });
 
 export const tripInputSchema = z.object({
