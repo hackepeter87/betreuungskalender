@@ -16,17 +16,19 @@ import { formatDateTime } from "../lib/date";
 import { handoverLabel, locationLabel } from "../lib/labels";
 import { useAppStore } from "../store/AppStore";
 import {
+  type ApiMemberAccessCapabilityCode,
+  type ApiMemberAccessGlobalDataCode,
+  type ApiMemberAccessPreview,
+  type ApiMemberCareDataScope,
   type ApiWorkspaceRole,
   carePartyKinds,
-  type ApiAppUser,
   type ApiCalendarFeedScope,
   type ApiCalendarFeedStatus,
   type ApiCarePartyKind,
   type ApiInvitation,
   type ApiInstanceReadiness,
   type ApiMember,
-  type ApiSession,
-  type ApiUserCarePartyAssignment
+  type ApiSession
 } from "../../shared/api";
 import type { CareLocation, CareParty, Child, HandoverParty, NotificationEventType, NotificationPreference } from "../types";
 import { omitUndefinedValues } from "../../shared/objects";
@@ -203,6 +205,112 @@ function memberRoleLabel(role: ApiWorkspaceRole, locale: "de" | "en") {
   return copy(locale, "settings", catalogKey("settings", `memberRole_${role}`));
 }
 
+function memberRoleDescription(role: ApiWorkspaceRole, locale: "de" | "en") {
+  return copy(locale, "settings", catalogKey("settings", `memberRoleDescription_${role}`));
+}
+
+function memberCapabilityLabel(code: ApiMemberAccessCapabilityCode, locale: "de" | "en") {
+  return copy(locale, "settings", catalogKey("settings", `memberCapability_${code}`));
+}
+
+function memberGlobalDataLabel(code: ApiMemberAccessGlobalDataCode, locale: "de" | "en") {
+  return copy(locale, "settings", catalogKey("settings", `memberGlobalData_${code}`));
+}
+
+function memberScopeSummary(
+  scope: ApiMemberCareDataScope | undefined,
+  parties: Array<{ id: string; name: string }>,
+  locale: "de" | "en"
+) {
+  if (!scope || scope.type === "all") return copy(locale, "settings", "memberScopeAllSummary");
+  if (!scope.carePartyIds.length) return copy(locale, "settings", "memberScopeNoneSummary");
+  const names = scope.carePartyIds
+    .map((id) => parties.find((party) => party.id === id)?.name)
+    .filter((name): name is string => Boolean(name));
+  return names.length
+    ? copy(locale, "settings", "memberScopeSelectedSummary", { names: names.join(", ") })
+    : copy(locale, "settings", "memberScopeNoneSummary");
+}
+
+function MemberScopeFields({
+  prefix,
+  role,
+  scope,
+  parties,
+  disabled,
+  onChange
+}: {
+  prefix: string;
+  role: ApiWorkspaceRole;
+  scope: ApiMemberCareDataScope;
+  parties: Array<{ id: string; name: string }>;
+  disabled: boolean;
+  onChange: (scope: ApiMemberCareDataScope) => void;
+}) {
+  const { locale } = useI18n();
+  const selectedIds = scope.type === "selected" ? scope.carePartyIds : [];
+  const scopeDisabled = disabled || role === "admin";
+  return (
+    <fieldset className="member-access-scope">
+      <legend>{copy(locale, "settings", "memberScopeTitle")}</legend>
+      <p>{copy(locale, "settings", "memberScopeDescription")}</p>
+      <div className="member-access-scope__modes">
+        <label className="check-row">
+          <input type="radio" name={`${prefix}-scope`} checked={scope.type === "all"} disabled={scopeDisabled} onChange={() => onChange({ type: "all" })} />
+          <span><strong>{copy(locale, "settings", "memberScopeAll")}</strong><small>{copy(locale, "settings", "memberScopeAllDescription")}</small></span>
+        </label>
+        <label className="check-row">
+          <input type="radio" name={`${prefix}-scope`} checked={scope.type === "selected"} disabled={scopeDisabled} onChange={() => onChange({ type: "selected", carePartyIds: selectedIds })} />
+          <span><strong>{copy(locale, "settings", "memberScopeSelected")}</strong><small>{copy(locale, "settings", "memberScopeSelectedDescription")}</small></span>
+        </label>
+      </div>
+      {scope.type === "selected" && role !== "admin" ? (
+        <div className="member-access-scope__parties">
+          {parties.map((party) => (
+            <label className="check-row" key={party.id}>
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(party.id)}
+                disabled={disabled}
+                onChange={() => onChange({
+                  type: "selected",
+                  carePartyIds: selectedIds.includes(party.id)
+                    ? selectedIds.filter((id) => id !== party.id)
+                    : [...selectedIds, party.id]
+                })}
+              />
+              {party.name}
+            </label>
+          ))}
+          {!selectedIds.length ? <p className="member-access-scope__empty" role="status"><Icon name="lock" size={16} />{copy(locale, "settings", "memberScopeNoneSummary")}</p> : null}
+        </div>
+      ) : null}
+    </fieldset>
+  );
+}
+
+function MemberAccessReview({ preview }: { preview: ApiMemberAccessPreview }) {
+  const { locale } = useI18n();
+  const groups = ["view", "edit", "administer", "denied"] as const;
+  const narrowed = preview.changes.lostCapabilities.length > 0 || preview.changes.lostCarePartyIds.length > 0;
+  const expanded = preview.changes.gainedCapabilities.length > 0 || preview.changes.gainedCarePartyIds.length > 0;
+  return (
+    <div className="member-access-review" data-testid="member-access-review">
+      <div className="member-access-review__summary">
+        <div><span>{copy(locale, "settings", "memberRole")}</span><strong>{memberRoleLabel(preview.after.role, locale)}</strong><small>{memberRoleDescription(preview.after.role, locale)}</small></div>
+        <div><span>{copy(locale, "settings", "memberScopeTitle")}</span><strong>{memberScopeSummary(preview.after.careDataScope, preview.careParties, locale)}</strong></div>
+      </div>
+      {expanded ? <p className="member-access-change"><Icon name="plus" size={16} /><strong>{copy(locale, "settings", "memberAccessExpanded")}</strong></p> : null}
+      {narrowed ? <div className="member-access-change member-access-change--warning"><Icon name="alert" size={16} /><span><strong>{copy(locale, "settings", "memberAccessNarrowed")}</strong>{preview.changes.lostCapabilities.map((code) => <small key={code}>{copy(locale, "settings", "memberAccessWillLose")}: {memberCapabilityLabel(code, locale)}</small>)}</span></div> : null}
+      {!expanded && !narrowed ? <p className="member-access-hint">{copy(locale, "settings", "memberAccessUnchanged")}</p> : null}
+      <div className="member-access-capabilities">
+        {groups.map((group) => <section key={group}><h3>{copy(locale, "settings", catalogKey("settings", `memberCapabilityGroup_${group}`))}</h3>{preview.after.capabilities[group].length ? <ul>{preview.after.capabilities[group].map((code) => <li key={code}>{memberCapabilityLabel(code, locale)}</li>)}</ul> : <p>{copy(locale, "common", "none")}</p>}</section>)}
+      </div>
+      <section className="member-access-global"><h3>{copy(locale, "settings", "memberGlobalDataTitle")}</h3><p>{copy(locale, "settings", "memberGlobalDataDescription")}</p>{preview.after.globalData.length ? <ul>{preview.after.globalData.map((code) => <li key={code}>{memberGlobalDataLabel(code, locale)}</li>)}</ul> : <p>{copy(locale, "common", "none")}</p>}</section>
+    </div>
+  );
+}
+
 function invitationStatus(invitation: ApiInvitation, locale: "de" | "en") {
   if (invitation.acceptedAt) return copy(locale, "settings", "invitationAccepted");
   if (invitation.revokedAt) return copy(locale, "settings", "invitationRevoked");
@@ -212,11 +320,12 @@ function invitationStatus(invitation: ApiInvitation, locale: "de" | "en") {
 
 function MemberInvitationManager() {
   const { locale, intlLocale } = useI18n();
-  const { session } = useAppStore();
+  const { data, session } = useAppStore();
   const [members, setMembers] = useState<ApiMember[]>([]);
   const [invitations, setInvitations] = useState<ApiInvitation[]>([]);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<ApiWorkspaceRole>("editor");
+  const [inviteScope, setInviteScope] = useState<ApiMemberCareDataScope>({ type: "all" });
   const [expiresDays, setExpiresDays] = useState(7);
   const [sendEmailOverride, setSendEmailOverride] = useState<boolean>();
   const [emailDeliveryAvailable, setEmailDeliveryAvailable] = useState(false);
@@ -225,6 +334,16 @@ function MemberInvitationManager() {
   const [ownerForbidden, setOwnerForbidden] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editingMember, setEditingMember] = useState<ApiMember | null>(null);
+  const [memberRole, setMemberRole] = useState<ApiWorkspaceRole>("viewer");
+  const [memberScope, setMemberScope] = useState<ApiMemberCareDataScope>({ type: "all" });
+  const [review, setReview] = useState<{
+    preview: ApiMemberAccessPreview;
+    kind: "member" | "invitation";
+    expiresAt?: string;
+    emailHint?: string;
+    sendEmail?: boolean;
+  } | null>(null);
   const hasInviteEmail = Boolean(inviteEmail.trim());
   const sendEmail = emailDeliveryAvailable && hasInviteEmail && (sendEmailOverride ?? true);
 
@@ -256,7 +375,7 @@ function MemberInvitationManager() {
 
   if (!session.authenticated || !session.isOwner) return null;
 
-  const createInvitation = async (event: FormEvent) => {
+  const previewInvitation = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
     setMessage(null);
@@ -265,23 +384,14 @@ function MemberInvitationManager() {
     try {
       const safeExpiresDays = Number.isFinite(expiresDays) ? Math.min(30, Math.max(1, expiresDays)) : 7;
       const expiresAt = new Date(Date.now() + safeExpiresDays * 86_400_000).toISOString();
-      const created = await api.createInvitation(omitUndefinedValues({
-        role: inviteRole,
+      const preview = await api.previewInvitationAccess({ role: inviteRole, careDataScope: inviteScope });
+      setReview({
+        preview,
+        kind: "invitation",
         expiresAt,
-        emailHint: inviteEmail.trim() || undefined,
+        ...(inviteEmail.trim() ? { emailHint: inviteEmail.trim() } : {}),
         sendEmail
-      }));
-      setInvitations((items) => [created.invitation, ...items]);
-      setCreatedInvitationUrl(created.invitationUrl);
-      setInviteEmail("");
-      setSendEmailOverride(undefined);
-      if (created.emailDelivery?.status === "sent") {
-        setMessage(copy(locale, "settings", "invitationEmailSent"));
-      } else if (created.emailDelivery?.status === "failed") {
-        setMessage(created.emailDelivery.message ?? copy(locale, "settings", "invitationEmailFailed"));
-      } else {
-        setMessage(copy(locale, "settings", "invitationCreated"));
-      }
+      });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -289,19 +399,70 @@ function MemberInvitationManager() {
     }
   };
 
-  const changeRole = async (member: ApiMember, role: ApiWorkspaceRole) => {
+  const previewMember = async () => {
+    if (!editingMember) return;
     setBusy(true);
     setMessage(null);
     setError(null);
     try {
-      const updated = await api.updateMemberRole(member.id, role);
-      setMembers((items) => items.map((item) => item.id === updated.id ? updated : item));
-      setMessage(copy(locale, "settings", "memberRoleUpdated"));
+      const preview = await api.previewMemberAccess(editingMember.id, { role: memberRole, careDataScope: memberScope });
+      setReview({ preview, kind: "member" });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       setBusy(false);
     }
+  };
+
+  const applyReview = async () => {
+    if (!review) return;
+    setBusy(true);
+    setMessage(null);
+    setError(null);
+    try {
+      if (review.kind === "member" && editingMember) {
+        const updated = await api.updateMemberAccess(editingMember.id, {
+          role: review.preview.after.role,
+          careDataScope: review.preview.after.careDataScope,
+          previewFingerprint: review.preview.fingerprint
+        });
+        setMembers((items) => items.map((item) => item.id === updated.member.id ? updated.member : item));
+        setMessage(copy(locale, "settings", "memberAccessUpdated"));
+        setEditingMember(null);
+      } else if (review.kind === "invitation" && review.expiresAt) {
+        const created = await api.createInvitation(omitUndefinedValues({
+          role: review.preview.after.role,
+          careDataScope: review.preview.after.careDataScope,
+          previewFingerprint: review.preview.fingerprint,
+          expiresAt: review.expiresAt,
+          emailHint: review.emailHint,
+          sendEmail: review.sendEmail
+        }));
+        setInvitations((items) => [created.invitation, ...items]);
+        setCreatedInvitationUrl(created.invitationUrl);
+        setInviteEmail("");
+        setInviteScope({ type: "all" });
+        setSendEmailOverride(undefined);
+        setMessage(created.emailDelivery?.status === "sent"
+          ? copy(locale, "settings", "invitationEmailSent")
+          : created.emailDelivery?.status === "failed"
+            ? created.emailDelivery.message ?? copy(locale, "settings", "invitationEmailFailed")
+            : copy(locale, "settings", "invitationCreated"));
+      }
+      setReview(null);
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const openMember = (member: ApiMember) => {
+    setEditingMember(member);
+    setMemberRole(member.effectiveRole);
+    setMemberScope(member.careDataScope ?? { type: "all" });
+    setReview(null);
+    setError(null);
   };
 
   const removeMember = async (member: ApiMember) => {
@@ -343,6 +504,7 @@ function MemberInvitationManager() {
   };
 
   const currentUserId = session.user?.id;
+  const parties = data.careParties.map(({ id, name }) => ({ id, name }));
   const showOwnerControls = Boolean(session.isOwner && !ownerForbidden);
 
   return (
@@ -357,7 +519,7 @@ function MemberInvitationManager() {
       {showOwnerControls ? (
         <>
           <div className={`member-management-grid${createdInvitationUrl ? "" : " member-management-grid--single"}`}>
-            <form className="member-invite-card" data-testid="invitation-create-form" onSubmit={(event) => void createInvitation(event)}>
+            <form className="member-invite-card" data-testid="invitation-create-form" onSubmit={(event) => void previewInvitation(event)}>
               <div>
                 <strong>{copy(locale, "settings", "invitationCreate")}</strong>
                 <small>{copy(locale, "settings", "invitationCreateDescription")}</small>
@@ -375,17 +537,23 @@ function MemberInvitationManager() {
               <div className="member-invite-card__row">
                 <label className="field">
                   <span>{copy(locale, "settings", "memberRole")}</span>
-                  <select data-testid="invitation-role" value={inviteRole} onChange={(event) => setInviteRole(event.target.value as ApiWorkspaceRole)}>
+                  <select data-testid="invitation-role" value={inviteRole} onChange={(event) => {
+                    const role = event.target.value as ApiWorkspaceRole;
+                    setInviteRole(role);
+                    if (role === "admin") setInviteScope({ type: "all" });
+                  }}>
                     {memberRoles.map((role) => (
                       <option key={role} value={role}>{memberRoleLabel(role, locale)}</option>
                     ))}
                   </select>
+                  <small>{memberRoleDescription(inviteRole, locale)}</small>
                 </label>
                 <label className="field">
                   <span>{copy(locale, "settings", "invitationExpiresDays")}</span>
                   <input data-testid="invitation-expires-days" type="number" min="1" max="30" value={expiresDays} onChange={(event) => setExpiresDays(Number(event.target.value))} />
                 </label>
               </div>
+              <MemberScopeFields prefix="invitation" role={inviteRole} scope={inviteScope} parties={parties} disabled={busy} onChange={setInviteScope} />
               {emailDeliveryAvailable ? <label className="toggle-card toggle-card--compact">
                 <input
                   data-testid="invitation-send-email"
@@ -402,8 +570,8 @@ function MemberInvitationManager() {
                 <small>{copy(locale, "settings", "invitationSendEmailDescription")}</small>
               )}
               <button className="button button--primary" type="submit" disabled={busy}>
-                <Icon name="plus" size={17} />
-                {copy(locale, "settings", "invitationCreateAction")}
+                <Icon name="check" size={17} />
+                {copy(locale, "settings", "invitationReviewAction")}
               </button>
             </form>
 
@@ -437,21 +605,13 @@ function MemberInvitationManager() {
                     </small>
                   </span>
                 </div>
-                <label className="field field--compact">
-                  <span>{copy(locale, "settings", "memberRole")}</span>
-                  <select
-                    data-testid="member-role-select"
-                    value={member.effectiveRole}
-                    disabled={busy || member.owner || member.id === currentUserId}
-                    onChange={(event) => void changeRole(member, event.target.value as ApiWorkspaceRole)}
-                  >
-                    {memberRoles.map((role) => (
-                      <option key={role} value={role}>{memberRoleLabel(role, locale)}</option>
-                    ))}
-                  </select>
-                </label>
+                <div className="member-row__access">
+                  <strong>{memberRoleLabel(member.effectiveRole, locale)}</strong>
+                  <small>{memberScopeSummary(member.owner ? { type: "all" } : member.careDataScope, parties, locale)}</small>
+                </div>
                 <div className="member-row__actions">
                   {member.membershipRole ? <span className="status-pill status-pill--ok">{copy(locale, "settings", "memberAppRole")}</span> : <span className="status-pill">{copy(locale, "settings", "memberClaimRole")}</span>}
+                  {!member.owner && member.id !== currentUserId ? <button className="button button--secondary" type="button" disabled={busy} onClick={() => openMember(member)}><Icon name="settings" size={17} />{copy(locale, "settings", "memberManageAccess")}</button> : null}
                   <button
                     className="button button--danger-quiet"
                     data-testid="member-remove-role"
@@ -476,7 +636,7 @@ function MemberInvitationManager() {
                   <span>
                     <strong>{invitation.emailHint || memberRoleLabel(invitation.role, locale)}</strong>
                     <small>
-                      {memberRoleLabel(invitation.role, locale)} · {copy(locale, "settings", "invitationExpiresAt", {
+                      {memberRoleLabel(invitation.role, locale)} · {memberScopeSummary(invitation.careDataScope, parties, locale)} · {copy(locale, "settings", "invitationExpiresAt", {
                         date: formatDateTime(invitation.expiresAt, intlLocale)
                       })}
                     </small>
@@ -494,7 +654,18 @@ function MemberInvitationManager() {
       ) : null}
 
       {message ? <p className="inline-message" role="status">{message}</p> : null}
-      {error ? <p className="form-error" role="alert">{error}</p> : null}
+      {error && !editingMember && !review ? <p className="form-error" role="alert">{error}</p> : null}
+      {editingMember && !review ? <Modal title={copy(locale, "settings", "memberAccessDialogTitle", { name: editingMember.displayName })} size="large" className="member-access-dialog" onClose={() => setEditingMember(null)}>
+        <form className="member-access-dialog__body" onSubmit={(event) => { event.preventDefault(); void previewMember(); }}>
+          <fieldset className="member-access-roles"><legend>{copy(locale, "settings", "memberRole")}</legend>{memberRoles.map((role) => <label className="member-access-role check-row" key={role}><input type="radio" name="member-role" checked={memberRole === role} disabled={busy} onChange={() => { setMemberRole(role); if (role === "admin") setMemberScope({ type: "all" }); }} /><span><strong>{memberRoleLabel(role, locale)}</strong><small>{memberRoleDescription(role, locale)}</small></span></label>)}</fieldset>
+          <MemberScopeFields prefix={`member-${editingMember.id}`} role={memberRole} scope={memberScope} parties={parties} disabled={busy} onChange={setMemberScope} />
+          {error ? <p className="form-error" role="alert">{error}</p> : null}
+          <footer className="form-actions"><span /><div className="form-actions__right"><button className="button button--secondary" type="button" onClick={() => setEditingMember(null)}>{copy(locale, "common", "cancel")}</button><button className="button button--primary" type="submit" disabled={busy}>{copy(locale, "settings", "memberReviewAction")}</button></div></footer>
+        </form>
+      </Modal> : null}
+      {review ? <Modal title={review.kind === "member" && editingMember ? copy(locale, "settings", "memberAccessDialogTitle", { name: editingMember.displayName }) : copy(locale, "settings", "invitationReviewTitle")} size="large" className="member-access-dialog" onClose={() => { setReview(null); if (review.kind === "member") setEditingMember(null); }}>
+        <div className="member-access-dialog__body"><MemberAccessReview preview={review.preview} />{error ? <p className="form-error" role="alert">{error}</p> : null}<footer className="form-actions"><span /><div className="form-actions__right"><button className="button button--secondary" type="button" onClick={() => setReview(null)}>{copy(locale, "settings", "memberReviewBack")}</button><button className="button button--primary" type="button" disabled={busy} onClick={() => void applyReview()}>{review.kind === "member" ? copy(locale, "settings", "memberSaveAccess") : copy(locale, "settings", "invitationCreateAction")}</button></div></footer></div>
+      </Modal> : null}
     </section>
   );
 }
@@ -693,104 +864,6 @@ function CalendarFeedManager() {
         {message ? <p className="inline-message" role="status">{message}</p> : null}
         {error ? <p className="form-error" role="alert">{error}</p> : null}
       </div>
-    </section>
-  );
-}
-
-function UserCarePartyAssignmentManager() {
-  const { locale } = useI18n();
-  const { data, session, canWrite } = useAppStore();
-  const [users, setUsers] = useState<ApiAppUser[]>([]);
-  const [assignments, setAssignments] = useState<ApiUserCarePartyAssignment[]>([]);
-  const [busyUserId, setBusyUserId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const canManageMembers = session.permissions
-    ? session.permissions.includes("members:manage")
-    : true;
-
-  const load = async () => {
-    if (!canManageMembers) return;
-    try {
-      const [nextUsers, nextAssignments] = await Promise.all([
-        api.listAppUsers(),
-        api.listUserCarePartyAssignments()
-      ]);
-      setUsers(nextUsers);
-      setAssignments(nextAssignments);
-      setError(null);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    }
-  };
-
-  useEffect(() => {
-    void load();
-  }, [canManageMembers]);
-
-  if (!canManageMembers) return null;
-
-  const assignmentFor = (userId: string) =>
-    assignments.find((assignment) => assignment.userId === userId)?.carePartyIds ?? [];
-
-  const toggle = async (userId: string, carePartyId: string) => {
-    const current = assignmentFor(userId);
-    const next = current.includes(carePartyId)
-      ? current.filter((id) => id !== carePartyId)
-      : [...current, carePartyId];
-    setBusyUserId(userId);
-    setError(null);
-    try {
-      const saved = await api.updateUserCarePartyAssignment(userId, next);
-      setAssignments((items) => [
-        ...items.filter((item) => item.userId !== userId),
-        saved
-      ]);
-    } catch (reason) {
-      setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      setBusyUserId(null);
-    }
-  };
-
-  return (
-    <section className="panel settings-section" data-testid="user-care-party-assignments">
-      <div className="panel__header panel__header--compact">
-        <div>
-          <h2>{copy(locale, "settings", "userAssignments")}</h2>
-          <p>{copy(locale, "settings", "userAssignmentsDescription")}</p>
-        </div>
-      </div>
-      {users.length && data.careParties.length ? (
-        <div className="assignment-list">
-          {users.map((user) => {
-            const selected = assignmentFor(user.id);
-            return (
-              <div className="assignment-row" key={user.id}>
-                <div>
-                  <strong>{user.displayName}</strong>
-                  <small>{user.email ?? user.role}</small>
-                </div>
-                <div className="assignment-row__choices">
-                  {data.careParties.map((party) => (
-                    <label className="check-row" key={party.id}>
-                      <input
-                        type="checkbox"
-                        checked={selected.includes(party.id)}
-                        disabled={!canWrite || busyUserId === user.id}
-                        onChange={() => void toggle(user.id, party.id)}
-                      />
-                      {party.name}
-                    </label>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      ) : (
-        <p className="empty-copy empty-copy--padded">{copy(locale, "settings", "userAssignmentsEmpty")}</p>
-      )}
-      {error ? <p className="form-error" role="alert">{error}</p> : null}
     </section>
   );
 }
@@ -1040,8 +1113,6 @@ export function SettingsPage() {
       <InstanceReadinessSection />
 
       <MemberInvitationManager />
-
-      <UserCarePartyAssignmentManager />
 
       <PrivacyActionWorkflow children={data.children} careParties={data.careParties} />
 

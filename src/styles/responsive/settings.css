@@ -3,7 +3,6 @@
     row-gap: 18px;
   }
 }
-
 @media (min-width: 721px) and (max-width: 1199px) {
   .instance-readiness-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -118,6 +117,21 @@
     grid-template-columns: minmax(0, 1fr);
   }
 
+  .member-access-scope__modes,
+  .member-access-scope__parties,
+  .member-access-roles,
+  .member-access-review__summary,
+  .member-access-capabilities {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .modal.member-access-dialog {
+    align-self: flex-end;
+    height: auto;
+    max-height: min(92dvh, 760px);
+    border-radius: 12px 12px 0 0;
+  }
+
   .calendar-feed-status {
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -196,11 +210,5 @@
 
   .instance-readiness-grid {
     grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-@media (max-width: 640px) {
-  .assignment-row {
-    grid-template-columns: 1fr;
   }
 }
