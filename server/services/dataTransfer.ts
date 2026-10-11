@@ -946,7 +946,7 @@ async function targetStateFingerprint(
 ): Promise<string> {
   const currentDomain = domain ?? await exportDomainData(database);
   const { updatedAt: _derivedTimestamp, ...stableDomain } = currentDomain;
-  const [runs, actors, assignments] = await Promise.all([
+  const [runs, actors, assignments, invitationAssignments] = await Promise.all([
     database.selectFrom("data_transfer_runs")
       .select(["id", "package_fingerprint", "result", "imported_at"])
       .orderBy("id")
@@ -959,9 +959,20 @@ async function targetStateFingerprint(
       .select(["actor_id", "source_care_party_id", "target_care_party_id", "updated_at"])
       .orderBy("actor_id")
       .orderBy("source_care_party_id")
+      .execute(),
+    database.selectFrom("app_invitation_care_party_assignments")
+      .select(["invitation_id", "care_party_id", "updated_at", "deleted_at"])
+      .orderBy("invitation_id")
+      .orderBy("care_party_id")
       .execute()
   ]);
-  return sha256(canonicalJson({ domain: stableDomain, runs, actors, assignments }));
+  return sha256(canonicalJson({
+    domain: stableDomain,
+    runs,
+    actors,
+    assignments,
+    invitationAssignments
+  }));
 }
 
 async function lockPostgresTransferTarget(database: DatabaseExecutor): Promise<void> {
@@ -974,7 +985,7 @@ async function lockPostgresTransferTarget(database: DatabaseExecutor): Promise<v
     care_confirmation_email_deliveries, care_confirmation_requests,
     notification_preferences, push_subscriptions,
     calendar_feed_tokens, data_transfer_runs, data_transfer_actors,
-    data_transfer_actor_care_parties, app_invitations
+    data_transfer_actor_care_parties, app_invitation_care_party_assignments, app_invitations
     IN SHARE ROW EXCLUSIVE MODE`).execute(database);
 }
 

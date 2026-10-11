@@ -10,6 +10,14 @@ import {
   type WorkspaceRole
 } from "../auth.js";
 import type { DatabaseExecutor } from "../db/runtime.js";
+import {
+  assertActiveCareParties,
+  defaultCareDataScope,
+  membershipCareDataScope,
+  normalizeCareDataScope,
+  syncMemberCareDataScope,
+  type CareDataScope
+} from "./careDataScopes.js";
 
 export interface MembershipResolution {
   user: RequestUser;
@@ -41,7 +49,7 @@ async function ownerId(database: DatabaseExecutor): Promise<string | undefined> 
 
 async function latestMembershipForUser(userId: string, database: DatabaseExecutor) {
   return database.selectFrom("app_memberships")
-    .select(["id", "role", "deleted_at"])
+    .select(["id", "role", "care_scope_type", "deleted_at"])
     .where("user_id", "=", userId)
     .orderBy("updated_at", "desc")
     .orderBy("id", "desc")
@@ -151,24 +159,41 @@ export async function setMembershipRole(
   database: DatabaseExecutor,
   timestamp = new Date().toISOString()
 ): Promise<void> {
+  const scope = (await membershipCareDataScope(userId, database))
+    ?? (await defaultCareDataScope(role, database));
+  return setMembershipAccess(userId, role, scope, actorId, database, timestamp);
+}
+
+export async function setMembershipAccess(
+  userId: string,
+  role: WorkspaceRole,
+  requestedScope: CareDataScope,
+  actorId: string,
+  database: DatabaseExecutor,
+  timestamp = new Date().toISOString()
+): Promise<void> {
+  const scope = normalizeCareDataScope(role, requestedScope);
+  await assertActiveCareParties(scope, database);
   const existing = await latestMembershipForUser(userId, database);
   if (existing && !existing.deleted_at) {
     await database.updateTable("app_memberships")
-      .set({ role, updated_by: actorId, updated_at: timestamp })
+      .set({ role, care_scope_type: scope.type, updated_by: actorId, updated_at: timestamp })
       .where("id", "=", existing.id)
       .execute();
-    return;
+  } else {
+    await database.insertInto("app_memberships").values({
+      id: randomUUID(),
+      user_id: userId,
+      role,
+      care_scope_type: scope.type,
+      created_by: actorId,
+      updated_by: actorId,
+      created_at: timestamp,
+      updated_at: timestamp,
+      deleted_at: null
+    }).execute();
   }
-  await database.insertInto("app_memberships").values({
-    id: randomUUID(),
-    user_id: userId,
-    role,
-    created_by: actorId,
-    updated_by: actorId,
-    created_at: timestamp,
-    updated_at: timestamp,
-    deleted_at: null
-  }).execute();
+  await syncMemberCareDataScope(userId, scope, actorId, database, timestamp);
 }
 
 export async function clearMembershipRole(

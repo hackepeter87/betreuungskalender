@@ -1,7 +1,15 @@
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import type { RequestUser, WorkspaceRole } from "../auth.js";
 import type { DatabaseExecutor, PersistenceRuntime } from "../db/runtime.js";
-import { setMembershipRole } from "./memberships.js";
+import {
+  assertActiveCareParties,
+  defaultCareDataScope,
+  invitationCareDataScope,
+  normalizeCareDataScope,
+  syncInvitationCareDataScope,
+  type CareDataScope
+} from "./careDataScopes.js";
+import { setMembershipAccess } from "./memberships.js";
 import { upsertAuthenticatedUser } from "./users.js";
 
 export interface InvitationSummary {
@@ -33,6 +41,7 @@ type InvitationRow = {
   created_at: string;
   updated_at: string;
   data_transfer_actor_id: string | null;
+  care_scope_type: string;
 };
 
 export class InvitationError extends Error {
@@ -61,6 +70,9 @@ function mapInvitation(row: InvitationRow): InvitationSummary {
   if (!isWorkspaceRole(row.role)) {
     throw new InvitationError("invalid_invitation", 500, "Die Einladung enthält eine ungültige Rolle.");
   }
+  if (row.care_scope_type !== "all" && row.care_scope_type !== "selected") {
+    throw new InvitationError("invalid_invitation", 500, "Die Einladung enthält einen ungültigen Datenzugriff.");
+  }
   return {
     id: row.id,
     role: row.role,
@@ -76,7 +88,8 @@ function mapInvitation(row: InvitationRow): InvitationSummary {
 
 const invitationColumns = [
   "id", "token_hash", "email_hint", "role", "expires_at", "accepted_user_id",
-  "accepted_at", "revoked_at", "created_at", "updated_at", "data_transfer_actor_id"
+  "accepted_at", "revoked_at", "created_at", "updated_at", "data_transfer_actor_id",
+  "care_scope_type"
 ] as const;
 
 async function selectInvitationByHash(hash: string, database: DatabaseExecutor) {
@@ -109,12 +122,31 @@ export async function createInvitation(
     token?: string;
     timestamp?: string;
     dataTransferActorId?: string;
+    careDataScope?: CareDataScope;
   },
   database: DatabaseExecutor
 ): Promise<CreatedInvitation> {
   const token = input.token ?? randomBytes(32).toString("base64url");
   const timestamp = input.timestamp ?? new Date().toISOString();
   const id = randomUUID();
+  let requestedScope = input.careDataScope;
+  if (!requestedScope && input.dataTransferActorId) {
+    const assignments = await database.selectFrom("data_transfer_actor_care_parties")
+      .select("target_care_party_id")
+      .where("actor_id", "=", input.dataTransferActorId)
+      .where("target_care_party_id", "is not", null)
+      .execute();
+    requestedScope = {
+      type: "selected",
+      carePartyIds: assignments.flatMap(({ target_care_party_id }) =>
+        target_care_party_id ? [target_care_party_id] : [])
+    };
+  }
+  const scope = normalizeCareDataScope(
+    input.role,
+    requestedScope ?? (await defaultCareDataScope(input.role, database))
+  );
+  await assertActiveCareParties(scope, database);
   await database.insertInto("app_invitations").values({
     id,
     token_hash: invitationTokenHash(token),
@@ -129,8 +161,10 @@ export async function createInvitation(
     created_at: timestamp,
     updated_at: timestamp,
     deleted_at: null,
-    data_transfer_actor_id: input.dataTransferActorId ?? null
+    data_transfer_actor_id: input.dataTransferActorId ?? null,
+    care_scope_type: scope.type
   }).execute();
+  await syncInvitationCareDataScope(id, scope, input.actorId, database, timestamp);
   const invitation = await selectInvitationById(id, database);
   if (!invitation) {
     throw new InvitationError("invalid_invitation", 500, "Die Einladung konnte nicht erstellt werden.");
@@ -165,30 +199,20 @@ async function acceptSelectedInvitation(
     throw new InvitationError("invalid_invitation", 500, "Die Einladung enthält eine ungültige Rolle.");
   }
   const persistedUserId = await upsertAuthenticatedUser(user, database, timestamp);
-  await setMembershipRole(persistedUserId, invitation.role, persistedUserId, database, timestamp);
+  const scope = await invitationCareDataScope(invitation.id, database);
+  await setMembershipAccess(
+    persistedUserId,
+    invitation.role,
+    scope,
+    persistedUserId,
+    database,
+    timestamp
+  );
   if (invitation.data_transfer_actor_id) {
     await database.updateTable("data_transfer_actors")
       .set({ mapped_user_id: persistedUserId, updated_by: persistedUserId, updated_at: timestamp })
       .where("id", "=", invitation.data_transfer_actor_id)
       .execute();
-    const assignments = await database.selectFrom("data_transfer_actor_care_parties")
-      .select("target_care_party_id")
-      .where("actor_id", "=", invitation.data_transfer_actor_id)
-      .where("target_care_party_id", "is not", null)
-      .execute();
-    for (const assignment of assignments) {
-      if (!assignment.target_care_party_id) continue;
-      await database.insertInto("app_user_care_party_assignments").values({
-        id: randomUUID(),
-        user_id: persistedUserId,
-        care_party_id: assignment.target_care_party_id,
-        created_by: persistedUserId,
-        updated_by: persistedUserId,
-        created_at: timestamp,
-        updated_at: timestamp,
-        deleted_at: null
-      }).onConflict((conflict) => conflict.doNothing()).execute();
-    }
   }
   const update = await database.updateTable("app_invitations")
     .set({

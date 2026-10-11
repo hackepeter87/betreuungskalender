@@ -107,8 +107,9 @@ async function carePartyRecordAnalysis(
   carePartyId: string,
   database: DatabaseExecutor
 ): Promise<{ relationshipCount: number; recordCount: number; shared: boolean }> {
-  const [assignments, actorMappings, scopedFeeds, settings, plannedEntries, actualEntries, rules, unavailable] = await Promise.all([
+  const [assignments, invitationAssignments, actorMappings, scopedFeeds, settings, plannedEntries, actualEntries, rules, unavailable] = await Promise.all([
     database.selectFrom("app_user_care_party_assignments").select("id").where("care_party_id", "=", carePartyId).execute(),
+    database.selectFrom("app_invitation_care_party_assignments").select("id").where("care_party_id", "=", carePartyId).execute(),
     database.selectFrom("data_transfer_actor_care_parties").select("actor_id").where("target_care_party_id", "=", carePartyId).execute(),
     database.selectFrom("calendar_feed_tokens").select("id").where("scope_party_id", "=", carePartyId).execute(),
     database.selectFrom("settings").select("key")
@@ -143,7 +144,8 @@ async function carePartyRecordAnalysis(
       .where("unavailable_period_id", "=", id).executeTakeFirst())) shared = true;
   }
   return {
-    relationshipCount: assignments.length + actorMappings.length + scopedFeeds.length + settings.length,
+    relationshipCount: assignments.length + invitationAssignments.length + actorMappings.length
+      + scopedFeeds.length + settings.length,
     recordCount: entryIds.length + rules.length + unavailable.length,
     shared
   };
@@ -382,6 +384,8 @@ export async function applyPrivacyDomainErasure(
     if (recordDelete) counts.domain_records = await deleteCarePartyDomainRecords(request.subjectId, database);
     if (relationshipDelete) {
       counts.domain_relationships = deleted(await database.deleteFrom("app_user_care_party_assignments")
+        .where("care_party_id", "=", request.subjectId).executeTakeFirst());
+      counts.domain_relationships += deleted(await database.deleteFrom("app_invitation_care_party_assignments")
         .where("care_party_id", "=", request.subjectId).executeTakeFirst());
       counts.domain_relationships += deleted(await database.deleteFrom("data_transfer_actor_care_parties")
         .where("target_care_party_id", "=", request.subjectId).executeTakeFirst());

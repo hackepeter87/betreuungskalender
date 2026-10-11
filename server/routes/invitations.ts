@@ -114,10 +114,11 @@ async function registerInvitationRoutes(
         issues: parsed.error.issues
       });
     }
-    const created = await createInvitation(omitUndefinedValues({
-      ...parsed.data,
-      actorId: request.userEmail
-    }), app.persistence.query);
+    const created = await app.persistence.transaction((database) =>
+      createInvitation(omitUndefinedValues({
+        ...parsed.data,
+        actorId: request.userEmail
+      }), database));
     if (!parsed.data.sendEmail) {
       return invitationReply.code(201).send(toApiCreatedInvitation(
         created,

@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { isUnknownRecord, omitUndefinedValues } from "../../shared/objects.js";
 import { randomUUID } from "node:crypto";
 import { config } from "../config.js";
-import { setMembershipRole } from "../services/memberships.js";
+import { setMembershipAccess } from "../services/memberships.js";
 import { createInvitation } from "../services/invitations.js";
 import { toApiCreatedInvitation } from "../services/invitationResponses.js";
 import {
@@ -134,34 +134,18 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
           : undefined;
         const effectiveRole = userId === ownerId ? "admin" : role;
         const timestamp = new Date().toISOString();
-        await setMembershipRole(userId, effectiveRole, actorId, database, timestamp);
+        await setMembershipAccess(
+          userId,
+          effectiveRole,
+          { type: "selected", carePartyIds },
+          actorId,
+          database,
+          timestamp
+        );
         await database.updateTable("data_transfer_actors")
           .set({ mapped_user_id: userId, updated_by: actorId, updated_at: timestamp })
           .where("id", "=", request.params.id)
           .execute();
-        await database.updateTable("app_user_care_party_assignments")
-          .set({ deleted_at: timestamp, updated_by: actorId, updated_at: timestamp })
-          .where("user_id", "=", userId)
-          .where("deleted_at", "is", null)
-          .execute();
-        for (const carePartyId of carePartyIds) {
-          const exists = await database.selectFrom("care_parties")
-            .select("id")
-            .where("id", "=", carePartyId)
-            .where("deleted_at", "is", null)
-            .executeTakeFirst();
-          if (!exists) throw new Error("Care-party mapping is invalid.");
-          await database.insertInto("app_user_care_party_assignments").values({
-            id: randomUUID(),
-            user_id: userId,
-            care_party_id: carePartyId,
-            created_by: actorId,
-            updated_by: actorId,
-            created_at: timestamp,
-            updated_at: timestamp,
-            deleted_at: null
-          }).execute();
-        }
       });
       return noStore(reply).send({ mapped: true });
     } catch (error) {
@@ -175,27 +159,31 @@ export async function dataTransferRoutes(app: FastifyInstance): Promise<void> {
     if (!role || typeof body.expiresAt !== "string") {
       return noStore(reply).code(400).send({ error: "validation_error", message: "Invitation request is incomplete." });
     }
+    const expiresAt = body.expiresAt;
     const actor = await app.persistence.query.selectFrom("data_transfer_actors")
       .select(["id", "email_hint as email"])
       .where("id", "=", request.params.id)
       .executeTakeFirst();
     if (!actor) return noStore(reply).code(404).send({ error: "not_found", message: "Imported actor was not found." });
     try {
-      const created = await createInvitation(omitUndefinedValues({
-        role,
-        expiresAt: body.expiresAt,
-        actorId: request.userEmail,
-        emailHint: typeof body.emailHint === "string" ? body.emailHint : actor.email ?? undefined,
-        dataTransferActorId: actor.id
-      }), app.persistence.query);
-      await app.persistence.query.updateTable("data_transfer_actors")
-        .set({
-          invitation_id: created.invitation.id,
-          updated_by: request.userEmail,
-          updated_at: new Date().toISOString()
-        })
-        .where("id", "=", actor.id)
-        .execute();
+      const created = await app.persistence.transaction(async (database) => {
+        const invitation = await createInvitation(omitUndefinedValues({
+          role,
+          expiresAt,
+          actorId: request.userEmail,
+          emailHint: typeof body.emailHint === "string" ? body.emailHint : actor.email ?? undefined,
+          dataTransferActorId: actor.id
+        }), database);
+        await database.updateTable("data_transfer_actors")
+          .set({
+            invitation_id: invitation.invitation.id,
+            updated_by: request.userEmail,
+            updated_at: new Date().toISOString()
+          })
+          .where("id", "=", actor.id)
+          .execute();
+        return invitation;
+      });
       return noStore(reply)
         .code(201)
         .send(toApiCreatedInvitation(created, config.invitationPublicBaseUrl));
