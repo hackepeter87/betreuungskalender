@@ -229,6 +229,16 @@ response without record details. Scoped report snapshots omit global audit
 history rather than exposing audit fields that cannot be safely projected to a
 single care-data scope.
 
+Membership and invitation access changes use an owner-only preview. The server
+derives fixed capability codes from the same role-permission model used for
+authorization and binds the proposed role and care-data scope to a fingerprint
+of the current membership and active care parties. Applying a stale preview
+returns a generic conflict without changing membership, assignments, feeds, or
+pending confirmation work. Role and scope are committed in one database
+transaction; narrowing access revokes user-bound delivery state in that same
+transaction. Preview responses are not cached, and clients cannot submit
+custom permission lists.
+
 Partial confirmation updates validate the resolved actual care range before
 any write. Explicit values and values defaulted from the planned entry are
 subject to the same supported-date and maximum-duration limits as normal care

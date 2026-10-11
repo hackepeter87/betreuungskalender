@@ -38,6 +38,9 @@ import type {
   ApiInstanceReadiness,
   ApiImportedTransferActor,
   ApiMember,
+  ApiMemberAccessPreview,
+  ApiMemberAccessUpdateResult,
+  ApiMemberCareDataScope,
   ApiNotificationPreferencesResponse,
   ApiNotificationPreference,
   ApiPushSubscriptionInput,
@@ -898,6 +901,22 @@ export const api = {
       { method: "PUT", body: JSON.stringify({ role }) }
     );
   },
+  previewMemberAccess(userId: string, input: { role: ApiWorkspaceRole; careDataScope: ApiMemberCareDataScope }) {
+    return request<ApiMemberAccessPreview>(
+      `/api/members/${encodeURIComponent(userId)}/access-preview`,
+      { method: "POST", body: JSON.stringify(input) }
+    );
+  },
+  updateMemberAccess(userId: string, input: {
+    role: ApiWorkspaceRole;
+    careDataScope: ApiMemberCareDataScope;
+    previewFingerprint: string;
+  }) {
+    return request<ApiMemberAccessUpdateResult>(
+      `/api/members/${encodeURIComponent(userId)}/access`,
+      { method: "PUT", body: JSON.stringify(input) }
+    );
+  },
   removeMember(userId: string) {
     return request<ApiMember>(
       `/api/members/${encodeURIComponent(userId)}`,
@@ -912,7 +931,20 @@ export const api = {
   listInvitations() {
     return request<ApiInvitation[]>("/api/invitations");
   },
-  createInvitation(input: { role: ApiWorkspaceRole; expiresAt: string; emailHint?: string; sendEmail?: boolean }) {
+  previewInvitationAccess(input: { role: ApiWorkspaceRole; careDataScope: ApiMemberCareDataScope }) {
+    return request<ApiMemberAccessPreview>("/api/invitations/access-preview", {
+      method: "POST",
+      body: JSON.stringify(input)
+    });
+  },
+  createInvitation(input: {
+    role: ApiWorkspaceRole;
+    expiresAt: string;
+    emailHint?: string;
+    sendEmail?: boolean;
+    careDataScope?: ApiMemberCareDataScope;
+    previewFingerprint?: string;
+  }) {
     return request<ApiCreatedInvitation>("/api/invitations", {
       method: "POST",
       body: JSON.stringify(input)

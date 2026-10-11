@@ -54,7 +54,12 @@ import {
   legacyMigrationCapabilities,
   previewLegacyMigration
 } from "./services/legacyMigration.js";
-import { listMembers, updateMemberRole } from "./services/memberManagement.js";
+import {
+  listMembers,
+  previewMemberAccess,
+  updateMemberAccess,
+  updateMemberRole
+} from "./services/memberManagement.js";
 import { createReportSnapshot } from "./services/reportSnapshots.js";
 import {
   executePrivacyAction,
@@ -354,6 +359,38 @@ async function runApplicationScenario(runtime: PersistenceRuntime) {
   );
   await updateMemberRole(owner, invited.id, "scheduler", runtime, "2026-07-01T11:00:00.000Z");
   await updateMemberRole(owner, invited.id, "editor", runtime, "2026-07-01T12:00:00.000Z");
+  const restrictedAccessPreview = await previewMemberAccess(
+    owner,
+    invited.id,
+    "viewer",
+    { type: "selected", carePartyIds: [] },
+    runtime.query
+  );
+  const restrictedAccess = await updateMemberAccess(
+    owner,
+    invited.id,
+    "viewer",
+    { type: "selected", carePartyIds: [] },
+    restrictedAccessPreview.fingerprint,
+    runtime,
+    "2026-07-01T12:15:00.000Z"
+  );
+  const restoredAccessPreview = await previewMemberAccess(
+    owner,
+    invited.id,
+    "editor",
+    { type: "selected", carePartyIds: ["demo-party-primary"] },
+    runtime.query
+  );
+  const restoredAccess = await updateMemberAccess(
+    owner,
+    invited.id,
+    "editor",
+    { type: "selected", carePartyIds: ["demo-party-primary"] },
+    restoredAccessPreview.fingerprint,
+    runtime,
+    "2026-07-01T12:30:00.000Z"
+  );
   const acceptedUser = await findAuthenticatedUserBySubject(invited.externalSubject, runtime.query);
   const feed = await rotateCalendarFeedToken(invited.id, "all", runtime);
   const resolvedFeed = await resolveCalendarFeedToken(feed.token, runtime.query);
@@ -477,6 +514,14 @@ async function runApplicationScenario(runtime: PersistenceRuntime) {
       listedScope,
       userWorkspaceRole: acceptedUser?.workspaceRole,
       userWorkspaceAccess: acceptedUser?.workspaceAccess
+    },
+    memberAccess: {
+      restrictedRole: restrictedAccess.access.role,
+      restrictedScope: restrictedAccess.access.careDataScope,
+      lostCapabilities: restrictedAccessPreview.changes.lostCapabilities,
+      restoredRole: restoredAccess.access.role,
+      restoredScope: restoredAccess.access.careDataScope,
+      gainedCapabilities: restoredAccessPreview.changes.gainedCapabilities
     },
     members: members.map(({ displayName, effectiveRole, membershipRole, owner: isOwner, workspaceAccess }) => ({
       displayName, effectiveRole, membershipRole, owner: isOwner, workspaceAccess

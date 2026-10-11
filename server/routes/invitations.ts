@@ -8,7 +8,9 @@ import {
 } from "../services/invitations.js";
 import {
   assertCanAdministerMembers,
-  MemberManagementError
+  assertInvitationAccessPreview,
+  MemberManagementError,
+  previewInvitationAccess
 } from "../services/memberManagement.js";
 import {
   InvitationEmailError,
@@ -16,8 +18,12 @@ import {
   sendInvitationEmail
 } from "../services/invitationEmail.js";
 import { toApiCreatedInvitation } from "../services/invitationResponses.js";
+import { CareDataScopeError } from "../services/careDataScopes.js";
 import { getStoredSettings } from "../services/settings.js";
-import { invitationInputSchema } from "../validation/schemas.js";
+import {
+  invitationAccessPreviewSchema,
+  invitationInputSchema
+} from "../validation/schemas.js";
 
 const readLimit = {
   config: { permission: "members:manage" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
@@ -33,6 +39,9 @@ function normalizeMemberError(error: unknown) {
       error: error.code,
       message: error.message
     };
+  }
+  if (error instanceof CareDataScopeError) {
+    return { statusCode: error.statusCode, error: error.code, message: error.message };
   }
   return {
     statusCode: 500,
@@ -96,6 +105,34 @@ async function registerInvitationRoutes(
     return listInvitations(app.persistence.query);
   });
 
+  app.post("/api/invitations/access-preview", writeLimit, async (request, reply) => {
+    const invitationReply = preventInvitationCache(reply);
+    const parsed = invitationAccessPreviewSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return invitationReply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
+    }
+    if (!request.user) {
+      return invitationReply.code(401).send({
+        error: "authentication_required",
+        message: "Authentifizierung erforderlich."
+      });
+    }
+    try {
+      return await previewInvitationAccess(
+        request.user,
+        parsed.data.role,
+        parsed.data.careDataScope,
+        app.persistence.query
+      );
+    } catch (error) {
+      const normalized = normalizeMemberError(error);
+      return invitationReply.code(normalized.statusCode).send({
+        error: normalized.error,
+        message: normalized.message
+      });
+    }
+  });
+
   app.post("/api/invitations", writeLimit, async (request, reply) => {
     const invitationReply = preventInvitationCache(reply);
     try {
@@ -114,11 +151,48 @@ async function registerInvitationRoutes(
         issues: parsed.error.issues
       });
     }
-    const created = await app.persistence.transaction((database) =>
-      createInvitation(omitUndefinedValues({
-        ...parsed.data,
-        actorId: request.userEmail
-      }), database));
+    if (!parsed.data.previewFingerprint) {
+      invitationReply.header("Deprecation", "true");
+      invitationReply.header("Link", "</api/invitations/access-preview>; rel=\"successor-version\"");
+    }
+    if (!request.user) {
+      return invitationReply.code(401).send({
+        error: "authentication_required",
+        message: "Authentifizierung erforderlich."
+      });
+    }
+    const actor = request.user;
+    const {
+      previewFingerprint,
+      careDataScope,
+      ...invitationInput
+    } = parsed.data;
+    let created;
+    try {
+      created = await app.persistence.transaction(async (database) => {
+        if (careDataScope && previewFingerprint) {
+          await assertInvitationAccessPreview(
+            actor,
+            invitationInput.role,
+            careDataScope,
+            previewFingerprint,
+            database,
+            app.persistence.driver
+          );
+        }
+        return createInvitation(omitUndefinedValues({
+          ...invitationInput,
+          careDataScope,
+          actorId: request.userEmail
+        }), database);
+      });
+    } catch (error) {
+      const normalized = normalizeMemberError(error);
+      return invitationReply.code(normalized.statusCode).send({
+        error: normalized.error,
+        message: normalized.message
+      });
+    }
     if (!parsed.data.sendEmail) {
       return invitationReply.code(201).send(toApiCreatedInvitation(
         created,

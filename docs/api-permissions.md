@@ -92,8 +92,8 @@ writable through this route.
 
 | Routes | Permission |
 | --- | --- |
-| `GET /api/members`, `PUT /api/members/:userId/role`, `DELETE /api/members/:userId` | `members:manage` |
-| `GET /api/invitations/capabilities`, `GET/POST /api/invitations`, `DELETE /api/invitations/:id` | `members:manage` |
+| `GET /api/members`, `POST /api/members/:userId/access-preview`, `PUT /api/members/:userId/access`, `DELETE /api/members/:userId` | `members:manage` |
+| `GET /api/invitations/capabilities`, `GET /api/invitations`, `POST /api/invitations/access-preview`, `POST /api/invitations`, `DELETE /api/invitations/:id` | `members:manage` |
 | `GET /api/app-users`, `GET /api/user-care-party-assignments`, `PUT /api/user-care-party-assignments/:userId` | `members:manage` |
 | `GET /api/instance-readiness` | `instance:inspect` |
 | `GET /api/migration/legacy-summary`, all migration POST routes | `admin:destructive` |
@@ -111,6 +111,15 @@ Invitation-creation responses contain the complete one-time `invitationUrl`
 and invitation metadata. They do not expose the underlying bearer token as a
 separate response field. Manual invitations, optional email delivery, and
 historical-actor invitations use the same complete URL.
+
+Role and care-data scope changes use one owner-only preview and update
+operation. The preview reports stable capability codes and gained or lost
+care-party visibility. Applying the change requires the matching fingerprint;
+changes to the membership, proposed access, role model, or active care parties
+invalidate it without writing partial state. The same preview contract is used
+when creating a scoped invitation. Preview and update responses are not cached.
+The separate role and care-party assignment update routes remain available for
+one compatibility release and return deprecation headers.
 
 ## Machine-checked protected route inventory
 
@@ -191,6 +200,8 @@ POST /api/external-calendars/feed | planning:manage
 POST /api/external-calendars/import | planning:manage
 POST /api/holiday-periods | planning:manage
 POST /api/invitations | members:manage
+POST /api/invitations/access-preview | members:manage
+POST /api/members/:userId/access-preview | members:manage
 POST /api/migration/legacy-detected | admin:destructive
 POST /api/migration/legacy-import | admin:destructive
 POST /api/migration/legacy-preview | admin:destructive
@@ -213,6 +224,7 @@ PUT /api/external-calendars/:id/feed | planning:manage
 PUT /api/external-calendars/:id/import | planning:manage
 PUT /api/holiday-periods/:id | planning:manage
 PUT /api/members/:userId/role | members:manage
+PUT /api/members/:userId/access | members:manage
 PUT /api/notification-preferences | notifications:manage-own
 PUT /api/settings | settings:manage
 PUT /api/unavailable-periods/:id | planning:manage

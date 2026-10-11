@@ -22,6 +22,7 @@ export interface InvitationSummary {
   acceptedUserId?: string;
   acceptedAt?: string;
   revokedAt?: string;
+  careDataScope: CareDataScope;
 }
 
 export interface CreatedInvitation {
@@ -66,7 +67,7 @@ function isWorkspaceRole(role: string): role is WorkspaceRole {
   return role === "admin" || role === "editor" || role === "scheduler" || role === "viewer";
 }
 
-function mapInvitation(row: InvitationRow): InvitationSummary {
+function mapInvitation(row: InvitationRow, careDataScope: CareDataScope): InvitationSummary {
   if (!isWorkspaceRole(row.role)) {
     throw new InvitationError("invalid_invitation", 500, "Die Einladung enthält eine ungültige Rolle.");
   }
@@ -79,6 +80,7 @@ function mapInvitation(row: InvitationRow): InvitationSummary {
     expiresAt: row.expires_at,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
+    careDataScope,
     ...(row.email_hint ? { emailHint: row.email_hint } : {}),
     ...(row.accepted_user_id ? { acceptedUserId: row.accepted_user_id } : {}),
     ...(row.accepted_at ? { acceptedAt: row.accepted_at } : {}),
@@ -169,7 +171,7 @@ export async function createInvitation(
   if (!invitation) {
     throw new InvitationError("invalid_invitation", 500, "Die Einladung konnte nicht erstellt werden.");
   }
-  return { token, invitation: mapInvitation(invitation) };
+  return { token, invitation: mapInvitation(invitation, scope) };
 }
 
 function assertInvitationUsable(
@@ -236,7 +238,7 @@ async function acceptSelectedInvitation(
   if (!accepted) {
     throw new InvitationError("invalid_invitation", 500, "Die Einladung konnte nicht aktualisiert werden.");
   }
-  return mapInvitation(accepted);
+  return mapInvitation(accepted, scope);
 }
 
 export async function acceptInvitation(
@@ -303,7 +305,9 @@ export async function revokeInvitation(
     .where("deleted_at", "is", null)
     .execute();
   const invitation = await selectInvitationById(id, database);
-  return invitation ? mapInvitation(invitation) : undefined;
+  return invitation
+    ? mapInvitation(invitation, await invitationCareDataScope(invitation.id, database))
+    : undefined;
 }
 
 export async function listInvitations(database: DatabaseExecutor): Promise<InvitationSummary[]> {
@@ -313,5 +317,6 @@ export async function listInvitations(database: DatabaseExecutor): Promise<Invit
     .orderBy("created_at", "desc")
     .orderBy("id", "desc")
     .execute();
-  return rows.map(mapInvitation);
+  return Promise.all(rows.map(async (row) =>
+    mapInvitation(row, await invitationCareDataScope(row.id, database))));
 }

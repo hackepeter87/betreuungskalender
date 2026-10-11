@@ -5,14 +5,22 @@ import {
   assertCanAdministerMembers,
   listMembers,
   MemberManagementError,
+  previewMemberAccess,
   removeMember,
+  updateMemberAccess,
   updateMemberRole
 } from "../services/memberManagement.js";
 import { listAppUsers } from "../services/users.js";
 import { membershipRoleForUser, setMembershipAccess } from "../services/memberships.js";
-import { assertActiveCareParties, syncMemberCareDataScope } from "../services/careDataScopes.js";
+import {
+  assertActiveCareParties,
+  CareDataScopeError,
+  syncMemberCareDataScope
+} from "../services/careDataScopes.js";
 import {
   memberRoleInputSchema,
+  memberAccessProposalSchema,
+  memberAccessUpdateSchema,
   userCarePartyAssignmentInputSchema
 } from "../validation/schemas.js";
 
@@ -47,11 +55,19 @@ function normalizeMemberError(error: unknown) {
   if (error instanceof MemberManagementError) {
     return { statusCode: error.statusCode, error: error.code, message: error.message };
   }
+  if (error instanceof CareDataScopeError) {
+    return { statusCode: error.statusCode, error: error.code, message: error.message };
+  }
   return {
     statusCode: 500,
     error: "member_update_failed",
     message: "Mitglied konnte nicht aktualisiert werden."
   };
+}
+
+function markDeprecated(reply: import("fastify").FastifyReply, successor: string): void {
+  reply.header("Deprecation", "true");
+  reply.header("Link", `<${successor}>; rel="successor-version"`);
 }
 
 export async function appUserRoutes(app: FastifyInstance): Promise<void> {
@@ -75,6 +91,7 @@ export async function appUserRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.put<{ Params: { userId: string } }>("/api/members/:userId/role", writeLimit, async (request, reply) => {
+    markDeprecated(reply, `/api/members/${encodeURIComponent(request.params.userId)}/access`);
     const parsed = memberRoleInputSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
@@ -98,6 +115,53 @@ export async function appUserRoutes(app: FastifyInstance): Promise<void> {
         error: normalized.error,
         message: normalized.message
       });
+    }
+  });
+
+  app.post<{ Params: { userId: string } }>("/api/members/:userId/access-preview", writeLimit, async (request, reply) => {
+    reply.header("cache-control", "no-store");
+    const parsed = memberAccessProposalSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
+    }
+    if (!request.user) {
+      return reply.code(401).send({ error: "authentication_required", message: "Authentifizierung erforderlich." });
+    }
+    try {
+      return await previewMemberAccess(
+        request.user,
+        request.params.userId,
+        parsed.data.role,
+        parsed.data.careDataScope,
+        app.persistence.query
+      );
+    } catch (error) {
+      const normalized = normalizeMemberError(error);
+      return reply.code(normalized.statusCode).send({ error: normalized.error, message: normalized.message });
+    }
+  });
+
+  app.put<{ Params: { userId: string } }>("/api/members/:userId/access", writeLimit, async (request, reply) => {
+    reply.header("cache-control", "no-store");
+    const parsed = memberAccessUpdateSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
+    }
+    if (!request.user) {
+      return reply.code(401).send({ error: "authentication_required", message: "Authentifizierung erforderlich." });
+    }
+    try {
+      return await updateMemberAccess(
+        request.user,
+        request.params.userId,
+        parsed.data.role,
+        parsed.data.careDataScope,
+        parsed.data.previewFingerprint,
+        app.persistence
+      );
+    } catch (error) {
+      const normalized = normalizeMemberError(error);
+      return reply.code(normalized.statusCode).send({ error: normalized.error, message: normalized.message });
     }
   });
 
@@ -128,6 +192,7 @@ export async function appUserRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.put<{ Params: { userId: string } }>("/api/user-care-party-assignments/:userId", writeLimit, async (request, reply) => {
+    markDeprecated(reply, `/api/members/${encodeURIComponent(request.params.userId)}/access`);
     const parsed = userCarePartyAssignmentInputSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
