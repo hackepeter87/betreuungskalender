@@ -1036,7 +1036,9 @@ test("manages member invitations from settings", async ({ page }) => {
   await memberRow.getByRole("button", { name: "Zugriff verwalten" }).click();
   let memberEditor = page.getByRole("dialog", { name: "Zugriff für Member E2E" });
   await expect(memberEditor).toBeVisible();
-  expect(await memberEditor.evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true);
+  await expect.poll(
+    () => memberEditor.evaluate((dialog) => dialog.contains(document.activeElement))
+  ).toBe(true);
   await page.keyboard.press("Escape");
   await expect(memberEditor).toHaveCount(0);
   await memberRow.getByRole("button", { name: "Zugriff verwalten" }).click();

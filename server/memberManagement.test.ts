@@ -130,6 +130,153 @@ test("member access capability groups cover every permission exactly once", () =
   }
 });
 
+test("member access states match the documented fixed role model", () => {
+  const commonGlobalData = [
+    "child_identity",
+    "holiday_periods",
+    "external_calendar_overlays"
+  ];
+  const cases = [
+    {
+      name: "owner",
+      role: "admin" as const,
+      isOwner: true,
+      expected: {
+        role: "admin",
+        careDataScope: { type: "all" },
+        capabilities: {
+          view: [
+            "care_entries_view", "children_basic_view", "children_sensitive_view",
+            "care_notes_view", "planning_view", "reports_view", "settings_view",
+            "audit_view", "instance_inspect"
+          ],
+          edit: [
+            "care_entries_create", "care_entries_edit", "care_entries_delete",
+            "care_entries_confirm", "children_manage", "planning_manage", "settings_manage"
+          ],
+          administer: [
+            "own_notifications_manage", "personal_feeds_manage", "members_manage",
+            "exports_run", "destructive_operations"
+          ],
+          denied: []
+        },
+        globalData: [
+          "child_identity", "sensitive_child_details", "holiday_periods",
+          "external_calendar_overlays", "application_settings", "audit_history",
+          "instance_information"
+        ]
+      }
+    },
+    {
+      name: "admin",
+      role: "admin" as const,
+      isOwner: false,
+      expected: {
+        role: "admin",
+        careDataScope: { type: "all" },
+        capabilities: {
+          view: [
+            "care_entries_view", "children_basic_view", "children_sensitive_view",
+            "care_notes_view", "planning_view", "reports_view", "settings_view",
+            "audit_view", "instance_inspect"
+          ],
+          edit: [
+            "care_entries_create", "care_entries_edit", "care_entries_delete",
+            "care_entries_confirm", "children_manage", "planning_manage", "settings_manage"
+          ],
+          administer: ["own_notifications_manage", "personal_feeds_manage", "exports_run"],
+          denied: ["members_manage", "destructive_operations"]
+        },
+        globalData: [
+          "child_identity", "sensitive_child_details", "holiday_periods",
+          "external_calendar_overlays", "application_settings", "audit_history",
+          "instance_information"
+        ]
+      }
+    },
+    {
+      name: "editor",
+      role: "editor" as const,
+      isOwner: false,
+      expected: {
+        role: "editor",
+        careDataScope: { type: "selected", carePartyIds: [] },
+        capabilities: {
+          view: [
+            "care_entries_view", "children_basic_view", "children_sensitive_view",
+            "care_notes_view", "planning_view", "reports_view"
+          ],
+          edit: [
+            "care_entries_create", "care_entries_edit", "care_entries_delete",
+            "care_entries_confirm", "children_manage", "planning_manage"
+          ],
+          administer: ["own_notifications_manage", "personal_feeds_manage"],
+          denied: [
+            "settings_view", "settings_manage", "audit_view", "instance_inspect",
+            "members_manage", "exports_run", "destructive_operations"
+          ]
+        },
+        globalData: [
+          "child_identity", "sensitive_child_details", "holiday_periods",
+          "external_calendar_overlays"
+        ]
+      }
+    },
+    {
+      name: "scheduler",
+      role: "scheduler" as const,
+      isOwner: false,
+      expected: {
+        role: "scheduler",
+        careDataScope: { type: "selected", carePartyIds: [] },
+        capabilities: {
+          view: ["care_entries_view", "children_basic_view"],
+          edit: ["care_entries_create", "care_entries_edit"],
+          administer: ["own_notifications_manage"],
+          denied: [
+            "care_entries_delete", "care_entries_confirm", "children_sensitive_view",
+            "children_manage", "care_notes_view", "planning_view", "planning_manage",
+            "reports_view", "settings_view", "settings_manage", "personal_feeds_manage",
+            "audit_view", "instance_inspect", "members_manage", "exports_run",
+            "destructive_operations"
+          ]
+        },
+        globalData: commonGlobalData
+      }
+    },
+    {
+      name: "viewer",
+      role: "viewer" as const,
+      isOwner: false,
+      expected: {
+        role: "viewer",
+        careDataScope: { type: "selected", carePartyIds: [] },
+        capabilities: {
+          view: ["care_entries_view", "children_basic_view"],
+          edit: [],
+          administer: ["own_notifications_manage"],
+          denied: [
+            "care_entries_create", "care_entries_edit", "care_entries_delete",
+            "care_entries_confirm", "children_sensitive_view", "children_manage",
+            "care_notes_view", "planning_view", "planning_manage", "reports_view",
+            "settings_view", "settings_manage", "personal_feeds_manage", "audit_view",
+            "instance_inspect", "members_manage", "exports_run", "destructive_operations"
+          ]
+        },
+        globalData: commonGlobalData
+      }
+    }
+  ];
+
+  for (const { name, role, isOwner, expected } of cases) {
+    assert.deepEqual(
+      memberAccessState(role, { type: "selected", carePartyIds: [] }, isOwner),
+      expected,
+      `${name} access state changed`
+    );
+  }
+});
+
 test("member access preview explains role and care-party changes before atomic apply", async () => {
   await withDatabase(async (database, persistence) => {
     const owner = user("user_owner", "admin");
