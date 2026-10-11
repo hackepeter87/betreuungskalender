@@ -150,3 +150,10 @@ settings API.
   future confirmation targeting.
 - Browser tests cover invitation, role change, scheduler, viewer, and revoked
   access on mobile and desktop.
+
+## Relationship to ADR 0009
+
+[ADR 0009](0009-explicit-member-data-scopes.md) keeps this fixed role and
+permission model and replaces the implicit, installation-wide care-party
+assignment switch with explicit membership and invitation data scopes for
+`v1.35.0`.
