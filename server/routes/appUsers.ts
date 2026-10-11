@@ -156,6 +156,17 @@ export async function appUserRoutes(app: FastifyInstance): Promise<void> {
             database,
             timestamp
           );
+          if (role === "admin") {
+            // The legacy assignment endpoint remains usable until the previewed
+            // access API replaces it. Admin access still resolves to `all`.
+            await syncMemberCareDataScope(
+              request.params.userId,
+              scope,
+              request.userEmail,
+              database,
+              timestamp
+            );
+          }
         } else {
           await assertActiveCareParties(scope, database);
           await syncMemberCareDataScope(
