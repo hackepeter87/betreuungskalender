@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { WorkspaceRole } from "../auth.js";
+import type { RequestUser, WorkspaceRole } from "../auth.js";
 import type { DatabaseExecutor } from "../db/runtime.js";
 
 export type CareDataScope =
@@ -74,6 +74,22 @@ export async function membershipCareDataScope(
     .orderBy("care_party_id")
     .execute();
   return { type: "selected", carePartyIds: rows.map(({ care_party_id }) => care_party_id) };
+}
+
+export async function effectiveCareDataScope(
+  user: RequestUser | undefined,
+  database: DatabaseExecutor
+): Promise<CareDataScope> {
+  if (
+    !user ||
+    user.isOwner ||
+    user.workspaceRole === "admin" ||
+    (!user.workspaceRole && user.role === "admin")
+  ) {
+    return { type: "all" };
+  }
+  return (await membershipCareDataScope(user.id, database))
+    ?? { type: "selected", carePartyIds: [] };
 }
 
 export async function invitationCareDataScope(

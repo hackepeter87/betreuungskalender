@@ -9,6 +9,7 @@ import { migrateDatabase } from "./db/migrationRunner.js";
 import { createSqlitePersistenceRuntime, type PersistenceRuntime } from "./db/runtime.js";
 import { applyMembershipRole, hasWorkspaceAccess, membershipRoleForUser } from "./services/memberships.js";
 import { findAuthenticatedUserBySubject } from "./services/users.js";
+import { effectiveCareDataScope } from "./services/careDataScopes.js";
 
 const timestamp = "2026-07-05T10:00:00.000Z";
 
@@ -29,6 +30,21 @@ async function withDatabase(
 
 function insertMembership(database: Database.Database, userId: string, role: string): void {
   database.prepare(`
+    INSERT INTO app_users (
+      id, external_subject, display_name, role, groups_json,
+      last_seen_at, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, '[]', ?, ?, ?)
+    ON CONFLICT(id) DO NOTHING
+  `).run(
+    userId,
+    `subject-${userId}`,
+    userId,
+    role === "admin" ? "admin" : role === "viewer" ? "readonly" : "parent",
+    timestamp,
+    timestamp,
+    timestamp
+  );
+  database.prepare(`
     INSERT INTO app_memberships (
       id, user_id, role, created_by, updated_by, created_at, updated_at
     ) VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -41,6 +57,20 @@ function insertMembership(database: Database.Database, userId: string, role: str
     timestamp,
     timestamp
   );
+}
+
+function scopedUser(id: string, workspaceRole: "admin" | "editor" | "scheduler" | "viewer"): RequestUser {
+  return {
+    id,
+    externalSubject: `subject-${id}`,
+    displayName: id,
+    groups: [],
+    role: workspaceRole === "admin" ? "admin" : workspaceRole === "viewer" ? "readonly" : "parent",
+    permissions: permissionsForRole(
+      workspaceRole === "admin" ? "admin" : workspaceRole === "viewer" ? "readonly" : "parent"
+    ),
+    workspaceRole
+  };
 }
 
 function setOwner(database: Database.Database, userId: string): void {
@@ -159,5 +189,56 @@ test("a deleted membership is authoritative and never falls back to identity cla
     assert.deepEqual(resolved.user.permissions, []);
     assert.deepEqual(resolved.user.workspacePermissions, []);
     assert.equal(await hasWorkspaceAccess(user.id, persistence.query), false);
+  });
+});
+
+test("explicit care-data scopes do not depend on assignments belonging to other members", async () => {
+  await withDatabase(async (database, persistence) => {
+    database.prepare(`
+      INSERT INTO care_parties (
+        id, name, kind, created_by, updated_by, created_at, updated_at
+      ) VALUES ('party-selected', 'Selected caregiver', 'other', 'tester', 'tester', ?, ?)
+    `).run(timestamp, timestamp);
+    insertMembership(database, "member-all", "editor");
+    insertMembership(database, "member-selected", "editor");
+    insertMembership(database, "member-empty", "viewer");
+    database.prepare(`
+      UPDATE app_memberships SET care_scope_type = 'all' WHERE user_id = 'member-all'
+    `).run();
+    database.prepare(`
+      INSERT INTO app_user_care_party_assignments (
+        id, user_id, care_party_id, created_by, updated_by, created_at, updated_at
+      ) VALUES ('assignment-selected', 'member-selected', 'party-selected', 'tester', 'tester', ?, ?)
+    `).run(timestamp, timestamp);
+
+    assert.deepEqual(
+      await effectiveCareDataScope(scopedUser("member-all", "editor"), persistence.query),
+      { type: "all" }
+    );
+    assert.deepEqual(
+      await effectiveCareDataScope(scopedUser("member-selected", "editor"), persistence.query),
+      { type: "selected", carePartyIds: ["party-selected"] }
+    );
+    assert.deepEqual(
+      await effectiveCareDataScope(scopedUser("member-empty", "viewer"), persistence.query),
+      { type: "selected", carePartyIds: [] }
+    );
+    assert.deepEqual(
+      await effectiveCareDataScope(scopedUser("missing-member", "editor"), persistence.query),
+      { type: "selected", carePartyIds: [] }
+    );
+  });
+});
+
+test("owner and admin scope always resolves to all", async () => {
+  await withDatabase(async (database, persistence) => {
+    insertMembership(database, "member-admin", "admin");
+    const owner = { ...scopedUser("member-owner", "admin"), isOwner: true };
+
+    assert.deepEqual(await effectiveCareDataScope(owner, persistence.query), { type: "all" });
+    assert.deepEqual(
+      await effectiveCareDataScope(scopedUser("member-admin", "admin"), persistence.query),
+      { type: "all" }
+    );
   });
 });
