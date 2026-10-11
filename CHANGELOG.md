@@ -6,6 +6,36 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.35.0] - 2026-10-11
+
+### Added
+
+- Add explicit per-member care-data scopes for all children, selected children,
+  or no care records.
+- Add an owner-facing access summary and preview before invitations or existing
+  member permissions are changed.
+
+### Changed
+
+- Consolidate role, care-data scope, invitation, and member administration in
+  one settings workflow with clear capability descriptions.
+- Apply the same scoped access rules to care entries, reports, calendar feeds,
+  confirmations, transfers, and supporting domain records.
+
+### Security and privacy
+
+- Enforce role capabilities and care-data scopes on the server for every
+  affected read and write path instead of relying on interface visibility.
+- Revalidate access changes transactionally and preserve owner safeguards,
+  audit attribution, and generic error responses.
+
+### Compatibility
+
+- Apply migration `037` on SQLite and PostgreSQL to store explicit member data
+  scopes while preserving existing workspace memberships.
+- Existing backups, restores, invitations, and portable transfers remain
+  supported.
+
 ## [1.34.0] - 2026-10-11
 
 ### Added
