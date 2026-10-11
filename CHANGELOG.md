@@ -6,6 +6,41 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.34.0] - 2026-10-11
+
+### Added
+
+- Add an owner-only workflow to inventory privacy-relevant records and preview
+  approved access revocation, anonymization, and erasure actions before any
+  data is changed.
+- Add explicit confirmation and stale-preview protection for privacy actions,
+  with aggregate-only technical results.
+
+### Changed
+
+- Revoke workspace access and detach current authentication identities as one
+  controlled operation before later lifecycle actions are applied.
+- Preserve shared-domain consistency and protected historical context while
+  anonymizing approved attributes or removing approved domain data.
+- Document how backups, exports, portable transfers, and restored data relate
+  to operator-managed privacy requests.
+
+### Security and privacy
+
+- Execute approved lifecycle actions transactionally with owner safeguards,
+  authorization revalidation, idempotency, rollback, and audit attribution.
+- Keep public responses, logs, and downloadable technical results free of
+  personal record contents and authentication identifiers.
+- Avoid automatic retention decisions or legal conclusions; the operator
+  remains responsible for defining and approving each action.
+
+### Compatibility
+
+- Apply migrations `035` and `036` on SQLite and PostgreSQL for bounded action
+  state and nullable child birth attributes required by approved anonymization.
+- Existing installations, backups, exports, and portable transfer packages
+  remain supported.
+
 ## [1.33.1] - 2026-10-01
 
 ### Security and reliability
