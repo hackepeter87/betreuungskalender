@@ -685,12 +685,79 @@ test("workspace roles enforce restricted projections and scheduler writes", asyn
   assert.equal((await fetch(feed.feedUrl)).status, 404);
 
   const noAssignmentDatabase = new Database(databasePath);
-  noAssignmentDatabase.prepare(`
-    UPDATE app_user_care_party_assignments
-    SET deleted_at = ?, updated_at = ?
-    WHERE deleted_at IS NULL
-  `).run("2026-07-27T12:00:00.000Z", "2026-07-27T12:00:00.000Z");
+  noAssignmentDatabase.transaction(() => {
+    noAssignmentDatabase.prepare(`
+      INSERT INTO care_confirmation_requests (
+        id, care_entry_id, user_id, due_at, status, reminder_count, created_at, updated_at
+      ) VALUES ('confirmation-empty-scope', ?, ?, ?, 'open', 0, ?, ?)
+    `).run(
+      customLocationEntry.id,
+      editorSession.user?.id,
+      timestamp,
+      timestamp,
+      timestamp
+    );
+    noAssignmentDatabase.prepare(`
+      UPDATE app_user_care_party_assignments
+      SET deleted_at = ?, updated_at = ?
+      WHERE deleted_at IS NULL
+    `).run("2026-07-27T12:00:00.000Z", "2026-07-27T12:00:00.000Z");
+  })();
   noAssignmentDatabase.close();
+
+  assert.deepEqual(await jsonRequest<ApiScheduleEntry[]>(
+    baseUrl,
+    "/api/care-entries/schedule?startDate=2030-07-05&endDate=2030-07-05",
+    editorHeaders
+  ), []);
+  assert.deepEqual(await jsonRequest<ApiCareParty[]>(baseUrl, "/api/care-parties", editorHeaders), []);
+  assert.deepEqual(await jsonRequest<Array<{ id: string }>>(
+    baseUrl,
+    "/api/contact-patterns",
+    editorHeaders
+  ), []);
+  const emptyScopeReport = await jsonRequest<{
+    data: { careParties: Array<{ id: string }>; entries: Array<{ id: string }> };
+  }>(
+    baseUrl,
+    "/api/reports/snapshot?startDate=2030-07-05&endDate=2030-07-08",
+    editorHeaders
+  );
+  assert.deepEqual(emptyScopeReport.data.careParties, []);
+  assert.deepEqual(emptyScopeReport.data.entries, []);
+  assert.deepEqual(await jsonRequest<Array<{ id: string }>>(
+    baseUrl,
+    "/api/care-confirmations/open",
+    editorHeaders
+  ), []);
+  assert.equal((await (await fetch(scopedEditorFeed.feedUrl)).text()).includes("BEGIN:VEVENT"), false);
+  const emptyScopeConflict = await request(baseUrl, "/api/care-conflicts/preview", editorHeaders, {
+    method: "POST",
+    body: JSON.stringify({
+      startDateTime: "2030-07-05T17:00:00.000Z",
+      endDateTime: "2030-07-05T19:00:00.000Z",
+      childIds: [child.id],
+      responsiblePartyId: assignedParty.id
+    })
+  });
+  assert.equal(emptyScopeConflict.status, 403);
+  assert.equal((await emptyScopeConflict.json() as { error: string }).error, "forbidden");
+  const emptyScopeWrite = await request(baseUrl, "/api/care-entries", editorHeaders, {
+    method: "POST",
+    body: JSON.stringify({
+      ...input,
+      startDateTime: "2030-07-09T16:00:00.000Z",
+      endDateTime: "2030-07-09T18:00:00.000Z",
+      status: "planned"
+    })
+  });
+  await expectGenericForbidden(emptyScopeWrite);
+  assert.deepEqual(await jsonRequest<ApiScheduleEntry[]>(
+    baseUrl,
+    "/api/care-entries/schedule?startDate=2030-07-09&endDate=2030-07-09",
+    ownerHeaders
+  ), []);
+
   const unscopedViewerSchedule = await jsonRequest<ApiScheduleEntry[]>(
     baseUrl,
     "/api/care-entries/schedule?startDate=2030-07-05&endDate=2030-07-05",
