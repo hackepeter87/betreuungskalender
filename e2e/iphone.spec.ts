@@ -131,6 +131,32 @@ test("creates and displays a complete invitation link on mobile", async ({ page 
       if (pathname === "/api/invitations/capabilities" && method === "GET") {
         return json({ emailDeliveryAvailable: false });
       }
+      if (pathname === "/api/invitations/access-preview" && method === "POST") {
+        const body = typeof init?.body === "string" ? JSON.parse(init.body) as Record<string, unknown> : {};
+        return json({
+          target: { type: "invitation" },
+          roleModelVersion: "2026-10-01",
+          after: {
+            role: body.role,
+            careDataScope: body.careDataScope,
+            capabilities: {
+              view: ["care_entries_view", "children_basic_view"],
+              edit: [],
+              administer: [],
+              denied: ["care_entries_create", "care_entries_edit", "members_manage"]
+            },
+            globalData: ["child_identity"]
+          },
+          careParties: [],
+          changes: {
+            gainedCapabilities: ["care_entries_view", "children_basic_view"],
+            lostCapabilities: [],
+            gainedCarePartyIds: [],
+            lostCarePartyIds: []
+          },
+          fingerprint: "invitation-mobile-preview"
+        });
+      }
       if (pathname === "/api/invitations" && method === "POST") {
         const now = new Date().toISOString();
         return json({
@@ -139,7 +165,8 @@ test("creates and displays a complete invitation link on mobile", async ({ page 
             role: "viewer",
             expiresAt: new Date(Date.now() + 86_400_000).toISOString(),
             createdAt: now,
-            updatedAt: now
+            updatedAt: now,
+            careDataScope: { type: "all" }
           },
           token: "invite_mobile_compatibility_token",
           invitationUrl: "https://bk.example.invalid/invite?token=invite_mobile_compatibility_token",
@@ -156,7 +183,12 @@ test("creates and displays a complete invitation link on mobile", async ({ page 
   await expect(manager).toBeVisible();
   await expect(manager.getByTestId("invitation-accept-form")).toHaveCount(0);
   await manager.getByTestId("invitation-role").selectOption("viewer");
-  await manager.getByRole("button", { name: "Einladung erstellen" }).click();
+  await manager.getByRole("button", { name: "Einladung prüfen" }).click();
+  const review = page.getByRole("dialog", { name: "Einladung prüfen" });
+  await expect(review).toBeVisible();
+  await expect(review).toHaveCSS("border-bottom-left-radius", "0px");
+  await expect(review).toContainText("Kann ansehen");
+  await review.getByRole("button", { name: "Einladung erstellen" }).click();
 
   const invitationLink = manager.getByTestId("invitation-created-link");
   await expect(invitationLink).toHaveValue(/\/invite\?token=.+/);

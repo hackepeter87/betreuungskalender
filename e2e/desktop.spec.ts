@@ -745,6 +745,7 @@ test("manages member invitations from settings", async ({ page }) => {
       membershipRole?: "admin" | "editor" | "scheduler" | "viewer";
       email?: string;
       lastSeenAt?: string;
+      careDataScope?: { type: "all" } | { type: "selected"; carePartyIds: string[] };
     };
     type Invitation = {
       id: string;
@@ -754,6 +755,7 @@ test("manages member invitations from settings", async ({ page }) => {
       updatedAt: string;
       emailHint?: string;
       revokedAt?: string;
+      careDataScope: { type: "all" } | { type: "selected"; carePartyIds: string[] };
     };
     const now = new Date().toISOString();
     const existingInvitationExpiry = new Date(Date.now() + 14 * 86_400_000).toISOString();
@@ -777,6 +779,7 @@ test("manages member invitations from settings", async ({ page }) => {
         owner: false,
         workspaceAccess: true,
         membershipRole: "editor",
+        careDataScope: { type: "all" },
         lastSeenAt: now
       }
     ];
@@ -787,7 +790,8 @@ test("manages member invitations from settings", async ({ page }) => {
         emailHint: "readonly@example.invalid",
         expiresAt: existingInvitationExpiry,
         createdAt: now,
-        updatedAt: now
+        updatedAt: now,
+        careDataScope: { type: "all" }
       }
     ];
     const json = (body: unknown, status = 200) =>
@@ -845,6 +849,51 @@ test("manages member invitations from settings", async ({ page }) => {
       if (pathname === "/api/invitations/capabilities" && method === "GET") {
         return json({ emailDeliveryAvailable: true });
       }
+      const accessPreview = (
+        target: { type: "member"; userId: string } | { type: "invitation" },
+        body: Record<string, unknown>
+      ) => ({
+        target,
+        roleModelVersion: "2026-10-01",
+        before: target.type === "member" ? {
+          role: "editor",
+          careDataScope: { type: "all" },
+          capabilities: {
+            view: ["care_entries_view", "children_basic_view", "planning_view"],
+            edit: ["care_entries_create", "care_entries_edit"],
+            administer: [],
+            denied: ["members_manage", "destructive_operations"]
+          },
+          globalData: ["child_identity", "holiday_periods"]
+        } : undefined,
+        after: {
+          role: body.role,
+          careDataScope: body.careDataScope,
+          capabilities: {
+            view: ["care_entries_view", "children_basic_view", "planning_view"],
+            edit: body.role === "viewer" ? [] : ["care_entries_create", "care_entries_edit"],
+            administer: body.role === "admin" ? ["members_manage"] : [],
+            denied: body.role === "viewer"
+              ? ["care_entries_create", "care_entries_edit", "members_manage", "destructive_operations"]
+              : ["members_manage", "destructive_operations"]
+          },
+          globalData: ["child_identity", "holiday_periods"]
+        },
+        careParties: [],
+        changes: {
+          gainedCapabilities: [],
+          lostCapabilities: body.role === "viewer" ? ["care_entries_create", "care_entries_edit"] : [],
+          gainedCarePartyIds: [],
+          lostCarePartyIds: []
+        },
+        fingerprint: target.type === "member" ? "member-preview-e2e" : "invitation-preview-e2e"
+      });
+      if (pathname === "/api/invitations/access-preview" && method === "POST") {
+        return json(accessPreview({ type: "invitation" }, readBody(init)));
+      }
+      if (pathname === "/api/members/user-member-e2e/access-preview" && method === "POST") {
+        return json(accessPreview({ type: "member", userId: "user-member-e2e" }, readBody(init)));
+      }
       if (pathname === "/api/invitations" && method === "POST") {
         const body = readBody(init);
         (window as typeof window & { __lastInvitationRequest?: Record<string, unknown> })
@@ -859,7 +908,10 @@ test("manages member invitations from settings", async ({ page }) => {
             ? body.expiresAt
             : new Date(Date.now() + 7 * 86_400_000).toISOString(),
           createdAt: now,
-          updatedAt: now
+          updatedAt: now,
+          careDataScope: body.careDataScope && typeof body.careDataScope === "object"
+            ? body.careDataScope as Invitation["careDataScope"]
+            : { type: "all" }
         };
         invitations = [invitation, ...invitations];
         return json({
@@ -879,7 +931,7 @@ test("manages member invitations from settings", async ({ page }) => {
         );
         return json(invitations.find((invitation) => invitation.id === "invitation-existing-e2e"));
       }
-      if (pathname === "/api/members/user-member-e2e/role" && method === "PUT") {
+      if (pathname === "/api/members/user-member-e2e/access" && method === "PUT") {
         const body = readBody(init);
         members = members.map((member) =>
           member.id === "user-member-e2e"
@@ -890,11 +942,15 @@ test("manages member invitations from settings", async ({ page }) => {
                   : "editor",
                 membershipRole: body.role === "admin" || body.role === "scheduler" || body.role === "viewer"
                   ? body.role
-                  : "editor"
+                  : "editor",
+                careDataScope: body.careDataScope && typeof body.careDataScope === "object"
+                  ? body.careDataScope as Member["careDataScope"]
+                  : { type: "all" }
               }
             : member
         );
-        return json(members.find((member) => member.id === "user-member-e2e"));
+        const member = members.find((item) => item.id === "user-member-e2e");
+        return json({ member, access: accessPreview({ type: "member", userId: "user-member-e2e" }, body).after });
       }
       if (pathname === "/api/members/user-member-e2e" && method === "DELETE") {
         members = members.map((member) =>
@@ -936,13 +992,22 @@ test("manages member invitations from settings", async ({ page }) => {
   expect(Math.abs(initialWidths.contentWidth - initialWidths.formWidth)).toBeLessThanOrEqual(2);
 
   await manager.getByTestId("invitation-email-hint").fill("new-user@example.invalid");
+  await invitationForm.getByLabel("Ausgewählte betreuende Personen").check();
+  await manager.getByTestId("invitation-role").selectOption("admin");
+  await expect(invitationForm.getByLabel("Alle betreuenden Personen")).toBeChecked();
   await manager.getByTestId("invitation-role").selectOption("scheduler");
   await manager.getByTestId("invitation-expires-days").fill("14");
   await expect(manager.getByTestId("invitation-send-email")).toBeChecked();
   await manager.getByTestId("invitation-send-email").uncheck();
   await manager.getByTestId("invitation-email-hint").fill("corrected-user@example.invalid");
   await expect(manager.getByTestId("invitation-send-email")).not.toBeChecked();
-  await manager.getByRole("button", { name: "Einladung erstellen" }).click();
+  await manager.getByRole("button", { name: "Einladung prüfen" }).click();
+  const invitationReview = page.getByRole("dialog", { name: "Einladung prüfen" });
+  await expect(invitationReview).toBeVisible();
+  await expect(invitationReview).toContainText("Kann ansehen");
+  await expect(invitationReview).toContainText("Kein Zugriff");
+  await expect(invitationReview).not.toContainText("care_entries_view");
+  await invitationReview.getByRole("button", { name: "Einladung erstellen" }).click();
   await expect(manager).toContainText("Einladung wurde erstellt.");
   await expect(manager.getByTestId("invitation-created-link")).toHaveValue(
     "https://bk.example.invalid/invite?token=invite_e2e_created_token"
@@ -968,8 +1033,20 @@ test("manages member invitations from settings", async ({ page }) => {
   )).toBe(false);
 
   const memberRow = manager.getByTestId("member-row-user-member-e2e");
-  await memberRow.getByTestId("member-role-select").selectOption("viewer");
-  await expect(manager).toContainText("Rolle wurde aktualisiert.");
+  await memberRow.getByRole("button", { name: "Zugriff verwalten" }).click();
+  let memberEditor = page.getByRole("dialog", { name: "Zugriff für Member E2E" });
+  await expect(memberEditor).toBeVisible();
+  expect(await memberEditor.evaluate((dialog) => dialog.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press("Escape");
+  await expect(memberEditor).toHaveCount(0);
+  await memberRow.getByRole("button", { name: "Zugriff verwalten" }).click();
+  memberEditor = page.getByRole("dialog", { name: "Zugriff für Member E2E" });
+  await memberEditor.getByLabel("Nur lesen").check();
+  await memberEditor.getByRole("button", { name: "Änderung prüfen" }).click();
+  await expect(memberEditor).toContainText("Wird entzogen");
+  await expect(memberEditor).toContainText("Einträge anlegen");
+  await memberEditor.getByRole("button", { name: "Zugriff speichern" }).click();
+  await expect(manager).toContainText("Zugriff wurde aktualisiert.");
   await expect(memberRow).toContainText("Nur lesen");
 
   await memberRow.getByTestId("member-remove-role").click();
@@ -1681,20 +1758,7 @@ test("manages care parties and assigns them to entries and contact rules", async
   )).toBe(true);
 
   await navigate(page, "settings");
-  const assignments = page.getByTestId("user-care-party-assignments");
-  await expect(assignments).toContainText("local-dev");
-  const partyAssignment = assignments.getByRole("checkbox", { name: partyName });
-  if (!(await partyAssignment.isChecked())) {
-    await partyAssignment.click();
-  }
-  await expect(partyAssignment).toBeChecked();
-  const assignmentRows = await (await request.get("/api/user-care-party-assignments")).json() as Array<{
-    userId: string;
-    carePartyIds: string[];
-  }>;
-  expect(assignmentRows.some((assignment) =>
-    assignment.userId === "local-dev" && assignment.carePartyIds.includes(party!.id)
-  )).toBe(true);
+  await expect(page.getByTestId("user-care-party-assignments")).toHaveCount(0);
 
   const manager = page.getByTestId("calendar-feed-manager");
   await manager.getByTestId("calendar-feed-scope").selectOption(`party:${party!.id}`);
