@@ -25,6 +25,10 @@ import {
   sendInvitationEmail,
   type InvitationEmailConfig
 } from "./services/invitationEmail.js";
+import {
+  invitationCareDataScope,
+  membershipCareDataScope
+} from "./services/careDataScopes.js";
 import { membershipRoleForUser } from "./services/memberships.js";
 
 const migrationsDirectory = resolve(process.cwd(), "server/migrations");
@@ -98,6 +102,31 @@ test("valid invitations can be accepted by authenticated users", async () => {
     assert.equal(accepted.acceptedUserId, user.id);
     assert.equal(accepted.acceptedAt, "2026-07-05T11:00:00.000Z");
     assert.equal(await membershipRoleForUser(user.id, persistence.query), "editor");
+    assert.deepEqual(await membershipCareDataScope(user.id, persistence.query), { type: "all" });
+  });
+});
+
+test("selected invitation scopes remain selected when the selection is empty", async () => {
+  await withDatabase(async (_database, persistence) => {
+    const user = insertUser(_database, "user_empty_scope");
+    const created = await createInvitation({
+      role: "viewer",
+      expiresAt: "2026-07-06T10:00:00.000Z",
+      actorId: "owner",
+      token: "test-token-empty-scope-invitation-000000",
+      timestamp: "2026-07-05T10:00:00.000Z",
+      careDataScope: { type: "selected", carePartyIds: [] }
+    }, persistence.query);
+
+    assert.deepEqual(await invitationCareDataScope(created.invitation.id, persistence.query), {
+      type: "selected",
+      carePartyIds: []
+    });
+    await acceptInvitation(created.token, user, persistence, "2026-07-05T11:00:00.000Z");
+    assert.deepEqual(await membershipCareDataScope(user.id, persistence.query), {
+      type: "selected",
+      carePartyIds: []
+    });
   });
 });
 
@@ -186,6 +215,10 @@ test("transfer-linked invitations apply only the selected role and proposed care
     await acceptInvitation(created.token, user, persistence, "2026-07-05T11:00:00.000Z");
 
     assert.equal(await membershipRoleForUser(user.id, persistence.query), "scheduler");
+    assert.deepEqual(await membershipCareDataScope(user.id, persistence.query), {
+      type: "selected",
+      carePartyIds: ["party-transfer"]
+    });
     assert.deepEqual(database.prepare(`
       SELECT care_party_id AS carePartyId
       FROM app_user_care_party_assignments

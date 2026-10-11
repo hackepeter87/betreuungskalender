@@ -105,6 +105,7 @@ export async function clearDomainData(database: DatabaseExecutor): Promise<void>
     "unavailable_period_children",
     "contact_rule_children",
     "contact_pattern_children",
+    "app_invitation_care_party_assignments",
     "trips",
     "costs",
     "care_entries",

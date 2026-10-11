@@ -47,6 +47,7 @@ import {
 } from "./services/dataTransfer.js";
 import { createEdgeCaseDemoData } from "./services/demoFixtures.js";
 import { acceptInvitation, createInvitation, listInvitations } from "./services/invitations.js";
+import { invitationCareDataScope, membershipCareDataScope } from "./services/careDataScopes.js";
 import {
   executeLegacyMigration,
   getLegacyDatabaseSummary,
@@ -342,7 +343,8 @@ async function runApplicationScenario(runtime: PersistenceRuntime) {
     emailHint: invited.email,
     token: "parity-invitation-token",
     timestamp: "2026-07-01T09:00:00.000Z",
-    expiresAt: "2026-07-08T09:00:00.000Z"
+    expiresAt: "2026-07-08T09:00:00.000Z",
+    careDataScope: { type: "selected" as const, carePartyIds: ["demo-party-primary"] }
   }), runtime.query);
   const acceptedInvitation = await acceptInvitation(
     createdInvitation.token,
@@ -433,6 +435,8 @@ async function runApplicationScenario(runtime: PersistenceRuntime) {
 
   const members = await listMembers(runtime.query, { includeLocalDevelopmentIdentity: false });
   const invitations = await listInvitations(runtime.query);
+  const acceptedScope = await membershipCareDataScope(invited.id, runtime.query);
+  const listedScope = await invitationCareDataScope(createdInvitation.invitation.id, runtime.query);
   const status = await calendarFeedStatus(invited.id, "all", runtime.query);
   const domain = await domainSummary(runtime);
   const integrity = await runtime.integrity();
@@ -459,6 +463,8 @@ async function runApplicationScenario(runtime: PersistenceRuntime) {
       role: acceptedInvitation.role,
       accepted: Boolean(acceptedInvitation.acceptedAt),
       listed: invitations.length,
+      acceptedScope,
+      listedScope,
       userWorkspaceRole: acceptedUser?.workspaceRole,
       userWorkspaceAccess: acceptedUser?.workspaceAccess
     },

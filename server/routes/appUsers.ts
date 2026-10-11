@@ -1,5 +1,4 @@
 import type { FastifyInstance } from "fastify";
-import { randomUUID } from "node:crypto";
 import { config } from "../config.js";
 import type { DatabaseExecutor } from "../db/runtime.js";
 import {
@@ -10,6 +9,8 @@ import {
   updateMemberRole
 } from "../services/memberManagement.js";
 import { listAppUsers } from "../services/users.js";
+import { membershipRoleForUser, setMembershipAccess } from "../services/memberships.js";
+import { assertActiveCareParties, syncMemberCareDataScope } from "../services/careDataScopes.js";
 import {
   memberRoleInputSchema,
   userCarePartyAssignmentInputSchema
@@ -143,38 +144,40 @@ export async function appUserRoutes(app: FastifyInstance): Promise<void> {
         if (!user) {
           throw new AssignmentError("unknown_user", 404, "Mitglied nicht gefunden.");
         }
-        for (const carePartyId of uniqueIds) {
-          const careParty = await database.selectFrom("care_parties")
-            .select("id")
-            .where("id", "=", carePartyId)
-            .where("deleted_at", "is", null)
-            .executeTakeFirst();
-          if (!careParty) {
-            throw new AssignmentError(
-              "invalid_relation",
-              400,
-              "Betreuende Person ist nicht vorhanden."
+        const role = await membershipRoleForUser(request.params.userId, database);
+        const before = await activeAssignmentIds(request.params.userId, database);
+        const scope = { type: "selected" as const, carePartyIds: uniqueIds };
+        if (role) {
+          await setMembershipAccess(
+            request.params.userId,
+            role,
+            scope,
+            request.userEmail,
+            database,
+            timestamp
+          );
+          if (role === "admin") {
+            // The legacy assignment endpoint remains usable until the previewed
+            // access API replaces it. Admin access still resolves to `all`.
+            await syncMemberCareDataScope(
+              request.params.userId,
+              scope,
+              request.userEmail,
+              database,
+              timestamp
             );
           }
+        } else {
+          await assertActiveCareParties(scope, database);
+          await syncMemberCareDataScope(
+            request.params.userId,
+            scope,
+            request.userEmail,
+            database,
+            timestamp
+          );
         }
-        const before = await activeAssignmentIds(request.params.userId, database);
-        await database.updateTable("app_user_care_party_assignments")
-          .set({ deleted_at: timestamp, updated_by: request.userEmail, updated_at: timestamp })
-          .where("user_id", "=", request.params.userId)
-          .where("deleted_at", "is", null)
-          .execute();
-        for (const carePartyId of uniqueIds) {
-          await database.insertInto("app_user_care_party_assignments").values({
-            id: randomUUID(),
-            user_id: request.params.userId,
-            care_party_id: carePartyId,
-            created_by: request.userEmail,
-            updated_by: request.userEmail,
-            created_at: timestamp,
-            updated_at: timestamp,
-            deleted_at: null
-          }).execute();
-        }
+        const after = await activeAssignmentIds(request.params.userId, database);
         await database.updateTable("care_confirmation_requests")
           .set({ deleted_at: timestamp, updated_at: timestamp })
           .where("user_id", "=", request.params.userId)
@@ -189,13 +192,13 @@ export async function appUserRoutes(app: FastifyInstance): Promise<void> {
           action: "updated",
           field_name: null,
           old_value: JSON.stringify(before),
-          new_value: JSON.stringify(uniqueIds),
+          new_value: JSON.stringify(after),
           metadata_json: null,
           created_at: timestamp,
           updated_at: timestamp,
           deleted_at: null
         }).execute();
-        return activeAssignmentIds(request.params.userId, database);
+        return after;
       });
       return { userId: request.params.userId, carePartyIds: result };
     } catch (error) {

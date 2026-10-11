@@ -68,8 +68,9 @@ documented in [database backends](database-backends.md).
 | `audit_log` | Field changes, creates, deletes, and post-close changes |
 | `app_users` | Stable users derived from trusted proxy headers or native OIDC claims |
 | `app_memberships` | Application-level workspace roles; active membership is authoritative after ownership is established |
-| `app_invitations` | App-owned invitation token hashes for assigning membership roles after login |
-| `app_user_care_party_assignments` | Optional mapping between authenticated users and domain care parties |
+| `app_invitations` | App-owned invitation token hashes with the role and explicit care-data scope applied after login |
+| `app_invitation_care_party_assignments` | Selected care-party scope attached to a pending invitation |
+| `app_user_care_party_assignments` | Selected care-party scope attached to an authenticated member |
 | `calendar_feed_tokens` | Revocable per-user iCalendar feed token hashes |
 | `native_oidc_login_states` | Short-lived server-side OIDC state, nonce, and PKCE verifier records |
 | `native_oidc_sessions` | Server-side native OIDC session token hashes and expiry metadata |
@@ -108,8 +109,11 @@ access.
 `app_invitations` stores only hashes of one-time invitation tokens. The raw
 token is used only inside the server to construct the complete invitation URL
 and is never persisted or returned as a separate API field. Invitations carry
-the target app role, an optional email hint, expiry, acceptance and revocation
-timestamps, and the accepted app user ID once claimed.
+the target app role, explicit care-data scope, an optional email hint, expiry,
+acceptance and revocation timestamps, and the accepted app user ID once
+claimed. A `selected` invitation stores its active relations in
+`app_invitation_care_party_assignments`; an empty selection is valid and does
+not mean full access.
 
 Member administration uses `settings.setup.ownerUserId`. The explicit owner can
 list members, manage invitation records, and update workspace roles. Existing
@@ -206,14 +210,22 @@ Each care party has a free display name and a coarse kind (`father`, `mother`,
 and flexible contact rules are backfilled to a neutral default care party
 during migration `012_care_parties` when such data exists.
 
-`app_user_care_party_assignments` enables optional shared management. When no
-active assignment exists, the installation remains in solo mode and users with
-write permission can manage all care parties. Once at least one assignment is
-configured, non-admin users must write care entries and contact rules for one
-of their assigned care parties. This scope also applies to legacy contact
-patterns and reduced schedule projections. Conflict indicators in those
-projections are derived only from entries in the same visible scope. Admin
-users remain unrestricted so they can repair assignments and data.
+Migration `037_explicit_member_data_scopes` replaces the implicit global
+assignment switch with an explicit scope on each active membership and pending
+invitation. `care_scope_type = all` grants the complete care domain;
+`care_scope_type = selected` uses the active relations in
+`app_user_care_party_assignments` or
+`app_invitation_care_party_assignments`. An empty selected scope is a valid
+least-privilege state. Owner and admin memberships normalize to `all`.
+
+The migration preserves existing behavior deterministically: administrators
+remain unrestricted; when no active user assignment exists, existing
+non-admin memberships and invitations receive `all`; otherwise they receive
+`selected`, and existing member assignments remain their selection. New
+invitations persist their scope before acceptance and apply role plus scope in
+one transaction. Native database backups include this authorization state.
+Portable domain transfers intentionally exclude memberships, invitations and
+their scope relations; access is configured afresh on the target installation.
 
 ## Derived care conflicts
 

@@ -28,6 +28,7 @@ interface AppInvitationsTable extends DefaultActorColumns {
   token_hash: string;
   email_hint: NullableText;
   role: string;
+  care_scope_type: DefaultText;
   expires_at: string;
   accepted_user_id: NullableText;
   accepted_at: NullableText;
@@ -38,10 +39,20 @@ interface AppInvitationsTable extends DefaultActorColumns {
   data_transfer_actor_id: NullableText;
 }
 
+interface AppInvitationCarePartyAssignmentsTable extends DefaultActorColumns {
+  id: string;
+  invitation_id: string;
+  care_party_id: string;
+  created_at: DefaultText;
+  updated_at: DefaultText;
+  deleted_at: NullableText;
+}
+
 interface AppMembershipsTable extends DefaultActorColumns {
   id: string;
   user_id: string;
   role: string;
+  care_scope_type: DefaultText;
   created_at: DefaultText;
   updated_at: DefaultText;
   deleted_at: NullableText;
@@ -453,6 +464,7 @@ interface UnavailablePeriodsTable extends SoftDeleteColumns, ActorColumns {
 }
 
 export interface DatabaseSchema {
+  app_invitation_care_party_assignments: AppInvitationCarePartyAssignmentsTable;
   app_invitations: AppInvitationsTable;
   app_memberships: AppMembershipsTable;
   app_user_care_party_assignments: AppUserCarePartyAssignmentsTable;
@@ -496,6 +508,7 @@ export interface DatabaseSchema {
 }
 
 export const databaseTableNames = [
+  "app_invitation_care_party_assignments",
   "app_invitations",
   "app_memberships",
   "app_user_care_party_assignments",

@@ -46,8 +46,104 @@ const expectedMigrations = [
   "033_oidc_browser_marker",
   "034_care_confirmation_email_deliveries",
   "035_privacy_action_runs",
-  "036_nullable_child_birth_attributes"
+  "036_nullable_child_birth_attributes",
+  "037_explicit_member_data_scopes"
 ];
+
+test("explicit member data scopes preserve legacy access deterministically", async () => {
+  await withTemporaryDirectory("explicit-member-data-scopes", (directory) => {
+    const oldMigrations = join(directory, "old-migrations");
+    mkdirSync(oldMigrations);
+    for (const file of readdirSync(migrationsDirectory)) {
+      if (!file.endsWith(".sql") || file.startsWith("037_")) continue;
+      copyFileSync(join(migrationsDirectory, file), join(oldMigrations, file));
+    }
+
+    const database = openDatabase(join(directory, "app.sqlite"));
+    try {
+      migrateDatabase(database, oldMigrations);
+      const timestamp = "2026-10-11T10:00:00.000Z";
+      database.exec(`
+        INSERT INTO app_users (
+          id, external_subject, display_name, role, groups_json,
+          last_seen_at, created_at, updated_at
+        ) VALUES
+          ('scope-admin', 'subject-admin', 'Admin', 'admin', '[]', '${timestamp}', '${timestamp}', '${timestamp}'),
+          ('scope-editor', 'subject-editor', 'Editor', 'parent', '[]', '${timestamp}', '${timestamp}', '${timestamp}'),
+          ('scope-viewer', 'subject-viewer', 'Viewer', 'readonly', '[]', '${timestamp}', '${timestamp}', '${timestamp}');
+        INSERT INTO care_parties (
+          id, name, kind, created_by, updated_by, created_at, updated_at
+        ) VALUES ('scope-party', 'Fictional caregiver', 'other', 'scope-admin', 'scope-admin', '${timestamp}', '${timestamp}');
+        INSERT INTO app_memberships (
+          id, user_id, role, created_by, updated_by, created_at, updated_at
+        ) VALUES
+          ('scope-membership-admin', 'scope-admin', 'admin', 'scope-admin', 'scope-admin', '${timestamp}', '${timestamp}'),
+          ('scope-membership-editor', 'scope-editor', 'editor', 'scope-admin', 'scope-admin', '${timestamp}', '${timestamp}'),
+          ('scope-membership-viewer', 'scope-viewer', 'viewer', 'scope-admin', 'scope-admin', '${timestamp}', '${timestamp}');
+        INSERT INTO app_user_care_party_assignments (
+          id, user_id, care_party_id, created_by, updated_by, created_at, updated_at
+        ) VALUES ('scope-assignment', 'scope-editor', 'scope-party', 'scope-admin', 'scope-admin', '${timestamp}', '${timestamp}');
+        INSERT INTO app_invitations (
+          id, token_hash, role, expires_at, created_by, updated_by, created_at, updated_at
+        ) VALUES
+          ('scope-invite-admin', '${"a".repeat(64)}', 'admin', '2027-01-01T00:00:00.000Z', 'scope-admin', 'scope-admin', '${timestamp}', '${timestamp}'),
+          ('scope-invite-viewer', '${"b".repeat(64)}', 'viewer', '2027-01-01T00:00:00.000Z', 'scope-admin', 'scope-admin', '${timestamp}', '${timestamp}');
+      `);
+
+      migrateDatabase(database, migrationsDirectory);
+
+      assert.deepEqual(database.prepare(`
+        SELECT user_id AS userId, care_scope_type AS scopeType
+        FROM app_memberships
+        WHERE user_id LIKE 'scope-%'
+        ORDER BY user_id
+      `).all(), [
+        { userId: "scope-admin", scopeType: "all" },
+        { userId: "scope-editor", scopeType: "selected" },
+        { userId: "scope-viewer", scopeType: "selected" }
+      ]);
+      assert.deepEqual(database.prepare(`
+        SELECT id, care_scope_type AS scopeType
+        FROM app_invitations
+        WHERE id LIKE 'scope-%'
+        ORDER BY id
+      `).all(), [
+        { id: "scope-invite-admin", scopeType: "all" },
+        { id: "scope-invite-viewer", scopeType: "selected" }
+      ]);
+    } finally {
+      database.close();
+    }
+  });
+
+  await withTemporaryDirectory("explicit-global-member-data-scopes", (directory) => {
+    const oldMigrations = join(directory, "old-migrations");
+    mkdirSync(oldMigrations);
+    for (const file of readdirSync(migrationsDirectory)) {
+      if (!file.endsWith(".sql") || file.startsWith("037_")) continue;
+      copyFileSync(join(migrationsDirectory, file), join(oldMigrations, file));
+    }
+    const database = openDatabase(join(directory, "app.sqlite"));
+    try {
+      migrateDatabase(database, oldMigrations);
+      database.exec(`
+        INSERT INTO app_users (
+          id, external_subject, display_name, role, groups_json,
+          last_seen_at, created_at, updated_at
+        ) VALUES ('global-viewer', 'subject-global', 'Viewer', 'readonly', '[]', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+        INSERT INTO app_memberships (
+          id, user_id, role, created_by, updated_by, created_at, updated_at
+        ) VALUES ('global-membership', 'global-viewer', 'viewer', 'local-dev', 'local-dev', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP);
+      `);
+      migrateDatabase(database, migrationsDirectory);
+      assert.equal((database.prepare(`
+        SELECT care_scope_type AS scopeType FROM app_memberships WHERE id = 'global-membership'
+      `).get() as { scopeType: string }).scopeType, "all");
+    } finally {
+      database.close();
+    }
+  });
+});
 
 async function withTemporaryDirectory(
   name: string,
@@ -221,7 +317,8 @@ test("care party migration backfills existing active entries", async () => {
         file.startsWith("019_") ||
         file.startsWith("020_") ||
         file.startsWith("025_") ||
-        file.startsWith("029_")
+        file.startsWith("029_") ||
+        file.startsWith("037_")
       ) continue;
       copyFileSync(join(migrationsDirectory, file), join(oldMigrations, file));
     }
