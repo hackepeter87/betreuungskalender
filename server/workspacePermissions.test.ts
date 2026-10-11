@@ -488,6 +488,39 @@ test("workspace roles enforce restricted projections and scheduler writes", asyn
         care_entry_id, child_id, created_at, updated_at
       ) VALUES (?, ?, ?, ?)
     `).run("entry-hidden-unassigned", child.id, timestamp, timestamp);
+    const insertCompletedEntry = mixedScheduleDatabase.prepare(`
+      INSERT INTO care_entries (
+        id, start_datetime, end_datetime, status, care_scope,
+        responsible_party_id, actual_responsible_party_id, duration_minutes,
+        created_by, updated_by, created_at, updated_at
+      ) VALUES (?, '2030-07-08T16:00:00.000Z', '2030-07-08T18:00:00.000Z',
+        'completed', 'hourly', ?, ?, 120, ?, ?, ?, ?)
+    `);
+    insertCompletedEntry.run(
+      "entry-visible-by-actual-party",
+      unassignedParty.id,
+      assignedParty.id,
+      ownerSession.user?.id,
+      ownerSession.user?.id,
+      timestamp,
+      timestamp
+    );
+    insertCompletedEntry.run(
+      "entry-hidden-by-actual-party",
+      assignedParty.id,
+      unassignedParty.id,
+      ownerSession.user?.id,
+      ownerSession.user?.id,
+      timestamp,
+      timestamp
+    );
+    const insertCompletedChild = mixedScheduleDatabase.prepare(`
+      INSERT INTO care_entry_children (
+        care_entry_id, child_id, created_at, updated_at
+      ) VALUES (?, ?, ?, ?)
+    `);
+    insertCompletedChild.run("entry-visible-by-actual-party", child.id, timestamp, timestamp);
+    insertCompletedChild.run("entry-hidden-by-actual-party", child.id, timestamp, timestamp);
   })();
   mixedScheduleDatabase.close();
 
@@ -519,6 +552,61 @@ test("workspace roles enforce restricted projections and scheduler writes", asyn
     adminHeaders
   );
   assert.deepEqual(adminSchedule.map(({ id }) => id), ownerSchedule.map(({ id }) => id));
+
+  const actualPartySchedule = await jsonRequest<ApiScheduleEntry[]>(
+    baseUrl,
+    "/api/care-entries/schedule?startDate=2030-07-08&endDate=2030-07-08",
+    editorHeaders
+  );
+  assert.deepEqual(actualPartySchedule.map(({ id }) => id), ["entry-visible-by-actual-party"]);
+  assert.equal(actualPartySchedule[0]?.responsibleParty?.id, assignedParty.id);
+  assert.deepEqual((await jsonRequest<Array<{ id: string }>>(
+    baseUrl,
+    "/api/care-entries?startDate=2030-07-08&endDate=2030-07-08",
+    editorHeaders
+  )).map(({ id }) => id), ["entry-visible-by-actual-party"]);
+  assert.equal((await request(
+    baseUrl,
+    "/api/care-entries/entry-visible-by-actual-party",
+    editorHeaders
+  )).status, 200);
+  await expectGenericForbidden(await request(
+    baseUrl,
+    "/api/care-entries/entry-hidden-by-actual-party",
+    editorHeaders
+  ));
+  assert.deepEqual((await jsonRequest<ApiCareParty[]>(
+    baseUrl,
+    "/api/care-parties",
+    editorHeaders
+  )).map(({ id }) => id), [assignedParty.id]);
+  const scopedEditorFeed = await jsonRequest<{ feedUrl: string }>(
+    baseUrl,
+    "/api/calendar-feed",
+    editorHeaders,
+    { method: "POST", body: JSON.stringify({ scope: "all" }) }
+  );
+  const editorFeedBody = await (await fetch(scopedEditorFeed.feedUrl)).text();
+  assert.equal(editorFeedBody.includes("entry-visible-by-actual-party@betreuungskalender"), true);
+  assert.equal(editorFeedBody.includes("entry-hidden-by-actual-party@betreuungskalender"), false);
+  const scopedReport = await jsonRequest<{
+    data: { careParties: Array<{ id: string }>; entries: Array<{ id: string }> };
+  }>(
+    baseUrl,
+    "/api/reports/snapshot?startDate=2030-07-08&endDate=2030-07-08",
+    editorHeaders
+  );
+  assert.deepEqual(scopedReport.data.careParties.map(({ id }) => id), [assignedParty.id]);
+  assert.deepEqual(scopedReport.data.entries.map(({ id }) => id), ["entry-visible-by-actual-party"]);
+  assert.deepEqual(await jsonRequest(baseUrl, "/api/month-closings", editorHeaders), []);
+  await expectGenericForbidden(await request(baseUrl, "/api/month-closings", editorHeaders, {
+    method: "POST",
+    body: JSON.stringify({
+      monthKey: "2030-07",
+      dataUpdatedAt: "2030-07-31T23:59:59.000Z",
+      summary: { entries: 1 }
+    })
+  }));
 
   const conflictDatabase = new Database(databasePath);
   conflictDatabase.pragma("foreign_keys = ON");
@@ -608,10 +696,7 @@ test("workspace roles enforce restricted projections and scheduler writes", asyn
     "/api/care-entries/schedule?startDate=2030-07-05&endDate=2030-07-05",
     viewerHeaders
   );
-  assert.deepEqual(
-    unscopedViewerSchedule.map(({ id }) => id),
-    ownerSchedule.map(({ id }) => id)
-  );
+  assert.deepEqual(unscopedViewerSchedule, []);
 
   assert.equal((await request(baseUrl, "/api/app-data", ownerHeaders, { method: "DELETE" })).status, 204);
   assert.equal((await request(baseUrl, "/api/members", ownerHeaders)).status, 200);

@@ -9,6 +9,8 @@ import {
   markDomainClosedMonthsChanged,
   recordDomainAudit,
   recordDomainFieldChanges,
+  isCarePartyAccessError,
+  scopedPersistedCarePartyIds,
   syncPersistedChildJunction
 } from "../services/domainPersistence.js";
 import type { DatabaseExecutor } from "../db/runtime.js";
@@ -90,14 +92,6 @@ async function validateRelations(database: DatabaseExecutor, input: {
   await assertPersistedCareParty(database, input.responsiblePartyId);
 }
 
-async function assertOptionalCarePartyAccess(
-  database: DatabaseExecutor,
-  user: Parameters<typeof assertCanUsePersistedCareParty>[1],
-  responsiblePartyId?: string
-): Promise<void> {
-  if (responsiblePartyId) await assertCanUsePersistedCareParty(database, user, responsiblePartyId);
-}
-
 async function getPeriod(database: DatabaseExecutor, id: string): Promise<ApiUnavailablePeriod | undefined> {
   const row = await database.selectFrom("unavailable_periods")
     .selectAll()
@@ -112,9 +106,12 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
     "/api/unavailable-periods",
     readLimit,
     async (request) => {
+      const scopedPartyIds = await scopedPersistedCarePartyIds(app.persistence.query, request.user);
+      if (scopedPartyIds?.length === 0) return [];
       let query = app.persistence.query.selectFrom("unavailable_periods")
         .selectAll()
         .where("deleted_at", "is", null);
+      if (scopedPartyIds) query = query.where("responsible_party_id", "in", scopedPartyIds);
       if (request.query.startDate) {
         query = query.where("end_datetime", ">=", `${request.query.startDate}T00:00:00`);
       }
@@ -139,7 +136,7 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
     try {
       const period = await app.persistence.transaction(async (database) => {
         await validateRelations(database, omitUndefinedValues(parsed.data));
-        await assertOptionalCarePartyAccess(database, request.user, parsed.data.responsiblePartyId);
+        await assertCanUsePersistedCareParty(database, request.user, parsed.data.responsiblePartyId);
         await database.insertInto("unavailable_periods").values({
           id,
           start_datetime: parsed.data.startDateTime,
@@ -174,6 +171,9 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
       });
       return reply.code(201).send(period);
     } catch (error) {
+      if (isCarePartyAccessError(error)) {
+        return reply.code(403).send({ error: "forbidden" });
+      }
       return reply.code(400).send({
         error: "validation_error",
         message: error instanceof Error ? error.message : String(error)
@@ -187,6 +187,12 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
     async (request, reply) => {
       const before = await getPeriod(app.persistence.query, request.params.id);
       if (!before) return reply.code(404).send({ error: "not_found" });
+      try {
+        await assertCanUsePersistedCareParty(app.persistence.query, request.user, before.responsiblePartyId);
+      } catch (error) {
+        if (isCarePartyAccessError(error)) return reply.code(403).send({ error: "forbidden" });
+        throw error;
+      }
       const parsed = unavailablePeriodInputSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply.code(400).send({
@@ -198,8 +204,8 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
         const timestamp = nowIso();
         return await app.persistence.transaction(async (database) => {
         await validateRelations(database, omitUndefinedValues(parsed.data));
-        await assertOptionalCarePartyAccess(database, request.user, before.responsiblePartyId);
-        await assertOptionalCarePartyAccess(database, request.user, parsed.data.responsiblePartyId);
+        await assertCanUsePersistedCareParty(database, request.user, before.responsiblePartyId);
+        await assertCanUsePersistedCareParty(database, request.user, parsed.data.responsiblePartyId);
         await database.updateTable("unavailable_periods").set({
           start_datetime: parsed.data.startDateTime,
           end_datetime: parsed.data.endDateTime,
@@ -248,6 +254,9 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
         return after;
       });
       } catch (error) {
+        if (isCarePartyAccessError(error)) {
+          return reply.code(403).send({ error: "forbidden" });
+        }
         return reply.code(400).send({
           error: "validation_error",
           message: error instanceof Error ? error.message : String(error)
@@ -263,8 +272,11 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
       const before = await getPeriod(app.persistence.query, request.params.id);
       if (!before) return reply.code(404).send({ error: "not_found" });
       try {
-        await assertOptionalCarePartyAccess(app.persistence.query, request.user, before.responsiblePartyId);
+        await assertCanUsePersistedCareParty(app.persistence.query, request.user, before.responsiblePartyId);
       } catch (error) {
+        if (isCarePartyAccessError(error)) {
+          return reply.code(403).send({ error: "forbidden" });
+        }
         return reply.code(400).send({
           error: "validation_error",
           message: error instanceof Error ? error.message : String(error)

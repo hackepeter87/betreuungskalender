@@ -107,6 +107,43 @@ test("report snapshots omit history and use half-open entry end times", async ()
   }
 });
 
+test("report snapshots project entries and aggregates to the explicit care scope", async () => {
+  const runtime = await database();
+  try {
+    await runtime.transaction((database) => importData(createEdgeCaseDemoData(), "fixture-actor", database));
+    const snapshot = await createReportSnapshot({
+      persistence: runtime,
+      startDate: "2026-07-01",
+      endDate: "2026-07-31",
+      includeAuditHistory: true,
+      carePartyIds: ["demo-party-primary"]
+    });
+
+    assert.deepEqual(snapshot.data.careParties.map(({ id }) => id), ["demo-party-primary"]);
+    assert.equal(
+      snapshot.data.entries.every((entry) =>
+        (entry.status === "completed" || entry.status === "partial") && entry.actualResponsiblePartyId
+          ? entry.actualResponsiblePartyId === "demo-party-primary"
+          : entry.responsiblePartyId === "demo-party-primary"),
+      true
+    );
+    assert.equal(
+      snapshot.data.entries.some(({ id }) => id === "demo-entry-holiday-full-day"),
+      false
+    );
+    assert.equal(
+      snapshot.data.unavailablePeriods.every(({ responsiblePartyId }) =>
+        responsiblePartyId === "demo-party-primary"),
+      true
+    );
+    assert.deepEqual(snapshot.data.monthClosures, []);
+    assert.notEqual(snapshot.data.settings.defaultResponsiblePartyId, "demo-party-grandparent");
+    assert.deepEqual(snapshot.data.auditLog, []);
+  } finally {
+    await runtime.close();
+  }
+});
+
 test("report snapshot responses are not cached", async () => {
   const runtime = await database();
   const app = Fastify();

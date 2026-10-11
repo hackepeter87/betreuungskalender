@@ -303,47 +303,29 @@ function dueAtForEntry(endDateTime: string): string {
   return due.toISOString();
 }
 
-async function activeCarePartyAssignmentsExist(database: DatabaseExecutor): Promise<boolean> {
-  return Boolean(await database.selectFrom("app_user_care_party_assignments")
-    .select("id")
-    .where("deleted_at", "is", null)
-    .executeTakeFirst());
-}
-
 async function usersForEntry(
   database: DatabaseExecutor,
   entry: EntryRow,
   maximumRecipients: number
 ): Promise<string[]> {
-  if (entry.responsible_party_id && await activeCarePartyAssignmentsExist(database)) {
-    const rows = await database.selectFrom("app_user_care_party_assignments")
-      .select("user_id")
-      .where("care_party_id", "=", entry.responsible_party_id)
-      .where("deleted_at", "is", null)
-      .orderBy("user_id")
-      .limit(maximumRecipients + 1)
-      .execute();
-    assertWithinLimit(rows.length, maximumRecipients);
-    if (rows.length) {
-      const allowed = await Promise.all(rows.map(async (row) => ({
-        userId: row.user_id,
-        allowed: await userHasWorkspacePermission(row.user_id, "appointments:confirm", database)
-      })));
-      return allowed.filter((item) => item.allowed).map((item) => item.userId);
-    }
-  }
-  const users = await database.selectFrom("app_users")
-    .select("id")
-    .where("deleted_at", "is", null)
-    .where("role", "in", ["admin", "parent"])
-    .orderBy("id")
+  const users = await database.selectFrom("app_memberships as membership")
+    .innerJoin("app_users as users", (join) => join
+      .onRef("users.id", "=", "membership.user_id")
+      .on("users.deleted_at", "is", null))
+    .select("users.id")
+    .distinct()
+    .where("membership.deleted_at", "is", null)
+    .orderBy("users.id")
     .limit(maximumRecipients + 1)
     .execute();
   assertWithinLimit(users.length, maximumRecipients);
-  const allowed = await Promise.all(users.map(async ({ id }) => ({
-    userId: id,
-    allowed: await userHasWorkspacePermission(id, "appointments:confirm", database)
-  })));
+  const allowed = await Promise.all(users.map(async ({ id }) => {
+    const user = await currentUserForId(database, id);
+    return {
+      userId: id,
+      allowed: await canAccessConfirmation(database, user, entry)
+    };
+  }));
   return allowed.filter((item) => item.allowed).map((item) => item.userId);
 }
 

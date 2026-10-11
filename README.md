@@ -356,8 +356,9 @@ installations without an explicit owner can use the same owner link without
 recreating or changing their domain data.
 
 Owner-scoped member administration is available in Settings. Owners can create
-one-time invitations, assign application roles, revoke pending invitations, and
-manage explicit app roles. The complete invitation link is shown only at
+one-time invitations, assign fixed application roles and explicit care-data
+scopes, revoke pending invitations, and manage active memberships. An empty
+selected scope grants no care-party domain data. The complete invitation link is shown only at
 creation time; the server stores token hashes and acceptance metadata. Optional
 SMTP delivery sends exactly the same one-time invitation link that the owner can
 copy manually. After an owner exists, a normal identity-provider login does not

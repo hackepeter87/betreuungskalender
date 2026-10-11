@@ -283,19 +283,6 @@ export async function assertPersistedCareParty(
   }
 }
 
-export async function assignedPersistedCarePartyIds(
-  database: DatabaseExecutor,
-  userId: string
-): Promise<string[]> {
-  const rows = await database.selectFrom("app_user_care_party_assignments")
-    .select("care_party_id")
-    .where("user_id", "=", userId)
-    .where("deleted_at", "is", null)
-    .orderBy("care_party_id")
-    .execute();
-  return rows.map((row) => row.care_party_id);
-}
-
 export class CarePartyAccessError extends Error {
   readonly code = "forbidden";
   readonly statusCode = 403;

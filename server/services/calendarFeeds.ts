@@ -3,7 +3,10 @@ import type { ApiCalendarFeedScope } from "../../shared/api.js";
 import { omitUndefinedValues } from "../../shared/objects.js";
 import type { DatabaseExecutor, PersistenceRuntime } from "../db/runtime.js";
 import { nowIso } from "./common.js";
-import { assignedCarePartyIds, canUseCareParty, sharedCarePartyModeEnabled } from "./carePartyAccess.js";
+import {
+  effectiveCareDataScope,
+  effectiveCareEntryPartyExpression
+} from "./careDataScopes.js";
 import { getCareParty } from "./careParties.js";
 import { findAuthenticatedUserBySubject } from "./users.js";
 import { userHasWorkspacePermission } from "./memberships.js";
@@ -169,7 +172,10 @@ async function assertScopeAllowed(
   const requestUser = user
     ? await findAuthenticatedUserBySubject(user.externalSubject, database)
     : undefined;
-  if (requestUser && !(await canUseCareParty(requestUser, parsed.partyId, database))) {
+  const careScope = requestUser
+    ? await effectiveCareDataScope(requestUser, database)
+    : { type: "selected" as const, carePartyIds: [] };
+  if (careScope.type === "selected" && !careScope.carePartyIds.includes(parsed.partyId)) {
     throw new Error("Diese betreuende Person ist für deinen Benutzer nicht freigegeben.");
   }
 }
@@ -259,7 +265,10 @@ export async function resolveCalendarFeedToken(
   if (!requestUser?.workspaceAccess) return undefined;
   if (row.scope_type === "party") {
     if (!row.scope_party_id || !row.scope_party_name) return undefined;
-    if (!(await canUseCareParty(requestUser, row.scope_party_id, database))) return undefined;
+    const careScope = await effectiveCareDataScope(requestUser, database);
+    if (careScope.type === "selected" && !careScope.carePartyIds.includes(row.scope_party_id)) {
+      return undefined;
+    }
   }
   await database.updateTable("calendar_feed_tokens")
     .set({ last_used_at: nowIso() })
@@ -280,13 +289,12 @@ async function feedEntriesForToken(
   if (!requestUser?.workspaceAccess || !requestUser.workspacePermissions?.includes("feeds:manage-own")) {
     return [];
   }
-  const sharedMode = await sharedCarePartyModeEnabled(database);
-  const unrestricted = !sharedMode || requestUser.isOwner || requestUser.workspaceRole === "admin";
-  const assignedIds = unrestricted ? [] : await assignedCarePartyIds(token.user_id, database);
+  const careScope = await effectiveCareDataScope(requestUser, database);
+  const effectiveParty = effectiveCareEntryPartyExpression("e");
   const scope = scopeFromRow(token);
   let query = database.selectFrom("care_entries as e")
     .leftJoin("care_parties as responsible_party", (join) => join
-      .onRef("responsible_party.id", "=", "e.responsible_party_id")
+      .on("responsible_party.id", "=", effectiveParty)
       .on("responsible_party.deleted_at", "is", null))
     .select([
       "e.id", "e.start_datetime", "e.end_datetime", "e.status", "e.location",
@@ -301,11 +309,11 @@ async function feedEntriesForToken(
     query = query.where("e.created_by", "=", token.user_id);
   } else if (scope.startsWith("party:")) {
     if (!token.scope_party_id) return [];
-    query = query.where("e.responsible_party_id", "=", token.scope_party_id);
-  } else if (!unrestricted && assignedIds.length > 0) {
-    query = query.where("e.responsible_party_id", "in", assignedIds);
-  } else if (!unrestricted) {
-    return [];
+    query = query.where(effectiveParty, "=", token.scope_party_id);
+  }
+  if (careScope.type === "selected") {
+    if (careScope.carePartyIds.length === 0) return [];
+    query = query.where(effectiveParty, "in", careScope.carePartyIds);
   }
   const entries = await query.limit(limits.maximumEntries + 1).execute();
   if (entries.length > limits.maximumEntries) throw new CalendarFeedProcessingLimitError();

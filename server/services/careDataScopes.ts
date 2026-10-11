@@ -1,10 +1,38 @@
 import { randomUUID } from "node:crypto";
+import { sql } from "kysely";
 import type { RequestUser, WorkspaceRole } from "../auth.js";
 import type { DatabaseExecutor } from "../db/runtime.js";
 
 export type CareDataScope =
   | { type: "all" }
   | { type: "selected"; carePartyIds: string[] };
+
+export interface CareEntryScopeFields {
+  status: "planned" | "completed" | "cancelled" | "partial";
+  responsiblePartyId?: string | null | undefined;
+  actualResponsiblePartyId?: string | null | undefined;
+}
+
+export function effectiveCareEntryPartyId(
+  entry: CareEntryScopeFields
+): string | undefined {
+  if (
+    (entry.status === "completed" || entry.status === "partial") &&
+    entry.actualResponsiblePartyId
+  ) {
+    return entry.actualResponsiblePartyId;
+  }
+  return entry.responsiblePartyId ?? undefined;
+}
+
+export function effectiveCareEntryPartyExpression(alias: string) {
+  return sql<string | null>`CASE
+    WHEN ${sql.ref(`${alias}.status`)} IN ('completed', 'partial')
+      AND ${sql.ref(`${alias}.actual_responsible_party_id`)} IS NOT NULL
+      THEN ${sql.ref(`${alias}.actual_responsible_party_id`)}
+    ELSE ${sql.ref(`${alias}.responsible_party_id`)}
+  END`;
+}
 
 export class CareDataScopeError extends Error {
   readonly code = "invalid_care_data_scope";

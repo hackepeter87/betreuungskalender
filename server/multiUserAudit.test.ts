@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import test from "node:test";
+import Database from "better-sqlite3";
 import type {
   ApiAuditEntry,
   ApiCareEntry,
@@ -122,6 +123,42 @@ async function sessionUserId(
   assert.equal(session.authenticated, true);
   assert.ok(session.user?.id);
   return session.user.id;
+}
+
+function configureExplicitMemberships(
+  databasePath: string,
+  ownerId: string,
+  memberIds: string[]
+): void {
+  const database = new Database(databasePath);
+  const timestamp = "2026-07-01T10:00:00.000Z";
+  database.pragma("foreign_keys = ON");
+  database.transaction(() => {
+    database.prepare(`
+      INSERT INTO settings (key, value_json, created_by, updated_by, created_at, updated_at)
+      VALUES ('setup.ownerUserId', ?, ?, ?, ?, ?)
+      ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json, updated_at = excluded.updated_at
+    `).run(JSON.stringify(ownerId), ownerId, ownerId, timestamp, timestamp);
+    const insertMembership = database.prepare(`
+      INSERT INTO app_memberships (
+        id, user_id, role, care_scope_type, created_by, updated_by, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    insertMembership.run(`membership-${ownerId}`, ownerId, "admin", "all", ownerId, ownerId, timestamp, timestamp);
+    for (const memberId of memberIds) {
+      insertMembership.run(
+        `membership-${memberId}`,
+        memberId,
+        "editor",
+        "selected",
+        ownerId,
+        ownerId,
+        timestamp,
+        timestamp
+      );
+    }
+  })();
+  database.close();
 }
 
 test("trusted OIDC users create distinct actor metadata and audit entries", async (t) => {
@@ -301,8 +338,9 @@ test("trusted OIDC users create distinct actor metadata and audit entries", asyn
   });
 });
 
-test("shared care-party assignments restrict unavailable period care context", async (t) => {
+test("explicit member scopes restrict unavailable period care context", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "betreuungskalender-care-party-access-"));
+  const databasePath = join(root, "app.sqlite");
   const port = await freePort();
   let logs = "";
   const runtime = spawn(
@@ -315,7 +353,7 @@ test("shared care-party assignments restrict unavailable period care context", a
         NODE_ENV: "production",
         HOST: "127.0.0.1",
         PORT: String(port),
-        DATABASE_PATH: join(root, "app.sqlite"),
+        DATABASE_PATH: databasePath,
         BACKUP_DIR: join(root, "backups"),
         REQUIRE_AUTH: "true",
         TRUST_PROXY_AUTH: "true",
@@ -340,7 +378,8 @@ test("shared care-party assignments restrict unavailable period care context", a
 
   const alphaUserId = await sessionUserId(baseUrl, alphaHeaders);
   const betaUserId = await sessionUserId(baseUrl, betaHeaders);
-  await sessionUserId(baseUrl, adminHeaders);
+  const adminUserId = await sessionUserId(baseUrl, adminHeaders);
+  configureExplicitMemberships(databasePath, adminUserId, [alphaUserId, betaUserId]);
   await jsonRequest<ApiChild[]>(baseUrl, "/api/children", {
     method: "GET",
     headers: alphaHeaders
@@ -396,12 +435,12 @@ test("shared care-party assignments restrict unavailable period care context", a
   });
   assert.equal(created.responsiblePartyId, alphaParty.id);
 
-  await expectStatus(baseUrl, "/api/unavailable-periods", 400, {
+  await expectStatus(baseUrl, "/api/unavailable-periods", 403, {
     method: "POST",
     headers: betaHeaders,
     body: JSON.stringify(periodInput)
   });
-  await expectStatus(baseUrl, `/api/unavailable-periods/${created.id}`, 400, {
+  await expectStatus(baseUrl, `/api/unavailable-periods/${created.id}`, 403, {
     method: "PUT",
     headers: betaHeaders,
     body: JSON.stringify({
@@ -409,7 +448,7 @@ test("shared care-party assignments restrict unavailable period care context", a
       location: "Fiktiver Änderungsversuch"
     })
   });
-  await expectStatus(baseUrl, `/api/unavailable-periods/${created.id}`, 400, {
+  await expectStatus(baseUrl, `/api/unavailable-periods/${created.id}`, 403, {
     method: "DELETE",
     headers: betaHeaders
   });
@@ -421,8 +460,9 @@ test("shared care-party assignments restrict unavailable period care context", a
   assert.equal(afterDeniedDelete.some((period) => period.id === created.id), true);
 });
 
-test("shared care-party assignments restrict care entries and contact rules by existing owner", async (t) => {
+test("explicit member scopes restrict care entries and contact rules", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "betreuungskalender-care-party-owner-"));
+  const databasePath = join(root, "app.sqlite");
   const port = await freePort();
   let logs = "";
   const runtime = spawn(
@@ -435,7 +475,7 @@ test("shared care-party assignments restrict care entries and contact rules by e
         NODE_ENV: "production",
         HOST: "127.0.0.1",
         PORT: String(port),
-        DATABASE_PATH: join(root, "app.sqlite"),
+        DATABASE_PATH: databasePath,
         BACKUP_DIR: join(root, "backups"),
         REQUIRE_AUTH: "true",
         TRUST_PROXY_AUTH: "true",
@@ -460,7 +500,8 @@ test("shared care-party assignments restrict care entries and contact rules by e
 
   const alphaUserId = await sessionUserId(baseUrl, alphaHeaders);
   const betaUserId = await sessionUserId(baseUrl, betaHeaders);
-  await sessionUserId(baseUrl, adminHeaders);
+  const adminUserId = await sessionUserId(baseUrl, adminHeaders);
+  configureExplicitMemberships(databasePath, adminUserId, [alphaUserId, betaUserId]);
   await jsonRequest<ApiChild[]>(baseUrl, "/api/children", {
     method: "GET",
     headers: alphaHeaders

@@ -9,7 +9,10 @@ import { migrateDatabase } from "./db/migrationRunner.js";
 import { createSqlitePersistenceRuntime, type PersistenceRuntime } from "./db/runtime.js";
 import { applyMembershipRole, hasWorkspaceAccess, membershipRoleForUser } from "./services/memberships.js";
 import { findAuthenticatedUserBySubject } from "./services/users.js";
-import { effectiveCareDataScope } from "./services/careDataScopes.js";
+import {
+  effectiveCareDataScope,
+  effectiveCareEntryPartyId
+} from "./services/careDataScopes.js";
 
 const timestamp = "2026-07-05T10:00:00.000Z";
 
@@ -241,4 +244,27 @@ test("owner and admin scope always resolves to all", async () => {
       { type: "all" }
     );
   });
+});
+
+test("completed and partial care use the actual responsible party for scope checks", () => {
+  assert.equal(effectiveCareEntryPartyId({
+    status: "planned",
+    responsiblePartyId: "planned",
+    actualResponsiblePartyId: "actual"
+  }), "planned");
+  assert.equal(effectiveCareEntryPartyId({
+    status: "cancelled",
+    responsiblePartyId: "planned",
+    actualResponsiblePartyId: "actual"
+  }), "planned");
+  assert.equal(effectiveCareEntryPartyId({
+    status: "completed",
+    responsiblePartyId: "planned",
+    actualResponsiblePartyId: "actual"
+  }), "actual");
+  assert.equal(effectiveCareEntryPartyId({
+    status: "partial",
+    responsiblePartyId: "planned"
+  }), "planned");
+  assert.equal(effectiveCareEntryPartyId({ status: "planned" }), undefined);
 });

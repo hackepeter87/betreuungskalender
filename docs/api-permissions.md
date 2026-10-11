@@ -29,9 +29,14 @@ token.
 | `POST /api/care-confirmations/:id/answer`, `POST /api/care-confirmations/:id/remind-later` | `appointments:confirm` |
 | `GET/PUT /api/notification-preferences`, `POST /api/push-subscriptions`, `DELETE /api/push-subscriptions/:id` | `notifications:manage-own` |
 
-When shared care-party assignments are active, reduced schedule responses are
-limited to the authenticated user's assigned care parties. Their conflict
-indicators are calculated from that same authorized result set.
+Every protected care-data route intersects the fixed role permission with the
+member's explicit `all` or `selected` care-data scope. An empty selected scope
+returns no care-party domain records. Lists, direct reads and writes, conflict
+indicators, confirmations, reports, month summaries, and personal feeds use
+the same authorized result set. Completed and partially completed care uses
+the actual responsible care party when one is stored; other statuses use the
+planned responsible care party. Records without a responsible care party are
+available only to `all` scope.
 
 ## Children, care parties, and planning
 
@@ -51,6 +56,12 @@ indicators are calculated from that same authorized result set.
 | `POST /api/contact-rules`, `PUT/DELETE /api/contact-rules/:id`, `POST /api/contact-rules/:id/sync`, `POST /api/contact-rules/:id/sync-preview`, `POST /api/contact-rules/:id/change`, `POST /api/contact-rules/:id/change-preview` | `planning:manage` |
 | `GET /api/month-closings` | `reports:view` |
 | `POST /api/month-closings` | `reports:view` |
+
+Restricted scopes do not receive global month-closing aggregates because
+those persisted summaries can include out-of-scope care. Creating a month
+closing therefore also requires an effective `all` care-data scope.
+Report snapshots for restricted scopes omit the global audit history because
+its field values and metadata are not partitioned by care-data scope.
 
 ## Settings, calendars, and reporting support
 
