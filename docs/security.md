@@ -217,14 +217,17 @@ times, notes, and other case details. When several confirmations become due in
 the same sweep, the service sends at most one push per user while retaining all
 individual tasks in the authenticated in-app notification view.
 
-Care parties are domain records, not authentication principals. Optional
-app-user to care-party assignments restrict non-admin shared users once at
-least one assignment exists, but they do not replace active workspace
-membership and its role as the authorization source. The same assignment scope
-is enforced for current and compatibility planning writes, planning lists, and
-reduced schedule responses. Hidden records do not contribute conflict markers
-to a scoped schedule response. Access failures use a generic response without
-record details.
+Care parties are domain records, not authentication principals. Active
+workspace memberships carry an explicit `all` or `selected` care-data scope;
+an empty selected scope grants no care-party domain data. This scope is
+independent of every other member and complements, rather than replaces, the
+fixed workspace role. The same scope is enforced for direct and list reads,
+writes, planning, conflicts, confirmations, reports, month summaries, and
+personal feeds. Hidden records do not contribute identifiers, timestamps,
+counts, or conflict markers to scoped responses. Access failures use a generic
+response without record details. Scoped report snapshots omit global audit
+history rather than exposing audit fields that cannot be safely projected to a
+single care-data scope.
 
 Partial confirmation updates validate the resolved actual care range before
 any write. Explicit values and values defaulted from the planned entry are

@@ -18,7 +18,6 @@ import {
   assertCanUsePersistedCareParty,
   assertPersistedCareParty,
   assertPersistedChildren,
-  assignedPersistedCarePartyIds,
   getPersistedDefaultResponsiblePartyId,
   isCarePartyAccessError,
   markDomainClosedMonthsChanged,
@@ -37,6 +36,11 @@ import {
   listCareConflicts
 } from "../services/careConflicts.js";
 import { bool, makeId, nowIso } from "../services/common.js";
+import {
+  effectiveCareDataScope,
+  effectiveCareEntryPartyExpression,
+  effectiveCareEntryPartyId
+} from "../services/careDataScopes.js";
 import { retireOpenCareConfirmationRequests } from "../services/careConfirmations.js";
 import {
   careConflictPreviewInputSchema,
@@ -225,6 +229,18 @@ function mapCostRow(row: CostRow): ApiCost {
 
 function optional<T>(value: T | null): T | undefined {
   return value === null ? undefined : value;
+}
+
+async function assertCanUseCareEntry(
+  database: DatabaseExecutor,
+  user: RequestUser | undefined,
+  entry: Pick<ApiCareEntry, "status" | "responsiblePartyId" | "actualResponsiblePartyId">
+): Promise<void> {
+  await assertCanUsePersistedCareParty(
+    database,
+    user,
+    effectiveCareEntryPartyId(entry)
+  );
 }
 
 async function childIds(database: DatabaseExecutor, table: "care_entry_children" | "care_entry_actual_children", entryId: string): Promise<string[]> {
@@ -435,9 +451,10 @@ async function getScheduleEntry(
   user?: RequestUser
 ): Promise<ApiScheduleEntry | undefined> {
   const scopedPartyIds = await scopedPersistedCarePartyIds(database, user);
+  const effectiveParty = effectiveCareEntryPartyExpression("entries");
   const row = await database.selectFrom("care_entries as entries")
     .leftJoin("care_parties as parties", (join) => join
-      .onRef("parties.id", "=", "entries.responsible_party_id")
+      .on("parties.id", "=", effectiveParty)
       .on("parties.deleted_at", "is", null))
     .select([
       "entries.id as id",
@@ -445,7 +462,7 @@ async function getScheduleEntry(
       "entries.end_datetime as endDateTime",
       "entries.status as status",
       "entries.location as location",
-      "entries.responsible_party_id as responsiblePartyId",
+      effectiveParty.as("responsiblePartyId"),
       "parties.name as responsiblePartyName"
     ])
     .where("entries.id", "=", id)
@@ -495,9 +512,12 @@ async function schedulerWriteAllowed(
   existing?: ApiCareEntry
 ): Promise<boolean> {
   if (user?.workspaceRole !== "scheduler") return true;
-  const assigned = new Set(await assignedPersistedCarePartyIds(database, user.id));
-  if (!assigned.has(responsiblePartyId)) return false;
-  if (existing?.responsiblePartyId && !assigned.has(existing.responsiblePartyId)) return false;
+  const scope = await effectiveCareDataScope(user, database);
+  if (scope.type === "selected") {
+    const assigned = new Set(scope.carePartyIds);
+    if (!assigned.has(responsiblePartyId)) return false;
+    if (existing && !assigned.has(effectiveCareEntryPartyId(existing) ?? "")) return false;
+  }
   if (Date.parse(submittedStartDateTime) <= Date.now()) return false;
   if (existing && (existing.status !== "planned" || Date.parse(existing.startDateTime) <= Date.now())) return false;
   return true;
@@ -727,14 +747,12 @@ async function persistEntry(
   user?: RequestUser
 ): Promise<ApiCareEntry> {
   if (existing) {
-    await assertCanUsePersistedCareParty(database, user, existing.responsiblePartyId);
-    if (existing.actualResponsiblePartyId) await assertCanUsePersistedCareParty(database, user, existing.actualResponsiblePartyId);
+    await assertCanUseCareEntry(database, user, existing);
   }
   const effectiveResponsiblePartyId =
     input.responsiblePartyId ?? existing?.responsiblePartyId ?? await getPersistedDefaultResponsiblePartyId(database);
   await assertPersistedChildren(database, input.childIds);
   await assertPersistedCareParty(database, effectiveResponsiblePartyId);
-  await assertCanUsePersistedCareParty(database, user, effectiveResponsiblePartyId);
   const timestamp = nowIso();
   const durationMinutes = Math.round(
     (Date.parse(input.endDateTime) - Date.parse(input.startDateTime)) / 60000
@@ -749,8 +767,12 @@ async function persistEntry(
   if (input.status === "partial") {
     await assertPersistedChildren(database, actualChildIds);
     await assertPersistedCareParty(database, actualResponsiblePartyId);
-    await assertCanUsePersistedCareParty(database, user, actualResponsiblePartyId);
   }
+  await assertCanUsePersistedCareParty(database, user, effectiveCareEntryPartyId({
+    status: input.status,
+    responsiblePartyId: effectiveResponsiblePartyId,
+    actualResponsiblePartyId
+  }));
   await assertPlannedCareConflictAcknowledged(omitUndefinedValues({
     candidate: omitUndefinedValues({
       status: input.status,
@@ -949,6 +971,7 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
       }
       let scopedPartyIds: string[] | undefined;
       try {
+        if (existing) await assertCanUseCareEntry(app.persistence.query, request.user, existing);
         await assertCanUsePersistedCareParty(
           app.persistence.query,
           request.user,
@@ -989,7 +1012,7 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
         return await app.persistence.transaction(async (database) => {
           const existing = await getEntry(database, input.entryId!);
           if (!existing) return reply.code(409).send({ error: "care_conflict_changed" });
-          await assertCanUsePersistedCareParty(database, request.user, existing.responsiblePartyId);
+          await assertCanUseCareEntry(database, request.user, existing);
           const scopedPartyIds = await scopedPersistedCarePartyIds(database, request.user);
           const conflict = (await listCareConflicts(database, {
             ...(scopedPartyIds ? { responsiblePartyIds: scopedPartyIds } : {})
@@ -1051,9 +1074,10 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
       try {
         const scopedPartyIds = await scopedPersistedCarePartyIds(app.persistence.query, request.user);
         if (scopedPartyIds?.length === 0) return [];
+        const effectiveParty = effectiveCareEntryPartyExpression("entries");
         let query = app.persistence.query.selectFrom("care_entries as entries")
         .leftJoin("care_parties as parties", (join) => join
-          .onRef("parties.id", "=", "entries.responsible_party_id")
+          .on("parties.id", "=", effectiveParty)
           .on("parties.deleted_at", "is", null))
         .select([
           "entries.id as id",
@@ -1061,12 +1085,12 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
           "entries.end_datetime as endDateTime",
           "entries.status as status",
           "entries.location as location",
-          "entries.responsible_party_id as responsiblePartyId",
+          effectiveParty.as("responsiblePartyId"),
           "parties.name as responsiblePartyName"
         ])
         .where("entries.deleted_at", "is", null);
       if (scopedPartyIds) {
-        query = query.where("entries.responsible_party_id", "in", scopedPartyIds);
+        query = query.where(effectiveParty, "in", scopedPartyIds);
       }
         if (parsedQuery.data.startDate) {
           query = query.where("entries.end_datetime", ">=", `${parsedQuery.data.startDate}T00:00:00.000Z`);
@@ -1133,9 +1157,17 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
     }
   );
 
-  app.get("/api/care-conflicts", readLimit, async (): Promise<ApiCareConflictList> => {
+  app.get("/api/care-conflicts", readLimit, async (request): Promise<ApiCareConflictList> => {
     try {
-      return { items: await listCareConflicts(app.persistence.query), complete: true };
+      const scopedPartyIds = await scopedPersistedCarePartyIds(app.persistence.query, request.user);
+      return {
+        items: scopedPartyIds?.length === 0
+          ? []
+          : await listCareConflicts(app.persistence.query, {
+            ...(scopedPartyIds ? { responsiblePartyIds: scopedPartyIds } : {})
+          }),
+        complete: true
+      };
     } catch (error) {
       if (isCareConflictWorkLimitError(error)) {
         return { items: [], complete: false };
@@ -1157,9 +1189,13 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
         return reply.code(400).send({ error: "invalid_request" });
       }
       try {
+        const scopedPartyIds = await scopedPersistedCarePartyIds(app.persistence.query, request.user);
+        if (scopedPartyIds?.length === 0) return [];
+        const effectiveParty = effectiveCareEntryPartyExpression("care_entries");
         let query = app.persistence.query.selectFrom("care_entries")
         .selectAll()
         .where("deleted_at", "is", null);
+        if (scopedPartyIds) query = query.where(effectiveParty, "in", scopedPartyIds);
         if (parsedQuery.data.startDate) {
           query = query.where("end_datetime", ">=", `${parsedQuery.data.startDate}T00:00:00.000Z`);
         }
@@ -1181,7 +1217,14 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
 
   app.get<{ Params: { id: string } }>("/api/care-entries/:id", readLimit, async (request, reply) => {
     const entry = await getEntry(app.persistence.query, request.params.id);
-    return entry ?? reply.code(404).send({ error: "not_found" });
+    if (!entry) return reply.code(404).send({ error: "not_found" });
+    try {
+      await assertCanUseCareEntry(app.persistence.query, request.user, entry);
+      return entry;
+    } catch (error) {
+      if (isCarePartyAccessError(error)) return reply.code(403).send({ error: "forbidden" });
+      throw error;
+    }
   });
 
   app.post("/api/care-entries", createLimit, async (request, reply) => {
@@ -1222,6 +1265,12 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
   app.put<{ Params: { id: string } }>("/api/care-entries/:id", editLimit, async (request, reply) => {
     const existing = await getEntry(app.persistence.query, request.params.id);
     if (!existing) return reply.code(404).send({ error: "not_found" });
+    try {
+      await assertCanUseCareEntry(app.persistence.query, request.user, existing);
+    } catch (error) {
+      if (isCarePartyAccessError(error)) return reply.code(403).send({ error: "forbidden" });
+      throw error;
+    }
     const scheduler = request.user?.workspaceRole === "scheduler";
     const parsed = scheduler
       ? schedulerCareEntryInputSchema.safeParse(request.body)
@@ -1259,8 +1308,7 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
     const existing = await getEntry(app.persistence.query, request.params.id);
     if (!existing) return reply.code(404).send({ error: "not_found" });
     try {
-      await assertCanUsePersistedCareParty(app.persistence.query, request.user, existing.responsiblePartyId);
-      if (existing.actualResponsiblePartyId) await assertCanUsePersistedCareParty(app.persistence.query, request.user, existing.actualResponsiblePartyId);
+      await assertCanUseCareEntry(app.persistence.query, request.user, existing);
     } catch (error) {
       if (isCarePartyAccessError(error)) {
         return reply.code(403).send({ error: "forbidden" });

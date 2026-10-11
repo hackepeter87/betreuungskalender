@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import { sql } from "kysely";
 import type { ApiCareConflict, ApiEntryStatus } from "../../shared/api.js";
 import { omitUndefinedValues } from "../../shared/objects.js";
 import type { DatabaseExecutor } from "../db/runtime.js";
+import { effectiveCareEntryPartyExpression } from "./careDataScopes.js";
 import {
   CareConflictDetectionLimitError,
   detectCareConflicts,
@@ -124,7 +124,7 @@ export async function listCareConflictEntries(
   if (options.responsiblePartyIds) {
     const responsiblePartyIds = [...new Set(options.responsiblePartyIds)];
     if (!responsiblePartyIds.length) return [];
-    query = query.where("responsible_party_id", "in", responsiblePartyIds);
+    query = query.where(effectiveCareEntryPartyExpression("care_entries"), "in", responsiblePartyIds);
   }
   if (options.actualOnly) query = query.where("status", "in", ["completed", "partial"]);
   if (options.excludeId) {

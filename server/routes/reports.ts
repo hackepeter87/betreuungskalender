@@ -4,6 +4,7 @@ import { isInclusiveDateRangeWithinDays, MAX_DOMAIN_RANGE_DAYS } from "../../sha
 import { config } from "../config.js";
 import { DomainExportLimitError } from "../services/dataTransfer.js";
 import { createReportSnapshot } from "../services/reportSnapshots.js";
+import { scopedPersistedCarePartyIds } from "../services/domainPersistence.js";
 
 const querySchema = z.object({
   startDate: z.string(),
@@ -28,11 +29,13 @@ export async function reportRoutes(app: FastifyInstance): Promise<void> {
     }
     reply.header("Cache-Control", "no-store");
     try {
+      const carePartyIds = await scopedPersistedCarePartyIds(app.persistence.query, request.user);
       return await createReportSnapshot({
         persistence: app.persistence,
         startDate: parsed.data.startDate,
         endDate: parsed.data.endDate,
-        includeAuditHistory
+        includeAuditHistory,
+        ...(carePartyIds ? { carePartyIds } : {})
       });
     } catch (error) {
       if (error instanceof DomainExportLimitError) {

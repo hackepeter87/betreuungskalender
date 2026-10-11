@@ -463,6 +463,8 @@ test("directly resolving a planned entry confirms it and retires every open task
   insertPastPlannedEntry();
   const secondUser = parentUser("user-second-confirmation");
   insertAppUser(secondUser);
+  db.prepare("UPDATE app_memberships SET care_scope_type = 'all' WHERE user_id = ?")
+    .run(secondUser.id);
   await createDueCareConfirmationRequests(persistence, new Date("2026-07-03T08:05:00.000Z"));
   const app = await buildCareApi();
 

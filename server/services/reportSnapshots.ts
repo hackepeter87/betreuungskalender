@@ -65,12 +65,24 @@ export async function createReportSnapshot(input: {
   startDate: string;
   endDate: string;
   includeAuditHistory: boolean;
+  carePartyIds?: string[];
 }): Promise<ApiReportSnapshot> {
   return input.persistence.transaction(async (database) => {
     const exported = await exportDomainData(database, {
-      reportRange: { startDate: input.startDate, endDate: input.endDate }
+      reportRange: { startDate: input.startDate, endDate: input.endDate },
+      ...(input.carePartyIds ? { carePartyIds: input.carePartyIds } : {})
     });
     const generatedAt = new Date().toISOString();
+    const settings = await normalizeClientSettings(exported.settings, database);
+    if (input.carePartyIds) {
+      const visible = new Set(input.carePartyIds);
+      if (settings.primaryCarePartyId && !visible.has(settings.primaryCarePartyId)) {
+        delete settings.primaryCarePartyId;
+      }
+      if (settings.defaultResponsiblePartyId && !visible.has(settings.defaultResponsiblePartyId)) {
+        delete settings.defaultResponsiblePartyId;
+      }
+    }
 
     return {
       reportId: `BK-${generatedAt.slice(0, 10).replaceAll("-", "")}-${randomUUID().slice(0, 8).toUpperCase()}`,
@@ -85,8 +97,8 @@ export async function createReportSnapshot(input: {
         entries: exported.entries as unknown as ApiCareEntry[],
         holidayPeriods: exported.holidayPeriods as unknown as ApiHolidayPeriod[],
         unavailablePeriods: exported.unavailablePeriods as unknown as ApiUnavailablePeriod[],
-        settings: await normalizeClientSettings(exported.settings, database),
-        auditLog: input.includeAuditHistory
+        settings,
+        auditLog: input.includeAuditHistory && !input.carePartyIds
           ? await auditEntries(database, input.startDate, input.endDate)
           : [],
         monthClosures: exported.monthClosures as unknown as ApiMonthlyClosing[]

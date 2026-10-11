@@ -357,6 +357,9 @@ async function runApplicationScenario(runtime: PersistenceRuntime) {
   const acceptedUser = await findAuthenticatedUserBySubject(invited.externalSubject, runtime.query);
   const feed = await rotateCalendarFeedToken(invited.id, "all", runtime);
   const resolvedFeed = await resolveCalendarFeedToken(feed.token, runtime.query);
+  const scopedFeedBody = resolvedFeed
+    ? await buildPersonalCalendarFeed({ token: resolvedFeed, database: runtime.query })
+    : "";
   let feedLimitCode = "none";
   if (resolvedFeed) {
     try {
@@ -390,6 +393,13 @@ async function runApplicationScenario(runtime: PersistenceRuntime) {
     startDate: "2026-07-01",
     endDate: "2026-07-31",
     includeAuditHistory: true
+  });
+  const scopedReport = await createReportSnapshot({
+    persistence: runtime,
+    startDate: "2026-07-01",
+    endDate: "2026-07-31",
+    includeAuditHistory: false,
+    carePartyIds: ["demo-party-primary"]
   });
   const auditPagination = await auditPaginationSummary(runtime);
 
@@ -475,7 +485,9 @@ async function runApplicationScenario(runtime: PersistenceRuntime) {
       active: status.active,
       scope: status.scope,
       resolved: resolvedFeed?.user_id === invited.id,
-      limitCode: feedLimitCode
+      limitCode: feedLimitCode,
+      includesPrimary: scopedFeedBody.includes("demo-entry-short-contact@betreuungskalender"),
+      includesGrandparent: scopedFeedBody.includes("demo-entry-holiday-full-day@betreuungskalender")
     },
     notifications: {
       updated: notificationPreferences.preferences.find(
@@ -494,7 +506,11 @@ async function runApplicationScenario(runtime: PersistenceRuntime) {
       holidayCount: report.data.holidayPeriods.length,
       unavailableCount: report.data.unavailablePeriods.length,
       auditActions: report.data.auditLog.map(({ action }) => action).sort(),
-      auditActors: report.data.auditLog.map(({ userDisplayName }) => userDisplayName ?? null).sort()
+      auditActors: report.data.auditLog.map(({ userDisplayName }) => userDisplayName ?? null).sort(),
+      scopedEntryIds: scopedReport.data.entries
+        .map((entry) => stableEntryId(entry as unknown as DataRecord)).sort(),
+      scopedCarePartyIds: scopedReport.data.careParties.map(({ id }) => id).sort(),
+      scopedMonthClosureCount: scopedReport.data.monthClosures.length
     },
     auditPagination,
     rollback: {

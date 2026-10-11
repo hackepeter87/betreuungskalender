@@ -2,11 +2,13 @@ import type { FastifyInstance } from "fastify";
 import { sql } from "kysely";
 import { config } from "../config.js";
 import {
-  assignedPersistedCarePartyIds,
+  assertCanUsePersistedCareParty,
   getPersistedCareParty,
+  isCarePartyAccessError,
   markAllDomainClosedMonthsChanged,
   recordDomainAudit,
-  recordDomainFieldChanges
+  recordDomainFieldChanges,
+  scopedPersistedCarePartyIds
 } from "../services/domainPersistence.js";
 import { makeId, nowIso } from "../services/common.js";
 import { carePartyInputSchema } from "../validation/schemas.js";
@@ -36,25 +38,25 @@ async function assignedUsageCount(app: FastifyInstance, id: string): Promise<num
 
 export async function carePartyRoutes(app: FastifyInstance): Promise<void> {
   app.get("/api/care-parties/summary", summaryLimit, async (request) => {
-    const assigned = request.user?.workspaceRole === "scheduler"
-      ? await assignedPersistedCarePartyIds(app.persistence.query, request.user.id)
-      : [];
-    if (request.user?.workspaceRole === "scheduler" && assigned.length === 0) return [];
+    const assigned = await scopedPersistedCarePartyIds(app.persistence.query, request.user);
+    if (assigned?.length === 0) return [];
     let query = app.persistence.query.selectFrom("care_parties")
       .select(["id", "name"])
       .where("deleted_at", "is", null);
-    if (request.user?.workspaceRole === "scheduler") {
+    if (assigned) {
       query = query.where("id", "in", assigned);
     }
     return query.orderBy(sql`lower(name)`).execute();
   });
 
-  app.get("/api/care-parties", readLimit, async () => {
-    const rows = await app.persistence.query.selectFrom("care_parties")
+  app.get("/api/care-parties", readLimit, async (request) => {
+    const scopedPartyIds = await scopedPersistedCarePartyIds(app.persistence.query, request.user);
+    if (scopedPartyIds?.length === 0) return [];
+    let query = app.persistence.query.selectFrom("care_parties")
       .select(["id", "name", "kind", "created_by", "updated_by", "created_at", "updated_at"])
-      .where("deleted_at", "is", null)
-      .orderBy(sql`lower(name)`)
-      .execute();
+      .where("deleted_at", "is", null);
+    if (scopedPartyIds) query = query.where("id", "in", scopedPartyIds);
+    const rows = await query.orderBy(sql`lower(name)`).execute();
     return rows.map((row) => ({
       id: row.id,
       name: row.name,
@@ -70,6 +72,9 @@ export async function carePartyRoutes(app: FastifyInstance): Promise<void> {
     const parsed = carePartyInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
 
+    if (await scopedPersistedCarePartyIds(app.persistence.query, request.user)) {
+      return reply.code(403).send({ error: "forbidden" });
+    }
     const id = makeId("party");
     const timestamp = nowIso();
     const careParty = await app.persistence.transaction(async (database) => {
@@ -99,6 +104,12 @@ export async function carePartyRoutes(app: FastifyInstance): Promise<void> {
   app.put<{ Params: { id: string } }>("/api/care-parties/:id", writeLimit, async (request, reply) => {
     const before = await getPersistedCareParty(app.persistence.query, request.params.id);
     if (!before) return reply.code(404).send({ error: "not_found" });
+    try {
+      await assertCanUsePersistedCareParty(app.persistence.query, request.user, request.params.id);
+    } catch (error) {
+      if (isCarePartyAccessError(error)) return reply.code(403).send({ error: "forbidden" });
+      throw error;
+    }
     const parsed = carePartyInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
 
@@ -135,6 +146,12 @@ export async function carePartyRoutes(app: FastifyInstance): Promise<void> {
   app.delete<{ Params: { id: string } }>("/api/care-parties/:id", writeLimit, async (request, reply) => {
     const before = await getPersistedCareParty(app.persistence.query, request.params.id);
     if (!before) return reply.code(404).send({ error: "not_found" });
+    try {
+      await assertCanUsePersistedCareParty(app.persistence.query, request.user, request.params.id);
+    } catch (error) {
+      if (isCarePartyAccessError(error)) return reply.code(403).send({ error: "forbidden" });
+      throw error;
+    }
     const usageCount = await assignedUsageCount(app, request.params.id);
     if (usageCount > 0) {
       return reply.code(409).send({

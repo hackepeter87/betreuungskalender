@@ -1,5 +1,6 @@
 import { sql } from "kysely";
 import type { RequestUser } from "../auth.js";
+import { effectiveCareDataScope } from "./careDataScopes.js";
 import type { DatabaseExecutor } from "../db/runtime.js";
 import type { ApiAppSettings } from "../../shared/api.js";
 import { normalizeSettingsValues, settingsDefaults } from "./settingsContract.js";
@@ -282,19 +283,6 @@ export async function assertPersistedCareParty(
   }
 }
 
-export async function assignedPersistedCarePartyIds(
-  database: DatabaseExecutor,
-  userId: string
-): Promise<string[]> {
-  const rows = await database.selectFrom("app_user_care_party_assignments")
-    .select("care_party_id")
-    .where("user_id", "=", userId)
-    .where("deleted_at", "is", null)
-    .orderBy("care_party_id")
-    .execute();
-  return rows.map((row) => row.care_party_id);
-}
-
 export class CarePartyAccessError extends Error {
   readonly code = "forbidden";
   readonly statusCode = 403;
@@ -314,20 +302,8 @@ export async function scopedPersistedCarePartyIds(
   database: DatabaseExecutor,
   user: RequestUser | undefined
 ): Promise<string[] | undefined> {
-  if (
-    !user ||
-    user.isOwner ||
-    user.workspaceRole === "admin" ||
-    (!user.workspaceRole && user.role === "admin")
-  ) {
-    return undefined;
-  }
-  const assignmentCount = await database.selectFrom("app_user_care_party_assignments")
-    .select(({ fn }) => fn.count<number>("id").as("count"))
-    .where("deleted_at", "is", null)
-    .executeTakeFirst();
-  if (Number(assignmentCount?.count ?? 0) === 0) return undefined;
-  return assignedPersistedCarePartyIds(database, user.id);
+  const scope = await effectiveCareDataScope(user, database);
+  return scope.type === "all" ? undefined : scope.carePartyIds;
 }
 
 export async function assertCanUsePersistedCareParty(

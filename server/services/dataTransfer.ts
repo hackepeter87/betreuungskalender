@@ -20,6 +20,7 @@ import {
 import { importData } from "../routes/appData.js";
 import type { WorkspaceRole } from "../auth.js";
 import { getClientSettings } from "./settings.js";
+import { effectiveCareEntryPartyExpression } from "./careDataScopes.js";
 
 const FORMAT_VERSION = 1;
 const MAX_STRUCTURE_DEPTH = 24;
@@ -41,6 +42,7 @@ interface ReportExportRange {
 
 interface ExportDomainDataOptions {
   reportRange?: ReportExportRange;
+  carePartyIds?: string[];
 }
 
 export class DomainExportLimitError extends Error {}
@@ -267,11 +269,16 @@ function chunks<T>(items: T[], size: number): T[][] {
 
 async function activeEntryRows(
   database: DatabaseExecutor,
-  range?: ReportExportRange
+  range?: ReportExportRange,
+  carePartyIds?: string[]
 ): Promise<DataRecord[]> {
+  if (carePartyIds?.length === 0) return [];
   let query = database.selectFrom("care_entries")
     .selectAll()
     .where("deleted_at", "is", null);
+  if (carePartyIds) {
+    query = query.where(effectiveCareEntryPartyExpression("care_entries"), "in", carePartyIds);
+  }
   if (range) {
     query = query
       .where("start_datetime", "<", startOfFollowingDay(range.endDate))
@@ -382,7 +389,10 @@ export async function exportDomainData(
   options: ExportDomainDataOptions = {}
 ): Promise<ImportData> {
   const reportRange = options.reportRange;
-  const entryRows = await activeEntryRows(database, reportRange);
+  const carePartyIds = options.carePartyIds
+    ? [...new Set(options.carePartyIds)]
+    : undefined;
+  const entryRows = await activeEntryRows(database, reportRange, carePartyIds);
   const entryIds = reportRange ? entryRows.map((entry) => String(entry.id)) : undefined;
   const holidayRowsPromise = reportRange
     ? database.selectFrom("holiday_periods")
@@ -394,11 +404,14 @@ export async function exportDomainData(
       .execute()
     : activeRows(database, "holiday_periods", MAX_TRANSFER_COLLECTION_RECORDS);
   const unavailableRowsPromise = reportRange
-    ? database.selectFrom("unavailable_periods")
+    ? carePartyIds?.length === 0
+      ? Promise.resolve([])
+      : database.selectFrom("unavailable_periods")
       .selectAll()
       .where("deleted_at", "is", null)
       .where("start_datetime", "<", startOfFollowingDay(reportRange.endDate))
       .where("end_datetime", ">", `${reportRange.startDate}T00:00:00.000Z`)
+      .$if(Boolean(carePartyIds), (query) => query.where("responsible_party_id", "in", carePartyIds!))
       .limit(MAX_REPORT_CATEGORY_RECORDS + 1)
       .execute()
     : activeRows(database, "unavailable_periods", MAX_TRANSFER_COLLECTION_RECORDS);
@@ -413,6 +426,19 @@ export async function exportDomainData(
   const holidayIds = reportRange ? holidayRows.map((row) => String(row.id)) : undefined;
   const unavailableIds = reportRange ? unavailableRows.map((row) => String(row.id)) : undefined;
 
+  const carePartiesPromise = carePartyIds
+    ? carePartyIds.length === 0
+      ? Promise.resolve([])
+      : database.selectFrom("care_parties")
+        .selectAll()
+        .where("deleted_at", "is", null)
+        .where("id", "in", carePartyIds)
+        .orderBy("created_at")
+        .orderBy("id")
+        .limit(MAX_REPORT_CATEGORY_RECORDS + 1)
+        .execute()
+        .then((rows) => (rows as DataRecord[]).map(camelRecord))
+    : activeRows(database, "care_parties", reportRange ? MAX_REPORT_CATEGORY_RECORDS : MAX_TRANSFER_COLLECTION_RECORDS);
   const [
     entryChildren,
     actualChildren,
@@ -457,9 +483,18 @@ export async function exportDomainData(
   });
 
   const settings = await exportedSettings(database);
+  const reportEntriesUpdatedAt = reportRange
+    ? entryRows
+      .map((entry) => entry.updatedAt)
+      .filter((value): value is string => typeof value === "string")
+      .sort()
+      .at(-1)
+    : undefined;
   const [childrenUpdated, entriesUpdated, settingsUpdated] = await Promise.all([
     database.selectFrom("children").select(({ fn }) => fn.max<string>("updated_at").as("value")).executeTakeFirst(),
-    database.selectFrom("care_entries").select(({ fn }) => fn.max<string>("updated_at").as("value")).executeTakeFirst(),
+    reportRange
+      ? Promise.resolve({ value: reportEntriesUpdatedAt })
+      : database.selectFrom("care_entries").select(({ fn }) => fn.max<string>("updated_at").as("value")).executeTakeFirst(),
     database.selectFrom("settings").select(({ fn }) => fn.max<string>("updated_at").as("value")).executeTakeFirst()
   ]);
   const updatedAt = [childrenUpdated?.value, entriesUpdated?.value, settingsUpdated?.value]
@@ -479,7 +514,7 @@ export async function exportDomainData(
     closingRows
   ] = await Promise.all([
     activeRows(database, "children", reportRange ? MAX_REPORT_CATEGORY_RECORDS : MAX_TRANSFER_COLLECTION_RECORDS),
-    activeRows(database, "care_parties", reportRange ? MAX_REPORT_CATEGORY_RECORDS : MAX_TRANSFER_COLLECTION_RECORDS),
+    carePartiesPromise,
     Promise.resolve(holidayRows),
     Promise.resolve(unavailableRows),
     reportRange ? Promise.resolve([]) : database.selectFrom("external_calendar_sources")
@@ -517,7 +552,7 @@ export async function exportDomainData(
       .orderBy("audit.id")
       .limit(MAX_TRANSFER_COLLECTION_RECORDS + 1)
       .execute(),
-    database.selectFrom("monthly_closings")
+    carePartyIds ? Promise.resolve([]) : database.selectFrom("monthly_closings")
       .select([
         "month_key", "created_at as closed_at", "closed_by", "summary_json",
         "changed_after_close_at", "updated_by", "updated_at"

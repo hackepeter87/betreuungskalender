@@ -3,7 +3,7 @@ import type { ApiMonthlyClosing } from "../../shared/api.js";
 import { omitUndefinedValues } from "../../shared/objects.js";
 import { config } from "../config.js";
 import { makeId, nowIso } from "../services/common.js";
-import { recordDomainAudit } from "../services/domainPersistence.js";
+import { recordDomainAudit, scopedPersistedCarePartyIds } from "../services/domainPersistence.js";
 import { monthlyClosingInputSchema } from "../validation/schemas.js";
 
 const readLimit = {
@@ -51,7 +51,8 @@ async function getClosing(
 }
 
 export async function monthClosingRoutes(app: FastifyInstance): Promise<void> {
-  app.get("/api/month-closings", readLimit, async () => {
+  app.get("/api/month-closings", readLimit, async (request) => {
+    if (await scopedPersistedCarePartyIds(app.persistence.query, request.user)) return [];
     const rows = await app.persistence.query.selectFrom("monthly_closings")
       .select(["month_key", "summary_json", "closed_by", "updated_by", "changed_after_close_at", "created_at"])
       .where("deleted_at", "is", null)
@@ -61,6 +62,9 @@ export async function monthClosingRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post("/api/month-closings", writeLimit, async (request, reply) => {
+    if (await scopedPersistedCarePartyIds(app.persistence.query, request.user)) {
+      return reply.code(403).send({ error: "forbidden" });
+    }
     const parsed = monthlyClosingInputSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.code(400).send({

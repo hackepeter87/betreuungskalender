@@ -10,7 +10,7 @@ baseline, not a formal penetration-test report.
   OIDC with server-side sessions.
 - Public health/session boundaries, controlled first-use setup, and the Owner,
   Admin, Editor, Scheduler, and Viewer workspace roles.
-- Shared care-context rules for app-user to care-party assignments.
+- Explicit per-membership care-data scopes for care-party domain records.
 - Owner-only app-data, migration, portable-transfer, membership, invitation,
   and demo-data surfaces, plus role-scoped backup and export operations.
 - Personal iCalendar feeds and feed-token handling.
@@ -60,11 +60,12 @@ access control, and incident response.
 - Recovery admin is disabled by default and, when explicitly enabled, uses a
   short-lived server-side session, scrypt password hash, and one-time bootstrap
   password-change flow.
-- Care parties are domain records, not authentication principals. Shared
-  care-party assignments restrict non-admin users once assignments exist.
-  After an owner is established, an active `app_memberships` record and its
-  workspace role are authoritative; a missing or revoked membership grants no
-  workspace access.
+- Care parties are domain records, not authentication principals. Every active
+  membership has an explicit `all` or `selected` care-data scope. An empty
+  selected scope grants no care-party domain data and never falls back to full
+  access. Owner and Admin use `all`; other roles are restricted independently
+  of assignments belonging to other members. After an owner is established,
+  a missing or revoked membership grants no workspace access.
 - Personal calendar feeds use bearer URLs only for the `.ics` endpoint. They do
   not authenticate general API routes and exclude notes, evidence references,
   trips, costs, audit metadata, deleted entries, and cancelled entries.
@@ -106,8 +107,8 @@ version, changelog, release notes, and tag state are ready.
 ## Residual risks and deferred work
 
 - This is not a multi-tenant SaaS isolation model. The shared-operation model is
-  intentionally limited to a trusted small group using roles and care-party
-  assignments.
+  intentionally limited to a trusted small group using fixed roles and
+  explicit care-data scopes.
 - Browser-side UI hiding is not a security boundary; server-side route checks
   must remain the source of truth.
 - Web Push confirms care entries with privacy-preserving messages, but browser
@@ -127,8 +128,8 @@ version, changelog, release notes, and tag state are ready.
 ## Open review checklist
 
 - Re-run the access-control runtime matrix after new route classes are added.
-- Extend care-party shared-context tests when a feature writes care-party scoped
-  data.
+- Extend explicit care-data-scope tests whenever a feature reads, writes, or
+  aggregates care-party domain data.
 - Re-check release artifact deny rules when new file formats, exports, or
   deployment config files are introduced.
 - Review notification payloads before adding new reminder types.
