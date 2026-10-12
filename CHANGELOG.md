@@ -6,6 +6,25 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.35.1] - 2026-10-12
+
+### Changed
+
+- Present existing members before the invitation action and move invitation
+  creation into a focused responsive dialog.
+- Separate role and care-party scope choices and use the same readable review
+  structure for invitations and existing-member access changes.
+- Replace the dense inline privacy controls with a guided modal workflow that
+  keeps warnings, blockers, confirmation, and cancellation in one place.
+- Align owner settings rows, actions, forms, and review summaries across mobile,
+  tablet, and desktop widths.
+
+### Compatibility
+
+- No API, database schema, authentication, authorization, backup, or transfer
+  contract changes are required.
+- Existing SQLite and PostgreSQL installations remain compatible.
+
 ## [1.35.0] - 2026-10-11
 
 ### Added
