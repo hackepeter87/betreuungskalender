@@ -10,8 +10,8 @@ project follows semantic versioning where practical.
 
 ### Added
 
-- Add explicit per-member care-data scopes for all children, selected children,
-  or no care records.
+- Add explicit per-member care-data scopes for all care parties, selected care
+  parties, or no care records.
 - Add an owner-facing access summary and preview before invitations or existing
   member permissions are changed.
 

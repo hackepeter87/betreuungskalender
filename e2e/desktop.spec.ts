@@ -724,6 +724,7 @@ test("shows admin instance readiness information in settings", async ({ page }) 
 });
 
 test("manages member invitations from settings", async ({ page }) => {
+  await page.setViewportSize({ width: 1024, height: 900 });
   page.on("dialog", (dialog) => void dialog.accept());
   await page.addInitScript(() => {
     Object.defineProperty(navigator, "clipboard", {
@@ -1018,6 +1019,11 @@ test("manages member invitations from settings", async ({ page }) => {
   const memberRow = manager.getByTestId("member-row-user-member-e2e");
   await expect(memberRow.locator(".member-row__access strong")).toHaveText("Bearbeiten");
   await expect(memberRow.locator(".member-row__access small")).toContainText("Alle betreuenden Personen");
+  const memberColumns = await memberRow.locator(":scope > *").evaluateAll((items) =>
+    items.map((item) => Math.round(item.getBoundingClientRect().top))
+  );
+  expect(Math.abs(memberColumns[0] - memberColumns[1])).toBeLessThanOrEqual(12);
+  expect(memberColumns[2]).toBeGreaterThan(Math.max(memberColumns[0], memberColumns[1]));
   await memberRow.getByRole("button", { name: "Zugriff verwalten" }).click();
   let memberEditor = page.getByRole("dialog", { name: "Zugriff für Member E2E" });
   await expect(memberEditor).toBeVisible();

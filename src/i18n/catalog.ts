@@ -118,7 +118,7 @@ const de = {
   privacyWorkflow: {
     title: "Datenschutzanfrage prüfen",
     description: "Owner können betroffene Daten erfassen, Auswirkungen prüfen und eine zuvor getroffene Entscheidung kontrolliert ausführen.",
-    open: "Prüfung öffnen",
+    open: "Öffnen",
     legalDecisionTitle: "Keine automatische Rechtsentscheidung",
     legalDecisionDescription: "Die Anwendung zeigt technische Folgen. Ob und in welchem Umfang eine Anfrage erfüllt wird, entscheidet der Betreiber außerhalb dieses Ablaufs.",
     stepsLabel: "Schritte der Datenschutzprüfung",
@@ -868,7 +868,7 @@ const en = {
   "privacyWorkflow": {
     "title": "Review privacy request",
     "description": "Owners can inventory affected data, review impact, and carry out a decision that was made outside the application.",
-    "open": "Open review",
+    "open": "Open",
     "legalDecisionTitle": "No automated legal decision",
     "legalDecisionDescription": "The application shows technical consequences. The operator decides whether and to what extent a request is fulfilled outside this workflow.",
     "stepsLabel": "Privacy review steps",
