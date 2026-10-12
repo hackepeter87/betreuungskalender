@@ -182,6 +182,8 @@ test("creates and displays a complete invitation link on mobile", async ({ page 
   const manager = page.getByTestId("member-invitations");
   await expect(manager).toBeVisible();
   await expect(manager.getByTestId("invitation-accept-form")).toHaveCount(0);
+  await manager.getByRole("button", { name: "Einladung erstellen" }).click();
+  await expect(page.getByRole("dialog", { name: "Einladung erstellen" })).toBeVisible();
   await manager.getByTestId("invitation-role").selectOption("viewer");
   await manager.getByRole("button", { name: "Einladung prüfen" }).click();
   const review = page.getByRole("dialog", { name: "Einladung prüfen" });

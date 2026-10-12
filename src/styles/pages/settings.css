@@ -384,6 +384,8 @@
 }
 
 .member-row__identity strong,
+.member-row__access strong,
+.member-row__access small,
 .member-row__identity small,
 .invitation-row strong,
 .invitation-row small {
@@ -393,6 +395,7 @@
 }
 
 .member-row__identity small,
+.member-row__access small,
 .invitation-row small {
   margin-top: 3px;
   color: var(--muted);
@@ -418,6 +421,7 @@
 .member-access-capabilities { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 
 .member-access-dialog__body { display: grid; grid-template-columns: 1fr; gap: 12px; padding: 20px; }
+
 
 .settings-form-grid input,
 .settings-form-grid select {

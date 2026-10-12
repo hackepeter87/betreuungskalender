@@ -976,20 +976,11 @@ test("manages member invitations from settings", async ({ page }) => {
   await expect(manager).toBeVisible();
   await expect(manager).toContainText("Member E2E");
   await expect(manager.getByTestId("invitation-accept-form")).toHaveCount(0);
-  const invitationGrid = manager.locator(".member-management-grid");
+  await manager.getByRole("button", { name: "Einladung erstellen" }).click();
   const invitationForm = manager.getByTestId("invitation-create-form");
-  const initialWidths = await invitationGrid.evaluate((element) => {
-    const style = window.getComputedStyle(element);
-    const contentWidth = element.getBoundingClientRect().width
-      - Number.parseFloat(style.paddingLeft)
-      - Number.parseFloat(style.paddingRight);
-    const form = element.querySelector('[data-testid="invitation-create-form"]');
-    return {
-      contentWidth,
-      formWidth: form?.getBoundingClientRect().width ?? 0
-    };
-  });
-  expect(Math.abs(initialWidths.contentWidth - initialWidths.formWidth)).toBeLessThanOrEqual(2);
+  await expect(page.getByRole("dialog", { name: "Einladung erstellen" })).toBeVisible();
+  await expect(invitationForm).toContainText("Person und Gültigkeit");
+  await expect(invitationForm).toContainText("Einladung übermitteln");
 
   await manager.getByTestId("invitation-email-hint").fill("new-user@example.invalid");
   await invitationForm.getByLabel("Ausgewählte betreuende Personen").check();
@@ -1012,15 +1003,7 @@ test("manages member invitations from settings", async ({ page }) => {
   await expect(manager.getByTestId("invitation-created-link")).toHaveValue(
     "https://bk.example.invalid/invite?token=invite_e2e_created_token"
   );
-  const splitCards = await manager.locator(".member-management-grid > *").evaluateAll((items) =>
-    items.map((item) => {
-      const rect = item.getBoundingClientRect();
-      return { top: Math.round(rect.top), width: Math.round(rect.width) };
-    })
-  );
-  expect(splitCards).toHaveLength(2);
-  expect(splitCards[0].top).toBe(splitCards[1].top);
-  expect(Math.abs(splitCards[0].width - splitCards[1].width)).toBeLessThanOrEqual(2);
+  await expect(manager.getByTestId("created-invitation-link")).toBeVisible();
   await manager.getByRole("button", { name: "Link kopieren" }).click();
   expect(await page.evaluate(() =>
     (window as typeof window & { __copiedInvitationLink?: string }).__copiedInvitationLink
@@ -1033,6 +1016,8 @@ test("manages member invitations from settings", async ({ page }) => {
   )).toBe(false);
 
   const memberRow = manager.getByTestId("member-row-user-member-e2e");
+  await expect(memberRow.locator(".member-row__access strong")).toHaveText("Bearbeiten");
+  await expect(memberRow.locator(".member-row__access small")).toContainText("Alle betreuenden Personen");
   await memberRow.getByRole("button", { name: "Zugriff verwalten" }).click();
   let memberEditor = page.getByRole("dialog", { name: "Zugriff für Member E2E" });
   await expect(memberEditor).toBeVisible();

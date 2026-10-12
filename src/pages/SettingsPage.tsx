@@ -334,6 +334,7 @@ function MemberInvitationManager() {
   const [ownerForbidden, setOwnerForbidden] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [inviting, setInviting] = useState(false);
   const [editingMember, setEditingMember] = useState<ApiMember | null>(null);
   const [memberRole, setMemberRole] = useState<ApiWorkspaceRole>("viewer");
   const [memberScope, setMemberScope] = useState<ApiMemberCareDataScope>({ type: "all" });
@@ -443,6 +444,7 @@ function MemberInvitationManager() {
         setInviteEmail("");
         setInviteScope({ type: "all" });
         setSendEmailOverride(undefined);
+        setInviting(false);
         setMessage(created.emailDelivery?.status === "sent"
           ? copy(locale, "settings", "invitationEmailSent")
           : created.emailDelivery?.status === "failed"
@@ -461,6 +463,12 @@ function MemberInvitationManager() {
     setEditingMember(member);
     setMemberRole(member.effectiveRole);
     setMemberScope(member.careDataScope ?? { type: "all" });
+    setReview(null);
+    setError(null);
+  };
+
+  const closeInvitation = () => {
+    setInviting(false);
     setReview(null);
     setError(null);
   };
@@ -509,85 +517,19 @@ function MemberInvitationManager() {
 
   return (
     <section className="panel settings-section" data-testid="member-invitations">
-      <div className="panel__header panel__header--compact">
+      <div className="panel__header">
         <div>
           <h2>{copy(locale, "settings", "members")}</h2>
           <p>{copy(locale, "settings", "membersDescription")}</p>
         </div>
+        {showOwnerControls ? <button className="button button--primary" type="button" onClick={() => { setInviting(true); setError(null); setReview(null); }}>
+          <Icon name="plus" size={17} />
+          {copy(locale, "settings", "invitationCreate")}
+        </button> : null}
       </div>
 
       {showOwnerControls ? (
         <>
-          <div className={`member-management-grid${createdInvitationUrl ? "" : " member-management-grid--single"}`}>
-            <form className="member-invite-card" data-testid="invitation-create-form" onSubmit={(event) => void previewInvitation(event)}>
-              <div>
-                <strong>{copy(locale, "settings", "invitationCreate")}</strong>
-                <small>{copy(locale, "settings", "invitationCreateDescription")}</small>
-              </div>
-              <label className="field">
-                <span>{copy(locale, "settings", "invitationEmailHint")}</span>
-                <input
-                  data-testid="invitation-email-hint"
-                  type="email"
-                  value={inviteEmail}
-                  onChange={(event) => setInviteEmail(event.target.value)}
-                  placeholder="name@example.invalid"
-                />
-              </label>
-              <div className="member-invite-card__row">
-                <label className="field">
-                  <span>{copy(locale, "settings", "memberRole")}</span>
-                  <select data-testid="invitation-role" value={inviteRole} onChange={(event) => {
-                    const role = event.target.value as ApiWorkspaceRole;
-                    setInviteRole(role);
-                    if (role === "admin") setInviteScope({ type: "all" });
-                  }}>
-                    {memberRoles.map((role) => (
-                      <option key={role} value={role}>{memberRoleLabel(role, locale)}</option>
-                    ))}
-                  </select>
-                  <small>{memberRoleDescription(inviteRole, locale)}</small>
-                </label>
-                <label className="field">
-                  <span>{copy(locale, "settings", "invitationExpiresDays")}</span>
-                  <input data-testid="invitation-expires-days" type="number" min="1" max="30" value={expiresDays} onChange={(event) => setExpiresDays(Number(event.target.value))} />
-                </label>
-              </div>
-              <MemberScopeFields prefix="invitation" role={inviteRole} scope={inviteScope} parties={parties} disabled={busy} onChange={setInviteScope} />
-              {emailDeliveryAvailable ? <label className="toggle-card toggle-card--compact">
-                <input
-                  data-testid="invitation-send-email"
-                  type="checkbox"
-                  checked={sendEmail}
-                  onChange={(event) => setSendEmailOverride(event.target.checked)}
-                  disabled={!hasInviteEmail}
-                />
-                <span>
-                  <strong>{copy(locale, "settings", "invitationSendEmail")}</strong>
-                  <small>{copy(locale, "settings", "invitationSendEmailDescription")}</small>
-                </span>
-              </label> : (
-                <small>{copy(locale, "settings", "invitationSendEmailDescription")}</small>
-              )}
-              <button className="button button--primary" type="submit" disabled={busy}>
-                <Icon name="check" size={17} />
-                {copy(locale, "settings", "invitationReviewAction")}
-              </button>
-            </form>
-
-            {createdInvitationUrl ? (
-              <div className="member-token-card" data-testid="created-invitation-link">
-                <strong>{copy(locale, "settings", "invitationLinkTitle")}</strong>
-                <small>{copy(locale, "settings", "invitationLinkDescription")}</small>
-                <textarea data-testid="invitation-created-link" readOnly value={createdInvitationUrl} />
-                <button className="button button--secondary" type="button" onClick={() => void copyInvitationLink()}>
-                  <Icon name="copy" size={17} />
-                  {copy(locale, "settings", "invitationLinkCopy")}
-                </button>
-              </div>
-            ) : null}
-          </div>
-
           <div className="member-list" data-testid="member-list">
             {members.map((member) => (
               <div className="member-row" data-testid={`member-row-${member.id}`} key={member.id}>
@@ -627,6 +569,20 @@ function MemberInvitationManager() {
             ))}
           </div>
 
+          {createdInvitationUrl ? (
+            <div className="member-management-grid member-management-grid--single">
+              <div className="member-token-card" data-testid="created-invitation-link">
+                <strong>{copy(locale, "settings", "invitationLinkTitle")}</strong>
+                <small>{copy(locale, "settings", "invitationLinkDescription")}</small>
+                <textarea data-testid="invitation-created-link" readOnly value={createdInvitationUrl} />
+                <button className="button button--secondary" type="button" onClick={() => void copyInvitationLink()}>
+                  <Icon name="copy" size={17} />
+                  {copy(locale, "settings", "invitationLinkCopy")}
+                </button>
+              </div>
+            </div>
+          ) : null}
+
           <div className="invitation-list" data-testid="invitation-list">
             <h3>{copy(locale, "settings", "pendingInvitations")}</h3>
             {invitations.length ? invitations.map((invitation) => {
@@ -654,7 +610,48 @@ function MemberInvitationManager() {
       ) : null}
 
       {message ? <p className="inline-message" role="status">{message}</p> : null}
-      {error && !editingMember && !review ? <p className="form-error" role="alert">{error}</p> : null}
+      {error && !inviting && !editingMember && !review ? <p className="form-error" role="alert">{error}</p> : null}
+      {inviting && !review ? <Modal title={copy(locale, "settings", "invitationCreate")} size="large" className="member-access-dialog" onClose={closeInvitation}>
+        <form className="member-access-dialog__body" data-testid="invitation-create-form" onSubmit={(event) => void previewInvitation(event)}>
+          <p className="form-section__hint">{copy(locale, "settings", "invitationCreateDescription")}</p>
+          <fieldset className="form-section">
+            <legend>{copy(locale, "settings", "invitationDetails")}</legend>
+            <div className="member-invite-card__row">
+              <label className="field">
+                <span>{copy(locale, "settings", "invitationEmailHint")}</span>
+                <input data-testid="invitation-email-hint" type="email" value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="name@example.invalid" />
+              </label>
+              <label className="field">
+                <span>{copy(locale, "settings", "invitationExpiresDays")}</span>
+                <input data-testid="invitation-expires-days" type="number" min="1" max="30" value={expiresDays} onChange={(event) => setExpiresDays(Number(event.target.value))} />
+              </label>
+            </div>
+          </fieldset>
+          <fieldset className="form-section">
+            <legend>{copy(locale, "settings", "memberRole")}</legend>
+            <label className="field">
+              <select data-testid="invitation-role" value={inviteRole} onChange={(event) => {
+                const role = event.target.value as ApiWorkspaceRole;
+                setInviteRole(role);
+                if (role === "admin") setInviteScope({ type: "all" });
+              }}>
+                {memberRoles.map((role) => <option key={role} value={role}>{memberRoleLabel(role, locale)}</option>)}
+              </select>
+              <small>{memberRoleDescription(inviteRole, locale)}</small>
+            </label>
+          </fieldset>
+          <MemberScopeFields prefix="invitation" role={inviteRole} scope={inviteScope} parties={parties} disabled={busy} onChange={setInviteScope} />
+          <fieldset className="form-section">
+            <legend>{copy(locale, "settings", "invitationDelivery")}</legend>
+            {emailDeliveryAvailable ? <label className="toggle-card toggle-card--compact">
+              <input data-testid="invitation-send-email" type="checkbox" checked={sendEmail} onChange={(event) => setSendEmailOverride(event.target.checked)} disabled={!hasInviteEmail} />
+              <span><strong>{copy(locale, "settings", "invitationSendEmail")}</strong><small>{copy(locale, "settings", "invitationSendEmailDescription")}</small></span>
+            </label> : <p className="form-section__hint">{copy(locale, "settings", "invitationSendEmailDescription")}</p>}
+          </fieldset>
+          {error ? <p className="form-error" role="alert">{error}</p> : null}
+          <footer className="form-actions"><span /><div className="form-actions__right"><button className="button button--secondary" type="button" onClick={closeInvitation}>{copy(locale, "common", "cancel")}</button><button className="button button--primary" type="submit" disabled={busy}><Icon name="check" size={17} />{copy(locale, "settings", "invitationReviewAction")}</button></div></footer>
+        </form>
+      </Modal> : null}
       {editingMember && !review ? <Modal title={copy(locale, "settings", "memberAccessDialogTitle", { name: editingMember.displayName })} size="large" className="member-access-dialog" onClose={() => setEditingMember(null)}>
         <form className="member-access-dialog__body" onSubmit={(event) => { event.preventDefault(); void previewMember(); }}>
           <fieldset className="member-access-roles"><legend>{copy(locale, "settings", "memberRole")}</legend>{memberRoles.map((role) => <label className="member-access-role check-row" key={role}><input type="radio" name="member-role" checked={memberRole === role} disabled={busy} onChange={() => { setMemberRole(role); if (role === "admin") setMemberScope({ type: "all" }); }} /><span><strong>{memberRoleLabel(role, locale)}</strong><small>{memberRoleDescription(role, locale)}</small></span></label>)}</fieldset>
