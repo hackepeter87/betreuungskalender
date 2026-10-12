@@ -10,6 +10,15 @@
 }
 
 @media (min-width: 768px) and (max-width: 1199px) {
+  .member-row {
+    grid-template-columns: minmax(220px, 1fr) minmax(180px, 0.7fr);
+  }
+
+  .member-row__actions {
+    grid-column: 1 / -1;
+    justify-content: flex-start;
+  }
+
   .external-calendar-import-grid > .button {
     grid-column: 1 / -1;
     justify-self: start;
@@ -119,9 +128,7 @@
 
   .member-access-scope__modes,
   .member-access-scope__parties,
-  .member-access-roles,
-  .member-access-review__summary,
-  .member-access-capabilities {
+  .member-access-roles {
     grid-template-columns: minmax(0, 1fr);
   }
 
@@ -186,7 +193,6 @@
 }
 
 @media (max-width: 720px) {
-  .member-invite-card .button,
   .member-token-card .button,
   .invitation-row .button,
   .member-row__actions .button {

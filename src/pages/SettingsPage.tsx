@@ -251,15 +251,15 @@ function MemberScopeFields({
   const selectedIds = scope.type === "selected" ? scope.carePartyIds : [];
   const scopeDisabled = disabled || role === "admin";
   return (
-    <fieldset className="member-access-scope">
+    <fieldset className="form-section member-access-scope">
       <legend>{copy(locale, "settings", "memberScopeTitle")}</legend>
-      <p>{copy(locale, "settings", "memberScopeDescription")}</p>
+      <p className="form-section__hint">{copy(locale, "settings", "memberScopeDescription")}</p>
       <div className="member-access-scope__modes">
-        <label className="check-row">
+        <label className="toggle-card toggle-card--compact">
           <input type="radio" name={`${prefix}-scope`} checked={scope.type === "all"} disabled={scopeDisabled} onChange={() => onChange({ type: "all" })} />
           <span><strong>{copy(locale, "settings", "memberScopeAll")}</strong><small>{copy(locale, "settings", "memberScopeAllDescription")}</small></span>
         </label>
-        <label className="check-row">
+        <label className="toggle-card toggle-card--compact">
           <input type="radio" name={`${prefix}-scope`} checked={scope.type === "selected"} disabled={scopeDisabled} onChange={() => onChange({ type: "selected", carePartyIds: selectedIds })} />
           <span><strong>{copy(locale, "settings", "memberScopeSelected")}</strong><small>{copy(locale, "settings", "memberScopeSelectedDescription")}</small></span>
         </label>
@@ -267,7 +267,7 @@ function MemberScopeFields({
       {scope.type === "selected" && role !== "admin" ? (
         <div className="member-access-scope__parties">
           {parties.map((party) => (
-            <label className="check-row" key={party.id}>
+            <label className="toggle-card toggle-card--compact" key={party.id}>
               <input
                 type="checkbox"
                 checked={selectedIds.includes(party.id)}
@@ -282,7 +282,7 @@ function MemberScopeFields({
               {party.name}
             </label>
           ))}
-          {!selectedIds.length ? <p className="member-access-scope__empty" role="status"><Icon name="lock" size={16} />{copy(locale, "settings", "memberScopeNoneSummary")}</p> : null}
+          {!selectedIds.length ? <p className="notice" role="status"><Icon name="lock" size={16} />{copy(locale, "settings", "memberScopeNoneSummary")}</p> : null}
         </div>
       ) : null}
     </fieldset>
@@ -296,17 +296,40 @@ function MemberAccessReview({ preview }: { preview: ApiMemberAccessPreview }) {
   const expanded = preview.changes.gainedCapabilities.length > 0 || preview.changes.gainedCarePartyIds.length > 0;
   return (
     <div className="member-access-review" data-testid="member-access-review">
-      <div className="member-access-review__summary">
-        <div><span>{copy(locale, "settings", "memberRole")}</span><strong>{memberRoleLabel(preview.after.role, locale)}</strong><small>{memberRoleDescription(preview.after.role, locale)}</small></div>
-        <div><span>{copy(locale, "settings", "memberScopeTitle")}</span><strong>{memberScopeSummary(preview.after.careDataScope, preview.careParties, locale)}</strong></div>
+      <dl className="instance-readiness-grid">
+        <div className="readiness-item">
+          <dt><small>{copy(locale, "settings", "memberRole")}</small></dt>
+          <dd><strong>{memberRoleLabel(preview.after.role, locale)}</strong></dd>
+          <dd><span>{memberRoleDescription(preview.after.role, locale)}</span></dd>
+        </div>
+        <div className="readiness-item">
+          <dt><small>{copy(locale, "settings", "memberScopeTitle")}</small></dt>
+          <dd><strong>{memberScopeSummary(preview.after.careDataScope, preview.careParties, locale)}</strong></dd>
+        </div>
+      </dl>
+      {expanded ? <div className="notice" role="status"><Icon name="plus" size={16} /><strong>{copy(locale, "settings", "memberAccessExpanded")}</strong></div> : null}
+      {narrowed ? <div className="notice notice--warning" role="status"><Icon name="alert" size={16} /><div><strong>{copy(locale, "settings", "memberAccessNarrowed")}</strong>{preview.changes.lostCapabilities.map((code) => <p key={code}>{copy(locale, "settings", "memberAccessWillLose")}: {memberCapabilityLabel(code, locale)}</p>)}</div></div> : null}
+      {!expanded && !narrowed ? <p className="form-section__hint">{copy(locale, "settings", "memberAccessUnchanged")}</p> : null}
+      <div className="instance-readiness-grid">
+        {groups.map((group) => (
+          <section className="readiness-item" key={group}>
+            <h3>{copy(locale, "settings", catalogKey("settings", `memberCapabilityGroup_${group}`))}</h3>
+            {preview.after.capabilities[group].length
+              ? preview.after.capabilities[group].map((code) => <span key={code}>{memberCapabilityLabel(code, locale)}</span>)
+              : <span>{copy(locale, "common", "none")}</span>}
+          </section>
+        ))}
       </div>
-      {expanded ? <p className="member-access-change"><Icon name="plus" size={16} /><strong>{copy(locale, "settings", "memberAccessExpanded")}</strong></p> : null}
-      {narrowed ? <div className="member-access-change member-access-change--warning"><Icon name="alert" size={16} /><span><strong>{copy(locale, "settings", "memberAccessNarrowed")}</strong>{preview.changes.lostCapabilities.map((code) => <small key={code}>{copy(locale, "settings", "memberAccessWillLose")}: {memberCapabilityLabel(code, locale)}</small>)}</span></div> : null}
-      {!expanded && !narrowed ? <p className="member-access-hint">{copy(locale, "settings", "memberAccessUnchanged")}</p> : null}
-      <div className="member-access-capabilities">
-        {groups.map((group) => <section key={group}><h3>{copy(locale, "settings", catalogKey("settings", `memberCapabilityGroup_${group}`))}</h3>{preview.after.capabilities[group].length ? <ul>{preview.after.capabilities[group].map((code) => <li key={code}>{memberCapabilityLabel(code, locale)}</li>)}</ul> : <p>{copy(locale, "common", "none")}</p>}</section>)}
-      </div>
-      <section className="member-access-global"><h3>{copy(locale, "settings", "memberGlobalDataTitle")}</h3><p>{copy(locale, "settings", "memberGlobalDataDescription")}</p>{preview.after.globalData.length ? <ul>{preview.after.globalData.map((code) => <li key={code}>{memberGlobalDataLabel(code, locale)}</li>)}</ul> : <p>{copy(locale, "common", "none")}</p>}</section>
+      <section className="notice" role="note">
+        <Icon name="info" size={16} />
+        <div>
+          <h3>{copy(locale, "settings", "memberGlobalDataTitle")}</h3>
+          <p>{copy(locale, "settings", "memberGlobalDataDescription")}</p>
+          {preview.after.globalData.length
+            ? <ul>{preview.after.globalData.map((code) => <li key={code}>{memberGlobalDataLabel(code, locale)}</li>)}</ul>
+            : <p>{copy(locale, "common", "none")}</p>}
+        </div>
+      </section>
     </div>
   );
 }
@@ -654,7 +677,7 @@ function MemberInvitationManager() {
       </Modal> : null}
       {editingMember && !review ? <Modal title={copy(locale, "settings", "memberAccessDialogTitle", { name: editingMember.displayName })} size="large" className="member-access-dialog" onClose={() => setEditingMember(null)}>
         <form className="member-access-dialog__body" onSubmit={(event) => { event.preventDefault(); void previewMember(); }}>
-          <fieldset className="member-access-roles"><legend>{copy(locale, "settings", "memberRole")}</legend>{memberRoles.map((role) => <label className="member-access-role check-row" key={role}><input type="radio" name="member-role" checked={memberRole === role} disabled={busy} onChange={() => { setMemberRole(role); if (role === "admin") setMemberScope({ type: "all" }); }} /><span><strong>{memberRoleLabel(role, locale)}</strong><small>{memberRoleDescription(role, locale)}</small></span></label>)}</fieldset>
+          <fieldset className="form-section member-access-roles"><legend>{copy(locale, "settings", "memberRole")}</legend>{memberRoles.map((role) => <label className="toggle-card toggle-card--compact" key={role}><input type="radio" name="member-role" checked={memberRole === role} disabled={busy} onChange={() => { setMemberRole(role); if (role === "admin") setMemberScope({ type: "all" }); }} /><span><strong>{memberRoleLabel(role, locale)}</strong><small>{memberRoleDescription(role, locale)}</small></span></label>)}</fieldset>
           <MemberScopeFields prefix={`member-${editingMember.id}`} role={memberRole} scope={memberScope} parties={parties} disabled={busy} onChange={setMemberScope} />
           {error ? <p className="form-error" role="alert">{error}</p> : null}
           <footer className="form-actions"><span /><div className="form-actions__right"><button className="button button--secondary" type="button" onClick={() => setEditingMember(null)}>{copy(locale, "common", "cancel")}</button><button className="button button--primary" type="submit" disabled={busy}>{copy(locale, "settings", "memberReviewAction")}</button></div></footer>
