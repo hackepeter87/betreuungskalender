@@ -1,8 +1,10 @@
-import "dotenv/config";
+import { config as loadEnvironment } from "dotenv";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { csvListEnv, parseTrustedProxyRules } from "./trustedProxy.js";
 import { isUnknownRecord } from "../shared/objects.js";
+
+loadEnvironment({ quiet: true, override: false });
 
 export type AuthMode = "local" | "trusted-proxy" | "native-oidc";
 export type DatabaseDriver = "sqlite" | "postgres";

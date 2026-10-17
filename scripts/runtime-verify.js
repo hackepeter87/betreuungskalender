@@ -1,6 +1,8 @@
-import "dotenv/config";
+import { config as loadEnvironment } from "dotenv";
 import Database from "better-sqlite3";
 import { resolve } from "node:path";
+
+loadEnvironment({ quiet: true, override: false });
 
 function argumentValue(name) {
   const index = process.argv.indexOf(name);
