@@ -12,6 +12,8 @@ Every maintained TypeScript source is checked by a named compiler project:
 Compiler-major sequencing and the conditions for a future native TypeScript 7
 evaluation are defined in
 [ADR 0010](adr/0010-supported-runtime-and-compiler-baseline.md).
+The maintained projects currently compile together on the TypeScript 6.0
+transition line; TypeScript 7 remains outside the supported toolchain.
 
 All four projects use TypeScript strict mode. `npm run lint` runs the server
 project and the referenced browser, Vite, and tools projects, then ESLint with
