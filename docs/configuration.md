@@ -6,8 +6,10 @@ credentials in existing Kubernetes Secrets and reference them with
 `secretKeyRef` or `secretRef`; do not place secret values in Helm values or the
 generated ConfigMap. See [deployment-helm.md](deployment-helm.md).
 
-Configuration is read from environment variables. `dotenv` loads a local
-`.env` file when present. Never commit production `.env` files.
+Configuration is read from environment variables. The server and maintained
+operational scripts explicitly load an optional local `.env` file before they
+read configuration. Values already present in the process environment take
+precedence. Never commit production `.env` files.
 
 | Variable | Purpose | Example | Required | Default | Security relevance |
 | --- | --- | --- | --- | --- | --- |

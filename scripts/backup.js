@@ -1,7 +1,9 @@
-import "dotenv/config";
+import { config as loadEnvironment } from "dotenv";
 import Database from "better-sqlite3";
 import { chmod, mkdir, readdir, stat, unlink } from "node:fs/promises";
 import { basename, resolve } from "node:path";
+
+loadEnvironment({ quiet: true, override: false });
 
 const databasePath = resolve(
   process.cwd(),
