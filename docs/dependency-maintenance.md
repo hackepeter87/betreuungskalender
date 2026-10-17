@@ -5,6 +5,11 @@ normal review or release controls. Dependabot checks npm packages, GitHub
 Actions, and container base images every Monday in bounded groups. GitHub may
 raise security updates outside that weekly schedule.
 
+Major runtime and compiler changes follow the compatibility and rollback
+contract in
+[ADR 0010](adr/0010-supported-runtime-and-compiler-baseline.md). They are not
+treated as routine dependency maintenance.
+
 ## Update groups
 
 Routine compatible npm patch and minor updates are grouped separately for
