@@ -271,6 +271,8 @@ test("allows only required dependency install scripts", () => {
 });
 
 test("pins the required npm version in Node-based GitHub workflows", () => {
+  const approvedSetupNodeStep =
+    "- uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0";
   const workflowPaths = [
     ".github/workflows/ci.yml",
     ".github/workflows/container.yml",
@@ -280,14 +282,27 @@ test("pins the required npm version in Node-based GitHub workflows", () => {
 
   for (const workflowPath of workflowPaths) {
     const workflow = readFileSync(resolve(workflowPath), "utf8");
-    const setupNodeSteps = workflow.match(/actions\/setup-node@[0-9a-f]{40} # v7\.0\.0/g) ?? [];
-    const pinnedNpmSteps = workflow.match(/npm install --global npm@12\.0\.1/g) ?? [];
-
-    assert.equal(
-      pinnedNpmSteps.length,
-      setupNodeSteps.length,
-      `${workflowPath} must pin npm 12.0.1 after every setup-node step`
+    const lines = workflow.split(/\r?\n/u);
+    const setupNodeIndexes = lines.flatMap((line, index) =>
+      line.includes("actions/setup-node@") ? [index] : []
     );
+
+    assert.ok(setupNodeIndexes.length > 0, `${workflowPath} must configure Node.js`);
+    for (const setupNodeIndex of setupNodeIndexes) {
+      assert.equal(
+        lines[setupNodeIndex]?.trim(),
+        approvedSetupNodeStep,
+        `${workflowPath} must use the reviewed setup-node revision`
+      );
+      const nextStep = lines
+        .slice(setupNodeIndex + 1)
+        .find((line) => /^\s*-\s+(?:uses|run|name):/u.test(line));
+      assert.equal(
+        nextStep?.trim(),
+        "- run: npm install --global npm@12.0.1",
+        `${workflowPath} must pin npm 12.0.1 immediately after every setup-node step`
+      );
+    }
   }
 });
 
