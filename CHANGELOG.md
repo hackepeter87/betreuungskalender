@@ -6,6 +6,27 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.35.2] - 2026-10-18
+
+### Changed
+
+- Use TypeScript 6 as the transition compiler while retaining the supported
+  Node.js 24 runtime baseline.
+- Load optional local environment files explicitly in application and
+  operational entry points instead of relying on removed preload behavior.
+- Update compatible runtime and development dependencies, including Fastify
+  plugins, Nodemailer, Playwright, ESLint, Vite, and related tooling.
+- Refresh immutable GitHub Actions pins and the Node.js 24 container build
+  image digest.
+
+### Compatibility
+
+- No product, API, database schema, authentication, authorization, backup, or
+  transfer contract changes are included.
+- Existing SQLite and PostgreSQL installations remain compatible.
+- Node.js 26 remains outside this release until its separately planned LTS
+  migration is complete.
+
 ## [1.35.1] - 2026-10-12
 
 ### Changed
