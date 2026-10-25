@@ -8,6 +8,7 @@ metrics_container="betreuungskalender-metrics-smoke-${suffix}"
 volume="betreuungskalender-smoke-data-${suffix}"
 metrics_volume="betreuungskalender-metrics-smoke-data-${suffix}"
 dockerfile="${DOCKERFILE:-Dockerfile}"
+expected_node_version="${EXPECTED_NODE_VERSION:-24.22.1}"
 legal_dir="$(mktemp -d)"
 metrics_dir="$(mktemp -d)"
 
@@ -43,6 +44,14 @@ wait_for_health() {
 }
 
 docker build --file "$dockerfile" --tag "$image" .
+actual_node_version="$(docker run --rm --entrypoint /nodejs/bin/node "$image" --version)"
+if [[ "$actual_node_version" != "v${expected_node_version}" ]]; then
+  echo "Runtime Node.js version ${actual_node_version} does not match v${expected_node_version}." >&2
+  exit 1
+fi
+docker run --rm --entrypoint /nodejs/bin/node "$image" --input-type=module -e '
+  if (process.getuid?.() !== 1000) throw new Error("Runtime image must use the non-root application user");
+'
 docker volume create "$volume" >/dev/null
 docker run --detach --name "$container" \
   --volume "$volume:/data" \
