@@ -151,7 +151,7 @@ export function CalendarGrid({
                 data-testid={`calendar-day-${day.dateKey}`}
                 onClick={() => onSelectDate(day.dateKey)}
                 disabled={!allowCreate}
-                aria-label={copy(locale, "calendar", "addEntryOnDate", { date: day.dateKey })}
+                aria-label={`${day.day}, ${copy(locale, "calendar", "addEntryOnDate", { date: day.dateKey })}`}
               >
                 {day.day}
               </button>
