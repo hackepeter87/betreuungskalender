@@ -577,9 +577,9 @@ function checkDeploymentExamples(cwd, version, report) {
 
   const dockerfiles = `${dockerfile}\n${releaseDockerfile}`;
   const buildImage =
-    "node:24.21.0-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20";
+    "node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205";
   const runtimeImage =
-    "gcr.io/distroless/nodejs24-debian13:nonroot@sha256:9eeb7f5887d0e239e78264b06f7f11d2e14be534050481803a9e4728fcdd278e";
+    "gcr.io/distroless/nodejs24-debian13:nonroot@sha256:cb606325b7ec4af55462cb0b424a53b452a5b4a894ffe841fcf1048d216fb9f8";
   const runtimeStages = [dockerfile, releaseDockerfile].map((content) =>
     content.slice(content.lastIndexOf(" AS runtime"))
   );
@@ -588,7 +588,7 @@ function checkDeploymentExamples(cwd, version, report) {
     !releaseDockerfile.includes(`FROM ${buildImage} AS production-deps`) ||
     !dockerfile.includes(`FROM ${runtimeImage} AS runtime`) ||
     !releaseDockerfile.includes(`FROM ${runtimeImage} AS runtime`) ||
-    !dockerfiles.includes("npm install -g npm@12.0.1")
+    !dockerfiles.includes("npm install -g npm@12.2.1")
   ) {
     report.fail("Dockerfiles must use the pinned Node.js 24 build toolchain and minimal runtime image");
   } else if (

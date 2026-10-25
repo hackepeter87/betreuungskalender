@@ -16,9 +16,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24.18.0
+          node-version: 24.22.1
           cache: npm
-      - run: npm install --global npm@12.0.1
+      - run: npm install --global npm@12.2.1
       - run: npm ci
       - run: npm audit
       - run: npm run release:check
@@ -57,9 +57,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24.18.0
+          node-version: 24.22.1
           cache: npm
-      - run: npm install --global npm@12.0.1
+      - run: npm install --global npm@12.2.1
       - run: npm ci
       - name: Create test-only database secret
         run: printf '%s' 'test-only-password' > "$TEST_POSTGRES_PASSWORD_FILE"
@@ -76,9 +76,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24.18.0
+          node-version: 24.22.1
           cache: npm
-      - run: npm install --global npm@12.0.1
+      - run: npm install --global npm@12.2.1
       - run: npm ci
       - run: npm run build
       - run: npx playwright install --with-deps chromium webkit
@@ -101,9 +101,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24.18.0
+          node-version: 24.22.1
           cache: npm
-      - run: npm install --global npm@12.0.1
+      - run: npm install --global npm@12.2.1
       - run: npm ci
       - run: npm run test:security-runtime
 
@@ -124,8 +124,8 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24.18.0
+          node-version: 24.22.1
           cache: npm
-      - run: npm install --global npm@12.0.1
+      - run: npm install --global npm@12.2.1
       - run: npm ci
       - run: npx tsx --test scripts/update.test.js

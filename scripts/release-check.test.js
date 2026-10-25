@@ -299,8 +299,8 @@ test("pins the required npm version in Node-based GitHub workflows", () => {
         .find((line) => /^\s*-\s+(?:uses|run|name):/u.test(line));
       assert.equal(
         nextStep?.trim(),
-        "- run: npm install --global npm@12.0.1",
-        `${workflowPath} must pin npm 12.0.1 immediately after every setup-node step`
+        "- run: npm install --global npm@12.2.1",
+        `${workflowPath} must pin npm 12.2.1 immediately after every setup-node step`
       );
     }
   }
@@ -360,21 +360,21 @@ test("direct Compose example does not trust proxy identity headers", () => {
   assert.equal(parseEnvValue(oidcEnvExample, "TRUST_PROXY_AUTH"), "true");
   assert.match(
     dockerfile,
-    /FROM node:24\.21\.0-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS build/
+    /FROM node:24\.22\.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS build/
   );
   assert.match(
     releaseDockerfile,
-    /FROM node:24\.21\.0-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20 AS production-deps/
+    /FROM node:24\.22\.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS production-deps/
   );
   assert.match(
     dockerfile,
-    /FROM gcr\.io\/distroless\/nodejs24-debian13:nonroot@sha256:9eeb7f5887d0e239e78264b06f7f11d2e14be534050481803a9e4728fcdd278e AS runtime/
+    /FROM gcr\.io\/distroless\/nodejs24-debian13:nonroot@sha256:cb606325b7ec4af55462cb0b424a53b452a5b4a894ffe841fcf1048d216fb9f8 AS runtime/
   );
   assert.match(
     releaseDockerfile,
-    /FROM gcr\.io\/distroless\/nodejs24-debian13:nonroot@sha256:9eeb7f5887d0e239e78264b06f7f11d2e14be534050481803a9e4728fcdd278e AS runtime/
+    /FROM gcr\.io\/distroless\/nodejs24-debian13:nonroot@sha256:cb606325b7ec4af55462cb0b424a53b452a5b4a894ffe841fcf1048d216fb9f8 AS runtime/
   );
-  assert.match(`${dockerfile}\n${releaseDockerfile}`, /npm install -g npm@12\.0\.1/);
+  assert.match(`${dockerfile}\n${releaseDockerfile}`, /npm install -g npm@12\.2\.1/);
   assert.doesNotMatch(`${dockerfile}\n${releaseDockerfile}`, /CMD \["npm", "run", "start"\]/);
   assert.match(`${dockerfile}\n${releaseDockerfile}`, /CMD \["dist-server\/server\/index\.js"\]/);
   assert.match(
