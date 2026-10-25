@@ -11,6 +11,11 @@ public routes on desktop, iPhone, and iPad projects. Serious and critical WCAG
 verified false positive, be limited to the smallest affected element, and state
 why the underlying user experience remains accessible.
 
+Visible control text must be contained in the control's accessible name. Prefer
+the visible text as the name; add context only when it remains part of the same
+name. This keeps voice-control commands, visual labels, and screen-reader output
+aligned.
+
 The suite covers the dashboard, calendar, settings, backup and transfer,
 reports, the privacy page, the care-entry dialog, responsive navigation, and a
 320 CSS-pixel reflow check. Existing visual and interaction tests continue to

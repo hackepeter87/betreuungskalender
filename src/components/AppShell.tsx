@@ -305,7 +305,9 @@ function NotificationBell({
         className={`notification-center__trigger${count ? " has-notifications" : ""}`}
         type="button"
         data-testid={`${testIdPrefix}-notification-center-trigger`}
-        aria-label={copy(locale, "confirmation", "notificationCenterAria", { count })}
+        aria-label={testIdPrefix === "sidebar"
+          ? `${copy(locale, "confirmation", "notificationCenterShort")}: ${copy(locale, "confirmation", "notificationCenterAria", { count })}`
+          : copy(locale, "confirmation", "notificationCenterAria", { count })}
         aria-expanded={open}
         aria-haspopup="dialog"
         onClick={() => setOpen((current) => !current)}
@@ -422,7 +424,7 @@ export function AppShell({
     <div className={`app-shell${sidebarCollapsed ? " app-shell--sidebar-collapsed" : ""}`} data-testid="app-shell">
       <aside className={`sidebar${sidebarCollapsed ? " sidebar--collapsed" : ""}`}>
         <div className="sidebar__header">
-          <button className="brand" type="button" onClick={() => navigate("dashboard")} aria-label={t("app.name")}>
+          <button className="brand" type="button" onClick={() => navigate("dashboard")}>
             <span className="brand__mark">
               <img className="brand__logo" src="/icons/app-logo-nav.svg" alt="" data-testid="desktop-app-logo" />
             </span>
@@ -443,7 +445,6 @@ export function AppShell({
                   data-testid={`nav-${item.id}`}
                   className={activePage === item.id ? "is-active" : ""}
                   onClick={() => navigate(item.id)}
-                  aria-label={t(item.labelKey).replaceAll("\u00ad", "")}
                   title={sidebarCollapsed ? t(item.labelKey).replaceAll("\u00ad", "") : undefined}
                 >
                   <Icon name={item.icon} />
@@ -528,7 +529,7 @@ export function AppShell({
           onClick={() => setShowMore((current) => !current)}
           aria-expanded={showMore}
           aria-controls="mobile-more-sheet"
-          aria-label={t("nav.openMore")}
+          aria-label={`${t("nav.more")}: ${t("nav.openMore")}`}
         >
           <Icon name="list" size={19} />
           <span>{t("nav.more")}</span>
@@ -649,7 +650,6 @@ export function AppShell({
                     type="button"
                     key={item.id}
                     data-testid={`mobile-more-${item.id}`}
-                    aria-label={t(item.labelKey).replaceAll("\u00ad", "")}
                     className={activePage === item.id ? "is-active" : ""}
                     onClick={() => navigate(item.id)}
                   >
