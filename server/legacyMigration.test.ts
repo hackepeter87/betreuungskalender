@@ -299,25 +299,35 @@ test("Vorschau und Import lehnen dasselbe übergroße Paket generisch und nicht 
     ...fixture(),
     children: Array.from({ length: 50_001 }, () => ({}))
   };
+  const nestedData = fixture();
+  nestedData.entries[0]!.costs = Array.from({ length: 101 }, (_, index) => ({
+    id: `cost-${index}`,
+    category: "PRIVATE_MARKER_MUST_NOT_LEAK",
+    amount: 1,
+    paidBy: "care-party"
+  }));
 
-  for (const path of ["legacy-preview", "legacy-import"]) {
-    const response = await app.inject({
-      method: "POST",
-      url: `/api/migration/${path}`,
-      payload: {
-        data,
-        fingerprint: "fixture-over-limit",
-        invalidRecords: 0,
-        warnings: [],
-        ...(path === "legacy-import" ? { mode: "add", duplicatePolicy: "skip" } : {})
-      }
-    });
-    assert.equal(response.statusCode, 400);
-    assert.equal(response.headers["cache-control"], "no-store");
-    assert.deepEqual(response.json(), {
-      error: "migration_processing_limit",
-      message: "Das Datenpaket überschreitet die unterstützten Grenzen."
-    });
+  for (const rejectedData of [data, nestedData]) {
+    for (const path of ["legacy-preview", "legacy-import"]) {
+      const response = await app.inject({
+        method: "POST",
+        url: `/api/migration/${path}`,
+        payload: {
+          data: rejectedData,
+          fingerprint: "fixture-over-limit",
+          invalidRecords: 0,
+          warnings: [],
+          ...(path === "legacy-import" ? { mode: "add", duplicatePolicy: "skip" } : {})
+        }
+      });
+      assert.equal(response.statusCode, 400);
+      assert.equal(response.headers["cache-control"], "no-store");
+      assert.deepEqual(response.json(), {
+        error: "migration_processing_limit",
+        message: "Das Datenpaket überschreitet die unterstützten Grenzen."
+      });
+      assert.equal(response.body.includes("PRIVATE_MARKER_MUST_NOT_LEAK"), false);
+    }
   }
   assert.equal((await getLegacyDatabaseSummary(persistence.query)).isEmpty, true);
   await app.close();

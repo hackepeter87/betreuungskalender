@@ -52,20 +52,20 @@
     "@types/web-push": "^3.6.4",
     "better-sqlite3": "^13.0.3",
     "dotenv": "^18.0.8",
-    "fastify": "^5.12.5",
+    "fastify": "^5.12.7",
     "ical.js": "^2.2.1",
     "ipaddr.js": "^2.5.0",
     "jspdf": "^4.2.1",
     "jspdf-autotable": "^5.0.8",
     "kysely": "^0.29.6",
-    "nodemailer": "^10.0.16",
+    "nodemailer": "^10.2.1",
     "openid-client": "^6.8.8",
     "pg": "^8.23.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "rrule": "^2.8.1",
     "web-push": "^3.6.7",
-    "zod": "^4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.13.0",
