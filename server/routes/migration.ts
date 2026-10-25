@@ -13,7 +13,8 @@ import { appDataImportSchema } from "../validation/schemas.js";
 import { preventSensitiveResponseCaching } from "../httpProtection.js";
 import {
   ImportProcessingLimitError,
-  assertImportProcessingLimits
+  assertImportProcessingLimits,
+  assertUnknownImportProcessingLimits
 } from "../validation/processingLimits.js";
 
 const sensitiveLimit = {
@@ -60,6 +61,23 @@ function validationFailure(
   return reply.code(400).send({ error: "validation_error", issues });
 }
 
+function processingLimitFailure(
+  body: unknown,
+  reply: { code(status: number): { send(payload: unknown): unknown } }
+): unknown | undefined {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return undefined;
+  try {
+    assertUnknownImportProcessingLimits(Reflect.get(body, "data"));
+    return undefined;
+  } catch (error) {
+    if (!(error instanceof ImportProcessingLimitError)) throw error;
+    return reply.code(400).send({
+      error: "migration_processing_limit",
+      message: "Das Datenpaket überschreitet die unterstützten Grenzen."
+    });
+  }
+}
+
 export async function migrationRoutes(app: FastifyInstance): Promise<void> {
   app.addHook("onRequest", async (_request, reply) => {
     preventSensitiveResponseCaching(reply);
@@ -101,6 +119,8 @@ export async function migrationRoutes(app: FastifyInstance): Promise<void> {
 
   app.post("/api/migration/legacy-preview", sensitiveLimit, async (request, reply) => {
     reply.header("Cache-Control", "no-store");
+    const limitFailure = processingLimitFailure(request.body, reply);
+    if (limitFailure !== undefined) return limitFailure;
     const parsed = previewSchema.safeParse(request.body);
     if (!parsed.success) {
       return validationFailure(reply, parsed.error.issues);
@@ -117,6 +137,8 @@ export async function migrationRoutes(app: FastifyInstance): Promise<void> {
 
   app.post("/api/migration/legacy-import", sensitiveLimit, async (request, reply) => {
     reply.header("Cache-Control", "no-store");
+    const limitFailure = processingLimitFailure(request.body, reply);
+    if (limitFailure !== undefined) return limitFailure;
     const parsed = importSchema.safeParse(request.body);
     if (!parsed.success) {
       return validationFailure(reply, parsed.error.issues);

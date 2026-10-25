@@ -1,3 +1,5 @@
+import { isUnknownRecord } from "../../shared/objects.js";
+
 export const MAX_CHILD_RELATIONS_PER_RECORD = 100;
 export const MAX_CARE_ENTRY_TRIPS = 100;
 export const MAX_CARE_ENTRY_COSTS = 100;
@@ -60,24 +62,26 @@ interface ImportCollections {
   settings: unknown;
 }
 
-export function assertImportProcessingLimits(
-  data: ImportCollections,
-  overrides: Partial<ImportProcessingLimits> = {}
+const importCollectionKeys = [
+  "children",
+  "entries",
+  "holidayPeriods",
+  "unavailablePeriods",
+  "externalCalendarSources",
+  "externalCalendarEvents",
+  "careParties",
+  "contactPatterns",
+  "contactRules",
+  "auditLog",
+  "monthClosures"
+] as const;
+
+function assertProcessingLimits(
+  settings: unknown,
+  collections: readonly (readonly unknown[])[],
+  overrides: Partial<ImportProcessingLimits>
 ): void {
   const limits = { ...defaultImportProcessingLimits, ...overrides };
-  const collections = [
-    data.children,
-    data.entries,
-    data.holidayPeriods,
-    data.unavailablePeriods,
-    data.externalCalendarSources,
-    data.externalCalendarEvents,
-    data.careParties,
-    data.contactPatterns,
-    data.contactRules,
-    data.auditLog,
-    data.monthClosures
-  ];
   let recordCount = 0;
   for (const collection of collections) {
     if (collection.length > limits.maximumCollectionRecords) {
@@ -95,7 +99,7 @@ export function assertImportProcessingLimits(
     topLevelCollection: boolean;
     collectionLimit?: number;
   }> = [
-    { value: data.settings, depth: 0, topLevelCollection: false },
+    { value: settings, depth: 0, topLevelCollection: false },
     ...collections.map((value) => ({ value, depth: 0, topLevelCollection: true }))
   ];
   let traversedValues = 0;
@@ -143,4 +147,26 @@ export function assertImportProcessingLimits(
       }
     }
   }
+}
+
+export function assertUnknownImportProcessingLimits(
+  data: unknown,
+  overrides: Partial<ImportProcessingLimits> = {}
+): void {
+  if (!isUnknownRecord(data)) return;
+  const collections = importCollectionKeys
+    .map((key) => data[key])
+    .filter((value): value is unknown[] => Array.isArray(value));
+  assertProcessingLimits(data.settings, collections, overrides);
+}
+
+export function assertImportProcessingLimits(
+  data: ImportCollections,
+  overrides: Partial<ImportProcessingLimits> = {}
+): void {
+  assertProcessingLimits(
+    data.settings,
+    importCollectionKeys.map((key) => data[key]),
+    overrides
+  );
 }
