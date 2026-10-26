@@ -6,6 +6,32 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.35.3] - 2026-10-26
+
+### Security and reliability
+
+- Update supported runtime dependencies with current security and maintenance
+  fixes, including the web server, validation, and mail transport packages.
+- Keep legacy migration payload processing within the established application
+  limits before records are normalized or imported.
+- Refresh the pinned Node.js 24 build baseline and immutable container image
+  references.
+
+### Changed
+
+- Update compatible application, build, lint, and browser-test dependencies
+  without adopting deferred major runtime or compiler migrations.
+- Apply the current accessibility rules and align visible control labels with
+  their accessible names across navigation and calendar actions.
+- Refresh the immutable CodeQL SARIF upload action revision.
+
+### Compatibility
+
+- No database migration or breaking API, authentication, authorization,
+  backup, or transfer contract change is included.
+- Existing SQLite and PostgreSQL installations remain compatible.
+- Node.js 26 and other deferred major upgrades remain outside this release.
+
 ## [1.35.2] - 2026-10-18
 
 ### Changed
