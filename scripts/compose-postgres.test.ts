@@ -4,7 +4,6 @@ import test from "node:test";
 
 const composeFiles = [
   "deploy/compose.yml",
-  "deploy/compose.oidc.yml",
   "deploy/compose.testing.yml",
   "deploy/compose.production.yml"
 ];

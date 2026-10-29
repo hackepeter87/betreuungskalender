@@ -33,9 +33,9 @@ sudo -u betreuung npm ci
 sudo -u betreuung npm run build
 ```
 
-Create `/etc/betreuungskalender/.env` from `.env.example`. For a local
-oauth2-proxy use `HOST=127.0.0.1`, `AUTH_MODE=trusted-proxy`,
-`REQUIRE_AUTH=true`, and `TRUST_PROXY_AUTH=true`.
+Create `/etc/betreuungskalender/.env` from `.env.example`. For a separately
+managed local authentication proxy use `HOST=127.0.0.1`,
+`AUTH_MODE=trusted-proxy`, `REQUIRE_AUTH=true`, and `TRUST_PROXY_AUTH=true`.
 
 ```bash
 sudo chown root:betreuung /etc/betreuungskalender/.env

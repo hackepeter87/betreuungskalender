@@ -7,7 +7,6 @@ export const REQUIRED_GITIGNORE_RULES = [
   ".env",
   ".env.*",
   "!.env.example",
-  "!deploy/.env.oidc.example",
   "app.env",
   "app.env.*",
   "!deploy/app.env.demo.example",
@@ -17,7 +16,6 @@ export const REQUIRED_GITIGNORE_RULES = [
   "/secrets/",
   "/logs/",
   "/tmp/",
-  "oauth2-proxy.cfg",
   "*.sqlite",
   "*.sqlite-*",
   "*.db",
@@ -49,7 +47,6 @@ export const REQUIRED_DOCKERIGNORE_RULES = [
   ".env",
   ".env.*",
   "!.env.example",
-  "!deploy/.env.oidc.example",
   "app.env",
   "app.env.*",
   "!deploy/app.env.demo.example",
@@ -59,7 +56,6 @@ export const REQUIRED_DOCKERIGNORE_RULES = [
   "secrets",
   "logs",
   "tmp",
-  "oauth2-proxy.cfg",
   "test-results",
   "playwright-report",
   "blob-report",
@@ -87,7 +83,6 @@ export const REQUIRED_DOCKERIGNORE_RULES = [
 
 const ALLOWED_PATHS = new Set([
   ".env.example",
-  "deploy/.env.oidc.example",
   "deploy/app.env.demo.example",
   "e2e/fixtures/external-calendar.ics",
   "e2e/fixtures/external-calendar-replacement.ics",
@@ -105,14 +100,11 @@ const CRITICAL_PROJECT_PATHS = [
   "LICENSE",
   "docs/backup-restore.md",
   "docs/native-oidc-keycloak-podman.md",
-  "docs/native-oidc-migration-rollback.md",
   "docs/image-promotion.md",
   "docs/deployment-helm.md",
   "docs/adr/0006-kubernetes-helm-deployment.md",
   "docs/release.md",
-  "deploy/.env.oidc.example",
   "deploy/compose.yml",
-  "deploy/compose.oidc.yml",
   "deploy/compose.postgres.yml",
   "deploy/postgres/init/001-create-application-role.sh",
   "deploy/compose.testing.yml",
@@ -170,9 +162,6 @@ export function classifySensitiveArtifact(filePath) {
   ) {
     return "file in a local data, backup, export, secrets, logs, or tmp directory";
   }
-  if (fileName === "oauth2-proxy.cfg") {
-    return "oauth2-proxy configuration file";
-  }
   if (/\.sqlite(?:$|-)/i.test(lower)) {
     return "SQLite database or sidecar file";
   }
@@ -181,6 +170,9 @@ export function classifySensitiveArtifact(filePath) {
   }
   if (/\.ics$/i.test(lower)) {
     return "local calendar file";
+  }
+  if (fileName === "oauth2-proxy.cfg") {
+    return "legacy authentication proxy configuration file";
   }
   if (
     fileName === "id_rsa" ||
@@ -473,14 +465,12 @@ function checkReleaseMetadata(cwd, packageJson, version, report) {
 
 function checkDeploymentExamples(cwd, version, report) {
   let envExample;
-  let oidcEnvExample;
   let compose;
   let testingCompose;
   let productionCompose;
   let dockerfile;
   let releaseDockerfile;
   let nativeInstallDocs;
-  let nativeMigrationDocs;
   let imagePromotionDocs;
   let promoteTestingWorkflow;
   let publishReleaseImageWorkflow;
@@ -488,7 +478,6 @@ function checkDeploymentExamples(cwd, version, report) {
   let promoteProductionWorkflow;
   try {
     envExample = readFileSync(resolve(cwd, ".env.example"), "utf8");
-    oidcEnvExample = readFileSync(resolve(cwd, "deploy", ".env.oidc.example"), "utf8");
     compose = readFileSync(resolve(cwd, "deploy", "compose.yml"), "utf8");
     testingCompose = readFileSync(resolve(cwd, "deploy", "compose.testing.yml"), "utf8");
     productionCompose = readFileSync(resolve(cwd, "deploy", "compose.production.yml"), "utf8");
@@ -496,10 +485,6 @@ function checkDeploymentExamples(cwd, version, report) {
     releaseDockerfile = readFileSync(resolve(cwd, "Dockerfile.release"), "utf8");
     nativeInstallDocs = readFileSync(
       resolve(cwd, "docs", "native-oidc-keycloak-podman.md"),
-      "utf8"
-    );
-    nativeMigrationDocs = readFileSync(
-      resolve(cwd, "docs", "native-oidc-migration-rollback.md"),
       "utf8"
     );
     imagePromotionDocs = readFileSync(
@@ -528,10 +513,7 @@ function checkDeploymentExamples(cwd, version, report) {
   }
 
   if (version) {
-    const releaseExamples = [
-      [".env.example", envExample],
-      ["deploy/.env.oidc.example", oidcEnvExample]
-    ];
+    const releaseExamples = [[".env.example", envExample]];
     const staleReleaseExamples = releaseExamples.flatMap(([path, content]) => {
       const expectedDirSuffix = `/v${version}`;
       const actualVersion = parseEnvValue(content, "APP_RELEASE_VERSION");
@@ -561,8 +543,7 @@ function checkDeploymentExamples(cwd, version, report) {
       ".env.example must not enable trusted proxy auth for directly published compose.yml",
       [
         "  - deploy/compose.yml publishes the app service with ports:",
-        "  - TRUST_PROXY_AUTH=true may only be used when direct app access is blocked by a trusted proxy topology.",
-        "  - Keep TRUST_PROXY_AUTH=true in deploy/.env.oidc.example, where only oauth2-proxy publishes a host port."
+        "  - TRUST_PROXY_AUTH=true may only be used when direct app access is blocked by a separately managed trusted proxy."
       ]
     );
     return;
@@ -621,26 +602,6 @@ function checkDeploymentExamples(cwd, version, report) {
     );
   } else {
     report.pass("native OIDC install docs include safe production defaults");
-  }
-
-  const nativeMigrationRequired = [
-    "compose.oidc.yml",
-    "AUTH_MODE=native-oidc",
-    "TRUST_PROXY_AUTH=false",
-    "AUTH_MODE=trusted-proxy",
-    "TRUST_PROXY_AUTH=true",
-    "rollback"
-  ];
-  const missingMigrationDocs = nativeMigrationRequired.filter(
-    (text) => !nativeMigrationDocs.includes(text)
-  );
-  if (missingMigrationDocs.length) {
-    report.fail(
-      "native OIDC migration docs are missing rollback safety examples",
-      missingMigrationDocs.map((text) => `  - ${text}`)
-    );
-  } else {
-    report.pass("native OIDC migration docs include trusted-proxy rollback");
   }
 
   const imagePromotionRequired = [

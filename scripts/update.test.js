@@ -31,13 +31,10 @@ async function createArtifact(directory, version = "0.5.0") {
   await writeFile(resolve(payload, "package.json"), JSON.stringify({ name: "betreuungskalender", version }));
   await writeFile(resolve(payload, "Dockerfile.release"), "FROM scratch\n");
   await writeFile(resolve(payload, ".env.example"), "APP_RELEASE_VERSION=0.5.0\n");
-  await writeFile(resolve(payload, "deploy", ".env.oidc.example"), "APP_RELEASE_VERSION=0.5.0\n");
   await writeFile(resolve(payload, "deploy", "compose.yml"), "services: {}\n");
-  await writeFile(resolve(payload, "deploy", "compose.oidc.yml"), "services: {}\n");
   await writeFile(resolve(payload, "deploy", "compose.postgres.yml"), "services: {}\n");
   await mkdir(resolve(payload, "deploy", "postgres", "init"), { recursive: true });
   await writeFile(resolve(payload, "deploy", "postgres", "init", "001-create-application-role.sh"), "#!/bin/sh\n");
-  await writeFile(resolve(payload, "deploy", "oauth2-proxy.cfg.example"), "upstreams = [ \"http://betreuungskalender:3000\" ]\n");
   await writeFile(resolve(payload, "dist", "index.html"), "<main>test</main>");
   await writeFile(resolve(payload, "dist-server", "server.js"), "export {};\n");
   await writeFile(resolve(payload, "scripts", "update.js"), "export {};\n");
@@ -196,31 +193,15 @@ test("synthetic Compose upgrade verifies backup and records the active release",
   });
 });
 
-test("synthetic OIDC Compose upgrade uses APP_COMPOSE_FILE", async () => {
-  await withTemporaryDirectory("oidc-compose", async (directory) => {
-    const root = await createInstallation(directory, {
-      composeFile: "compose.oidc.yml",
-      env: "APP_COMPOSE_FILE=compose.oidc.yml\n"
-    });
-    const { archive, checksumPath } = await createArtifact(directory);
-    await createFakeDocker(directory);
-    await withFakeDocker(directory, async () => {
-      await runUpdate(updateOptions(root, archive, checksumPath, { dryRun: true }));
-    });
-    const log = await readFile(resolve(root, "fake-docker.log"), "utf8");
-    assert.match(log, /-f .*compose\.oidc\.yml config -q/);
-  });
-});
-
 test("rejects unsupported Compose filenames from APP_COMPOSE_FILE", async () => {
   await withTemporaryDirectory("bad-compose-file", async (directory) => {
     const root = await createInstallation(directory, {
-      env: "APP_COMPOSE_FILE=../compose.oidc.yml\n"
+      env: "APP_COMPOSE_FILE=compose.custom.yml\n"
     });
     const { archive, checksumPath } = await createArtifact(directory);
     await assert.rejects(
       runUpdate(updateOptions(root, archive, checksumPath, { dryRun: true })),
-      /APP_COMPOSE_FILE must be compose\.yml or compose\.oidc\.yml/
+      /APP_COMPOSE_FILE must be compose\.yml/
     );
   });
 });
