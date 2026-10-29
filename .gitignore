@@ -12,7 +12,6 @@ dist-server/
 .env
 .env.*
 !.env.example
-!deploy/.env.oidc.example
 app.env
 app.env.*
 !deploy/app.env.demo.example
@@ -23,7 +22,6 @@ app.env.*
 /logs/
 /tmp/
 /artifacts/
-oauth2-proxy.cfg
 *.sqlite
 *.sqlite-*
 *.db

@@ -87,6 +87,25 @@ test("documented npm run commands exist", async () => {
   assert.match(packageJson.scripts?.test ?? "", /\bnpm run test:docs\b/);
 });
 
+test("current operator artifacts do not restore the retired authentication proxy topology", async () => {
+  const currentFiles = [
+    ...(await currentMarkdownFiles()),
+    ...(await filesBelow("deploy", ".yml")),
+    ...(await filesBelow("deploy", ".example")),
+    "scripts/container-postgres-smoke.sh",
+    "scripts/update.js"
+  ];
+  const obsoleteReferences: string[] = [];
+  const pattern = /oauth2-proxy|compose\.oidc|\.env\.oidc/iu;
+
+  for (const file of currentFiles) {
+    const content = await readFile(path.join(projectRoot, file), "utf8");
+    if (pattern.test(content)) obsoleteReferences.push(file);
+  }
+
+  assert.deepEqual(obsoleteReferences, []);
+});
+
 test("runtime environment variables are documented", async () => {
   const [configSource, configurationGuide, environmentExample] = await Promise.all([
     readFile(path.join(projectRoot, "server/config.ts"), "utf8"),

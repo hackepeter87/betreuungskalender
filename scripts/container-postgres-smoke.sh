@@ -54,7 +54,6 @@ chmod 0755 "$target_dir/postgres" "$target_dir/postgres/init"
 chmod 0777 "$source_dir/data" "$source_dir/backups" "$target_dir/data" "$target_dir/backups"
 cp "$repo_root/deploy/compose.yml" "$source_dir/compose.yml"
 cp "$repo_root/deploy/compose.yml" "$target_dir/compose.yml"
-cp "$repo_root/deploy/compose.oidc.yml" "$target_dir/compose.oidc.yml"
 cp "$repo_root/deploy/compose.postgres.yml" "$target_dir/compose.postgres.yml"
 cp "$repo_root/deploy/postgres/init/001-create-application-role.sh" "$target_dir/postgres/init/001-create-application-role.sh"
 
@@ -175,14 +174,9 @@ source_compose down --volumes --remove-orphans
 
 target_compose config >"$work_dir/rendered-compose.yml"
 target_compose config --format json >"$work_dir/rendered-compose.json"
-docker compose --project-name "${target_project}-oidc-config" --project-directory "$target_dir" \
-  --env-file "$target_dir/.env" -f "$target_dir/compose.oidc.yml" -f "$target_dir/compose.postgres.yml" \
-  config --format json >"$work_dir/rendered-oidc-compose.json"
 assert_secret_absent "$work_dir/rendered-compose.yml"
 
-RENDERED_COMPOSE="$work_dir/rendered-compose.json" \
-  RENDERED_OIDC_COMPOSE="$work_dir/rendered-oidc-compose.json" \
-  node --input-type=module <<'NODE'
+RENDERED_COMPOSE="$work_dir/rendered-compose.json" node --input-type=module <<'NODE'
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
@@ -194,14 +188,6 @@ assert.equal("app-runtime" in config.services.betreuungskalender.networks, true)
 assert.equal(config.services.betreuungskalender.environment.DATABASE_DRIVER, "postgres");
 assert.equal(config.services.betreuungskalender.environment.POSTGRES_PASSWORD_FILE, "/run/secrets/postgres-password");
 
-const oidcConfig = JSON.parse(await readFile(process.env.RENDERED_OIDC_COMPOSE, "utf8"));
-assert.equal(oidcConfig.services.betreuungskalender.ports, undefined, "OIDC app publishes a host port");
-assert.deepEqual(
-  Object.keys(oidcConfig.services.betreuungskalender.networks).sort(),
-  ["app-runtime", "oidc-private", "postgres-private"]
-);
-assert.deepEqual(Object.keys(oidcConfig.services["oauth2-proxy"].networks), ["oidc-private"]);
-assert.deepEqual(Object.keys(oidcConfig.services.postgres.networks), ["postgres-private"]);
 NODE
 
 target_compose up --detach --no-build

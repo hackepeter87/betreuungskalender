@@ -1,14 +1,10 @@
 # Native OIDC with Keycloak and Podman
 
 Native OIDC lets Betreuungskalender handle the Authorization Code + PKCE login
-flow directly. It does not require oauth2-proxy, does not trust identity
-headers, and stores only an opaque server-side session cookie in the browser.
+flow directly. It does not trust identity headers and stores only an opaque
+server-side session cookie in the browser.
 
-Use this path for a fresh installation behind an existing HTTPS reverse proxy.
-A fresh native installation does not need a parallel oauth2-proxy deployment.
-For existing oauth2-proxy deployments, follow
-[native-oidc-migration-rollback.md](native-oidc-migration-rollback.md)
-instead of treating the fresh-install steps as an in-place migration.
+Use this path for an installation behind an existing HTTPS reverse proxy.
 
 ## Keycloak client
 
@@ -48,8 +44,7 @@ before the first owner exists, and do not override an invitation's role.
 
 Install the release archive layout from [update.md](update.md) and use
 `deploy/compose.yml` as the runtime Compose file. Native OIDC uses the direct
-app service; it does not use `deploy/compose.oidc.yml` and does not mount an
-`oauth2-proxy.cfg`.
+app service.
 
 Example deployment shape:
 

@@ -237,10 +237,8 @@ Complete guide: [docs/deployment-lxc.md](docs/deployment-lxc.md)
 ## Configuration
 
 All settings are environment based. `.env.example` contains production-shaped
-example values for the direct Compose/systemd path using `example.net` only. Use
-`deploy/.env.oidc.example` instead for the oauth2-proxy/OIDC Compose topology.
-For native OIDC without oauth2-proxy, keep the direct Compose path and set
-`AUTH_MODE=native-oidc`.
+example values for the supported Compose/systemd path using `example.net` only.
+For native OIDC, use this direct Compose path and set `AUTH_MODE=native-oidc`.
 
 Key variables:
 
@@ -281,14 +279,14 @@ OIDC_REQUIRE_ROLE_CLAIM=true
 ```
 
 Protected trusted-proxy mode remains available for deployments that already
-terminate authentication in oauth2-proxy or another reviewed private proxy
+terminate authentication in a separately managed, reviewed private proxy
 boundary:
 
 ```dotenv
 REQUIRE_AUTH=true
 TRUST_PROXY_AUTH=true
 TRUSTED_PROXY_CIDRS=127.0.0.1/32
-AUTH_LOGOUT_URL=/oauth2/sign_out
+AUTH_LOGOUT_URL=/authentication/logout
 OIDC_USER_ID_HEADER=x-auth-request-user
 OIDC_EMAIL_HEADER=x-auth-request-email
 OIDC_DISPLAY_NAME_HEADER=x-auth-request-preferred-username
@@ -319,10 +317,6 @@ loopback when `TRUST_PROXY_AUTH=true`.
   [docs/reverse-proxy.md](docs/reverse-proxy.md)
 - Native OIDC with Keycloak and Podman:
   [docs/native-oidc-keycloak-podman.md](docs/native-oidc-keycloak-podman.md)
-- Migration from oauth2-proxy to native OIDC:
-  [docs/native-oidc-migration-rollback.md](docs/native-oidc-migration-rollback.md)
-- Detailed Keycloak and oauth2-proxy setup:
-  [docs/keycloak-oauth2-proxy.md](docs/keycloak-oauth2-proxy.md)
 
 ## Health and readiness
 

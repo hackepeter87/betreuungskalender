@@ -102,9 +102,9 @@ unintentionally.
   mode fails startup when this allowlist is empty.
 - Configure `OIDC_USER_ID_HEADER` for a stable, non-empty subject. Mutable email,
   display-name, role, and group attributes never substitute for that identity.
-- Block all direct access that could bypass oauth2-proxy.
-- In oauth2-proxy, set `trusted_ips` only to the actual upstream reverse proxy
-  IP/CIDR. Never trust all client networks.
+- Block all direct access that could bypass the configured authentication
+  proxy. Trust only its actual source IP or smallest isolated CIDR; never trust
+  all client networks.
 - Restrict `ALLOWED_ORIGIN` to the exact public origin.
 - Session-changing browser actions validate available `Origin`, `Referer`, and
   Fetch Metadata against that public origin. Authentication, onboarding,
@@ -135,10 +135,9 @@ Native mode rejects conflicting `TRUST_PROXY_AUTH=true` configuration and does
 not accept proxy identity headers as an API authentication bypass.
 
 Trusted-proxy authentication remains a supported alternative with a different
-trust boundary: only the configured proxy may supply identity headers. When
-migrating an existing installation to native OIDC, preserve its verified proxy
-configuration until login, membership access, logout and session expiry have
-been accepted. See [the migration guide](native-oidc-migration-rollback.md).
+trust boundary: only the configured, separately managed proxy may supply
+identity headers. Preserve a verified prior deployment until native OIDC login,
+membership access, logout, and session expiry have been accepted.
 
 Recovery admin is a disabled-by-default break-glass path for identity-provider
 outages. Enable it only through deliberate deployment configuration, preferably

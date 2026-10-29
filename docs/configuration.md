@@ -18,8 +18,7 @@ precedence. Never commit production `.env` files.
 | `PORT` | HTTP port | `3000` | Optional | `3000` | Expose only through the intended firewall/proxy |
 | `APP_RELEASE_VERSION` | Release Compose image tag | `1.22.0` | Required for `deploy/compose.yml` | None | Must match the extracted release package version |
 | `APP_RELEASE_DIR` | Release Compose build context | `/opt/svc_betreuung/betreuungskalender/releases/vX.Y.Z` | Required for `deploy/compose.yml` | None | Must point at the verified extracted release directory |
-| `APP_COMPOSE_FILE` | Compose file used by the update tool | `compose.oidc.yml` | Required only when not using `compose.yml` | `compose.yml` | Must be `compose.yml` or `compose.oidc.yml` |
-| `OAUTH2_PROXY_IMAGE` | oauth2-proxy image used by `deploy/compose.oidc.yml` | `quay.io/oauth2-proxy/oauth2-proxy:v7.15.3` | Optional for OIDC Compose | Same | Pin and review oauth2-proxy updates like other runtime dependencies |
+| `APP_COMPOSE_FILE` | Compose file used by the archive update tool | `compose.yml` | Optional | `compose.yml` | Only the supported direct Compose layout is accepted |
 | `HOST_BIND_ADDRESS` | Host address published by release Compose | `127.0.0.1` | Recommended for `deploy/compose.yml` | `127.0.0.1` | Use loopback only when the reverse proxy is on the same host |
 | `HOST_PORT` | Host port published by release Compose | `3000` | Recommended for `deploy/compose.yml` | `3000` | Expose only through the intended firewall/proxy |
 | `DATABASE_DRIVER` | Persistence backend | `sqlite` | Optional | `sqlite` | PostgreSQL is selected only by the explicit value `postgres` |
@@ -119,18 +118,10 @@ not as a replacement for an operational database backup.
 The complete selection, startup, backup, restore, update, and cross-backend
 transfer contract is in [database backends](database-backends.md).
 
-`deploy/compose.oidc.yml` uses the same fixed container paths. In that mode,
-`HOST_BIND_ADDRESS` and `HOST_PORT` publish oauth2-proxy only; the app service
-uses `expose: 3000` and does not publish a host port.
-
 The root `.env.example` is intentionally direct-compose safe and keeps
-`TRUST_PROXY_AUTH=false`. Use `deploy/.env.oidc.example` for the OIDC Compose
-topology where oauth2-proxy is the only service with a host port.
-
-In the release OIDC Compose topology, oauth2-proxy forwards group claims to the
-app upstream as `X-Forwarded-Groups`; set
-`OIDC_GROUPS_HEADER=x-forwarded-groups` and verify `/api/session` reports the
-expected role before enabling `OIDC_REQUIRE_ROLE_CLAIM=true`.
+`TRUST_PROXY_AUTH=false`. Operators choosing the generic trusted-proxy mode
+must provide and maintain their own authentication proxy and ensure that the
+application listener cannot be reached around it.
 
 ## Authentication modes
 
@@ -178,13 +169,13 @@ container networking, or firewall policy.
 `TRUSTED_PROXY_CIDRS` defines the mandatory application-side source-address
 check for these identity headers. Use the actual socket source address of the
 trusted proxy or proxy network, for example loopback for a same-host reverse
-proxy or the private Podman/Docker network used by oauth2-proxy. Values may be
+proxy or the private Podman/Docker network used by that proxy. Values may be
 exact IP addresses or CIDR ranges. Trusted-proxy mode does not start while this
 setting is empty. Requests without the configured stable subject are
 unauthenticated.
 
 `TRUSTED_PROXY_CIDRS` intentionally accepts only IP addresses and CIDR ranges,
-not DNS names or Compose service names such as `nginx` or `oauth2-proxy`. The
+not DNS names or Compose service names. The
 application verifies the remote socket address of the incoming connection; it
 does not authenticate the proxy by container name. For a reverse proxy running
 as a container, use a fixed proxy container IP or the smallest isolated
@@ -218,15 +209,16 @@ existing single-user deployments. Set it to `true` after the identity provider
 emits the expected group claim.
 
 `/api/session` returns compact session metadata for the app shell. The UI shows
-a short display name and, when `AUTH_LOGOUT_URL` is configured, a logout link.
-With oauth2-proxy this is usually `/oauth2/sign_out`. The response also includes
+a short display name and, when `AUTH_LOGOUT_URL` is configured, a logout link
+owned by the separately managed authentication proxy. The response also includes
 a minimal setup state with `setup.complete` and `setup.required` so the app can
 detect fresh self-hosted installations without relying on browser storage. It
 does not expose domain-data counts; those remain admin-only instance readiness
 information.
 
-The release OIDC Compose mode enforces the intended boundary by publishing only
-oauth2-proxy. Do not add an app `ports:` mapping while `TRUST_PROXY_AUTH=true`.
+Do not publish an application port reachable by clients while
+`TRUST_PROXY_AUTH=true`; only the separately managed authentication proxy may
+reach it.
 
 ### Native OIDC
 
@@ -291,8 +283,7 @@ end-session redirect URL so the browser can also end the upstream SSO session.
 
 For a fresh Keycloak and Podman Compose installation, follow
 [native-oidc-keycloak-podman.md](native-oidc-keycloak-podman.md). Native OIDC
-uses `deploy/compose.yml`; `deploy/compose.oidc.yml` remains the oauth2-proxy
-trusted-header topology.
+uses `deploy/compose.yml`.
 
 ### Recovery admin
 
