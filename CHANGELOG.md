@@ -6,6 +6,21 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.35.4] - 2026-10-30
+
+### Fixed
+
+- Advertise an hourly refresh interval in personal iCalendar feeds so
+  compatible calendar clients can schedule subscription updates explicitly.
+
+### Compatibility
+
+- Preserve existing feed URLs, event identifiers, calendar content, access
+  controls, and revocation behavior.
+- No database migration or breaking API, authentication, authorization,
+  backup, or transfer contract change is included.
+- Existing SQLite and PostgreSQL installations remain compatible.
+
 ## [1.35.3] - 2026-10-26
 
 ### Security and reliability
