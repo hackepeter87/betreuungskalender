@@ -70,6 +70,36 @@ Common clients call this "calendar subscription", "subscribe by URL", or
 "add calendar from URL". Do not import the file as a one-time static calendar
 unless the client has no subscription mode.
 
+## Refresh behavior
+
+The feed advertises an hourly refresh interval with the interoperable
+
+```text
+REFRESH-INTERVAL;VALUE=DURATION:PT1H
+X-PUBLISHED-TTL:PT1H
+```
+
+calendar properties. These properties are hints for the subscribing calendar
+client. Betreuungskalender cannot start or schedule that client's background
+jobs and therefore cannot guarantee an exact refresh time.
+
+Nextcloud stores subscribed calendars in its own cache and refreshes them from
+its background jobs. Its current WebCal job runs an individual subscription at
+most once per hour, even when a feed requests a shorter interval. Nextcloud
+must therefore use a working system cron configuration. An existing
+subscription can retain a previously stored refresh interval; remove and add
+the subscription again if it does not adopt the feed's current interval.
+
+Use the feed status in Betreuungskalender to distinguish the two sides:
+
+- If `Zuletzt abgerufen` advances, the calendar client fetched the feed. A
+  stale view then points to client-side processing or caching.
+- If `Zuletzt abgerufen` does not advance, check the subscribed URL, network
+  access and the calendar client's background-job configuration.
+
+The feed response uses `Cache-Control: no-store`. Do not include the feed URL
+or token in support logs, screenshots or issue reports.
+
 ## Rotate or revoke
 
 Use `Neue URL erzeugen` when the URL may have been shared unintentionally.
