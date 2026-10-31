@@ -6,12 +6,17 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
-## [1.35.4] - 2026-10-30
+## [1.35.4] - 2026-10-31
 
 ### Fixed
 
 - Advertise an hourly refresh interval in personal iCalendar feeds so
   compatible calendar clients can schedule subscription updates explicitly.
+
+### Security and reliability
+
+- Update compatible static-delivery and development-tool dependencies and
+  resolve newly reported transitive dependency advisories.
 
 ### Compatibility
 
