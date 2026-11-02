@@ -48,6 +48,58 @@ an immediate mitigation. Keep that mitigation minimal, create the retrospective
 issue and roadmap entry immediately, and do not merge or release until the
 normal acceptance gates are restored.
 
+## Compact patch release execution
+
+Use the compact execution path for routine patch and compatible dependency
+releases when the implementation, release, and testing-acceptance issues are
+already scoped, their roadmap fields and dependencies are current, and no open
+decision changes the release contract. This path reduces repeated agent work;
+it never reduces repository checks or approval gates.
+
+When the compact path applies:
+
+1. Reuse the existing issues, milestone, parent/sub-issue relationships, and
+   recorded test evidence. Do not recreate planning or repeat completed
+   analysis without a concrete invalidation reason.
+2. Inspect only the relevant issues, milestone, project items, pull requests,
+   commits, and workflows. Query the complete roadmap or issue inventory only
+   when the targeted records reveal a scope, dependency, or status conflict.
+3. Request machine-readable, filtered GitHub responses. Read only the project
+   fields that need verification or modification instead of loading every item
+   and every field option repeatedly.
+4. Poll long-running workflows at intervals of 60 to 90 seconds and report only
+   their aggregate state while they are running. Retrieve job details and logs
+   only for failures, anomalous delays, or the final evidence record. Avoid
+   verbose watch output that repeats unchanged jobs and steps.
+5. Perform one release-baseline check before publication and one final
+   consistency check after publication. The final check must reconcile the
+   source commit, tag, release, archive, application image digest, Helm chart,
+   target channel, issue state, and outstanding manual acceptance.
+6. Keep implementation completion, release publication, testing-channel
+   promotion, and manual acceptance as separate states. Never close a manual
+   acceptance issue based only on automated publication evidence.
+7. Summarize the result in product terms first. Include the version, delivered
+   behavior, source commit, published artifacts, immutable image digest,
+   promoted channel, retained gates, and remaining manual checks. Issue and
+   pull-request numbers are supporting references, not the explanation.
+
+Fall back to the full planning and review workflow when any of these conditions
+applies:
+
+- planning artifacts are missing, inconsistent, stale, or blocked;
+- scope, dependencies, release policy, or the target channel changed;
+- the work introduces a major dependency or runtime upgrade, database
+  migration, authentication or authorization change, new external interface,
+  security-boundary change, or new deployment topology;
+- a required gate fails, produces ambiguous evidence, or the reviewed source
+  commit changes;
+- a security finding requires exposure analysis or an exception;
+- production or `latest` promotion is requested.
+
+The compact path must still run every check required by the issue, release
+documentation, and repository workflows. Token or time savings are never a
+reason to skip, weaken, suppress, or administratively bypass a gate.
+
 ## Project structure
 
 - `src/`: React and TypeScript frontend.
