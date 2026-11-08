@@ -1,0 +1,23 @@
+[
+  {
+    "name": "Application icon set",
+    "path": "public/icons",
+    "license": "MIT",
+    "source": "Repository-owned artwork",
+    "distributionScope": "public-static"
+  },
+  {
+    "name": "Documentation screenshots",
+    "path": "docs/assets/screenshots",
+    "license": "MIT",
+    "source": "Repository-owned fictional test fixtures",
+    "distributionScope": "release-documentation"
+  },
+  {
+    "name": "Inter variable font files",
+    "path": "node_modules/@fontsource-variable/inter/files",
+    "license": "OFL-1.1",
+    "source": "@fontsource-variable/inter@5.3.0",
+    "distributionScope": "browser-bundle"
+  }
+]

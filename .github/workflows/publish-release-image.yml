@@ -27,6 +27,7 @@ jobs:
     name: Publish GHCR image
     runs-on: ubuntu-latest
     permissions:
+      actions: read
       contents: write
       packages: write
     steps:
@@ -115,6 +116,23 @@ jobs:
             org.opencontainers.image.title=betreuungskalender
             org.opencontainers.image.description=Betreuungskalender release runtime image
 
+      - name: Generate immutable image SBOM
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          image: ${{ steps.release.outputs.image }}@${{ steps.build.outputs.digest }}
+          format: cyclonedx-json
+          output-file: betreuungskalender-${{ steps.release.outputs.tag }}.image.cyclonedx.json
+          artifact-name: betreuungskalender-${{ steps.release.outputs.tag }}-image-sbom
+          registry-username: ${{ github.actor }}
+          registry-password: ${{ github.token }}
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Compare lockfile inventory with image SBOM
+        run: >-
+          npm run compliance:compare-image --
+          --image-sbom betreuungskalender-${{ steps.release.outputs.tag }}.image.cyclonedx.json
+
       - name: Write image digest
         shell: bash
         run: |
@@ -140,7 +158,9 @@ jobs:
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: betreuungskalender-${{ steps.release.outputs.tag }}-image-digest
-          path: betreuungskalender-${{ steps.release.outputs.tag }}.image-digest.txt
+          path: |
+            betreuungskalender-${{ steps.release.outputs.tag }}.image-digest.txt
+            betreuungskalender-${{ steps.release.outputs.tag }}.image.cyclonedx.json
           if-no-files-found: error
           retention-days: 14
 
@@ -151,4 +171,5 @@ jobs:
         run: |
           gh release upload "${{ steps.release.outputs.tag }}" \
             "betreuungskalender-${{ steps.release.outputs.tag }}.image-digest.txt" \
+            "betreuungskalender-${{ steps.release.outputs.tag }}.image.cyclonedx.json" \
             --clobber

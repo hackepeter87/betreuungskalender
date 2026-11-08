@@ -40,6 +40,7 @@ repeatable capture procedure.
 [Configuration](docs/configuration.md) · [Security](docs/security.md) ·
 [Security baseline](docs/security-baseline.md) · [Security review](docs/security-review.md) ·
 [Dependency maintenance](docs/dependency-maintenance.md) ·
+[Third-party software](docs/third-party-software.md) ·
 [Operator legal information](docs/legal-information.md) ·
 [Database backends](docs/database-backends.md) · [Backup](docs/backup-restore.md) · [Legacy migration](docs/migration.md) ·
 [Calendar feed](docs/personal-calendar-feed.md) ·

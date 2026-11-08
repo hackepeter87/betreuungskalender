@@ -1,0 +1,100 @@
+{
+  "schemaVersion": 1,
+  "approvedLicenses": [
+    "(MIT AND Zlib)",
+    "0BSD",
+    "Apache-2.0",
+    "BlueOak-1.0.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "MIT-0"
+  ],
+  "browserPackages": [
+    "@fontsource-variable/inter",
+    "jspdf",
+    "jspdf-autotable",
+    "react",
+    "react-dom",
+    "rrule"
+  ],
+  "reviewedComponents": {
+    "@axe-core/playwright@4.14.0": {
+      "license": "MPL-2.0",
+      "reason": "Build-only accessibility test dependency; source remains unmodified and is not shipped in the runtime image."
+    },
+    "@fontsource-variable/inter@5.3.0": {
+      "license": "OFL-1.1",
+      "reason": "The unmodified Inter font files are bundled for local browser rendering and retain their license notice."
+    },
+    "axe-core@4.14.0": {
+      "license": "MPL-2.0",
+      "reason": "Build-only accessibility test dependency; source remains unmodified and is not shipped in the runtime image."
+    },
+    "dompurify@3.4.17": {
+      "license": "(MPL-2.0 OR Apache-2.0)",
+      "reason": "Unmodified runtime dependency distributed under its declared dual-license terms with the upstream notice."
+    },
+    "ical.js@2.2.1": {
+      "license": "MPL-2.0",
+      "reason": "Unmodified calendar parser; the upstream license text remains included with the runtime dependency."
+    },
+    "lightningcss@1.33.0": {
+      "license": "MPL-2.0",
+      "reason": "Build-only CSS tooling; source remains unmodified and is not shipped in the runtime image."
+    },
+    "lightningcss-android-arm64@1.33.0": {
+      "license": "MPL-2.0",
+      "reason": "Optional build-only platform package; not shipped in the runtime image."
+    },
+    "lightningcss-darwin-arm64@1.33.0": {
+      "license": "MPL-2.0",
+      "reason": "Optional build-only platform package; not shipped in the runtime image."
+    },
+    "lightningcss-darwin-x64@1.33.0": {
+      "license": "MPL-2.0",
+      "reason": "Optional build-only platform package; not shipped in the runtime image."
+    },
+    "lightningcss-freebsd-x64@1.33.0": {
+      "license": "MPL-2.0",
+      "reason": "Optional build-only platform package; not shipped in the runtime image."
+    },
+    "lightningcss-linux-arm-gnueabihf@1.33.0": {
+      "license": "MPL-2.0",
+      "reason": "Optional build-only platform package; not shipped in the runtime image."
+    },
+    "lightningcss-linux-arm64-gnu@1.33.0": {
+      "license": "MPL-2.0",
+      "reason": "Optional build-only platform package; not shipped in the runtime image."
+    },
+    "lightningcss-linux-arm64-musl@1.33.0": {
+      "license": "MPL-2.0",
+      "reason": "Optional build-only platform package; not shipped in the runtime image."
+    },
+    "lightningcss-linux-x64-gnu@1.33.0": {
+      "license": "MPL-2.0",
+      "reason": "Optional build-only platform package; not shipped in the runtime image."
+    },
+    "lightningcss-linux-x64-musl@1.33.0": {
+      "license": "MPL-2.0",
+      "reason": "Optional build-only platform package; not shipped in the runtime image."
+    },
+    "lightningcss-win32-arm64-msvc@1.33.0": {
+      "license": "MPL-2.0",
+      "reason": "Optional build-only platform package; not shipped in the runtime image."
+    },
+    "lightningcss-win32-x64-msvc@1.33.0": {
+      "license": "MPL-2.0",
+      "reason": "Optional build-only platform package; not shipped in the runtime image."
+    },
+    "rgbcolor@1.0.1": {
+      "license": "MIT OR SEE LICENSE IN FEEL-FREE.md",
+      "reason": "Unmodified PDF transitive dependency; the package-specific license file is retained in generated notices."
+    },
+    "web-push@3.6.7": {
+      "license": "MPL-2.0",
+      "reason": "Unmodified server dependency; the upstream license text remains included with the runtime dependency."
+    }
+  }
+}
