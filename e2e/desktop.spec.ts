@@ -126,6 +126,8 @@ test("shows email notification preferences only with server capability", async (
   await openApp(page);
   await navigate(page, "settings");
   const preferences = page.getByTestId("notification-preferences");
+  await expect(preferences.getByTestId("notification-delivery-status")).toContainText("Push ist serverseitig noch nicht konfiguriert");
+  await expect(preferences.getByTestId("notification-event-preferences")).toBeVisible();
   await expect(preferences).toContainText("Erneute Erinnerung nach 4 Stunden");
   await expect(preferences).toContainText("In 4 Stunden erinnern");
   const dueEmail = preferences.getByRole("checkbox", { name: "Betreuung bestätigen: E-Mail" });
@@ -807,6 +809,11 @@ test("shows admin instance readiness information in settings", async ({ page }) 
   await navigate(page, "settings");
   const readiness = page.getByTestId("instance-readiness");
   await expect(readiness).toBeVisible();
+  await expect(page.locator(".page--settings > .settings-section").last()).toHaveAttribute("data-testid", "instance-readiness");
+  await expect(readiness).not.toHaveAttribute("open", "");
+  await expect(readiness.getByText("1.10.2")).not.toBeVisible();
+  await readiness.getByTestId("instance-readiness-toggle").click();
+  await expect(readiness).toHaveAttribute("open", "");
   await expect(readiness).toContainText("Version");
   await expect(readiness).toContainText("1.10.2");
   await expect(readiness).toContainText("Native OIDC");
