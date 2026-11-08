@@ -401,6 +401,13 @@ export interface ApiInstanceReadiness {
     recoveryAdminEnabled: boolean;
     pushConfigured: boolean;
   };
+  demoLifecycle?: {
+    status: "ready" | "running" | "failed" | "unavailable";
+    writeLocked: boolean;
+    lastSuccessfulResetAt?: string;
+    nextResetAt?: string;
+    errorCode?: "demo_reset_failed";
+  };
 }
 
 export interface ApiSetupState {
@@ -686,6 +693,9 @@ export interface ApiPublicDemoProjection {
   mode: "shared_fictional_demo";
   seedVersion: string;
   generatedAt: string;
+  lifecycle: {
+    nextResetAt: string;
+  };
   children: ApiPublicDemoChild[];
   careParties: ApiPublicDemoCareParty[];
   entries: ApiPublicDemoEntry[];

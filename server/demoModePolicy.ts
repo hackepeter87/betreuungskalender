@@ -11,6 +11,10 @@ const writeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const demoWriteBodyLimit = 64 * 1024;
 const demoWindowMs = 60_000;
 
+export function isPublicDemoBrowserPath(path: string, enabled: boolean): boolean {
+  return enabled && path === "/demo";
+}
+
 function routePath(request: Parameters<preHandlerAsyncHookHandler>[0]): string {
   const registered = request.routeOptions?.url;
   if (registered) return registered;

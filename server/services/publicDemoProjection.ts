@@ -126,6 +126,9 @@ export async function publicDemoProjection(
     mode: "shared_fictional_demo",
     seedVersion: seedVersion!,
     generatedAt: now.toISOString(),
+    lifecycle: {
+      nextResetAt: resetState!.nextResetAt
+    },
     children,
     careParties,
     entries: entries.map((entry) => ({

@@ -49,6 +49,7 @@ import {
   createDemoModeBoundaryHook,
   createDemoRequestLimitHook,
   demoModeAllowsExternalSideEffects,
+  isPublicDemoBrowserPath,
   installDemoModeRoutePolicy
 } from "./demoModePolicy.js";
 import {
@@ -369,6 +370,7 @@ async function requiresNativeOidcBrowserLogin(request: FastifyRequest): Promise<
     isSpaFallbackRequest(request) &&
     !isNativeOidcOnboardingRequest(request) &&
     !publicLegalPaths.has(requestPath(request)) &&
+    !isPublicDemoBrowserPath(requestPath(request), config.demoModeEnabled) &&
     !(await hasNativeOidcBrowserSession(request))
   );
 }

@@ -235,11 +235,11 @@ test("keeps responsive rules in explicit shell, component and feature owners", a
   assert.deepEqual(topLevelSelectorsForTest(responsive), []);
 });
 
-test("keeps calendar and dashboard rules in their feature owners", async () => {
+test("keeps page feature rules in their explicit owners", async () => {
   const pages = await readFile(new URL("../src/styles/pages.css", import.meta.url), "utf8");
   assert.deepEqual(styleImports(pages), [
     ...supportingStyleOwners.map((owner) => `./pages/${owner}.css`),
-    "./pages/settings.css", "./pages/setup.css", "./pages/calendar.css", "./pages/dashboard.css"
+    "./pages/settings.css", "./pages/setup.css", "./pages/calendar.css", "./pages/dashboard.css", "./pages/public-demo.css"
   ]);
   assert.deepEqual(topLevelSelectorsForTest(pages), []);
 

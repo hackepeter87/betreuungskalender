@@ -55,6 +55,33 @@ interrupted and performs a new atomic reset before the public projection can be
 served. There is no public reset endpoint. Do not fall back to an unrestricted
 normal application after a reset failure.
 
+## Public guidance and lifecycle status
+
+When controlled demo mode is enabled, `/demo` is the public, read-only entry
+point. It states before the records that all displayed people and appointments
+are fictional, that approved testers share one dataset, and that tester changes
+are publicly visible. The page never offers a public write or reset control.
+
+The page shows the next full-UTC-hour reset and calculates its countdown from
+the server timestamp in the projection response. It does not rely on the
+visitor's wall clock or time zone. During the final five minutes, it warns that
+the reset discards demo changes and ends signed-in application sessions. The
+page polls at a bounded interval below the public request limits.
+
+An overdue, failed, missing, or inconsistent generation is not shown as stale
+data. The public endpoint returns a generic unavailable response, and the page
+replaces all records with a temporary unavailable state. It does not expose the
+failure category, write-lock state, seed internals, identities, or reset
+controls.
+
+Administrators with `instance:inspect` can view a bounded lifecycle summary in
+the existing instance information: state, write-lock state, last successful
+reset, next due reset, and the abstract `demo_reset_failed` category. The
+summary does not include the session generation, seed contents, user identity,
+free text, tokens, or infrastructure details. This status confirms only what
+the application served; it does not prove that a browser or another system
+processed or displayed the data.
+
 ## Backup, restore, and rollback
 
 Normal SQLite backup and restore procedures still apply. A restored database

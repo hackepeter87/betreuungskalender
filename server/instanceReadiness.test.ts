@@ -28,6 +28,7 @@ async function withDatabase(
 const runtime = {
   authMode: "native-oidc" as const,
   demoDatasetsEnabled: true,
+  demoModeEnabled: false,
   nodeEnv: "production",
   recoveryAdminEnabled: false,
   requireAuth: true,
@@ -86,6 +87,43 @@ test("builds admin-safe instance readiness without exposing secrets", async () =
     assert.doesNotMatch(serialized, /secret/i);
     assert.doesNotMatch(serialized, /private-key/i);
     assert.doesNotMatch(serialized, /DATABASE_PATH|OIDC_ISSUER|OIDC_CLIENT|VAPID|ISSUER_URL|CLIENT_SECRET/i);
+  });
+});
+
+test("exposes only bounded demo lifecycle fields to protected readiness", async () => {
+  await withDatabase(async (_database, persistence) => {
+    const timestamp = "2026-11-08T10:00:00.000Z";
+    await persistence.query.insertInto("settings").values({
+      key: "demo.mode.resetState",
+      value_json: JSON.stringify({
+        seedVersion: "controlled-demo-v1",
+        sessionGeneration: 7,
+        status: "failed",
+        lastSuccessfulResetAt: "2026-11-08T09:00:00.000Z",
+        nextResetAt: "2026-11-08T10:00:00.000Z",
+        errorCode: "demo_reset_failed"
+      }),
+      created_by: "demo-system",
+      updated_by: "demo-system",
+      created_at: timestamp,
+      updated_at: timestamp,
+      deleted_at: null
+    }).execute();
+
+    const readiness = await buildInstanceReadiness(
+      persistence.query,
+      { ...runtime, demoModeEnabled: true },
+      new Date("2026-11-08T10:05:00.000Z")
+    );
+
+    assert.deepEqual(readiness.demoLifecycle, {
+      status: "failed",
+      writeLocked: true,
+      lastSuccessfulResetAt: "2026-11-08T09:00:00.000Z",
+      nextResetAt: "2026-11-08T10:00:00.000Z",
+      errorCode: "demo_reset_failed"
+    });
+    assert.doesNotMatch(JSON.stringify(readiness.demoLifecycle), /sessionGeneration|seedVersion/i);
   });
 });
 
