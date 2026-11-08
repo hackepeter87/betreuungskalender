@@ -19,13 +19,6 @@
   gap: 8px;
 }
 
-.setup-wizard .field-help-button {
-  width: 26px;
-  min-width: 26px;
-  height: 26px;
-  min-height: 26px;
-}
-
 .setup-wizard .field input,
 .setup-wizard .field select {
   min-height: 44px;

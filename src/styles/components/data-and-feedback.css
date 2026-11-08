@@ -143,7 +143,7 @@
 .segmented-control button,
 .segmented-control label {
   display: flex;
-  min-height: 37px;
+  min-height: 44px;
   align-items: center;
   justify-content: center;
   padding: 0 12px;

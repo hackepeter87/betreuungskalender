@@ -99,6 +99,7 @@ test("keeps dialogs and responsive navigation accessible", async ({ page }) => {
   await entryTrigger.click();
   const entryDialog = page.getByRole("dialog");
   await expect(entryDialog).toBeVisible();
+  await expect(entryDialog.locator(".date-time-field-group")).toHaveCount(2);
   await expect(entryDialog.locator(":focus")).toHaveCount(1);
   const closeButton = entryDialog.locator(".modal__header .icon-button");
   await closeButton.focus();
@@ -110,6 +111,13 @@ test("keeps dialogs and responsive navigation accessible", async ({ page }) => {
   await helpTrigger.click();
   const helpDialog = page.locator(".field-help-dialog");
   await expect(helpDialog).toBeVisible();
+  await expect(helpDialog).not.toContainText("Warum relevant");
+  await expect(helpDialog).not.toContainText("Typische Fehler vermeiden");
+  if ((page.viewportSize()?.width ?? 0) >= 768) {
+    const helpBox = await helpDialog.boundingBox();
+    expect(helpBox).not.toBeNull();
+    expect(helpBox!.width).toBeLessThanOrEqual(420);
+  }
   await expect(helpDialog.locator(":focus")).toHaveCount(1);
   await expectNoBlockingAccessibilityViolations(page, "field help dialog");
   await page.keyboard.press("Escape");

@@ -38,7 +38,6 @@
   }
 
   .recurrence-builder,
-  .event-time-grid,
   .rule-segment-row {
     grid-template-columns: 1fr;
   }

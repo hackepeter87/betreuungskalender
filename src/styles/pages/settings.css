@@ -7,13 +7,6 @@
   width: 100%;
 }
 
-.notification-preferences-row__channel .field-help-button {
-  width: 24px;
-  min-width: 24px;
-  height: 24px;
-  min-height: 24px;
-}
-
 .child-settings-row strong {
   overflow-wrap: anywhere;
 }
@@ -91,6 +84,19 @@
   gap: 7px;
 }
 
+.child-settings-row--external-source {
+  align-items: start;
+  grid-template-columns: 42px minmax(0, 1fr);
+}
+
+.child-settings-row--external-source .child-settings-row__actions {
+  display: grid;
+  grid-column: 2;
+  grid-template-columns: auto minmax(180px, 240px) repeat(3, auto);
+  justify-content: start;
+  width: 100%;
+}
+
 .settings-form-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 360px));
@@ -118,6 +124,10 @@
   gap: 14px;
   max-width: 1200px;
   padding: 18px;
+}
+
+.external-calendar-import-grid .field-label-row {
+  min-height: 44px;
 }
 
 .external-calendar-kind-control {

@@ -233,6 +233,20 @@ are separate rules, without overwriting each other. Mobile entry forms retain
 their existing compact variant; this functional exception is not a new global
 baseline. Responsive tests protect the supported control sizes.
 
+Single-line fields, buttons, segmented controls, toggles, check rows, icon
+buttons, and field-help triggers share a 44 CSS-pixel minimum target. Date/time
+periods use the shared `.date-time-field-grid` and
+`.date-time-field-group` owners: boundaries are paired on wider viewports and
+stack at the existing 430px breakpoint. Feature pages may arrange these groups,
+but must not reintroduce independent field heights or four-column period grids.
+
+Field help is short and task-specific. Its compact desktop popover and mobile
+bottom drawer are owned by `compositions.css`; page styles must not shrink the
+trigger. Help content explains the field, the expected input, and at most a
+small number of concrete mistakes or examples. Generic legal disclaimers,
+report references, and template headings such as "why relevant" do not belong
+in every field-level help dialog.
+
 The first reduction removes overwritten mobile dialog geometry, obsolete
 two-column mobile form grids and redundant inherited field/label rules. It
 preserves effective rendering, rather than changing snapshot expectations to

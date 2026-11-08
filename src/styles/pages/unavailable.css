@@ -1,46 +1,5 @@
-.unavailable-toggle-card > .field-help-trigger {
-  justify-self: end;
-}
-
 .unavailable-toggle-card .field-help-button {
   flex: 0 0 auto;
-}
-
-.unavailable-time-grid {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 12px;
-}
-
-.unavailable-time-group {
-  display: grid;
-  min-width: 0;
-  gap: 12px;
-  padding: 14px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: var(--color-surface-subtle);
-}
-
-.unavailable-time-group__header {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.unavailable-time-group__header > strong {
-  min-width: 0;
-  overflow-wrap: anywhere;
-  font-size: 0.74rem;
-}
-
-.unavailable-time-fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
-  gap: 10px;
-  min-width: 0;
 }
 
 .unavailable-toggle-list {
@@ -53,7 +12,7 @@
   display: grid;
   min-width: 0;
   min-height: 58px;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: auto minmax(0, 1fr);
   align-items: center;
   gap: 10px;
   padding: 10px 12px;

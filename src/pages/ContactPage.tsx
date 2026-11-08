@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Icon } from "../components/Icon";
 import { FieldHelpButton, FieldHelpLabel } from "../components/FieldHelp";
+import { DateTimeFieldGroup } from "../components/DateTimeFieldGroup";
 import {
   calculateContactStats,
   entriesForRange,
@@ -683,26 +684,26 @@ export function ContactPage({
                 </select>
               </label>
             ) : null}
-            <fieldset className="inline-fieldset event-time-grid mobile-rule-step-panel" data-rule-step="2">
+            <fieldset className="inline-fieldset mobile-rule-step-panel" data-rule-step="2">
               <legend className="field-label-row">
                 <span>{copy(locale, "contactFlow", "firstEvent")}</span>
               </legend>
-              <label className="field">
-                <span>{copy(locale, "contactFlow", "startDate")}</span>
-                <input data-testid="contact-pattern-start-date" type="date" required value={startDate} onChange={(event) => updateFirstStartDate(event.target.value)} />
-              </label>
-              <label className="field">
-                <span>{copy(locale, "contactFlow", "startTime")}</span>
-                <input data-testid="contact-pattern-friday-start-time" type="time" required value={firstStartTime} onChange={(event) => setFirstStartTime(event.target.value)} />
-              </label>
-              <label className="field">
-                <span>{copy(locale, "contactFlow", "endDate")}</span>
-                <input data-testid="contact-first-end-date" type="date" required aria-invalid={!eventRangeValid} value={firstEndDate} onChange={(event) => setFirstEndDate(event.target.value)} />
-              </label>
-              <label className="field">
-                <span>{copy(locale, "contactFlow", "endTime")}</span>
-                <input data-testid="contact-pattern-sunday-end-time" type="time" required aria-invalid={!eventRangeValid} value={firstEndTime} onChange={(event) => setFirstEndTime(event.target.value)} />
-              </label>
+              <div className="date-time-field-grid">
+                <DateTimeFieldGroup
+                  groupLabel={copy(locale, "common", "start")}
+                  dateLabel={copy(locale, "common", "date")}
+                  timeLabel={copy(locale, "common", "time")}
+                  dateInput={{ "data-testid": "contact-pattern-start-date", required: true, value: startDate, onChange: (event) => updateFirstStartDate(event.target.value) }}
+                  timeInput={{ "data-testid": "contact-pattern-friday-start-time", required: true, value: firstStartTime, onChange: (event) => setFirstStartTime(event.target.value) }}
+                />
+                <DateTimeFieldGroup
+                  groupLabel={copy(locale, "common", "end")}
+                  dateLabel={copy(locale, "common", "date")}
+                  timeLabel={copy(locale, "common", "time")}
+                  dateInput={{ "data-testid": "contact-first-end-date", required: true, "aria-invalid": !eventRangeValid, value: firstEndDate, min: startDate, onChange: (event) => setFirstEndDate(event.target.value) }}
+                  timeInput={{ "data-testid": "contact-pattern-sunday-end-time", required: true, "aria-invalid": !eventRangeValid, value: firstEndTime, onChange: (event) => setFirstEndTime(event.target.value) }}
+                />
+              </div>
               {!eventRangeValid ? <p className="field-error recurrence-builder__wide" role="alert">{copy(locale, "contactFlow", "invalidEventRange")}</p> : null}
             </fieldset>
             <fieldset className="inline-fieldset recurrence-builder mobile-rule-step-panel" data-rule-step="3">

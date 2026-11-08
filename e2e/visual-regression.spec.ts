@@ -100,7 +100,7 @@ test("preserves the computed shared form and feedback baseline", async ({ page }
   await stabilizeRendering(page);
   const width = page.viewportSize()!.width;
   const mobile = width < 768;
-  const inputHeight = mobile ? "48px" : width < 1200 ? "44px" : "40px";
+  const inputHeight = mobile ? "48px" : "44px";
   await expect(page.locator("input")).toHaveCSS("min-height", inputHeight);
   await expect(page.locator("select")).toHaveCSS("min-height", inputHeight);
   await expect(page.locator("textarea")).toHaveCSS("min-height", mobile ? "96px" : "auto");
