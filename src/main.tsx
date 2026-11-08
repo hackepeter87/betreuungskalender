@@ -6,17 +6,22 @@ import { I18nProvider } from "./i18n/I18nProvider";
 import { AppStoreProvider } from "./store/AppStore";
 import { isRunningStandalone } from "./lib/pwaInstall";
 import { initializeOptionalServiceWorker } from "./lib/serviceWorker";
+import { PublicDemoPage } from "./pages/PublicDemoPage";
 import "@fontsource-variable/inter/wght.css";
 import "./styles.css";
+
+const publicDemo = window.location.pathname === "/demo";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <I18nProvider>
-      <HelpPreferencesProvider>
-        <AppStoreProvider>
-          <App />
-        </AppStoreProvider>
-      </HelpPreferencesProvider>
+      {publicDemo ? <PublicDemoPage /> : (
+        <HelpPreferencesProvider>
+          <AppStoreProvider>
+            <App />
+          </AppStoreProvider>
+        </HelpPreferencesProvider>
+      )}
     </I18nProvider>
   </StrictMode>
 );

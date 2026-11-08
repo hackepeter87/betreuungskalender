@@ -9,6 +9,7 @@ import {
   DemoRequestLimiter,
   demoModeAllowsExternalSideEffects,
   installDemoModeRoutePolicy,
+  isPublicDemoBrowserPath,
   isDemoModeRouteForbidden
 } from "./demoModePolicy.js";
 import { importData } from "./routes/appData.js";
@@ -136,12 +137,18 @@ test("public demo projection exposes only the explicit fictional-data allowlist"
     const body = response.json<{
       mode: string;
       seedVersion: string;
+      generatedAt: string;
+      lifecycle: Record<string, unknown>;
       children: Array<Record<string, unknown>>;
       careParties: Array<Record<string, unknown>>;
       entries: Array<Record<string, unknown>>;
     }>();
     assert.equal(body.mode, "shared_fictional_demo");
     assert.equal(body.seedVersion, "fixture-v1");
+    assert.match(body.generatedAt, /^\d{4}-\d{2}-\d{2}T/);
+    assert.deepEqual(body.lifecycle, {
+      nextResetAt: "2099-01-01T00:00:00.000Z"
+    });
     assert.ok(body.children.length > 0);
     assert.ok(body.careParties.length > 0);
     assert.ok(body.entries.length > 0);
@@ -367,6 +374,13 @@ test("demo request limiter enforces global and per-session budgets with retry me
 test("demo mode disables notification and delivery background effects", () => {
   assert.equal(demoModeAllowsExternalSideEffects(true), false);
   assert.equal(demoModeAllowsExternalSideEffects(false), true);
+});
+
+test("only the explicit demo page bypasses browser login while demo mode is enabled", () => {
+  assert.equal(isPublicDemoBrowserPath("/demo", true), true);
+  assert.equal(isPublicDemoBrowserPath("/demo", false), false);
+  assert.equal(isPublicDemoBrowserPath("/", true), false);
+  assert.equal(isPublicDemoBrowserPath("/demo/other", true), false);
 });
 
 test("demo care entry capacity counts persisted rows and is disabled outside demo mode", async () => {

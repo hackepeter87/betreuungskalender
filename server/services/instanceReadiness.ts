@@ -4,10 +4,12 @@ import { availableMigrationVersions } from "../db/migrationRunner.js";
 import type { DatabaseExecutor } from "../db/runtime.js";
 import { buildSetupState } from "./setupState.js";
 import type { ApiInstanceReadiness } from "../../shared/api.js";
+import { readDemoResetState } from "./demoReset.js";
 
 type ReadinessConfig = Pick<
   typeof config,
   | "authMode"
+  | "demoModeEnabled"
   | "demoDatasetsEnabled"
   | "nodeEnv"
   | "recoveryAdminEnabled"
@@ -34,13 +36,21 @@ function stableInstanceId(migrations: Array<{ version: string; appliedAt: string
 
 export async function buildInstanceReadiness(
   database: DatabaseExecutor,
-  runtime: ReadinessConfig = config
+  runtime: ReadinessConfig = config,
+  now = new Date()
 ): Promise<ApiInstanceReadiness> {
   const migrations = await appliedMigrations(database);
   const available = availableMigrationVersions();
   const latestApplied = migrations.at(-1)?.version;
   const latestAvailable = available.at(-1);
   const setup = await buildSetupState(database);
+  const demoReset = runtime.demoModeEnabled
+    ? await readDemoResetState(database)
+    : undefined;
+  const demoStatus = demoReset?.status ?? "unavailable";
+  const demoWriteLocked = demoStatus !== "ready" ||
+    !Number.isFinite(Date.parse(demoReset?.nextResetAt ?? "")) ||
+    Date.parse(demoReset?.nextResetAt ?? "") <= now.getTime();
 
   return {
     instanceId: stableInstanceId(migrations),
@@ -48,7 +58,7 @@ export async function buildInstanceReadiness(
     environment: runtime.nodeEnv,
     authMode: runtime.authMode,
     requireAuth: runtime.requireAuth,
-    serverTime: new Date().toISOString(),
+    serverTime: now.toISOString(),
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? "unknown",
     database: {
       reachable: true,
@@ -69,6 +79,21 @@ export async function buildInstanceReadiness(
       trustedProxy: runtime.trustProxyAuth,
       recoveryAdminEnabled: runtime.recoveryAdminEnabled,
       pushConfigured: Boolean(runtime.webPushPublicKey && runtime.webPushPrivateKey)
-    }
+    },
+    ...(runtime.demoModeEnabled
+      ? {
+          demoLifecycle: {
+            status: demoStatus,
+            writeLocked: demoWriteLocked,
+            ...(demoReset?.lastSuccessfulResetAt
+              ? { lastSuccessfulResetAt: demoReset.lastSuccessfulResetAt }
+              : {}),
+            ...(demoReset?.nextResetAt ? { nextResetAt: demoReset.nextResetAt } : {}),
+            ...(demoReset?.errorCode === "demo_reset_failed"
+              ? { errorCode: demoReset.errorCode }
+              : {})
+          }
+        }
+      : {})
   };
 }

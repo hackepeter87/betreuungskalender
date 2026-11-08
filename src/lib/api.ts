@@ -43,6 +43,7 @@ import type {
   ApiMemberCareDataScope,
   ApiNotificationPreferencesResponse,
   ApiNotificationPreference,
+  ApiPublicDemoProjection,
   ApiPushSubscriptionInput,
   ApiWorkspaceRole,
   ApiTransferDryRunResult,
@@ -194,6 +195,10 @@ export async function checkServer(): Promise<boolean> {
 
 export async function loadSession(): Promise<ApiSession> {
   return request<ApiSession>("/api/session");
+}
+
+export async function loadPublicDemoProjection(): Promise<ApiPublicDemoProjection> {
+  return request<ApiPublicDemoProjection>("/api/demo/public", undefined, 8_000);
 }
 
 export async function logoutSession(logoutUrl: string): Promise<ApiLogout> {

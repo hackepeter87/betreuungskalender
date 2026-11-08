@@ -1001,6 +1001,16 @@ function InstanceReadinessSection() {
               )) : <span className="status-pill">{copy(locale, "settings", "notConfigured")}</span>}
             </div>
           </div>
+          {readiness.demoLifecycle ? (
+            <div className="readiness-item readiness-item--wide">
+              <small>{copy(locale, "settings", "demoLifecycle")}</small>
+              <strong>{copy(locale, "settings", catalogKey("settings", `demoLifecycle_${readiness.demoLifecycle.status}`))}</strong>
+              <span>{copy(locale, "settings", "demoWriteState")}: {copy(locale, "settings", catalogKey("settings", readiness.demoLifecycle.writeLocked ? "demoWritesLocked" : "demoWritesOpen"))}</span>
+              {readiness.demoLifecycle.lastSuccessfulResetAt ? <span>{copy(locale, "settings", "demoLastReset")}: {formatDateTime(readiness.demoLifecycle.lastSuccessfulResetAt, intlLocale)}</span> : null}
+              {readiness.demoLifecycle.nextResetAt ? <span>{copy(locale, "settings", "demoNextReset")}: {formatDateTime(readiness.demoLifecycle.nextResetAt, intlLocale)}</span> : null}
+              {readiness.demoLifecycle.errorCode ? <span>{copy(locale, "settings", "demoResetError")}: {readiness.demoLifecycle.errorCode}</span> : null}
+            </div>
+          ) : null}
           <div className="readiness-item">
             <small>{copy(locale, "settings", "serverTime")}</small>
             <strong>{formatDateTime(readiness.serverTime, intlLocale)}</strong>
