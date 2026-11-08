@@ -23,6 +23,21 @@ pinned to full commit hashes, with a trailing version comment for readability.
 Docker build stages retain a readable version tag and add the reviewed image
 digest. Dependabot must update both parts together.
 
+## Authoritative version sources
+
+| Component | Authoritative source | Drift expectation |
+| --- | --- | --- |
+| npm packages | `package-lock.json` | `package.json` declares only the reviewed compatible range or exact tool pin |
+| Node.js and npm | `package.json` engines and `packageManager` | Dockerfiles and workflows use the same supported baseline |
+| Container bases | `Dockerfile` and `Dockerfile.release` | Every external image keeps a readable tag and immutable digest |
+| GitHub Actions | `.github/workflows/` | Every external action uses an immutable commit reference |
+| PostgreSQL validation | CI and container smoke workflows | Test majors match the operator documentation |
+| Release metadata | application version and Helm chart metadata | The strict release check rejects disagreement before publication |
+
+Runtime migrations, compiler majors, database majors, and type packages for a
+new runtime are coordinated packages. They must not arrive as unrelated routine
+updates even when an automated pull request is available.
+
 ## Review requirements
 
 Every dependency pull request runs the repository CI, CodeQL, dependency
@@ -54,6 +69,25 @@ A temporary exception must be narrow and include its rationale, affected
 dependency and versions, expiry date, compensating control, owner, and a
 follow-up issue. Do not add blanket audit suppressions. Recheck the exception
 after dependency, runtime, or deployment changes and before its expiry.
+
+## Required vulnerability gates
+
+- npm audit and dependency review reject unresolved high-severity package
+  findings.
+- CodeQL remains a required source-analysis gate.
+- The release-image Trivy workflow rejects unresolved high or critical
+  findings for pull requests, `main`, and scheduled scans. It still uploads the
+  SARIF result when the scan fails so maintainers can review the evidence.
+- Scanner disagreements are checked against the affected package ecosystem and
+  the authoritative upstream or distribution security tracker. A lower score
+  from another database is not by itself a reason to dismiss a finding.
+- Suppressions must be component-specific, justified, time-bounded or tied to a
+  review condition, and tracked separately. A broad ignore file is not an
+  acceptable release shortcut.
+
+Release-specific scan counts and dispositions belong to the release issue and
+its reviewed evidence. They are intentionally not copied into this current
+operating guide, where they would become stale.
 
 ## Recovery
 

@@ -99,6 +99,9 @@ access control, and incident response.
   `.env` files, databases, backups, exports, logs, local archives, private
   keys, certificates, token material, authentication-proxy configs, and local
   ICS files.
+- Release-image scans fail on unresolved high or critical findings while still
+  publishing reviewable SARIF evidence. The same severity policy applies to
+  pull requests, `main`, scheduled scans, and release validation.
 - The local security baseline command is available as `npm run security:check`.
 
 ## Local security commands
@@ -129,8 +132,9 @@ version, changelog, release notes, and tag state are ready.
 - Browser-side UI hiding is not a security boundary; server-side route checks
   must remain the source of truth.
 - Web Push confirms care entries with privacy-preserving messages, but browser
-  push providers still receive subscription metadata. Email notification
-  delivery is deferred until a concrete mail transport and threat model exist.
+  push providers still receive subscription metadata. Optional notification
+  email is disabled by default, requires an explicit operator configuration
+  and user opt-in, and uses generic messages without care details.
 - ZAP-style DAST is optional review work, not default CI. It may run only
   against a local or staging test instance with fictional data, as described in
   [security-review.md](security-review.md). It must not target production or

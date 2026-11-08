@@ -18,6 +18,13 @@ function externalActionReferences(value: unknown): string[] {
   return [...current, ...Object.values(value).flatMap(externalActionReferences)];
 }
 
+function workflowSteps(value: unknown): Array<Record<string, unknown>> {
+  if (!isUnknownRecord(value) || !isUnknownRecord(value.jobs)) return [];
+  return Object.values(value.jobs)
+    .filter(isUnknownRecord)
+    .flatMap((job) => Array.isArray(job.steps) ? job.steps.filter(isUnknownRecord) : []);
+}
+
 test("Dependabot covers maintained dependency ecosystems on a bounded schedule", async () => {
   const config: unknown = parse(await read(".github/dependabot.yml"));
   assert.ok(isUnknownRecord(config));
@@ -66,6 +73,23 @@ test("external workflow actions use immutable commit references", async () => {
   }
 
   assert.deepEqual(invalid, []);
+});
+
+test("image vulnerability scanning fails closed and still publishes review evidence", async () => {
+  const workflow: unknown = parse(await read(".github/workflows/trivy.yml"));
+  const steps = workflowSteps(workflow);
+  const scanner = steps.find((step) => step.name === "Run Trivy vulnerability scanner");
+  assert.ok(scanner && isUnknownRecord(scanner.with));
+  assert.equal(scanner.with.version, "v0.76.2");
+  assert.equal(scanner.with.format, "sarif");
+  assert.equal(scanner.with.template, undefined);
+  assert.equal(scanner.with.severity, "CRITICAL,HIGH");
+  assert.equal(scanner.with["exit-code"], "1");
+  assert.equal(scanner.with["limit-severities-for-sarif"], true);
+
+  const upload = steps.find((step) => step.name === "Upload Trivy scan results to GitHub Security tab");
+  assert.ok(upload);
+  assert.equal(upload.if, "always()");
 });
 
 test("container build stages and promotions use immutable image references", async () => {
