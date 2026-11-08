@@ -105,6 +105,32 @@ export interface MetricsValidationInput {
   bearerTokenFile?: string;
 }
 
+export interface DemoModeValidationInput {
+  enabled: boolean;
+  databaseDriver: DatabaseDriver;
+  authMode: AuthMode;
+  requireAuth: boolean;
+  demoDatasetsEnabled: boolean;
+}
+
+export function validateDemoModeConfig(input: DemoModeValidationInput): void {
+  if (!input.enabled) return;
+  if (input.databaseDriver !== "sqlite") {
+    throw new Error("DEMO_MODE_ENABLED=true requires DATABASE_DRIVER=sqlite.");
+  }
+  if (input.authMode !== "native-oidc") {
+    throw new Error("DEMO_MODE_ENABLED=true requires AUTH_MODE=native-oidc.");
+  }
+  if (!input.requireAuth) {
+    throw new Error("DEMO_MODE_ENABLED=true requires REQUIRE_AUTH=true.");
+  }
+  if (input.demoDatasetsEnabled) {
+    throw new Error(
+      "DEMO_DATASETS_ENABLED must remain false when DEMO_MODE_ENABLED=true."
+    );
+  }
+}
+
 export function validateMetricsConfig(input: MetricsValidationInput): void {
   if (input.enabled && !input.bearerTokenFile?.trim()) {
     throw new Error("METRICS_ENABLED=true requires METRICS_BEARER_TOKEN_FILE.");
@@ -308,6 +334,7 @@ export const config = {
   rateLimitWindowMs: positiveNumberEnv(process.env.RATE_LIMIT_WINDOW_MS, 60_000),
   dataTransferMaxBytes: positiveNumberEnv(process.env.DATA_TRANSFER_MAX_BYTES, 25 * 1024 * 1024),
   demoDatasetsEnabled: booleanEnv(process.env.DEMO_DATASETS_ENABLED),
+  demoModeEnabled: booleanEnv(process.env.DEMO_MODE_ENABLED),
   webPushSubject: process.env.WEB_PUSH_SUBJECT?.trim() || "mailto:admin@example.invalid",
   webPushPublicKey: process.env.WEB_PUSH_PUBLIC_KEY?.trim() || undefined,
   webPushPrivateKey: process.env.WEB_PUSH_PRIVATE_KEY?.trim() || undefined,
@@ -348,4 +375,12 @@ validateAuthModeConfig({
 validateMetricsConfig({
   enabled: config.metricsEnabled,
   ...(config.metricsBearerTokenFile ? { bearerTokenFile: config.metricsBearerTokenFile } : {})
+});
+
+validateDemoModeConfig({
+  enabled: config.demoModeEnabled,
+  databaseDriver: config.databaseDriver,
+  authMode: config.authMode,
+  requireAuth: config.requireAuth,
+  demoDatasetsEnabled: config.demoDatasetsEnabled
 });

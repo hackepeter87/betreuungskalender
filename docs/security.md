@@ -134,6 +134,15 @@ membership during onboarding.
 Native mode rejects conflicting `TRUST_PROXY_AUTH=true` configuration and does
 not accept proxy identity headers as an API authentication bypass.
 
+Controlled demo mode is a separate, disabled-by-default application contract.
+It requires SQLite, native OIDC, normal authentication, and active local
+memberships for every write. The anonymous read surface is limited to one
+documented projection of a versioned fictional seed; members, identities,
+email addresses, audit history, configuration, exports, and calendar-feed
+credentials are not part of that schema. If the seed proof is missing or
+invalid, the route fails closed instead of exposing the current database.
+Provider groups and roles do not establish demo membership.
+
 Trusted-proxy authentication remains a supported alternative with a different
 trust boundary: only the configured, separately managed proxy may supply
 identity headers. Preserve a verified prior deployment until native OIDC login,

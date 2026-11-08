@@ -110,6 +110,13 @@ an additional settings action that replaces the current domain data with a
 synthetic edge-case dataset. This is intended for demos and regression checks
 only; keep the variable unset or `false` in production.
 
+This administrative loader is not the controlled public demonstration mode.
+`DEMO_MODE_ENABLED=true` is a separate, disabled-by-default contract and rejects
+startup when the administrative loader is enabled. It also remains unavailable
+until an application-managed versioned seed exists. Publishing or promoting an
+image never authorizes activation, data replacement, or public exposure; those
+steps require their own operator acceptance and rollout gates.
+
 ## GitHub promotion workflow
 
 Release image publication still starts from a GitHub release for `vX.Y.Z`.

@@ -3,6 +3,7 @@ import test from "node:test";
 import {
   validateAuthModeConfig,
   validateDatabaseConfig,
+  validateDemoModeConfig,
   validateMetricsConfig,
   type AuthModeValidationInput,
   type DatabaseValidationInput
@@ -206,6 +207,43 @@ test("database validation rejects PostgreSQL settings with the SQLite driver", (
       postgresTlsModeConfigured: true
     })),
     /PostgreSQL settings require DATABASE_DRIVER=postgres/
+  );
+});
+
+test("demo mode stays disabled without imposing deployment constraints", () => {
+  assert.doesNotThrow(() => validateDemoModeConfig({
+    enabled: false,
+    databaseDriver: "postgres",
+    authMode: "local",
+    requireAuth: false,
+    demoDatasetsEnabled: true
+  }));
+});
+
+test("demo mode requires SQLite, native OIDC, authentication, and a separate seed lifecycle", () => {
+  const valid = {
+    enabled: true,
+    databaseDriver: "sqlite" as const,
+    authMode: "native-oidc" as const,
+    requireAuth: true,
+    demoDatasetsEnabled: false
+  };
+  assert.doesNotThrow(() => validateDemoModeConfig(valid));
+  assert.throws(
+    () => validateDemoModeConfig({ ...valid, databaseDriver: "postgres" }),
+    /DEMO_MODE_ENABLED=true requires DATABASE_DRIVER=sqlite/
+  );
+  assert.throws(
+    () => validateDemoModeConfig({ ...valid, authMode: "trusted-proxy" }),
+    /DEMO_MODE_ENABLED=true requires AUTH_MODE=native-oidc/
+  );
+  assert.throws(
+    () => validateDemoModeConfig({ ...valid, requireAuth: false }),
+    /DEMO_MODE_ENABLED=true requires REQUIRE_AUTH=true/
+  );
+  assert.throws(
+    () => validateDemoModeConfig({ ...valid, demoDatasetsEnabled: true }),
+    /DEMO_DATASETS_ENABLED must remain false/
   );
 });
 

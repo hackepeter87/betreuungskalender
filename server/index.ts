@@ -28,6 +28,7 @@ import { setupRoutes } from "./routes/setup.js";
 import { nativeOidcRoutes } from "./routes/nativeOidc.js";
 import { recoveryAdminRoutes } from "./routes/recoveryAdmin.js";
 import { legalRoutes } from "./routes/legal.js";
+import { publicDemoRoutes } from "./routes/publicDemo.js";
 import { installRateLimitPolicy, rateLimitIdentity } from "./rateLimitPolicy.js";
 import { OidcSessionStore } from "./services/oidcSessions.js";
 import { RecoveryAdminStore } from "./services/recoveryAdmin.js";
@@ -44,6 +45,7 @@ import { disableLocalDevelopmentIdentityAccess } from "./services/localDevelopme
 import { RuntimeMetrics, startMetricsListener } from "./metrics.js";
 import { omitUndefinedValues } from "../shared/objects.js";
 import { preventSensitiveResponseCaching } from "./httpProtection.js";
+import { createDemoModeBoundaryHook } from "./demoModePolicy.js";
 
 const app = Fastify({
   logController: new LogController({
@@ -185,6 +187,7 @@ const apiAuthHook = createApiAuthHook(config, app.rateLimit(), {
   findRecoveryUserByToken: (token) => recoveryAdmin.findUserByToken(token)
 });
 // codeql[js/missing-rate-limiting]: createApiAuthHook receives app.rateLimit() and runs that Fastify rate-limit preHandler before authorization.
+app.addHook("preHandler", createDemoModeBoundaryHook(config.demoModeEnabled));
 app.addHook("preHandler", apiAuthHook);
 
 app.setErrorHandler((error, request, reply) => {
@@ -465,6 +468,7 @@ await app.register(setupRoutes, {
   persistence
 });
 await app.register(legalRoutes, { legalContentDir: config.legalContentDir });
+await app.register(publicDemoRoutes, { enabled: config.demoModeEnabled });
 await registerProtectedApplicationRoutes(app);
 
 async function runNotificationSweep(): Promise<void> {
