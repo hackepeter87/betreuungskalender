@@ -51,6 +51,10 @@ import {
   demoModeAllowsExternalSideEffects,
   installDemoModeRoutePolicy
 } from "./demoModePolicy.js";
+import {
+  DemoResetCoordinator,
+  DemoWriteGate
+} from "./services/demoReset.js";
 
 const app = Fastify({
   logController: new LogController({
@@ -100,6 +104,12 @@ const nativeOidcSessions = new OidcSessionStore(
   persistence.query,
   config.demoModeEnabled ? { maxActiveSessions: 20 } : {}
 );
+const demoWriteGate = new DemoWriteGate(config.demoModeEnabled);
+const demoResetCoordinator = new DemoResetCoordinator({
+  enabled: config.demoModeEnabled,
+  persistence,
+  writeGate: demoWriteGate
+});
 const recoveryAdmin = new RecoveryAdminStore({
   enabled: config.recoveryAdminEnabled,
   username: config.recoveryAdminUsername,
@@ -201,6 +211,17 @@ app.addHook("preHandler", createDemoRequestLimitHook({
   enabled: config.demoModeEnabled,
   sessionCookieName: config.sessionCookieName
 }));
+const demoWriteReleases = new WeakMap<FastifyRequest, () => void>();
+app.addHook("preHandler", async (request) => {
+  const path = new URL(request.url, "http://localhost").pathname;
+  demoWriteReleases.set(request, demoWriteGate.enter(request.method, path));
+});
+const releaseDemoWrite = (request: FastifyRequest) => {
+  demoWriteReleases.get(request)?.();
+  demoWriteReleases.delete(request);
+};
+app.addHook("onResponse", async (request) => releaseDemoWrite(request));
+app.addHook("onError", async (request) => releaseDemoWrite(request));
 app.addHook("preHandler", createDemoModeBoundaryHook(config.demoModeEnabled));
 
 app.setErrorHandler((error, request, reply) => {
@@ -251,6 +272,12 @@ app.setErrorHandler((error, request, reply) => {
     return reply.code(413).send({
       error: "request_too_large",
       message: "Die Anfrage ist zu groß."
+    });
+  }
+  if (code === "demo_writes_blocked") {
+    return reply.code(503).send({
+      error: "demo_writes_blocked",
+      message: "Die Demo wird gerade zurückgesetzt. Änderungen sind vorübergehend gesperrt."
     });
   }
   const databaseError = classifyDatabaseError(normalized);
@@ -569,6 +596,7 @@ if (existsSync(frontendRoot)) {
 let metricsListener: Awaited<ReturnType<typeof startMetricsListener>>;
 
 const shutdown = async () => {
+  demoResetCoordinator.close();
   await metricsListener?.close();
   await app.close();
   await persistence.close();
@@ -578,6 +606,27 @@ process.on("SIGINT", shutdown);
 process.on("SIGTERM", shutdown);
 
 try {
+  try {
+    const demoResetState = await demoResetCoordinator.initialize();
+    if (demoResetState) {
+      app.log.info({
+        event: "demo.reset.ready",
+        generation: demoResetState.sessionGeneration,
+        nextResetAt: demoResetState.nextResetAt
+      }, "controlled demo reset ready");
+    }
+    await demoResetCoordinator.startScheduler((error) => {
+      app.log.error({
+        event: "demo.reset.failed",
+        code: safeErrorCode(error)
+      }, "controlled demo reset failed");
+    });
+  } catch (error) {
+    app.log.error({
+      event: "demo.reset.startup.failed",
+      code: safeErrorCode(error)
+    }, "controlled demo reset startup failed");
+  }
   metricsListener = await startMetricsListener({
     enabled: config.metricsEnabled,
     host: config.metricsHost,

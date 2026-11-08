@@ -19,6 +19,7 @@ import {
   assertDemoCareEntryCapacity
 } from "./services/demoModeLimits.js";
 import { DEMO_SEED_VERSION_SETTING } from "./services/publicDemoProjection.js";
+import { DEMO_RESET_STATE_SETTING } from "./services/demoReset.js";
 
 function authConfig() {
   return {
@@ -51,12 +52,29 @@ async function fixture() {
 
 async function markDatasetReady(
   persistence: Awaited<ReturnType<typeof fixture>>,
-  version = "fixture-v1"
+  version = "fixture-v1",
+  nextResetAt = "2099-01-01T00:00:00.000Z",
+  status: "ready" | "failed" = "ready"
 ): Promise<void> {
   const timestamp = new Date().toISOString();
   await persistence.query.insertInto("settings").values({
     key: DEMO_SEED_VERSION_SETTING,
     value_json: JSON.stringify(version),
+    created_by: "demo-system",
+    updated_by: "demo-system",
+    created_at: timestamp,
+    updated_at: timestamp,
+    deleted_at: null
+  }).execute();
+  await persistence.query.insertInto("settings").values({
+    key: DEMO_RESET_STATE_SETTING,
+    value_json: JSON.stringify({
+      seedVersion: version,
+      sessionGeneration: 1,
+      status,
+      lastSuccessfulResetAt: "2026-11-08T10:00:00.000Z",
+      nextResetAt
+    }),
     created_by: "demo-system",
     updated_by: "demo-system",
     created_at: timestamp,
@@ -158,6 +176,26 @@ test("public demo projection exposes only the explicit fictional-data allowlist"
   } finally {
     await app.close();
     await persistence.close();
+  }
+});
+
+test("public demo projection stops serving failed or overdue generations", async () => {
+  for (const reset of [
+    { nextResetAt: "2020-01-01T00:00:00.000Z", status: "ready" as const },
+    { nextResetAt: "2099-01-01T00:00:00.000Z", status: "failed" as const },
+    { nextResetAt: "not-a-date", status: "ready" as const }
+  ]) {
+    const persistence = await fixture();
+    await markDatasetReady(persistence, "fixture-v1", reset.nextResetAt, reset.status);
+    const app = await appFor(persistence, true);
+    try {
+      const response = await app.inject({ method: "GET", url: "/api/demo/public" });
+      assert.equal(response.statusCode, 503);
+      assert.deepEqual(response.json(), { error: "demo_unavailable" });
+    } finally {
+      await app.close();
+      await persistence.close();
+    }
   }
 });
 

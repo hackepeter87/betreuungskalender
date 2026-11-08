@@ -116,8 +116,11 @@ scaling decision covers shared rate limiting and scheduled work.
 cannot be enabled together. The dataset loader is an owner-only maintenance
 tool. Controlled demo mode exposes only its documented public projection and
 does not weaken authentication for any other API. It remains unavailable until
-the application has recorded a valid versioned demo seed. Enabling the flag
-does not seed, reset, publish, or replace existing data. The initial controlled
+the application has verified the exact versioned fictional seed. Enabling the
+flag starts the application-managed hourly reset only after that verification;
+it never converts or overwrites an unexpected dataset. Preparation, reset
+boundaries, session invalidation, and recovery are described in the
+[controlled demo mode guide](controlled-demo-mode.md). The initial controlled
 demo contract is SQLite-only; normal PostgreSQL operation is unchanged while
 the flag remains disabled. When it is enabled, every write body is limited to
 64 KiB, active native-OIDC sessions are capped at 20 without evicting existing

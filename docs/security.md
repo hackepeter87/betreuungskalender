@@ -155,6 +155,13 @@ limits fail with generic responses and never evict an active session. Existing
 authentication, membership checks, trusted-proxy handling, and response
 redaction remain authoritative.
 
+The hourly controlled reset verifies stable fictional identifiers before any
+replacement, drains writes, and commits domain replacement and OIDC-session
+revocation in one SQLite transaction. A failed, interrupted, or overdue
+generation is not published and remains write-blocked. Identity, membership,
+recovery, audit, and security records are outside the reset allowlist. Recovery
+limits are documented in [Controlled demo mode](controlled-demo-mode.md).
+
 Trusted-proxy authentication remains a supported alternative with a different
 trust boundary: only the configured, separately managed proxy may supply
 identity headers. Preserve a verified prior deployment until native OIDC login,

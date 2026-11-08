@@ -115,6 +115,15 @@ monthly day rules, monthly ordinal weekday rules, multiple time spans, calendar
 preview, automatic synchronization, and preserved single-occurrence
 exceptions. Do not enable this option in production.
 
+The separate controlled demo contract uses the fictional fixture only as an
+initial prerequisite. Its versioned seed shifts dates relative to the reset
+week and is tested with a real migrated SQLite database. Regression coverage
+includes atomic hourly replacement, rollback, concurrent serialization,
+restart catch-up, preserved users and memberships, stale-session invalidation,
+unexpected-seed refusal, and unchanged behavior while the mode is disabled.
+See [Controlled demo mode](controlled-demo-mode.md); tests do not authorize a
+deployment activation.
+
 ## Runtime security and CORS
 
 Run the production-style HTTP assertions locally with:

@@ -4,8 +4,13 @@ import type {
   CareScope
 } from "../../shared/api.js";
 import type { DatabaseExecutor } from "../db/runtime.js";
+import {
+  DEMO_SEED_VERSION_SETTING,
+  demoResetStateIsReadable,
+  readDemoResetState
+} from "./demoReset.js";
 
-export const DEMO_SEED_VERSION_SETTING = "demo.mode.seedVersion";
+export { DEMO_SEED_VERSION_SETTING } from "./demoReset.js";
 export const MAX_PUBLIC_DEMO_ENTRIES = 2_000;
 const MAX_PUBLIC_DEMO_RELATIONS = 8_000;
 
@@ -39,8 +44,13 @@ export async function publicDemoProjection(
   range: { startDate?: string; endDate?: string } = {},
   now = new Date()
 ): Promise<ApiPublicDemoProjection> {
-  const seedVersion = await activeSeedVersion(database);
-  if (!seedVersion) throw new PublicDemoProjectionError("demo_unavailable");
+  const [seedVersion, resetState] = await Promise.all([
+    activeSeedVersion(database),
+    readDemoResetState(database)
+  ]);
+  if (!demoResetStateIsReadable(resetState, seedVersion, now)) {
+    throw new PublicDemoProjectionError("demo_unavailable");
+  }
 
   const childrenPromise = database.selectFrom("children")
     .select(["id", "name", "color"])
@@ -114,7 +124,7 @@ export async function publicDemoProjection(
   ]);
   return {
     mode: "shared_fictional_demo",
-    seedVersion,
+    seedVersion: seedVersion!,
     generatedAt: now.toISOString(),
     children,
     careParties,

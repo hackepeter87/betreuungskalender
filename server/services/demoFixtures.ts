@@ -2,8 +2,55 @@ import { appDataImportSchema } from "../validation/schemas.js";
 
 type DemoData = ReturnType<typeof appDataImportSchema.parse>;
 
+export const CONTROLLED_DEMO_SEED_VERSION = "controlled-demo-v1";
+
 const timestamp = "2026-07-01T10:00:00.000Z";
 const actor = "demo-fixture";
+const fixtureAnchor = Date.UTC(2026, 6, 1);
+
+function shiftedDate(value: string, offsetMs: number): string {
+  return new Date(Date.parse(`${value}T00:00:00.000Z`) + offsetMs)
+    .toISOString()
+    .slice(0, 10);
+}
+
+function shiftedBasicDateTime(value: string, offsetMs: number): string {
+  const match = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})Z$/.exec(value);
+  if (!match) return value;
+  const [, year, month, day, hour, minute, second] = match;
+  const shifted = new Date(Date.UTC(
+    Number(year),
+    Number(month) - 1,
+    Number(day),
+    Number(hour),
+    Number(minute),
+    Number(second)
+  ) + offsetMs);
+  return shifted.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
+}
+
+function shiftFixtureValue(value: unknown, offsetMs: number, monthOffset: number): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => shiftFixtureValue(item, offsetMs, monthOffset));
+  }
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([key, item]) => [
+      key,
+      key === "monthKey" && typeof item === "string" && /^\d{4}-\d{2}$/.test(item)
+        ? new Date(Date.UTC(Number(item.slice(0, 4)), Number(item.slice(5, 7)) - 1 + monthOffset, 1))
+          .toISOString()
+          .slice(0, 7)
+        : shiftFixtureValue(item, offsetMs, monthOffset)
+    ]));
+  }
+  if (typeof value !== "string") return value;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return shiftedDate(value, offsetMs);
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) {
+    return new Date(Date.parse(value) + offsetMs).toISOString();
+  }
+  if (/^\d{8}T\d{6}Z$/.test(value)) return shiftedBasicDateTime(value, offsetMs);
+  return value;
+}
 
 function entry(input: {
   id: string;
@@ -443,6 +490,33 @@ export function createEdgeCaseDemoData(): DemoData {
   };
 
   return appDataImportSchema.parse(data);
+}
+
+export function createControlledDemoData(referenceTime = new Date()): {
+  seedVersion: string;
+  data: DemoData;
+} {
+  const referenceDay = Date.UTC(
+    referenceTime.getUTCFullYear(),
+    referenceTime.getUTCMonth(),
+    referenceTime.getUTCDate()
+  );
+  const referenceWeekday = new Date(referenceDay).getUTCDay();
+  const targetAnchor = referenceDay - ((referenceWeekday - 3 + 7) % 7) * 86_400_000;
+  const offsetMs = targetAnchor - fixtureAnchor;
+  const monthOffset = (
+    referenceTime.getUTCFullYear() * 12 + referenceTime.getUTCMonth()
+  ) - (2026 * 12 + 6);
+  const shifted = shiftFixtureValue(createEdgeCaseDemoData(), offsetMs, monthOffset) as DemoData;
+  return {
+    seedVersion: CONTROLLED_DEMO_SEED_VERSION,
+    data: appDataImportSchema.parse({
+      ...shifted,
+      auditLog: [],
+      settings: {},
+      lastJsonBackupAt: undefined
+    })
+  };
 }
 
 export function edgeCaseDemoSummary(data: DemoData) {

@@ -19,7 +19,7 @@ import {
   unavailablePeriodInputSchema
 } from "../validation/schemas.js";
 
-type DataRecord = Record<string, unknown>;
+export type DataRecord = Record<string, unknown>;
 
 function text(record: DataRecord, key: string, fallback = ""): string {
   const value = record[key];
@@ -649,6 +649,81 @@ export async function insertUnavailable(
   }
 }
 
+export async function insertExternalCalendarSource(
+  source: DataRecord,
+  timestamp: string,
+  database: DatabaseExecutor
+): Promise<void> {
+  const id = text(source, "id");
+  if (!id) throw new Error("External calendar source without ID.");
+  await database.insertInto("external_calendar_sources").values({
+    id,
+    name: text(source, "name"),
+    color: text(source, "color"),
+    visible: Number(booleanValue(source, "visible", true)),
+    source_type: externalCalendarSourceType(source),
+    source_kind: "file",
+    feed_url: null,
+    last_imported_at: text(source, "lastImportedAt", timestamp),
+    last_refresh_at: null,
+    last_refresh_error: null,
+    created_at: text(source, "createdAt", timestamp),
+    updated_at: text(source, "updatedAt", timestamp)
+  }).execute();
+}
+
+export async function insertExternalCalendarEvent(
+  event: DataRecord,
+  timestamp: string,
+  database: DatabaseExecutor
+): Promise<void> {
+  const id = text(event, "id");
+  if (!id || !text(event, "sourceId")) {
+    throw new Error("External calendar event is incomplete.");
+  }
+  await database.insertInto("external_calendar_events").values({
+    id,
+    source_id: text(event, "sourceId"),
+    ical_uid: text(event, "icalUid"),
+    recurrence_id: text(event, "recurrenceId"),
+    title: text(event, "title"),
+    description: optionalText(event, "description"),
+    start_datetime: text(event, "startDateTime"),
+    end_datetime: text(event, "endDateTime"),
+    all_day: Number(booleanValue(event, "allDay")),
+    location: optionalText(event, "location"),
+    raw_hash: text(event, "rawHash"),
+    created_at: text(event, "createdAt", timestamp),
+    updated_at: text(event, "updatedAt", timestamp)
+  }).execute();
+}
+
+export async function insertMonthClosure(
+  closure: DataRecord,
+  dataUpdatedAt: string,
+  timestamp: string,
+  userEmail: string,
+  database: DatabaseExecutor
+): Promise<void> {
+  const monthKey = text(closure, "monthKey");
+  if (!monthKey) return;
+  const closedAt = text(closure, "closedAt", timestamp);
+  await database.insertInto("monthly_closings").values({
+    id: `closing_${monthKey}`,
+    month_key: monthKey,
+    summary_json: JSON.stringify({
+      dataUpdatedAt: text(closure, "dataUpdatedAt", dataUpdatedAt),
+      summary: closure.summary ?? {}
+    }),
+    closed_by: text(closure, "closedBy", userEmail),
+    updated_by: text(closure, "updatedBy", userEmail),
+    changed_after_close_at: optionalText(closure, "changedAfterCloseAt"),
+    created_at: closedAt,
+    updated_at: timestamp,
+    deleted_at: null
+  }).execute();
+}
+
 export async function importData(
   data: ReturnType<typeof appDataImportSchema.parse>,
   userEmail: string,
@@ -670,41 +745,10 @@ export async function importData(
   for (const rule of data.contactRules) await insertContactRule(rule, timestamp, userEmail, fallbackResponsiblePartyId, database);
   for (const period of data.unavailablePeriods) await insertUnavailable(period, timestamp, userEmail, database);
   for (const source of data.externalCalendarSources) {
-    const id = text(source, "id");
-    if (!id) throw new Error("External calendar source without ID.");
-    await database.insertInto("external_calendar_sources").values({
-      id,
-      name: text(source, "name"),
-      color: text(source, "color"),
-      visible: Number(booleanValue(source, "visible", true)),
-      source_type: externalCalendarSourceType(source),
-      source_kind: "file",
-      feed_url: null,
-      last_imported_at: text(source, "lastImportedAt", timestamp),
-      last_refresh_at: null,
-      last_refresh_error: null,
-      created_at: text(source, "createdAt", timestamp),
-      updated_at: text(source, "updatedAt", timestamp)
-    }).execute();
+    await insertExternalCalendarSource(source, timestamp, database);
   }
   for (const event of data.externalCalendarEvents) {
-    const id = text(event, "id");
-    if (!id || !text(event, "sourceId")) throw new Error("External calendar event is incomplete.");
-    await database.insertInto("external_calendar_events").values({
-      id,
-      source_id: text(event, "sourceId"),
-      ical_uid: text(event, "icalUid"),
-      recurrence_id: text(event, "recurrenceId"),
-      title: text(event, "title"),
-      description: optionalText(event, "description"),
-      start_datetime: text(event, "startDateTime"),
-      end_datetime: text(event, "endDateTime"),
-      all_day: Number(booleanValue(event, "allDay")),
-      location: optionalText(event, "location"),
-      raw_hash: text(event, "rawHash"),
-      created_at: text(event, "createdAt", timestamp),
-      updated_at: text(event, "updatedAt", timestamp)
-    }).execute();
+    await insertExternalCalendarEvent(event, timestamp, database);
   }
 
   for (const [key, value] of Object.entries(importedSettings)) {
@@ -722,23 +766,7 @@ export async function importData(
   }
 
   for (const closure of data.monthClosures) {
-    const monthKey = text(closure, "monthKey");
-    if (!monthKey) continue;
-    const closedAt = text(closure, "closedAt", timestamp);
-    await database.insertInto("monthly_closings").values({
-      id: `closing_${monthKey}`,
-      month_key: monthKey,
-      summary_json: JSON.stringify({
-        dataUpdatedAt: text(closure, "dataUpdatedAt", data.updatedAt),
-        summary: closure.summary ?? {}
-      }),
-      closed_by: text(closure, "closedBy", userEmail),
-      updated_by: text(closure, "updatedBy", userEmail),
-      changed_after_close_at: optionalText(closure, "changedAfterCloseAt"),
-      created_at: closedAt,
-      updated_at: timestamp,
-      deleted_at: null
-    }).execute();
+    await insertMonthClosure(closure, data.updatedAt, timestamp, userEmail, database);
   }
 
   const typeMap: Record<string, string> = {
