@@ -10,6 +10,7 @@ baseline, not a formal penetration-test report.
   OIDC with server-side sessions.
 - Public health/session boundaries, controlled first-use setup, and the Owner,
   Admin, Editor, Scheduler, and Viewer workspace roles.
+- Disabled-by-default controlled demo projection and local-membership boundary.
 - Explicit per-membership care-data scopes for care-party domain records.
 - Owner-only app-data, migration, portable-transfer, membership, invitation,
   and demo-data surfaces, plus role-scoped backup and export operations.
@@ -57,6 +58,10 @@ access control, and incident response.
   server-side state/nonce/verifier storage, and opaque hashed session tokens.
 - Trusted-proxy authentication remains available as a rollback mode but is not
   accepted as a bypass in native OIDC mode.
+- Controlled demo mode is SQLite- and native-OIDC-only in its initial contract.
+  Its single public data route is an explicit response allowlist, remains
+  unavailable until a versioned fictional seed is recorded, and does not make
+  any other API public. External identity claims never create local access.
 - Recovery admin is disabled by default and, when explicitly enabled, uses a
   short-lived server-side session, scrypt password hash, and one-time bootstrap
   password-change flow.

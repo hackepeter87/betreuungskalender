@@ -70,12 +70,15 @@ test("new protected route plugins without permission metadata fail completeness"
 
 test("pre-authentication API exceptions stay explicit and bounded", () => {
   assert.deepEqual([...preAuthenticationApiRouteKeys].sort(), [
+    "GET /api/demo/public",
     "GET /api/health",
     "GET /api/ready",
     "GET /api/session",
     "POST /api/setup/first-use"
   ]);
   assert.equal(isPreAuthenticationApiRoute("GET", "/api/session"), true);
+  assert.equal(isPreAuthenticationApiRoute("GET", "/api/demo/public"), true);
+  assert.equal(isPreAuthenticationApiRoute("POST", "/api/demo/public"), false);
   assert.equal(isPreAuthenticationApiRoute("get", "/api/health"), true);
   assert.equal(isPreAuthenticationApiRoute("POST", "/api/session"), false);
   assert.equal(isPreAuthenticationApiRoute("GET", "/api/session/extra"), false);

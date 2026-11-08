@@ -89,6 +89,7 @@ precedence. Never commit production `.env` files.
 | `RATE_LIMIT_EXPORT_MAX` | Maximum export requests per client and time window | `15` | Optional | `15` | Restricts potentially expensive export generation |
 | `RATE_LIMIT_WINDOW_MS` | Shared rate-limit window in milliseconds | `60000` | Optional | `60000` | Keep a bounded window; values must be positive integers |
 | `DEMO_DATASETS_ENABLED` | Enable admin-only synthetic demo dataset loaders | `true` on demo only | Optional for demo/staging | `false` | Never enable on production; loading a dataset replaces domain data |
+| `DEMO_MODE_ENABLED` | Enable the controlled public demonstration contract | `true` only for an approved demo rollout | Optional | `false` | Requires SQLite, native OIDC, `REQUIRE_AUTH=true`, `DEMO_DATASETS_ENABLED=false`, and a versioned application-managed demo seed; release installation alone does not authorize activation |
 | `DATA_TRANSFER_MAX_BYTES` | Maximum JSON request size for portable transfer preview, dry run, and import | `26214400` | Optional | `26214400` (25 MiB) | Bounds memory use; align reverse-proxy or ingress request limits without increasing this value unnecessarily |
 | `BACKUP_RETENTION_DAYS` | Remove generated SQLite backups older than this | `14` | Optional | `14` | Set `0` to disable automatic age pruning |
 | `LEGAL_CONTENT_DIR` | Read-only directory containing operator-provided `impressum.txt` and `datenschutz.txt` | `/run/config/legal` | Optional | Same | Missing or invalid files make the corresponding public page return a neutral `404`; use the [operator legal-information guide](legal-information.md) and never commit completed deployment text |
@@ -109,6 +110,15 @@ own its application schema and create tables, indexes and the migration lock;
 it does not need superuser privileges. PostgreSQL 16 through 18 are supported.
 Every backend remains limited to one application replica until a separate
 scaling decision covers shared rate limiting and scheduled work.
+
+`DEMO_MODE_ENABLED` and `DEMO_DATASETS_ENABLED` serve different purposes and
+cannot be enabled together. The dataset loader is an owner-only maintenance
+tool. Controlled demo mode exposes only its documented public projection and
+does not weaken authentication for any other API. It remains unavailable until
+the application has recorded a valid versioned demo seed. Enabling the flag
+does not seed, reset, publish, or replace existing data. The initial controlled
+demo contract is SQLite-only; normal PostgreSQL operation is unchanged while
+the flag remains disabled.
 
 SQLite's native backup action applies only to SQLite. PostgreSQL installations
 need an independently tested logical database backup and restore procedure;

@@ -658,6 +658,39 @@ export interface ApiSession {
   logoutUrl?: string;
 }
 
+export interface ApiPublicDemoChild {
+  id: string;
+  name: string;
+  color: string;
+}
+
+export interface ApiPublicDemoCareParty {
+  id: string;
+  name: string;
+}
+
+export interface ApiPublicDemoEntry {
+  id: string;
+  startDateTime: string;
+  endDateTime: string;
+  status: ApiEntryStatus;
+  careScope: CareScope;
+  overnight: boolean;
+  holiday: boolean;
+  additionalCare: boolean;
+  childIds: string[];
+  responsiblePartyId?: string;
+}
+
+export interface ApiPublicDemoProjection {
+  mode: "shared_fictional_demo";
+  seedVersion: string;
+  generatedAt: string;
+  children: ApiPublicDemoChild[];
+  careParties: ApiPublicDemoCareParty[];
+  entries: ApiPublicDemoEntry[];
+}
+
 export type ApiCalendarFeedScope = "legacy" | "all" | `party:${string}`;
 export type ApiExternalCalendarSourceType = "overlay" | "holiday";
 export type ApiExternalCalendarSourceKind = "file" | "url";

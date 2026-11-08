@@ -1,4 +1,5 @@
 export const preAuthenticationApiRouteKeys: readonly string[] = Object.freeze([
+  "GET /api/demo/public",
   "GET /api/health",
   "GET /api/ready",
   "GET /api/session",
