@@ -13,6 +13,7 @@ import { userHasWorkspacePermission } from "./memberships.js";
 
 const TOKEN_BYTES = 32;
 const PRODUCT_ID = "-//Betreuungskalender//Personal Calendar Feed//DE";
+const CALENDAR_REFRESH_INTERVAL = "PT1H";
 
 export interface CalendarFeedProcessingLimits {
   maximumEntries: number;
@@ -454,7 +455,9 @@ export async function buildPersonalCalendarFeed(input: {
     "CALSCALE:GREGORIAN",
     "METHOD:PUBLISH",
     `X-WR-CALNAME:${escapeText(title)}`,
-    "X-WR-TIMEZONE:Europe/Berlin"
+    "X-WR-TIMEZONE:Europe/Berlin",
+    `REFRESH-INTERVAL;VALUE=DURATION:${CALENDAR_REFRESH_INTERVAL}`,
+    `X-PUBLISHED-TTL:${CALENDAR_REFRESH_INTERVAL}`
   );
   for (const entry of await feedEntriesForToken(input.token, input.database, limits)) {
     const location = feedLocation(entry);

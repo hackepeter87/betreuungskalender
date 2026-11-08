@@ -85,8 +85,28 @@ test("builds an empty personal calendar within the configured limits", async () 
   });
 
   assert.match(calendar, /^BEGIN:VCALENDAR\r\n/);
+  assert.match(calendar, /\r\nREFRESH-INTERVAL;VALUE=DURATION:PT1H\r\n/);
+  assert.match(calendar, /\r\nX-PUBLISHED-TTL:PT1H\r\n/);
   assert.match(calendar, /END:VCALENDAR\r\n$/);
   assert.doesNotMatch(calendar, /BEGIN:VEVENT/);
+});
+
+test("advertises one hourly refresh interval for feeds with events", async () => {
+  insertFeedEntry("feed-entry-a");
+
+  const calendar = await buildPersonalCalendarFeed({
+    token,
+    database: persistence.query,
+    generatedAt: "2026-07-03T08:00:00.000Z",
+    limits: { maximumEntries: 1, maximumChildLinks: 1, maximumBytes: 4096 }
+  });
+
+  assert.equal(
+    calendar.match(/REFRESH-INTERVAL;VALUE=DURATION:PT1H/g)?.length,
+    1
+  );
+  assert.equal(calendar.match(/X-PUBLISHED-TTL:PT1H/g)?.length, 1);
+  assert.match(calendar, /\r\nBEGIN:VEVENT\r\n/);
 });
 
 test("accepts the exact calendar entry limit and rejects one entry over it", async () => {
