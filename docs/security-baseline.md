@@ -73,6 +73,10 @@ access control, and incident response.
 - Personal calendar feeds use bearer URLs only for the `.ics` endpoint. They do
   not authenticate general API routes and exclude notes, evidence references,
   trips, costs, audit metadata, deleted entries, and cancelled entries.
+  Credentials are stored only as hashes, remain stable across ordinary reads,
+  logins, restarts, and supported migrations, and are revoked when appointment
+  read access is removed. Unknown and revoked credentials use the same neutral
+  response and do not create audit or status records.
 - External ICS imports and external calendar feed URLs are size-limited,
   count-limited, validated, rejected for unsupported recurrence, and returned
   with generic error codes on failure. Feed URLs must use HTTPS. Literal and

@@ -201,11 +201,13 @@ test("workspace roles expose the fixed permission matrix", () => {
     "appointments:create",
     "appointments:edit",
     "children:view-basic",
-    "notifications:manage-own"
+    "notifications:manage-own",
+    "feeds:manage-own"
   ]);
   assert.deepEqual(viewer, [
     "appointments:view",
     "children:view-basic",
-    "notifications:manage-own"
+    "notifications:manage-own",
+    "feeds:manage-own"
   ]);
 });

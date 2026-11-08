@@ -243,4 +243,4 @@ PUT /api/user-care-party-assignments/:userId | members:manage
 | Settings and exports | Yes | Yes | No | No | No |
 | Member administration and destructive operations | Yes | No | No | No | No |
 | Own notification preferences | Yes | Yes | Yes | Yes | Yes |
-| Own personal calendar feed | Yes | Yes | Yes | No | No |
+| Own personal calendar feed | Yes | Yes | Yes | Yes | Yes |

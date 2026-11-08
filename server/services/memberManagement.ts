@@ -248,7 +248,14 @@ export async function updateMemberRole(
     const scope = (await membershipCareDataScope(targetUserId, database))
       ?? (await defaultCareDataScope(role, database));
     await setMembershipAccess(targetUserId, role, scope, actor.id, database, timestamp);
-    await cleanUpMemberDeliveryState(targetUserId, role, false, database, timestamp);
+    await cleanUpMemberDeliveryState(
+      targetUserId,
+      role,
+      normalizeCareDataScope(role, scope),
+      false,
+      database,
+      timestamp
+    );
     await recordMemberAudit(
       database,
       actor.id,
@@ -460,17 +467,32 @@ export async function previewInvitationAccess(
 async function cleanUpMemberDeliveryState(
   userId: string,
   role: WorkspaceRole,
+  careDataScope: CareDataScope,
   accessChanged: boolean,
   database: DatabaseExecutor,
   timestamp: string
 ): Promise<void> {
   const nextPermissions = workspacePermissionsForRole(role, false);
-  if (accessChanged || !nextPermissions.includes("feeds:manage-own")) {
+  if (!nextPermissions.includes("feeds:manage-own")) {
     await database.updateTable("calendar_feed_tokens")
       .set({ revoked_at: timestamp })
       .where("user_id", "=", userId)
       .where("revoked_at", "is", null)
       .execute();
+  } else if (careDataScope.type === "selected") {
+    let revokeRemovedPartyFeeds = database.updateTable("calendar_feed_tokens")
+      .set({ revoked_at: timestamp })
+      .where("user_id", "=", userId)
+      .where("scope_type", "=", "party")
+      .where("revoked_at", "is", null);
+    if (careDataScope.carePartyIds.length > 0) {
+      revokeRemovedPartyFeeds = revokeRemovedPartyFeeds.where(
+        "scope_party_id",
+        "not in",
+        careDataScope.carePartyIds
+      );
+    }
+    await revokeRemovedPartyFeeds.execute();
   }
   if (accessChanged || !nextPermissions.includes("appointments:confirm")) {
     await database.updateTable("care_confirmation_requests")
@@ -504,7 +526,14 @@ export async function updateMemberAccess(
     const changed = !accessStateEqual(preview.before, preview.after);
     await setMembershipAccess(targetUserId, role, preview.after.careDataScope, actor.id, database, timestamp);
     if (changed) {
-      await cleanUpMemberDeliveryState(targetUserId, role, true, database, timestamp);
+      await cleanUpMemberDeliveryState(
+        targetUserId,
+        role,
+        preview.after.careDataScope,
+        true,
+        database,
+        timestamp
+      );
       await recordMemberAudit(
         database,
         actor.id,

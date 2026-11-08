@@ -13,7 +13,12 @@ const { persistence } = await import("./db/connection.js");
 const { requireSqlitePersistenceRuntime } = await import("./db/runtime.js");
 const {
   buildPersonalCalendarFeed,
-  isCalendarFeedProcessingLimitError
+  calendarFeedStatus,
+  isCalendarFeedProcessingLimitError,
+  markCalendarFeedDelivered,
+  resolveCalendarFeedToken,
+  revokeCalendarFeedTokens,
+  rotateCalendarFeedToken
 } = await import("./services/calendarFeeds.js");
 const db = requireSqlitePersistenceRuntime(persistence).sqliteDatabase;
 
@@ -29,11 +34,14 @@ const token = {
   scope_party_id: null,
   scope_party_name: null,
   created_at: "2026-07-01T10:00:00.000Z",
-  last_used_at: null
+  last_used_at: null,
+  revoked_at: null
 };
 
 function resetDatabase(): void {
   db.transaction(() => {
+    db.prepare("DELETE FROM calendar_feed_tokens").run();
+    db.prepare("DELETE FROM audit_log WHERE entity_type = 'calendar_feed'").run();
     db.prepare("DELETE FROM care_entry_children").run();
     db.prepare("DELETE FROM care_entries").run();
     db.prepare("DELETE FROM children").run();
@@ -89,6 +97,71 @@ test("builds an empty personal calendar within the configured limits", async () 
   assert.match(calendar, /\r\nX-PUBLISHED-TTL:PT1H\r\n/);
   assert.match(calendar, /END:VCALENDAR\r\n$/);
   assert.doesNotMatch(calendar, /BEGIN:VEVENT/);
+});
+
+test("keeps feed credentials stable until an explicit replacement or revocation", async () => {
+  assert.deepEqual(
+    await calendarFeedStatus("local-dev", "all", persistence.query),
+    { active: false, state: "never_created", scope: "all" }
+  );
+
+  const first = await rotateCalendarFeedToken("local-dev", "all", persistence);
+  assert.equal(first.status.state, "active");
+  assert.equal((await calendarFeedStatus("local-dev", "all", persistence.query)).state, "active");
+  assert.equal((await resolveCalendarFeedToken(first.token, persistence.query))?.id.length, 36);
+
+  const replacement = await rotateCalendarFeedToken("local-dev", "all", persistence);
+  assert.notEqual(replacement.token, first.token);
+  assert.equal(await resolveCalendarFeedToken(first.token, persistence.query), undefined);
+  assert.equal((await resolveCalendarFeedToken(replacement.token, persistence.query))?.id.length, 36);
+
+  await revokeCalendarFeedTokens("local-dev", persistence, "all");
+  assert.equal(await resolveCalendarFeedToken(replacement.token, persistence.query), undefined);
+  assert.deepEqual(
+    await calendarFeedStatus("local-dev", "all", persistence.query),
+    {
+      active: false,
+      state: "revoked",
+      scope: "all",
+      createdAt: replacement.status.createdAt
+    }
+  );
+
+  const audit = db.prepare(`
+    SELECT user_email AS actor, action, field_name AS fieldName, old_value AS oldValue,
+      new_value AS newValue, metadata_json AS metadata
+    FROM audit_log
+    WHERE entity_type = 'calendar_feed'
+    ORDER BY id
+  `).all() as Array<Record<string, unknown>>;
+  assert.deepEqual(audit, [
+    { actor: "system", action: "created", fieldName: "feed_created", oldValue: null, newValue: null, metadata: null },
+    { actor: "system", action: "updated", fieldName: "feed_replaced", oldValue: null, newValue: null, metadata: null },
+    { actor: "system", action: "deleted", fieldName: "feed_revoked", oldValue: null, newValue: null, metadata: null }
+  ]);
+});
+
+test("records only a successfully delivered authorized GET", async () => {
+  const created = await rotateCalendarFeedToken("local-dev", "all", persistence);
+  const resolved = await resolveCalendarFeedToken(created.token, persistence.query);
+  assert(resolved);
+  assert.equal((await calendarFeedStatus("local-dev", "all", persistence.query)).lastUsedAt, undefined);
+
+  await markCalendarFeedDelivered(
+    resolved.id,
+    persistence.query,
+    "2026-07-03T09:00:00.000Z"
+  );
+  assert.equal(
+    (await calendarFeedStatus("local-dev", "all", persistence.query)).lastUsedAt,
+    "2026-07-03T09:00:00.000Z"
+  );
+
+  assert.equal(await resolveCalendarFeedToken("unknown-token-value-that-is-long-enough-123", persistence.query), undefined);
+  assert.equal(
+    (await calendarFeedStatus("local-dev", "all", persistence.query)).lastUsedAt,
+    "2026-07-03T09:00:00.000Z"
+  );
 });
 
 test("advertises one hourly refresh interval for feeds with events", async () => {

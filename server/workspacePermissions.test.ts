@@ -8,6 +8,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import test from "node:test";
 import Database from "better-sqlite3";
 import type {
+  ApiCalendarFeedStatus,
   ApiCareConflictPreview,
   ApiCareParty,
   ApiChild,
@@ -202,6 +203,36 @@ test("workspace roles enforce restricted projections and scheduler writes", asyn
   const effectiveScheduler = await jsonRequest<ApiSession>(baseUrl, "/api/session", schedulerHeaders);
   assert.equal(effectiveScheduler.workspaceRole, "scheduler");
   assert.equal(effectiveScheduler.permissions?.includes("children:view-sensitive"), false);
+  assert.equal(effectiveScheduler.permissions?.includes("feeds:manage-own"), true);
+
+  const schedulerFeed = await jsonRequest<ApiCalendarFeedStatus>(
+    baseUrl,
+    "/api/calendar-feed",
+    schedulerHeaders,
+    { method: "POST", body: JSON.stringify({ scope: "all" }) }
+  );
+  assert.equal(schedulerFeed.state, "active");
+  assert(schedulerFeed.feedUrl);
+  assert.equal((await fetch(schedulerFeed.feedUrl, { method: "HEAD" })).status, 200);
+  assert.equal(
+    (await jsonRequest<ApiCalendarFeedStatus>(baseUrl, "/api/calendar-feed?scope=all", schedulerHeaders)).lastUsedAt,
+    undefined
+  );
+  assert.equal((await fetch(schedulerFeed.feedUrl)).status, 200);
+  assert.match(
+    (await jsonRequest<ApiCalendarFeedStatus>(baseUrl, "/api/calendar-feed?scope=all", schedulerHeaders)).lastUsedAt ?? "",
+    /^\d{4}-\d{2}-\d{2}T/
+  );
+
+  const viewerFeed = await jsonRequest<ApiCalendarFeedStatus>(
+    baseUrl,
+    "/api/calendar-feed",
+    viewerHeaders,
+    { method: "POST", body: JSON.stringify({ scope: "all" }) }
+  );
+  assert.equal(viewerFeed.state, "active");
+  assert(viewerFeed.feedUrl);
+  assert.equal((await fetch(viewerFeed.feedUrl)).status, 200);
 
   assert.equal((await request(baseUrl, "/api/children", schedulerHeaders)).status, 403);
   const childSummary = await jsonRequest<Array<Record<string, unknown>>>(baseUrl, "/api/children/summary", schedulerHeaders);
@@ -682,7 +713,7 @@ test("workspace roles enforce restricted projections and scheduler writes", asyn
     ownerHeaders,
     { method: "PUT", body: JSON.stringify({ role: "viewer" }) }
   )).status, 200);
-  assert.equal((await fetch(feed.feedUrl)).status, 404);
+  assert.equal((await fetch(feed.feedUrl)).status, 200);
 
   const noAssignmentDatabase = new Database(databasePath);
   noAssignmentDatabase.transaction(() => {

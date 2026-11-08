@@ -752,9 +752,14 @@ function CarePartyForm({ party, onDone }: { party?: CareParty; onDone: () => voi
 
 function CalendarFeedManager() {
   const { locale, intlLocale } = useI18n();
-  const { canWrite, data } = useAppStore();
+  const { data, isLoading, isSaving, serverStatus } = useAppStore();
+  const canManageFeed = serverStatus === "online" && !isLoading && !isSaving;
   const [selectedScope, setSelectedScope] = useState<ApiCalendarFeedScope>("all");
-  const [status, setStatus] = useState<ApiCalendarFeedStatus>({ active: false, scope: "all" });
+  const [status, setStatus] = useState<ApiCalendarFeedStatus>({
+    active: false,
+    state: "never_created",
+    scope: "all"
+  });
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -801,7 +806,7 @@ function CalendarFeedManager() {
     setError(null);
     try {
       await api.revokeCalendarFeed(selectedScope);
-      setStatus({ active: false, scope: selectedScope });
+      setStatus({ active: false, state: "revoked", scope: selectedScope });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
@@ -830,6 +835,8 @@ function CalendarFeedManager() {
               ? copy(locale, "calendarFeed", "active", {
                   date: formatDateTime(status.createdAt, intlLocale)
                 })
+              : status.state === "revoked"
+                ? copy(locale, "calendarFeed", "revoked")
               : copy(locale, "calendarFeed", "inactive")}
           </span>
           <small>
@@ -872,11 +879,11 @@ function CalendarFeedManager() {
         ) : null}
         <p className="settings-note">{copy(locale, "calendarFeed", "scope")}</p>
         <div className="data-actions">
-          <button className="button button--primary" type="button" data-testid="calendar-feed-rotate" disabled={!canWrite || busy} onClick={() => void rotate()}>
+          <button className="button button--primary" type="button" data-testid="calendar-feed-rotate" disabled={!canManageFeed || busy} onClick={() => void rotate()}>
             <Icon name="calendar" size={17} />
             {status.active ? copy(locale, "calendarFeed", "rotate") : copy(locale, "calendarFeed", "generate")}
           </button>
-          <button className="button button--danger-quiet" type="button" data-testid="calendar-feed-revoke" disabled={!canWrite || busy || !status.active} onClick={() => void revoke()}>
+          <button className="button button--danger-quiet" type="button" data-testid="calendar-feed-revoke" disabled={!canManageFeed || busy || !status.active} onClick={() => void revoke()}>
             <Icon name="trash" size={17} />
             {copy(locale, "calendarFeed", "revoke")}
           </button>

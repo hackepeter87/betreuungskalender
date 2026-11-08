@@ -1638,7 +1638,7 @@ test("creates a personal calendar feed URL from settings", async ({
   await navigate(page, "settings");
 
   const manager = page.getByTestId("calendar-feed-manager");
-  await expect(manager).toContainText("Für diese Auswahl ist noch kein Feed aktiv.");
+  await expect(manager).toContainText("Für diese Auswahl wurde noch kein Feed angelegt.");
   await manager.getByTestId("calendar-feed-rotate").click();
   await expect(manager).toContainText("Neue Feed-URL erzeugt");
   await expect(manager).toContainText("Feed aktiv seit");

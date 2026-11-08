@@ -255,9 +255,11 @@ holiday frame while listing the affected child share as unresolved.
 
 `calendar_feed_tokens` stores revocable per-user feed credentials. The raw
 token is shown only when generated; the selected database stores `token_hash`,
-the owning `app_users.id`, feed scope, creation time, optional last-use time,
-and optional revocation time. The token authorizes only the read-only `.ics`
-feed endpoint and never grants API access.
+the owning `app_users.id`, feed scope, creation time, optional last successful
+authorized `GET` delivery time, and optional revocation time. Status checks,
+`HEAD`, unknown credentials, and failed generation do not change the delivery
+time. The token authorizes only the read-only `.ics` feed endpoint and never
+grants API access.
 
 Feed scopes are:
 
@@ -272,6 +274,8 @@ Notes, evidence references, trips, costs, and audit data are not exported.
 Each exported event title includes the assigned child names followed by the
 calendar scope label so subscriptions remain distinguishable in calendar
 clients. Existing feed URLs and token scopes remain unchanged.
+Feed creation, replacement, and explicit revocation create bounded audit events
+that contain neither the token nor the complete URL or calendar contents.
 
 ## Native OIDC login state
 

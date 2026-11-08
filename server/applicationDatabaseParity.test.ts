@@ -18,6 +18,7 @@ import {
   buildPersonalCalendarFeed,
   calendarFeedStatus,
   isCalendarFeedProcessingLimitError,
+  markCalendarFeedDelivered,
   resolveCalendarFeedToken,
   rotateCalendarFeedToken
 } from "./services/calendarFeeds.js";
@@ -397,6 +398,13 @@ async function runApplicationScenario(runtime: PersistenceRuntime) {
   const scopedFeedBody = resolvedFeed
     ? await buildPersonalCalendarFeed({ token: resolvedFeed, database: runtime.query })
     : "";
+  if (resolvedFeed) {
+    await markCalendarFeedDelivered(
+      resolvedFeed.id,
+      runtime.query,
+      "2026-07-01T12:45:00.000Z"
+    );
+  }
   let feedLimitCode = "none";
   if (resolvedFeed) {
     try {
@@ -528,7 +536,9 @@ async function runApplicationScenario(runtime: PersistenceRuntime) {
     })),
     feed: {
       active: status.active,
+      state: status.state,
       scope: status.scope,
+      lastUsedAt: status.lastUsedAt,
       resolved: resolvedFeed?.user_id === invited.id,
       limitCode: feedLimitCode,
       includesPrimary: scopedFeedBody.includes("demo-entry-short-contact@betreuungskalender"),
@@ -1346,6 +1356,8 @@ test("SQLite exercises the complete application parity scenario", async () => {
     assert.equal(result.setup.strictAfterSetup, true);
     assert.equal(result.invitation.userWorkspaceRole, "editor");
     assert.equal(result.feed.resolved, true);
+    assert.equal(result.feed.state, "active");
+    assert.equal(result.feed.lastUsedAt, "2026-07-01T12:45:00.000Z");
     assert.equal(result.rollback.constraintKind, "constraint");
     assert.equal(result.rollback.after, result.rollback.before);
     assert.equal(result.softDeletedChildExported, false);

@@ -232,11 +232,11 @@ test("member access states match the documented fixed role model", () => {
         capabilities: {
           view: ["care_entries_view", "children_basic_view"],
           edit: ["care_entries_create", "care_entries_edit"],
-          administer: ["own_notifications_manage"],
+          administer: ["own_notifications_manage", "personal_feeds_manage"],
           denied: [
             "care_entries_delete", "care_entries_confirm", "children_sensitive_view",
             "children_manage", "care_notes_view", "planning_view", "planning_manage",
-            "reports_view", "settings_view", "settings_manage", "personal_feeds_manage",
+            "reports_view", "settings_view", "settings_manage",
             "audit_view", "instance_inspect", "members_manage", "exports_run",
             "destructive_operations"
           ]
@@ -254,12 +254,12 @@ test("member access states match the documented fixed role model", () => {
         capabilities: {
           view: ["care_entries_view", "children_basic_view"],
           edit: [],
-          administer: ["own_notifications_manage"],
+          administer: ["own_notifications_manage", "personal_feeds_manage"],
           denied: [
             "care_entries_create", "care_entries_edit", "care_entries_delete",
             "care_entries_confirm", "children_sensitive_view", "children_manage",
             "care_notes_view", "planning_view", "planning_manage", "reports_view",
-            "settings_view", "settings_manage", "personal_feeds_manage", "audit_view",
+            "settings_view", "settings_manage", "audit_view",
             "instance_inspect", "members_manage", "exports_run", "destructive_operations"
           ]
         },
@@ -277,7 +277,7 @@ test("member access states match the documented fixed role model", () => {
   }
 });
 
-test("member access preview explains role and care-party changes before atomic apply", async () => {
+test("member access changes revoke only party feeds that leave the effective scope", async () => {
   await withDatabase(async (database, persistence) => {
     const owner = user("user_owner", "admin");
     const target = user("user_target", "parent");
@@ -288,6 +288,13 @@ test("member access preview explains role and care-party changes before atomic a
     insertCareParty(database, "party-b", "Care party B");
     await updateMemberRole(owner, target.id, "editor", persistence, timestamp);
     insertDeliveryState(database, target.id, "access-change");
+    database.prepare(`
+      INSERT INTO calendar_feed_tokens (
+        id, user_id, token_hash, created_at, scope_type, scope_party_id
+      ) VALUES
+        ('feed-party-a', ?, 'feed-hash-party-a', ?, 'party', 'party-a'),
+        ('feed-party-b', ?, 'feed-hash-party-b', ?, 'party', 'party-b')
+    `).run(target.id, timestamp, target.id, timestamp);
 
     const preview = await previewMemberAccess(
       owner,
@@ -323,8 +330,15 @@ test("member access preview explains role and care-party changes before atomic a
       carePartyIds: ["party-a"]
     });
     assert.deepEqual(database.prepare(`
-      SELECT revoked_at AS revokedAt FROM calendar_feed_tokens WHERE id = 'feed-access-change'
-    `).get(), { revokedAt: "2026-07-05T12:00:00.000Z" });
+      SELECT id, revoked_at AS revokedAt
+      FROM calendar_feed_tokens
+      WHERE id IN ('feed-access-change', 'feed-party-a', 'feed-party-b')
+      ORDER BY id
+    `).all(), [
+      { id: "feed-access-change", revokedAt: null },
+      { id: "feed-party-a", revokedAt: null },
+      { id: "feed-party-b", revokedAt: "2026-07-05T12:00:00.000Z" }
+    ]);
     assert.deepEqual(database.prepare(`
       SELECT deleted_at AS deletedAt
       FROM care_confirmation_requests WHERE id = 'confirmation-access-change'
@@ -802,7 +816,7 @@ test("member removal rolls back session revocation with the membership change", 
   });
 });
 
-test("role downgrade revokes feeds and unanswered care confirmations", async () => {
+test("role changes preserve feeds when appointment read access remains", async () => {
   await withDatabase(async (database, persistence) => {
     const owner = user("user_owner", "admin");
     const target = user("user_target", "parent");
@@ -834,7 +848,7 @@ test("role downgrade revokes feeds and unanswered care confirmations", async () 
 
     assert.deepEqual(database.prepare(`
       SELECT revoked_at AS revokedAt FROM calendar_feed_tokens WHERE id = 'feed-downgrade'
-    `).get(), { revokedAt: "2026-07-05T12:00:00.000Z" });
+    `).get(), { revokedAt: null });
     assert.deepEqual(database.prepare(`
       SELECT deleted_at AS deletedAt FROM care_confirmation_requests WHERE id = 'confirmation-downgrade'
     `).get(), { deletedAt: "2026-07-05T12:00:00.000Z" });

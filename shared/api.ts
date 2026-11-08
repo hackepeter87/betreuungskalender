@@ -670,6 +670,7 @@ export interface ApiLogout {
 
 export interface ApiCalendarFeedStatus {
   active: boolean;
+  state: "never_created" | "active" | "revoked";
   scope: ApiCalendarFeedScope;
   createdAt?: string;
   lastUsedAt?: string;
