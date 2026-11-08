@@ -9,6 +9,7 @@ import {
   DemoWriteGate,
   readDemoResetState
 } from "./services/demoReset.js";
+import { OidcSessionStore } from "./services/oidcSessions.js";
 
 async function fixture() {
   const persistence = createSqlitePersistenceRuntime(":memory:");
@@ -64,6 +65,19 @@ async function fixture() {
 test("demo reset atomically replaces domain data while preserving identities and access", async () => {
   const persistence = await fixture();
   try {
+    const sessions = new OidcSessionStore(persistence.query);
+    const activeSession = await sessions.create(
+      "demo-subject",
+      24 * 60 * 60,
+      new Date("2026-11-08T10:00:00.000Z")
+    );
+    assert.equal(
+      (await sessions.findByToken(
+        activeSession.token,
+        new Date("2026-11-08T11:00:00.000Z")
+      ))?.externalSubject,
+      "demo-subject"
+    );
     const beforeAudit = await persistence.query.selectFrom("audit_log")
       .select(({ fn }) => fn.countAll<number>().as("count"))
       .executeTakeFirstOrThrow();
@@ -102,6 +116,13 @@ test("demo reset atomically replaces domain data while preserving identities and
       .select("revoked_at")
       .where("id", "=", "demo-session")
       .executeTakeFirstOrThrow()).revoked_at, "2026-11-08T12:34:56.000Z");
+    assert.equal(
+      await sessions.findByToken(
+        activeSession.token,
+        new Date("2026-11-08T12:35:00.000Z")
+      ),
+      undefined
+    );
 
     const unchanged = await coordinator.runIfDue(new Date("2026-11-08T12:59:59.000Z"));
     assert.equal(unchanged?.sessionGeneration, 1);
