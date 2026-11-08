@@ -36,7 +36,8 @@ test("keeps the viewer experience read-only and free of administrative sections"
           permissions: [
             "appointments:view",
             "children:view-basic",
-            "notifications:manage-own"
+            "notifications:manage-own",
+            "feeds:manage-own"
           ]
         }), {
           status: 200,
@@ -58,7 +59,8 @@ test("keeps the viewer experience read-only and free of administrative sections"
   await expect(page.getByTestId("instance-readiness")).toHaveCount(0);
   await expect(page.getByTestId("settings-add-child")).toHaveCount(0);
   await expect(page.getByTestId("external-calendar-manager")).toHaveCount(0);
-  await expect(page.getByTestId("calendar-feed-manager")).toHaveCount(0);
+  await expect(page.getByTestId("calendar-feed-manager")).toBeVisible();
+  await expect(page.getByTestId("calendar-feed-rotate")).toBeEnabled();
   await expectNoDocumentHorizontalOverflow(page);
 });
 

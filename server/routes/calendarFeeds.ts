@@ -4,6 +4,7 @@ import {
   buildPersonalCalendarFeed,
   calendarFeedStatus,
   isCalendarFeedProcessingLimitError,
+  markCalendarFeedDelivered,
   parseCalendarFeedScope,
   resolveCalendarFeedToken,
   revokeCalendarFeedTokens,
@@ -66,7 +67,7 @@ export async function calendarFeedRoutes(app: FastifyInstance): Promise<void> {
 
   app.delete<{ Querystring: { scope?: string } }>("/api/calendar-feed", writeLimit, async (request, reply) => {
     const scope = request.query.scope ? parseCalendarFeedScope(request.query.scope).scope : undefined;
-    await revokeCalendarFeedTokens(request.userEmail, app.persistence.query, scope);
+    await revokeCalendarFeedTokens(request.userEmail, app.persistence, scope);
     return reply.code(204).send();
   });
 
@@ -94,6 +95,9 @@ export async function calendarFeedRoutes(app: FastifyInstance): Promise<void> {
         });
       }
       throw error;
+    }
+    if (request.method === "GET") {
+      await markCalendarFeedDelivered(token.id, app.persistence.query);
     }
     return reply
       .header("content-type", "text/calendar; charset=utf-8")

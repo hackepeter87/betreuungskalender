@@ -153,13 +153,15 @@ export function workspacePermissionsForRole(
       "appointments:create",
       "appointments:edit",
       "children:view-basic",
-      "notifications:manage-own"
+      "notifications:manage-own",
+      "feeds:manage-own"
     ];
   }
   return [
     "appointments:view",
     "children:view-basic",
-    "notifications:manage-own"
+    "notifications:manage-own",
+    "feeds:manage-own"
   ];
 }
 

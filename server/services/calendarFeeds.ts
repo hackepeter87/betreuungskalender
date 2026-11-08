@@ -10,6 +10,7 @@ import {
 import { getCareParty } from "./careParties.js";
 import { findAuthenticatedUserBySubject } from "./users.js";
 import { userHasWorkspacePermission } from "./memberships.js";
+import { recordDomainAudit } from "./domainPersistence.js";
 
 const TOKEN_BYTES = 32;
 const PRODUCT_ID = "-//Betreuungskalender//Personal Calendar Feed//DE";
@@ -49,6 +50,7 @@ function feedLimits(overrides?: Partial<CalendarFeedProcessingLimits>): Calendar
 
 export interface CalendarFeedStatus {
   active: boolean;
+  state: "never_created" | "active" | "revoked";
   scope: ApiCalendarFeedScope;
   createdAt?: string;
   lastUsedAt?: string;
@@ -66,6 +68,7 @@ export interface TokenRow {
   scope_party_name: string | null;
   created_at: string;
   last_used_at: string | null;
+  revoked_at: string | null;
 }
 
 interface FeedEntryRow {
@@ -126,12 +129,38 @@ async function activeTokenForUser(
     .select([
       "t.id", "t.user_id", "u.external_subject", "u.display_name", "u.role",
       "t.scope_type", "t.scope_party_id", "p.name as scope_party_name",
-      "t.created_at", "t.last_used_at"
+      "t.created_at", "t.last_used_at", "t.revoked_at"
     ])
     .where("t.user_id", "=", userId)
     .where("t.scope_type", "=", parsed.type)
     .where("t.revoked_at", "is", null)
     .orderBy("t.created_at", "desc");
+  query = parsed.partyId
+    ? query.where("t.scope_party_id", "=", parsed.partyId)
+    : query.where("t.scope_party_id", "is", null);
+  return query.executeTakeFirst() as Promise<TokenRow | undefined>;
+}
+
+async function latestTokenForUser(
+  userId: string,
+  scope: ApiCalendarFeedScope,
+  database: DatabaseExecutor
+): Promise<TokenRow | undefined> {
+  const parsed = parseCalendarFeedScope(scope);
+  let query = database.selectFrom("calendar_feed_tokens as t")
+    .innerJoin("app_users as u", "u.id", "t.user_id")
+    .leftJoin("care_parties as p", (join) => join
+      .onRef("p.id", "=", "t.scope_party_id")
+      .on("p.deleted_at", "is", null))
+    .select([
+      "t.id", "t.user_id", "u.external_subject", "u.display_name", "u.role",
+      "t.scope_type", "t.scope_party_id", "p.name as scope_party_name",
+      "t.created_at", "t.last_used_at", "t.revoked_at"
+    ])
+    .where("t.user_id", "=", userId)
+    .where("t.scope_type", "=", parsed.type)
+    .orderBy("t.created_at", "desc")
+    .orderBy("t.id", "desc");
   query = parsed.partyId
     ? query.where("t.scope_party_id", "=", parsed.partyId)
     : query.where("t.scope_party_id", "is", null);
@@ -144,10 +173,14 @@ export async function calendarFeedStatus(
   database: DatabaseExecutor,
   feedUrl?: string
 ): Promise<CalendarFeedStatus> {
-  const token = await activeTokenForUser(userId, scope, database);
-  if (!token) return { active: false, scope };
+  const token = await activeTokenForUser(userId, scope, database)
+    ?? await latestTokenForUser(userId, scope, database);
+  if (!token) return { active: false, state: "never_created", scope };
+  const active = token.revoked_at === null;
+  const state: CalendarFeedStatus["state"] = active ? "active" : "revoked";
   return omitUndefinedValues({
-    active: true,
+    active,
+    state,
     scope,
     createdAt: token.created_at,
     lastUsedAt: token.last_used_at ?? undefined,
@@ -191,6 +224,7 @@ export async function rotateCalendarFeedToken(
   const token = randomBytes(TOKEN_BYTES).toString("base64url");
   const timestamp = nowIso();
   await runtime.transaction(async (database) => {
+    const active = await activeTokenForUser(userId, scope, database);
     let revoke = database.updateTable("calendar_feed_tokens")
       .set({ revoked_at: timestamp })
       .where("user_id", "=", userId)
@@ -200,8 +234,9 @@ export async function rotateCalendarFeedToken(
       ? revoke.where("scope_party_id", "=", parsed.partyId)
       : revoke.where("scope_party_id", "is", null);
     await revoke.execute();
+    const feedId = randomUUID();
     await database.insertInto("calendar_feed_tokens").values({
-      id: randomUUID(),
+      id: feedId,
       user_id: userId,
       token_hash: hashToken(token),
       scope_type: parsed.type,
@@ -210,27 +245,56 @@ export async function rotateCalendarFeedToken(
       last_used_at: null,
       revoked_at: null
     }).execute();
+    await recordDomainAudit(database, {
+      userEmail: "system",
+      entityType: "calendar_feed",
+      entityId: feedId,
+      action: active ? "updated" : "created",
+      fieldName: active ? "feed_replaced" : "feed_created",
+      timestamp
+    });
   });
   return { token, status: await calendarFeedStatus(userId, scope, runtime.query) };
 }
 
 export async function revokeCalendarFeedTokens(
   userId: string,
-  database: DatabaseExecutor,
-  scope?: ApiCalendarFeedScope
+  runtime: PersistenceRuntime,
+  scope?: ApiCalendarFeedScope,
+  timestamp = nowIso()
 ): Promise<void> {
-  const parsed = scope ? parseCalendarFeedScope(scope) : undefined;
-  let update = database.updateTable("calendar_feed_tokens")
-    .set({ revoked_at: nowIso() })
-    .where("user_id", "=", userId)
-    .where("revoked_at", "is", null);
-  if (parsed) {
-    update = update.where("scope_type", "=", parsed.type);
-    update = parsed.partyId
-      ? update.where("scope_party_id", "=", parsed.partyId)
-      : update.where("scope_party_id", "is", null);
-  }
-  await update.execute();
+  await runtime.transaction(async (database) => {
+    const parsed = scope ? parseCalendarFeedScope(scope) : undefined;
+    const active = scope
+      ? await activeTokenForUser(userId, scope, database)
+      : await database.selectFrom("calendar_feed_tokens")
+        .select("id")
+        .where("user_id", "=", userId)
+        .where("revoked_at", "is", null)
+        .orderBy("created_at", "desc")
+        .executeTakeFirst();
+    let update = database.updateTable("calendar_feed_tokens")
+      .set({ revoked_at: timestamp })
+      .where("user_id", "=", userId)
+      .where("revoked_at", "is", null);
+    if (parsed) {
+      update = update.where("scope_type", "=", parsed.type);
+      update = parsed.partyId
+        ? update.where("scope_party_id", "=", parsed.partyId)
+        : update.where("scope_party_id", "is", null);
+    }
+    const result = await update.executeTakeFirst();
+    if (active && result.numUpdatedRows > 0n) {
+      await recordDomainAudit(database, {
+        userEmail: "system",
+        entityType: "calendar_feed",
+        entityId: active.id,
+        action: "deleted",
+        fieldName: "feed_revoked",
+        timestamp
+      });
+    }
+  });
 }
 
 export async function resolveCalendarFeedToken(
@@ -247,7 +311,7 @@ export async function resolveCalendarFeedToken(
     .select([
       "t.id", "t.user_id", "u.external_subject", "u.display_name", "u.role",
       "t.scope_type", "t.scope_party_id", "p.name as scope_party_name",
-      "t.created_at", "t.last_used_at"
+      "t.created_at", "t.last_used_at", "t.revoked_at"
     ])
     .where("t.token_hash", "=", hashToken(normalized))
     .where("t.revoked_at", "is", null)
@@ -271,11 +335,19 @@ export async function resolveCalendarFeedToken(
       return undefined;
     }
   }
-  await database.updateTable("calendar_feed_tokens")
-    .set({ last_used_at: nowIso() })
-    .where("id", "=", row.id)
-    .execute();
   return row;
+}
+
+export async function markCalendarFeedDelivered(
+  tokenId: string,
+  database: DatabaseExecutor,
+  timestamp = nowIso()
+): Promise<void> {
+  await database.updateTable("calendar_feed_tokens")
+    .set({ last_used_at: timestamp })
+    .where("id", "=", tokenId)
+    .where("revoked_at", "is", null)
+    .execute();
 }
 
 async function feedEntriesForToken(
