@@ -153,6 +153,37 @@ async function deferredAsset(source: string): Promise<string> {
   return `/${file}`;
 }
 
+function futureWeeklySeriesDates(now = new Date()): {
+  firstStart: string;
+  firstEnd: string;
+  generationStart: string;
+  generationEnd: string;
+  monthKey: string;
+} {
+  const targetMonth = new Date(Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth() + 2,
+    1
+  ));
+  const firstFriday = new Date(targetMonth);
+  firstFriday.setUTCDate(1 + ((5 - firstFriday.getUTCDay() + 7) % 7));
+
+  const dateKey = (date: Date): string => date.toISOString().slice(0, 10);
+  const shifted = (days: number): string => {
+    const date = new Date(firstFriday);
+    date.setUTCDate(date.getUTCDate() + days);
+    return dateKey(date);
+  };
+
+  return {
+    firstStart: shifted(0),
+    firstEnd: shifted(2),
+    generationStart: shifted(-1),
+    generationEnd: shifted(7),
+    monthKey: dateKey(targetMonth).slice(0, 7)
+  };
+}
+
 test("shows an accessible loading state for a deferred page", async ({
   browser,
   baseURL
@@ -2188,25 +2219,26 @@ test("creates a weekly multi-day care series with calendar preview", async ({
   page,
   request
 }) => {
+  const dates = futureWeeklySeriesDates();
   await openApp(page);
   await createChild(page, "Wochentage Kind");
 
   await navigate(page, "contact");
-  await page.getByTestId("contact-pattern-start-date").fill("2026-10-02");
-  await page.getByTestId("contact-first-end-date").fill("2026-10-04");
+  await page.getByTestId("contact-pattern-start-date").fill(dates.firstStart);
+  await page.getByTestId("contact-first-end-date").fill(dates.firstEnd);
   await page.getByTestId("contact-pattern-friday-start-time").fill("15:00");
   await page.getByTestId("contact-pattern-sunday-end-time").fill("18:00");
   await page.getByTestId("contact-repeat-preset").selectOption("weekly");
-  await page.getByTestId("contact-generation-start").fill("2026-10-01");
-  await page.getByTestId("contact-generation-end").fill("2026-10-09");
+  await page.getByTestId("contact-generation-start").fill(dates.generationStart);
+  await page.getByTestId("contact-generation-end").fill(dates.generationEnd);
 
   await expect(page.getByTestId("contact-generation-preview")).toContainText(
     "2 neue geplante Termine"
   );
   await expect(page.getByTestId("contact-recurrence-summary")).toContainText("Wöchentlich");
-  await expect(page.getByTestId("contact-preview-day-2026-10-02").first())
+  await expect(page.getByTestId(`contact-preview-day-${dates.firstStart}`).first())
     .toHaveClass(/contact-preview-day--active/);
-  await expect(page.locator('[data-testid="contact-preview-day-2026-10-04"].contact-preview-day--active'))
+  await expect(page.locator(`[data-testid="contact-preview-day-${dates.firstEnd}"].contact-preview-day--active`))
     .toHaveCount(1);
 
   await page.getByTestId("contact-pattern-save").click();
@@ -2226,12 +2258,12 @@ test("creates a weekly multi-day care series with calendar preview", async ({
     contactRuleId?: string;
     startDateTime: string;
     status: string;
-  }>).filter((entry) => entry.contactRuleId && entry.startDateTime.startsWith("2026-10"));
+  }>).filter((entry) => entry.contactRuleId && entry.startDateTime.startsWith(dates.monthKey));
   expect(generatedEntries).toHaveLength(5);
   expect(generatedEntries.every((entry) => entry.status === "planned")).toBe(true);
 
   await navigate(page, "calendar");
-  await page.getByTestId("month-picker").fill("2026-10");
+  await page.getByTestId("month-picker").fill(dates.monthKey);
   if (await page.getByTestId("calendar-view-month").isVisible()) {
     await page.getByTestId("calendar-view-month").click();
   }
