@@ -147,27 +147,32 @@ export function DashboardPage({
       <div className="page-header">
         <div>
           <p className="page-header__context">{copy(locale, "dashboard", "context")}</p>
-          <h1>{formatMonth(monthKey, intlLocale)}</h1>
+          <div className="action-with-help">
+            <h1>{formatMonth(monthKey, intlLocale)}</h1>
+            <FieldHelpButton fieldId="analytics.month" showRequirement={false} />
+          </div>
         </div>
         <div className="page-header__actions">
           <MonthToolbar monthKey={monthKey} onChange={onMonthChange} />
-          {canCloseMonth ? <span className="action-with-help action-with-help--header">
-            <button
-              className={closure ? "button button--secondary" : "button button--primary"}
-              type="button"
-              data-testid="dashboard-close-month"
-              onClick={openClosureDialog}
-              disabled={!closure && (!canWrite || isSaving)}
-            >
-              <Icon name={closure ? "lock" : "check"} size={17} />
-              {closure ? copy(locale, "dashboard", "monthClosed") : copy(locale, "dashboard", "closeMonth")}
-            </button>
-            <FieldHelpButton fieldId="monthClosure.close" />
-          </span> : null}
-          {canCreateAppointments ? <button className="button button--primary desktop-only" data-testid="dashboard-new-entry" type="button" onClick={() => onNewEntry()} disabled={!canWrite || isSaving}>
-            <Icon name="plus" />
-            {copy(locale, "dashboard", "createEntry")}
-          </button> : null}
+          <div className="form-actions__right">
+            {canCloseMonth ? <span className="action-with-help action-with-help--header">
+              <button
+                className={closure ? "button button--secondary" : "button button--primary"}
+                type="button"
+                data-testid="dashboard-close-month"
+                onClick={openClosureDialog}
+                disabled={!closure && (!canWrite || isSaving)}
+              >
+                <Icon name={closure ? "lock" : "check"} size={17} />
+                {closure ? copy(locale, "dashboard", "monthClosed") : copy(locale, "dashboard", "closeMonth")}
+              </button>
+              <FieldHelpButton fieldId="monthClosure.close" />
+            </span> : null}
+            {canCreateAppointments ? <button className="button button--primary desktop-only" data-testid="dashboard-new-entry" type="button" onClick={() => onNewEntry()} disabled={!canWrite || isSaving}>
+              <Icon name="plus" />
+              {copy(locale, "dashboard", "createEntry")}
+            </button> : null}
+          </div>
         </div>
       </div>
 

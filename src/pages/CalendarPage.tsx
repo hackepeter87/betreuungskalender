@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { CalendarAgenda } from "../components/CalendarAgenda";
 import { CalendarGrid } from "../components/CalendarGrid";
+import { FieldHelpButton } from "../components/FieldHelp";
 import { Icon } from "../components/Icon";
 import { MonthToolbar } from "../components/MonthToolbar";
 import { UnavailablePeriodForm } from "../components/UnavailablePeriodForm";
@@ -113,18 +114,23 @@ export function CalendarPage({
       <div className="page-header">
         <div>
           <p className="page-header__context">{copy(locale, "calendarPage", "context")}</p>
-          <h1>{formatMonth(monthKey, intlLocale)}</h1>
+          <div className="action-with-help">
+            <h1>{formatMonth(monthKey, intlLocale)}</h1>
+            <FieldHelpButton fieldId="analytics.month" showRequirement={false} />
+          </div>
         </div>
         <div className="page-header__actions">
           <MonthToolbar monthKey={monthKey} onChange={onMonthChange} />
-          {canCreateAppointments ? <button className="button button--primary desktop-only" type="button" onClick={() => onNewEntry()} disabled={!canWrite}>
-            <Icon name="plus" />
-            {copy(locale, "calendarPage", "createEntry")}
-          </button> : null}
-          {canManagePlanning ? <button className="button button--secondary desktop-only" type="button" onClick={() => setEditingUnavailable("new")}>
-            <Icon name="briefcase" />
-            {copy(locale, "calendarPage", "unavailability")}
-          </button> : null}
+          <div className="form-actions__right">
+            {canCreateAppointments ? <button className="button button--primary desktop-only" type="button" onClick={() => onNewEntry()} disabled={!canWrite}>
+              <Icon name="plus" />
+              {copy(locale, "calendarPage", "createEntry")}
+            </button> : null}
+            {canManagePlanning ? <button className="button button--secondary desktop-only" type="button" onClick={() => setEditingUnavailable("new")}>
+              <Icon name="briefcase" />
+              {copy(locale, "calendarPage", "unavailability")}
+            </button> : null}
+          </div>
         </div>
       </div>
 
