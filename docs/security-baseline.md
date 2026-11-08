@@ -85,7 +85,8 @@ access control, and incident response.
   parameters.
 - Release checks reject tracked and untracked sensitive artifacts such as real
   `.env` files, databases, backups, exports, logs, local archives, private
-  keys, certificates, token material, oauth2-proxy configs, and local ICS files.
+  keys, certificates, token material, authentication-proxy configs, and local
+  ICS files.
 - The local security baseline command is available as `npm run security:check`.
 
 ## Local security commands

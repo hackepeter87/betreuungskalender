@@ -234,5 +234,4 @@ Before exposing a self-hosted installation beyond local evaluation:
 
 For native OIDC setup, see
 [native-oidc-keycloak-podman.md](native-oidc-keycloak-podman.md). For
-trusted-proxy deployments, see [reverse-proxy.md](reverse-proxy.md) and
-[keycloak-oauth2-proxy.md](keycloak-oauth2-proxy.md).
+trusted-proxy deployments, see [reverse-proxy.md](reverse-proxy.md).

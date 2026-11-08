@@ -1,86 +1,52 @@
 # Reverse proxy deployment
 
-## Security model
-
-Recommended architecture:
+The recommended production mode is native OIDC behind an ordinary HTTPS
+reverse proxy. The proxy terminates TLS and forwards requests without creating
+identity headers. The application validates OIDC itself and keeps
+`TRUST_PROXY_AUTH=false`.
 
 ```text
-Browser -> HTTPS reverse proxy -> oauth2-proxy -> Betreuungskalender -> selected database
+Browser -> HTTPS reverse proxy -> Betreuungskalender -> selected database
 ```
 
-The public proxy terminates TLS. oauth2-proxy authenticates the user and sets a
-trusted identity header. Betreuungskalender must not be reachable around that
-authentication path.
+Forward the original scheme and host, preserve WebSocket-capable HTTP/1.1
+behavior, and set request-size and timeout limits compatible with the documented
+transfer limits. Do not expose the application container on an additional
+public port.
 
-Set:
+## Trusted-proxy compatibility mode
 
-```dotenv
-HOST=127.0.0.1
-PORT=3000
-AUTH_MODE=trusted-proxy
-REQUIRE_AUTH=true
-TRUST_PROXY_AUTH=true
-ALLOWED_ORIGIN=https://betreuung.example.net
-```
+`AUTH_MODE=trusted-proxy` remains available for operators with an independently
+managed authentication proxy. This repository does not provide or configure
+such a proxy. The operator is responsible for its lifecycle and security.
 
-The proxy should set `X-Forwarded-Proto`, `X-Forwarded-Host`,
-`X-Forwarded-Port`, and `X-Forwarded-For`. Strip incoming authentication
-headers from clients before setting trusted values. In oauth2-proxy, pair
-`reverse_proxy = true` with a narrow `trusted_ips` list for the upstream proxy,
-for example `trusted_ips = [ "127.0.0.1/32", "192.0.2.10/32" ]`, and replace
-the documentation CIDR with the actual proxy address.
+The following boundary is mandatory:
 
-## HAProxy in front of oauth2-proxy
+- only the authentication proxy can reach the application listener;
+- the public proxy strips all configured identity headers from client requests
+  before setting trusted values;
+- `TRUSTED_PROXY_CIDRS` contains only the proxy source address or the smallest
+  isolated proxy network;
+- `OIDC_USER_ID_HEADER` carries a stable, immutable subject;
+- names, email addresses, and groups are optional attributes and never replace
+  the stable subject;
+- direct access that bypasses the authentication proxy is blocked by container
+  networking, loopback binding, or firewall policy.
 
-```haproxy
-frontend https_in
-  bind :443 ssl crt /etc/haproxy/certs/betreuung.example.net.pem
-  mode http
-  http-request set-header X-Forwarded-Proto https
-  http-request set-header X-Forwarded-Host %[req.hdr(Host)]
-  http-request set-header X-Forwarded-Port 443
-  option forwardfor
-  default_backend oauth2_proxy
-
-backend oauth2_proxy
-  mode http
-  server oauth2 127.0.0.1:4180 check
-```
-
-oauth2-proxy forwards authenticated requests to `127.0.0.1:3000`. Keep both
-ports behind the host firewall.
-
-## nginx
-
-```nginx
-location / {
-    proxy_pass http://127.0.0.1:4180;
-    proxy_set_header Host $host;
-    proxy_set_header X-Real-IP $remote_addr;
-    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-    proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_set_header X-Forwarded-Port $server_port;
-}
-```
-
-## Caddy
-
-```caddyfile
-betreuung.example.net {
-    reverse_proxy 127.0.0.1:4180
-}
-```
-
-## Traefik
-
-Place oauth2-proxy and Betreuungskalender on a private Docker network. Route
-the public HTTPS service only to oauth2-proxy. Do not publish the app container
-port directly. Configure forwarded headers only from trusted network ranges.
+The application accepts IP addresses and CIDR ranges in `TRUSTED_PROXY_CIDRS`,
+not DNS or container names. Validate the actual socket source address observed
+by the application before enabling the mode.
 
 ## Validation
 
-- A request to `/api/children` without a trusted identity must return `401`.
-- `/api/health` remains unauthenticated for monitoring and contains no paths.
-- A valid authenticated request must reach the API through oauth2-proxy.
-- Direct access to port 3000 must be blocked from untrusted networks.
-- The browser origin must exactly match `ALLOWED_ORIGIN`.
+1. Direct access to the application listener is impossible from an untrusted
+   network.
+2. An unauthenticated request is rejected.
+3. A client-supplied identity header is removed or replaced by the proxy.
+4. `/api/session` reports the expected application user and role.
+5. Logout follows the configured `AUTH_LOGOUT_URL`, when one is provided.
+6. Application logs contain neither identity headers nor authentication tokens.
+
+See [configuration](configuration.md), [security](security.md), and the
+[native OIDC guide](native-oidc-keycloak-podman.md) for the supported runtime
+contracts.

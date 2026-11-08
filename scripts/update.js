@@ -31,19 +31,16 @@ const REQUIRED_ARCHIVE_PATHS = [
   "package.json",
   "Dockerfile.release",
   ".env.example",
-  "deploy/.env.oidc.example",
   "deploy/compose.yml",
-  "deploy/compose.oidc.yml",
   "deploy/compose.postgres.yml",
   "deploy/postgres/init/001-create-application-role.sh",
-  "deploy/oauth2-proxy.cfg.example",
   "dist/",
   "dist-server/",
   "scripts/update.js",
   "scripts/runtime-verify.js"
 ];
 
-const SUPPORTED_COMPOSE_FILES = new Set(["compose.yml", "compose.oidc.yml"]);
+const SUPPORTED_COMPOSE_FILES = new Set(["compose.yml"]);
 
 class UpdateError extends Error {
   constructor(code, message) {
@@ -171,7 +168,7 @@ function parseEnv(content) {
 function composeFileFromEnv(content) {
   const composeFile = parseEnv(content).get("APP_COMPOSE_FILE") ?? "compose.yml";
   if (!SUPPORTED_COMPOSE_FILES.has(composeFile)) {
-    fail(EXIT.PREFLIGHT, "APP_COMPOSE_FILE must be compose.yml or compose.oidc.yml.");
+    fail(EXIT.PREFLIGHT, "APP_COMPOSE_FILE must be compose.yml.");
   }
   return composeFile;
 }

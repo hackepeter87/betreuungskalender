@@ -60,12 +60,9 @@ data remain outside every versioned release:
     vX.Y.Z/
 ```
 
-`compose.yml` is installed once from `deploy/compose.yml`. For the OIDC
-single-port deployment, install `deploy/compose.oidc.yml` as
-`compose.oidc.yml` and add `oauth2-proxy.cfg` next to `.env`. `.env` must
-include the active release path and version, in addition to the normal
-application configuration. Keep `.env` and `oauth2-proxy.cfg` private and out
-of Git.
+`compose.yml` is installed once from `deploy/compose.yml`. `.env` must include
+the active release path and version in addition to the normal application
+configuration. Keep `.env` private and out of Git.
 
 ```dotenv
 APP_RELEASE_VERSION=X.Y.Z
@@ -92,12 +89,6 @@ The application rejects an empty allowlist and requests without the configured
 stable `OIDC_USER_ID_HEADER`. Validate both values against the running proxy
 topology before switching the active release.
 
-When using `compose.oidc.yml`, also set:
-
-```dotenv
-APP_COMPOSE_FILE=compose.oidc.yml
-```
-
 For the first Compose installation, verify and extract the release archive,
 copy `deploy/compose.yml` to
 `/opt/svc_betreuung/betreuungskalender/compose.yml`, create the private `.env`,
@@ -116,36 +107,10 @@ sudo docker compose \
   -f /opt/svc_betreuung/betreuungskalender/compose.yml up -d --build
 ```
 
-For the OIDC deployment, copy `deploy/compose.oidc.yml` to
-`/opt/svc_betreuung/betreuungskalender/compose.oidc.yml`, copy
-`deploy/.env.oidc.example` to `.env`, copy `deploy/oauth2-proxy.cfg.example` to
-`oauth2-proxy.cfg`, replace every placeholder and secret, and start:
-
-```bash
-sudo docker compose \
-  --project-directory /opt/svc_betreuung/betreuungskalender \
-  --env-file /opt/svc_betreuung/betreuungskalender/.env \
-  -f /opt/svc_betreuung/betreuungskalender/compose.oidc.yml up -d --build
-```
-
-For rootless Podman with `podman-compose` 1.0.x, run from the deployment root:
-
-```bash
-cd /opt/svc_betreuung/betreuungskalender
-podman-compose --env-file .env -f compose.oidc.yml config
-podman-compose --env-file .env -f compose.oidc.yml up -d --build
-```
-
-In OIDC mode, `HOST_PORT` is the oauth2-proxy host port, not the app port. The
-app service has no host port and is reachable only through
-`http://betreuungskalender:3000` on the Compose network.
-
-For native OIDC without oauth2-proxy, use the direct `compose.yml` layout with
-`AUTH_MODE=native-oidc` and `TRUST_PROXY_AUTH=false`. Existing
-`compose.oidc.yml` installations should follow
-[native-oidc-migration-rollback.md](native-oidc-migration-rollback.md) so the
-trusted-proxy rollback path remains available until native login, role mapping,
-logout, and runtime verification pass in production.
+For native OIDC, use the direct `compose.yml` layout with
+`AUTH_MODE=native-oidc` and `TRUST_PROXY_AUTH=false`. For generic
+trusted-proxy mode, the operator must provide a separate authentication proxy
+and prevent direct client access to the application listener.
 
 Replace `X.Y.Z` with the package version, for example `1.5.0`, and `vX.Y.Z`
 with the matching release tag, for example `v1.5.0`.
@@ -177,18 +142,6 @@ recorded checksum. The archive contains the built frontend/backend, a minimal
 runtime `Dockerfile.release`, and the operational scripts. It does not contain
 `.env`, SQLite data, backups, exports, or secrets.
 
-The single-port OIDC Compose mode is supported only by release artifacts that
-contain all three OIDC deployment files:
-
-- `deploy/compose.oidc.yml`
-- `deploy/.env.oidc.example`
-- `deploy/oauth2-proxy.cfg.example`
-
-The published `v1.0.0-rc.1` archive was created before these files existed.
-Use `v1.0.0` or a newer verified release artifact for normal production OIDC
-deployment instead of mixing an older published runtime with deployment files
-copied from `main`.
-
 ## Promoted GHCR image update
 
 Published releases from `v1.2.0` onward may include a prebuilt runtime image in
@@ -200,9 +153,8 @@ ghcr.io/hackepeter87/betreuungskalender@sha256:<digest>
 ```
 
 The archive update tool does not switch a deployment to a GHCR image. It
-updates the archive-based Compose layout where `deploy/compose.yml` or
-`deploy/compose.oidc.yml` builds `Dockerfile.release` from the verified
-extracted release directory.
+updates the archive-based Compose layout where `deploy/compose.yml` builds
+`Dockerfile.release` from the verified extracted release directory.
 
 For image-based deployments, use `deploy/compose.testing.yml` or
 `deploy/compose.production.yml` and the promotion channels documented in

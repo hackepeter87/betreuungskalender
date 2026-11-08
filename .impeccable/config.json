@@ -1,3 +1,18 @@
 {
-  "buildPath": "comp"
+  "buildPath": "comp",
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "broken-image",
+        "value": "*",
+        "files": [
+          "scripts/documentation.test.ts"
+        ],
+        "createdAt": "2026-10-29T21:28:07.062Z",
+        "reason": "Static documentation-link parser regex, not rendered UI markup; false positive."
+      }
+    ]
+  }
 }
