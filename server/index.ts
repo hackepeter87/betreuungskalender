@@ -45,7 +45,12 @@ import { disableLocalDevelopmentIdentityAccess } from "./services/localDevelopme
 import { RuntimeMetrics, startMetricsListener } from "./metrics.js";
 import { omitUndefinedValues } from "../shared/objects.js";
 import { preventSensitiveResponseCaching } from "./httpProtection.js";
-import { createDemoModeBoundaryHook } from "./demoModePolicy.js";
+import {
+  createDemoModeBoundaryHook,
+  createDemoRequestLimitHook,
+  demoModeAllowsExternalSideEffects,
+  installDemoModeRoutePolicy
+} from "./demoModePolicy.js";
 
 const app = Fastify({
   logController: new LogController({
@@ -91,7 +96,10 @@ if (config.authMode !== "local") {
   await disableLocalDevelopmentIdentityAccess(persistence);
 }
 
-const nativeOidcSessions = new OidcSessionStore(persistence.query);
+const nativeOidcSessions = new OidcSessionStore(
+  persistence.query,
+  config.demoModeEnabled ? { maxActiveSessions: 20 } : {}
+);
 const recoveryAdmin = new RecoveryAdminStore({
   enabled: config.recoveryAdminEnabled,
   username: config.recoveryAdminUsername,
@@ -165,6 +173,7 @@ installRateLimitPolicy(app, {
   exportMax: config.rateLimitExportMax,
   timeWindowMs: config.rateLimitWindowMs
 });
+installDemoModeRoutePolicy(app, config.demoModeEnabled);
 
 await app.register(rateLimit, {
   global: true,
@@ -187,11 +196,19 @@ const apiAuthHook = createApiAuthHook(config, app.rateLimit(), {
   findRecoveryUserByToken: (token) => recoveryAdmin.findUserByToken(token)
 });
 // codeql[js/missing-rate-limiting]: createApiAuthHook receives app.rateLimit() and runs that Fastify rate-limit preHandler before authorization.
-app.addHook("preHandler", createDemoModeBoundaryHook(config.demoModeEnabled));
 app.addHook("preHandler", apiAuthHook);
+app.addHook("preHandler", createDemoRequestLimitHook({
+  enabled: config.demoModeEnabled,
+  sessionCookieName: config.sessionCookieName
+}));
+app.addHook("preHandler", createDemoModeBoundaryHook(config.demoModeEnabled));
 
 app.setErrorHandler((error, request, reply) => {
-  const normalized = error as Error & { code?: string; statusCode?: number };
+  const normalized = error as Error & {
+    code?: string;
+    statusCode?: number;
+    retryAfterSeconds?: number;
+  };
   const originDenied = normalized.message === "origin_not_allowed";
   const statusCode = originDenied ? 403 : normalized.statusCode ?? 500;
   const logCode = originDenied ? "origin_not_allowed" : safeErrorCode(normalized);
@@ -222,9 +239,18 @@ app.setErrorHandler((error, request, reply) => {
   }
   const code = normalized.code ?? "";
   if (code === "rate_limit_exceeded") {
+    if (normalized.retryAfterSeconds) {
+      reply.header("Retry-After", normalized.retryAfterSeconds);
+    }
     return reply.code(429).send({
       error: "rate_limit_exceeded",
       message: "Zu viele Anfragen. Bitte später erneut versuchen."
+    });
+  }
+  if (config.demoModeEnabled && code === "FST_ERR_CTP_BODY_TOO_LARGE") {
+    return reply.code(413).send({
+      error: "request_too_large",
+      message: "Die Anfrage ist zu groß."
     });
   }
   const databaseError = classifyDatabaseError(normalized);
@@ -489,7 +515,19 @@ async function runNotificationSweep(): Promise<void> {
   );
 }
 
-const confirmationSweep = setInterval(() => {
+if (demoModeAllowsExternalSideEffects(config.demoModeEnabled)) {
+  const confirmationSweep = setInterval(() => {
+    void runNotificationSweep().then(() => {
+      metrics.recordBackgroundJob("success");
+    }).catch((error) => {
+      metrics.recordBackgroundJob("failure");
+      app.log.warn({
+        event: "background.care-confirmation-sweep.failed",
+        code: safeErrorCode(error)
+      }, "care confirmation sweep failed");
+    });
+  }, 15 * 60 * 1000);
+  confirmationSweep.unref();
   void runNotificationSweep().then(() => {
     metrics.recordBackgroundJob("success");
   }).catch((error) => {
@@ -497,19 +535,9 @@ const confirmationSweep = setInterval(() => {
     app.log.warn({
       event: "background.care-confirmation-sweep.failed",
       code: safeErrorCode(error)
-    }, "care confirmation sweep failed");
+    }, "initial care confirmation sweep failed");
   });
-}, 15 * 60 * 1000);
-confirmationSweep.unref();
-void runNotificationSweep().then(() => {
-  metrics.recordBackgroundJob("success");
-}).catch((error) => {
-  metrics.recordBackgroundJob("failure");
-  app.log.warn({
-    event: "background.care-confirmation-sweep.failed",
-    code: safeErrorCode(error)
-  }, "initial care confirmation sweep failed");
-});
+}
 
 const frontendRoot = resolve(process.cwd(), "dist");
 if (existsSync(frontendRoot)) {

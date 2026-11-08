@@ -26,6 +26,7 @@ import {
   isContactRuleChangePreviewChangedError,
   previewContactRuleChange
 } from "../services/contactRuleChanges.js";
+import { isDemoDatasetLimitError } from "../services/demoModeLimits.js";
 import {
   contactRuleChangeApplySchema,
   contactRuleChangePreviewSchema,
@@ -108,6 +109,7 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
       });
       return reply.code(201).send(result);
     } catch (error) {
+      if (isDemoDatasetLimitError(error)) return reply.code(409).send({ error: error.code });
       if (isCarePartyAccessError(error)) {
         return reply.code(403).send({ error: "forbidden" });
       }
@@ -161,6 +163,7 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
         return { ...await getContactRule(request.params.id, database), syncSummary };
       });
     } catch (error) {
+      if (isDemoDatasetLimitError(error)) return reply.code(409).send({ error: error.code });
       if (isCarePartyAccessError(error)) {
         return reply.code(403).send({ error: "forbidden" });
       }
@@ -222,6 +225,7 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
       if (isContactRuleSyncPreviewChangedError(error)) {
         return reply.code(409).send({ error: "contact_rule_sync_preview_changed" });
       }
+      if (isDemoDatasetLimitError(error)) return reply.code(409).send({ error: error.code });
       if (isCarePartyAccessError(error)) {
         return reply.code(403).send({ error: "forbidden" });
       }
@@ -285,6 +289,7 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
       if (isContactRuleChangePreviewChangedError(error)) {
         return reply.code(409).send({ error: "contact_rule_change_preview_changed" });
       }
+      if (isDemoDatasetLimitError(error)) return reply.code(409).send({ error: error.code });
       if (isCarePartyAccessError(error)) return reply.code(403).send({ error: "forbidden" });
       return reply.code(400).send({ error: "invalid_contact_rule_change" });
     }

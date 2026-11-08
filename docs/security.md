@@ -146,7 +146,14 @@ documented projection of a versioned fictional seed; members, identities,
 email addresses, audit history, configuration, exports, and calendar-feed
 credentials are not part of that schema. If the seed proof is missing or
 invalid, the route fails closed instead of exposing the current database.
-Provider groups and roles do not establish demo membership.
+Provider groups and roles do not establish demo membership. Demo mode also
+blocks invitation, import, restore, transfer, public-feed, external-calendar,
+notification-channel, privacy-action, and technical-settings endpoints at the
+server boundary. Notification delivery jobs do not run. Request bodies,
+sessions, persisted care entries, and per-minute request rates are bounded;
+limits fail with generic responses and never evict an active session. Existing
+authentication, membership checks, trusted-proxy handling, and response
+redaction remain authoritative.
 
 Trusted-proxy authentication remains a supported alternative with a different
 trust boundary: only the configured, separately managed proxy may supply

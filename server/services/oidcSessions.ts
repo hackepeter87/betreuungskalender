@@ -9,6 +9,19 @@ export interface OidcSessionRecord {
   expiresAt: string;
 }
 
+export class OidcSessionLimitError extends Error {
+  readonly code = "demo_session_limit";
+  readonly statusCode = 429;
+
+  constructor() {
+    super("Die maximale Anzahl aktiver Demo-Sitzungen ist erreicht.");
+  }
+}
+
+export interface OidcSessionStoreOptions {
+  maxActiveSessions?: number;
+}
+
 function hashSessionToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
 }
@@ -27,7 +40,12 @@ export async function revokeOidcSessionsByExternalSubject(
 }
 
 export class OidcSessionStore {
-  constructor(private readonly database: DatabaseExecutor) {}
+  private creationGate: Promise<void> = Promise.resolve();
+
+  constructor(
+    private readonly database: DatabaseExecutor,
+    private readonly options: OidcSessionStoreOptions = {}
+  ) {}
 
   async create(
     externalSubject: string,
@@ -35,21 +53,41 @@ export class OidcSessionStore {
     now = new Date(),
     database: DatabaseExecutor = this.database
   ) {
-    await this.deleteExpired(now, database);
-    const token = randomBytes(32).toString("base64url");
-    const createdAt = now.toISOString();
-    const expiresAt = new Date(now.getTime() + ttlSeconds * 1000).toISOString();
-    const session = { id: randomUUID(), externalSubject, createdAt, expiresAt };
-    await database.insertInto("native_oidc_sessions").values({
-      id: session.id,
-      session_hash: hashSessionToken(token),
-      external_subject: externalSubject,
-      created_at: createdAt,
-      last_seen_at: null,
-      expires_at: expiresAt,
-      revoked_at: null
-    }).execute();
-    return { token, session };
+    const previous = this.creationGate;
+    let release!: () => void;
+    this.creationGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await previous;
+    try {
+      await this.deleteExpired(now, database);
+      if (this.options.maxActiveSessions !== undefined) {
+        const active = await database.selectFrom("native_oidc_sessions")
+          .select(({ fn }) => fn.countAll<number>().as("count"))
+          .where("revoked_at", "is", null)
+          .where("expires_at", ">", now.toISOString())
+          .executeTakeFirstOrThrow();
+        if (Number(active.count) >= this.options.maxActiveSessions) {
+          throw new OidcSessionLimitError();
+        }
+      }
+      const token = randomBytes(32).toString("base64url");
+      const createdAt = now.toISOString();
+      const expiresAt = new Date(now.getTime() + ttlSeconds * 1000).toISOString();
+      const session = { id: randomUUID(), externalSubject, createdAt, expiresAt };
+      await database.insertInto("native_oidc_sessions").values({
+        id: session.id,
+        session_hash: hashSessionToken(token),
+        external_subject: externalSubject,
+        created_at: createdAt,
+        last_seen_at: null,
+        expires_at: expiresAt,
+        revoked_at: null
+      }).execute();
+      return { token, session };
+    } finally {
+      release();
+    }
   }
 
   async findByToken(

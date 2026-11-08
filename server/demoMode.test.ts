@@ -1,12 +1,23 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import Fastify from "fastify";
+import Fastify, { type RouteOptions } from "fastify";
 import { createApiAuthHook } from "./authHook.js";
 import { createSqlitePersistenceRuntime } from "./db/runtime.js";
-import { createDemoModeBoundaryHook } from "./demoModePolicy.js";
+import {
+  applyDemoModeRoutePolicy,
+  createDemoModeBoundaryHook,
+  DemoRequestLimiter,
+  demoModeAllowsExternalSideEffects,
+  installDemoModeRoutePolicy,
+  isDemoModeRouteForbidden
+} from "./demoModePolicy.js";
 import { importData } from "./routes/appData.js";
 import { publicDemoRoutes } from "./routes/publicDemo.js";
 import { createEdgeCaseDemoData } from "./services/demoFixtures.js";
+import {
+  DemoDatasetLimitError,
+  assertDemoCareEntryCapacity
+} from "./services/demoModeLimits.js";
 import { DEMO_SEED_VERSION_SETTING } from "./services/publicDemoProjection.js";
 
 function authConfig() {
@@ -205,6 +216,137 @@ test("demo boundary keeps fictional master data immutable and disables owner boo
     }
   } finally {
     await app.close();
+    await persistence.close();
+  }
+});
+
+test("demo boundary blocks external side effects and administrative data movement", () => {
+  const blocked = [
+    ["POST", "/api/invitations"],
+    ["GET", "/invite"],
+    ["PUT", "/api/settings"],
+    ["POST", "/api/push-subscriptions"],
+    ["PUT", "/api/notification-preferences"],
+    ["POST", "/api/external-calendars/feed"],
+    ["GET", "/api/calendar-feed"],
+    ["GET", "/calendar/opaque-token"],
+    ["PUT", "/api/app-data"],
+    ["GET", "/api/data-transfer/export"],
+    ["POST", "/api/migration/legacy-import"],
+    ["POST", "/api/demo-data/edge-cases"],
+    ["POST", "/api/privacy-actions/execute"]
+  ] as const;
+  for (const [method, path] of blocked) {
+    assert.equal(isDemoModeRouteForbidden(method, path), true, `${method} ${path}`);
+  }
+
+  for (const [method, path] of [
+    ["GET", "/api/external-calendars"],
+    ["POST", "/api/care-entries"],
+    ["PUT", "/api/members/member-id/access"]
+  ] as const) {
+    assert.equal(isDemoModeRouteForbidden(method, path), false, `${method} ${path}`);
+  }
+});
+
+test("demo route policy bounds write bodies and preserves stricter route limits", () => {
+  const write = {
+    method: "POST",
+    url: "/api/care-entries",
+    config: { rateLimit: { max: 20, timeWindow: 60_000 } }
+  } as RouteOptions;
+  applyDemoModeRoutePolicy(write, true);
+  assert.equal(write.bodyLimit, 64 * 1024);
+  assert.deepEqual(write.config?.rateLimit, { max: 20, timeWindow: 60_000 });
+
+  const publicRead = {
+    method: "GET",
+    url: "/api/demo/public",
+    config: {}
+  } as RouteOptions;
+  applyDemoModeRoutePolicy(publicRead, true);
+  assert.deepEqual(publicRead.config?.rateLimit, { max: 60, timeWindow: 60_000 });
+
+  const disabled = {
+    method: "POST",
+    url: "/api/care-entries",
+    bodyLimit: 1024 * 1024,
+    config: {}
+  } as RouteOptions;
+  applyDemoModeRoutePolicy(disabled, false);
+  assert.equal(disabled.bodyLimit, 1024 * 1024);
+  assert.equal(disabled.config?.rateLimit, undefined);
+});
+
+test("demo write body limit is enforced by the real Fastify parser", async () => {
+  const app = Fastify({ logger: false, bodyLimit: 1024 * 1024 });
+  installDemoModeRoutePolicy(app, true);
+  app.post("/api/demo-write", async () => ({ ok: true }));
+  try {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/demo-write",
+      payload: { value: "x".repeat(64 * 1024) }
+    });
+    assert.equal(response.statusCode, 413);
+  } finally {
+    await app.close();
+  }
+});
+
+test("demo request limiter enforces global and per-session budgets with retry metadata", () => {
+  const limiter = new DemoRequestLimiter({
+    windowMs: 60_000,
+    publicReadGlobalMax: 2,
+    writeGlobalMax: 3,
+    writeSessionMax: 1,
+    loginGlobalMax: 1
+  });
+  const now = 1_000;
+
+  limiter.consume("public_read", undefined, now);
+  limiter.consume("public_read", undefined, now);
+  assert.throws(
+    () => limiter.consume("public_read", undefined, now),
+    (error: unknown) => {
+      assert.equal((error as { code?: string }).code, "rate_limit_exceeded");
+      assert.equal((error as { statusCode?: number }).statusCode, 429);
+      assert.equal((error as { retryAfterSeconds?: number }).retryAfterSeconds, 60);
+      return true;
+    }
+  );
+
+  limiter.consume("write", "session-a", now);
+  assert.throws(() => limiter.consume("write", "session-a", now), /Zu viele Anfragen/);
+  limiter.consume("write", "session-b", now);
+  assert.throws(() => limiter.consume("write", "session-c", now), /Zu viele Anfragen/);
+
+  limiter.consume("login", undefined, now);
+  assert.throws(() => limiter.consume("login", undefined, now), /Zu viele Anfragen/);
+  assert.doesNotThrow(() => limiter.consume("login", undefined, now + 60_000));
+});
+
+test("demo mode disables notification and delivery background effects", () => {
+  assert.equal(demoModeAllowsExternalSideEffects(true), false);
+  assert.equal(demoModeAllowsExternalSideEffects(false), true);
+});
+
+test("demo care entry capacity counts persisted rows and is disabled outside demo mode", async () => {
+  const persistence = await fixture();
+  try {
+    const result = await persistence.query.selectFrom("care_entries")
+      .select(({ fn }) => fn.countAll<number>().as("count"))
+      .executeTakeFirstOrThrow();
+    const currentCount = Number(result.count);
+
+    await assert.rejects(
+      assertDemoCareEntryCapacity(persistence.query, true, currentCount),
+      (error: unknown) => error instanceof DemoDatasetLimitError
+    );
+    await assert.doesNotReject(
+      assertDemoCareEntryCapacity(persistence.query, false, currentCount)
+    );
+  } finally {
     await persistence.close();
   }
 });

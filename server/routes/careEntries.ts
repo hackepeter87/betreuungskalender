@@ -43,6 +43,10 @@ import {
 } from "../services/careDataScopes.js";
 import { retireOpenCareConfirmationRequests } from "../services/careConfirmations.js";
 import {
+  assertDemoCareEntryCapacity,
+  isDemoDatasetLimitError
+} from "../services/demoModeLimits.js";
+import {
   careConflictPreviewInputSchema,
   careEntryInputSchema,
   schedulerCareEntryInputSchema
@@ -864,6 +868,7 @@ async function persistEntry(
       await retireOpenCareConfirmationRequests(database, id, timestamp);
     }
   } else {
+    await assertDemoCareEntryCapacity(database, config.demoModeEnabled);
     await database.insertInto("care_entries").values({
       id,
       generated_by_pattern_id: input.generatedByPatternId ?? null,
@@ -1246,6 +1251,9 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
         ? await getScheduleEntry(app.persistence.query, id, request.user)
         : created);
     } catch (error) {
+      if (isDemoDatasetLimitError(error)) {
+        return reply.code(409).send({ error: error.code });
+      }
       if (isCarePartyAccessError(error)) {
         return reply.code(403).send({ error: "forbidden" });
       }
