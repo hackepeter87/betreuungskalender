@@ -137,64 +137,69 @@ function NotificationPreferencesSection() {
           <h2>{copy(locale, "notifications", "title")}</h2>
           <p>{copy(locale, "notifications", "description")}</p>
         </div>
+      </div>
+      <div className="settings-toggle-row notification-delivery-status" data-testid="notification-delivery-status">
+        <span>
+          <strong>{copy(locale, "notifications", "deliveryTitle")}</strong>
+          <small>
+            {notificationPreferences?.pushAvailable
+              ? copy(locale, "notifications", "pushActive", { count: notificationPreferences.activePushSubscriptions })
+              : copy(locale, "notifications", "pushUnavailable")}
+          </small>
+          {showEmailPreferences && !notificationPreferences?.emailRecipientAvailable ? (
+            <small role="status">{copy(locale, "notifications", "emailRecipientUnavailable")}</small>
+          ) : null}
+        </span>
         <button className="button button--secondary" type="button" disabled={!canManageNotifications || isSaving || !notificationPreferences?.pushAvailable} onClick={() => void registerPushSubscription()}>
           <Icon name="bell" size={17} />
           {copy(locale, "notifications", "enablePush")}
         </button>
       </div>
-      <div className="notification-rules">
-        <p><strong>{copy(locale, "notifications", "whenTitle")}</strong>{copy(locale, "notifications", "whenDescription")}</p>
-        <p><strong>{copy(locale, "notifications", "editableTitle")}</strong>{copy(locale, "notifications", catalogKey("notifications", showEmailPreferences ? "editableDescriptionWithEmail" : "editableDescription"))}</p>
-      </div>
-      <div className={`notification-preferences-table${showEmailPreferences ? " notification-preferences-table--email" : ""}`}>
-        <div className="notification-preferences-row notification-preferences-row--head">
-          <span>{copy(locale, "notifications", "event")}</span>
-          <span>{copy(locale, "notifications", "inApp")}</span>
-          <span className="notification-preferences-row__channel">
-            {copy(locale, "notifications", "push")}
-            <FieldHelpButton fieldId="settings.notificationChannels" showRequirement={false} />
-          </span>
-          {showEmailPreferences ? <span>{copy(locale, "notifications", "email")}</span> : null}
+      <div className="notification-event-preferences" data-testid="notification-event-preferences">
+        <div className="notification-rules">
+          <span><strong>{copy(locale, "notifications", "whenTitle")}</strong>{copy(locale, "notifications", "whenDescription")}</span>
+          <span><strong>{copy(locale, "notifications", "editableTitle")}</strong>{copy(locale, "notifications", catalogKey("notifications", showEmailPreferences ? "editableDescriptionWithEmail" : "editableDescription"))}</span>
         </div>
-        {preferences.map((preference) => (
-          <div className="notification-preferences-row" key={preference.eventType}>
-            <strong>{notificationEventLabel(preference.eventType, locale)}</strong>
-            <span className="status-pill status-pill--ok">{copy(locale, "common", "yes")}</span>
-            <label className="toggle toggle--compact">
-              <input
-                type="checkbox"
-                aria-label={`${notificationEventLabel(preference.eventType, locale)}: ${copy(locale, "notifications", "push")}`}
-                checked={preference.pushEnabled}
-                disabled={!canManageNotifications || isSaving}
-                onChange={(event) => patchPreference(preference.eventType, { pushEnabled: event.target.checked })}
-              />
-              <span />
-            </label>
-            {showEmailPreferences ? (
+        <div className={`notification-preferences-table${showEmailPreferences ? " notification-preferences-table--email" : ""}`}>
+          <div className="notification-preferences-row notification-preferences-row--head">
+            <span>{copy(locale, "notifications", "event")}</span>
+            <span>{copy(locale, "notifications", "inApp")}</span>
+            <span className="notification-preferences-row__channel">
+              {copy(locale, "notifications", "push")}
+              <FieldHelpButton fieldId="settings.notificationChannels" showRequirement={false} />
+            </span>
+            {showEmailPreferences ? <span>{copy(locale, "notifications", "email")}</span> : null}
+          </div>
+          {preferences.map((preference) => (
+            <div className="notification-preferences-row" key={preference.eventType}>
+              <strong>{notificationEventLabel(preference.eventType, locale)}</strong>
+              <span className="status-pill status-pill--ok">{copy(locale, "common", "yes")}</span>
               <label className="toggle toggle--compact">
                 <input
                   type="checkbox"
-                  aria-label={`${notificationEventLabel(preference.eventType, locale)}: ${copy(locale, "notifications", "email")}`}
-                  checked={preference.emailEnabled}
-                  disabled={!canManageNotifications || isSaving || !notificationPreferences?.emailRecipientAvailable}
-                  onChange={(event) => patchPreference(preference.eventType, { emailEnabled: event.target.checked })}
+                  aria-label={`${notificationEventLabel(preference.eventType, locale)}: ${copy(locale, "notifications", "push")}`}
+                  checked={preference.pushEnabled}
+                  disabled={!canManageNotifications || isSaving}
+                  onChange={(event) => patchPreference(preference.eventType, { pushEnabled: event.target.checked })}
                 />
                 <span />
               </label>
-            ) : null}
-          </div>
-        ))}
+              {showEmailPreferences ? (
+                <label className="toggle toggle--compact">
+                  <input
+                    type="checkbox"
+                    aria-label={`${notificationEventLabel(preference.eventType, locale)}: ${copy(locale, "notifications", "email")}`}
+                    checked={preference.emailEnabled}
+                    disabled={!canManageNotifications || isSaving || !notificationPreferences?.emailRecipientAvailable}
+                    onChange={(event) => patchPreference(preference.eventType, { emailEnabled: event.target.checked })}
+                  />
+                  <span />
+                </label>
+              ) : null}
+            </div>
+          ))}
+        </div>
       </div>
-      <p className="settings-note">
-        {notificationPreferences?.pushAvailable
-          ? copy(locale, "notifications", "pushActive", { count: notificationPreferences.activePushSubscriptions })
-          : copy(locale, "notifications", "pushUnavailable")}
-      </p>
-      {showEmailPreferences && !notificationPreferences?.emailRecipientAvailable ? (
-        <p className="settings-note" role="status">
-          {copy(locale, "notifications", "emailRecipientUnavailable")}
-        </p>
-      ) : null}
     </section>
   );
 }
@@ -829,65 +834,75 @@ function CalendarFeedManager() {
         </div>
       </div>
       <div className="calendar-feed-content" data-testid="calendar-feed-content">
-        <div className="calendar-feed-status">
-          <span className={`status-pill ${status.active ? "status-pill--ok" : ""}`}>
-            {status.active && status.createdAt
-              ? copy(locale, "calendarFeed", "active", {
-                  date: formatDateTime(status.createdAt, intlLocale)
-                })
-              : status.state === "revoked"
-                ? copy(locale, "calendarFeed", "revoked")
-              : copy(locale, "calendarFeed", "inactive")}
-          </span>
-          <small>
-            {status.lastUsedAt
-              ? copy(locale, "calendarFeed", "lastUsed", {
-                  date: formatDateTime(status.lastUsedAt, intlLocale)
-                })
-              : copy(locale, "calendarFeed", "neverUsed")}
-          </small>
-        </div>
-        <label className="field calendar-feed-scope-field">
-          <FieldHelpLabel fieldId="calendarFeed.scope">
-            {copy(locale, "calendarFeed", "scopeLabel")}
-          </FieldHelpLabel>
-          <select
-            data-testid="calendar-feed-scope"
-            value={selectedScope}
-            onChange={(event) => {
-              setSelectedScope(event.target.value as ApiCalendarFeedScope);
-              setMessage(null);
-            }}
-          >
-            {scopeOptions.map((option) => (
-              <option key={option.scope} value={option.scope}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </label>
-        {status.feedUrl ? (
-          <div className="calendar-feed-url">
-            <input readOnly value={status.feedUrl} data-testid="calendar-feed-url" />
-            <button className="button button--secondary" type="button" onClick={() => void copyUrl()}>
-              <Icon name="copy" size={17} />
-              {copy(locale, "calendarFeed", "copy")}
+        <section className="calendar-feed-group" data-testid="calendar-feed-status-group">
+          <h3>{copy(locale, "calendarFeed", "statusTitle")}</h3>
+          <div className="calendar-feed-status data-actions">
+            <span className={`status-pill ${status.active ? "status-pill--ok" : ""}`}>
+              {status.active && status.createdAt
+                ? copy(locale, "calendarFeed", "active", {
+                    date: formatDateTime(status.createdAt, intlLocale)
+                  })
+                : status.state === "revoked"
+                  ? copy(locale, "calendarFeed", "revoked")
+                : copy(locale, "calendarFeed", "inactive")}
+            </span>
+            <small>
+              {status.lastUsedAt
+                ? copy(locale, "calendarFeed", "lastUsed", {
+                    date: formatDateTime(status.lastUsedAt, intlLocale)
+                  })
+                : copy(locale, "calendarFeed", "neverUsed")}
+            </small>
+          </div>
+          <p className="settings-note">{copy(locale, "calendarFeed", "refreshHint")}</p>
+        </section>
+        <section className="calendar-feed-group" data-testid="calendar-feed-scope-group">
+          <h3>{copy(locale, "calendarFeed", "scopeTitle")}</h3>
+          <label className="field calendar-feed-scope-field">
+            <FieldHelpLabel fieldId="calendarFeed.scope">
+              {copy(locale, "calendarFeed", "scopeLabel")}
+            </FieldHelpLabel>
+            <select
+              data-testid="calendar-feed-scope"
+              value={selectedScope}
+              onChange={(event) => {
+                setSelectedScope(event.target.value as ApiCalendarFeedScope);
+                setMessage(null);
+              }}
+            >
+              {scopeOptions.map((option) => (
+                <option key={option.scope} value={option.scope}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <p className="settings-note">{copy(locale, "calendarFeed", "scope")}</p>
+        </section>
+        <section className="calendar-feed-group" data-testid="calendar-feed-link-group">
+          <h3>{copy(locale, "calendarFeed", "linkTitle")}</h3>
+          {status.feedUrl ? (
+            <div className="calendar-feed-url">
+              <input readOnly value={status.feedUrl} data-testid="calendar-feed-url" aria-label={copy(locale, "calendarFeed", "linkTitle")} />
+              <button className="button button--secondary" type="button" onClick={() => void copyUrl()}>
+                <Icon name="copy" size={17} />
+                {copy(locale, "calendarFeed", "copy")}
+              </button>
+            </div>
+          ) : status.active ? (
+            <p className="empty-copy">{copy(locale, "calendarFeed", "notAvailable")}</p>
+          ) : null}
+          <div className="data-actions">
+            <button className="button button--primary" type="button" data-testid="calendar-feed-rotate" disabled={!canManageFeed || busy} onClick={() => void rotate()}>
+              <Icon name="calendar" size={17} />
+              {status.active ? copy(locale, "calendarFeed", "rotate") : copy(locale, "calendarFeed", "generate")}
+            </button>
+            <button className="button button--danger-quiet" type="button" data-testid="calendar-feed-revoke" disabled={!canManageFeed || busy || !status.active} onClick={() => void revoke()}>
+              <Icon name="trash" size={17} />
+              {copy(locale, "calendarFeed", "revoke")}
             </button>
           </div>
-        ) : status.active ? (
-          <p className="empty-copy">{copy(locale, "calendarFeed", "notAvailable")}</p>
-        ) : null}
-        <p className="settings-note">{copy(locale, "calendarFeed", "scope")}</p>
-        <div className="data-actions">
-          <button className="button button--primary" type="button" data-testid="calendar-feed-rotate" disabled={!canManageFeed || busy} onClick={() => void rotate()}>
-            <Icon name="calendar" size={17} />
-            {status.active ? copy(locale, "calendarFeed", "rotate") : copy(locale, "calendarFeed", "generate")}
-          </button>
-          <button className="button button--danger-quiet" type="button" data-testid="calendar-feed-revoke" disabled={!canManageFeed || busy || !status.active} onClick={() => void revoke()}>
-            <Icon name="trash" size={17} />
-            {copy(locale, "calendarFeed", "revoke")}
-          </button>
-        </div>
+        </section>
         {message ? <p className="inline-message" role="status">{message}</p> : null}
         {error ? <p className="form-error" role="alert">{error}</p> : null}
       </div>
@@ -900,12 +915,13 @@ function InstanceReadinessSection() {
   const { session } = useAppStore();
   const [readiness, setReadiness] = useState<ApiInstanceReadiness | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
   const canInspectInstance = session.permissions
     ? session.permissions.includes("instance:inspect")
     : true;
 
   useEffect(() => {
-    if (!canInspectInstance) return;
+    if (!canInspectInstance || !expanded || readiness) return;
     let cancelled = false;
     api.getInstanceReadiness()
       .then((next) => {
@@ -920,7 +936,7 @@ function InstanceReadinessSection() {
     return () => {
       cancelled = true;
     };
-  }, [canInspectInstance, locale]);
+  }, [canInspectInstance, expanded, locale, readiness]);
 
   if (!canInspectInstance) return null;
 
@@ -935,14 +951,15 @@ function InstanceReadinessSection() {
     : [];
 
   return (
-    <section className="panel settings-section" data-testid="instance-readiness">
-      <div className="panel__header panel__header--compact">
+    <details className="panel settings-section instance-readiness" data-testid="instance-readiness" open={expanded} onToggle={(event) => setExpanded(event.currentTarget.open)}>
+      <summary className="panel__header panel__header--compact instance-readiness-summary" data-testid="instance-readiness-toggle">
         <div>
           <h2>{copy(locale, "settings", "instanceReadiness")}</h2>
           <p>{copy(locale, "settings", "instanceReadinessDescription")}</p>
         </div>
-      </div>
-      {readiness ? (
+        <Icon name={expanded ? "close" : "plus"} size={17} />
+      </summary>
+      {readiness && expanded ? (
         <div className="instance-readiness-grid">
           <div className="readiness-item">
             <small>{copy(locale, "settings", "appVersion")}</small>
@@ -998,7 +1015,7 @@ function InstanceReadinessSection() {
         <p className="empty-copy empty-copy--padded">{error ?? "..."}</p>
       )}
       {error && readiness ? <p className="form-error" role="alert">{error}</p> : null}
-    </section>
+    </details>
   );
 }
 
@@ -1136,8 +1153,6 @@ export function SettingsPage() {
       </section>
 
       {canManageNotifications ? <NotificationPreferencesSection /> : null}
-
-      <InstanceReadinessSection />
 
       <MemberInvitationManager />
 
@@ -1336,6 +1351,8 @@ export function SettingsPage() {
       {canViewPlanning ? <ExternalCalendarManager /> : null}
 
       {canManageFeeds ? <CalendarFeedManager /> : null}
+
+      <InstanceReadinessSection />
 
       {canManageChildren && editingChild ? (
         <Modal title={editingChild === "new" ? copy(locale, "settings", "addChild") : copy(locale, "settings", "editChild")} onClose={() => setEditingChild(null)}>

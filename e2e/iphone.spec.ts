@@ -604,6 +604,8 @@ test("keeps critical mobile pages within the viewport", async ({
   const notificationPreferences = page.getByTestId("notification-preferences");
   await notificationPreferences.scrollIntoViewIfNeeded();
   await expect(notificationPreferences).toBeVisible();
+  await expect(notificationPreferences.getByTestId("notification-delivery-status")).toBeVisible();
+  await expect(notificationPreferences.getByTestId("notification-event-preferences")).toBeVisible();
   await expect(notificationPreferences).not.toContainText("E-Mail");
   await expect(notificationPreferences).not.toContainText("Email");
   await expect(notificationPreferences).not.toContainText("SMTP");
@@ -628,6 +630,9 @@ test("keeps critical mobile pages within the viewport", async ({
   await calendarFeedManager.getByTestId("calendar-feed-scope").selectOption(`party:${party.id}`);
   await calendarFeedManager.getByTestId("calendar-feed-rotate").click();
   await expect(calendarFeedManager).toContainText("Feed aktiv seit");
+  await expect(calendarFeedManager.getByTestId("calendar-feed-status-group")).toContainText("stündliche Aktualisierung");
+  await expect(calendarFeedManager.getByTestId("calendar-feed-scope-group")).toBeVisible();
+  await expect(calendarFeedManager.getByTestId("calendar-feed-link-group")).toBeVisible();
   const calendarFeedManagerBox = await calendarFeedManager.boundingBox();
   expect(calendarFeedManagerBox).toBeTruthy();
   for (const feedElementSelector of [

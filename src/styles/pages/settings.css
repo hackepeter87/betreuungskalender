@@ -171,20 +171,21 @@
   padding: 4px;
 }
 
-.calendar-feed-status {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 0 18px 12px;
+.calendar-feed-group {
+  display: grid;
+  gap: 12px;
+  padding: 16px 18px;
+  border-top: 1px solid var(--line);
 }
 
 .calendar-feed-content {
   max-width: 960px;
 }
 
-.calendar-feed-scope-field {
-  padding: 0 18px;
+.calendar-feed-group h3 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 0.76rem;
 }
 
 .calendar-feed-status small,
@@ -200,7 +201,6 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 10px;
-  padding: 0 18px 12px;
 }
 
 .calendar-feed-url input {
@@ -212,6 +212,11 @@
 .settings-note {
   margin: 0;
   padding: 0 18px;
+}
+
+.calendar-feed-group .settings-note,
+.calendar-feed-group .data-actions {
+  padding: 0;
 }
 
 .settings-toggle-row {
@@ -238,6 +243,10 @@
   padding: var(--panel-padding);
 }
 
+.instance-readiness-summary {
+  cursor: pointer;
+}
+
 .readiness-pills {
   display: flex;
   flex-wrap: wrap;
@@ -258,19 +267,11 @@
 .notification-rules {
   display: grid;
   gap: 8px;
-  padding: 0 18px 14px;
+  padding: 14px 18px;
   color: var(--muted);
   font-size: 0.69rem;
   font-weight: 700;
   line-height: 1.45;
-}
-
-.notification-rules p {
-  margin: 0;
-}
-
-.notification-rules strong {
-  color: var(--ink);
 }
 
 .notification-preferences-row {
