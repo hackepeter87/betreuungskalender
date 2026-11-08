@@ -3,7 +3,7 @@
 ## Prerequisites
 
 - Current Debian or Ubuntu LXC
-- Node.js 24.15 or newer in the supported LTS line and npm 12
+- Node.js 26.13 or newer in the supported LTS line and npm 12.2.2 or newer
 - A dedicated unprivileged system account
 - TLS and authentication handled by a reverse proxy
 

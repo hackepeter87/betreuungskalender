@@ -115,7 +115,7 @@ unintentionally.
   and writes intentionally have stricter limits than normal API reads. Client
   identities used for limits are normalized and represented by bounded,
   server-generated keys; raw forwarded values are not used as keys.
-- Keep the host, minimal Node.js 24 runtime, npm build toolchain, proxy, Keycloak,
+- Keep the host, minimal Node.js 26 runtime, npm build toolchain, proxy, Keycloak,
   and container images updated.
 
 Native OIDC handles authentication directly. The callback

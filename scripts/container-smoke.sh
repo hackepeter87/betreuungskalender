@@ -8,7 +8,7 @@ metrics_container="betreuungskalender-metrics-smoke-${suffix}"
 volume="betreuungskalender-smoke-data-${suffix}"
 metrics_volume="betreuungskalender-metrics-smoke-data-${suffix}"
 dockerfile="${DOCKERFILE:-Dockerfile}"
-expected_node_version="${EXPECTED_NODE_VERSION:-24.22.1}"
+expected_node_version="${EXPECTED_NODE_VERSION:-26.13.0}"
 legal_dir="$(mktemp -d)"
 metrics_dir="$(mktemp -d)"
 

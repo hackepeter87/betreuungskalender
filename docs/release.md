@@ -15,10 +15,15 @@ git status
 npm ci
 ```
 
-GitHub Actions uses Node.js 24.22.1 LTS with npm 12.2.1 and follows the same
+GitHub Actions uses Node.js 26.13.0 LTS with npm 12.2.2 and follows the same
 non-interactive sequence: `npm ci`, `npm run release:check`, and
 `npm run build`. The frontend is built with Vite through the package script;
 Webpack is not part of the build.
+
+For `v1.36.0` only, tag validation also runs a bounded Node.js 24 rollback
+compatibility job. It verifies installation, type checking, build, core tests,
+server startup, SQLite backup, and restore. This is rollback evidence for the
+runtime transition, not a second supported production baseline.
 
 ## 3. Set the version
 

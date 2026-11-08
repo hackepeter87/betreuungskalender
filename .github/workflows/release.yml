@@ -18,10 +18,10 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 24.22.1
+          node-version: 26.13.0
           cache: npm
 
-      - run: npm install --global npm@12.2.1
+      - run: npm install --global npm@12.2.2
 
       - run: npm ci
 
@@ -64,3 +64,53 @@ jobs:
             artifacts/compliance/THIRD_PARTY_NOTICES.md
           if-no-files-found: error
           retention-days: 14
+
+  node24-rollback-compatibility:
+    name: Node 24 rollback compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24.22.1
+          cache: npm
+      - run: npm install --global npm@12.2.2
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run build
+      - run: npm test
+      - name: Verify startup, backup, and restore on Node.js 24
+        shell: bash
+        run: |
+          set -euo pipefail
+          workdir="$(mktemp -d)"
+          server_pid=""
+          cleanup() {
+            if [[ -n "$server_pid" ]]; then kill "$server_pid" >/dev/null 2>&1 || true; fi
+            rm -rf "$workdir"
+          }
+          trap cleanup EXIT
+
+          export AUTH_MODE=local
+          export REQUIRE_AUTH=false
+          export TRUST_PROXY_AUTH=false
+          export ALLOWED_ORIGIN=http://127.0.0.1:3198
+          export HOST=127.0.0.1
+          export PORT=3198
+          export HEALTHCHECK_URL=http://127.0.0.1:3198/api/health
+          export DATABASE_PATH="$workdir/app.sqlite"
+          export BACKUP_DIR="$workdir/backups"
+          export NODE_ENV=production
+
+          node dist-server/server/index.js >"$workdir/server.log" 2>&1 &
+          server_pid=$!
+          for attempt in $(seq 1 30); do
+            if node scripts/healthcheck.js; then break; fi
+            if [[ "$attempt" == "30" ]]; then
+              echo "Node.js 24 rollback server did not become healthy." >&2
+              exit 1
+            fi
+            sleep 1
+          done
+          node scripts/backup.js
+          node scripts/restore-check.js

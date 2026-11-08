@@ -562,9 +562,9 @@ function checkDeploymentExamples(cwd, version, report) {
 
   const dockerfiles = `${dockerfile}\n${releaseDockerfile}`;
   const buildImage =
-    "node:24.22.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205";
+    "node:26.13.0-bookworm-slim@sha256:add5c17c14752c54d2f3d519ec46a3815684d41c33f198bcb09fb998f7dcbf68";
   const runtimeImage =
-    "gcr.io/distroless/nodejs24-debian13:nonroot@sha256:cb606325b7ec4af55462cb0b424a53b452a5b4a894ffe841fcf1048d216fb9f8";
+    "gcr.io/distroless/nodejs26-debian13:nonroot@sha256:9b945e92c1b5463a4b75f11e8417515e4bea7355f6adfd79ec220fbbe905dda8";
   const runtimeStages = [dockerfile, releaseDockerfile].map((content) =>
     content.slice(content.lastIndexOf(" AS runtime"))
   );
@@ -573,9 +573,9 @@ function checkDeploymentExamples(cwd, version, report) {
     !releaseDockerfile.includes(`FROM ${buildImage} AS production-deps`) ||
     !dockerfile.includes(`FROM ${runtimeImage} AS runtime`) ||
     !releaseDockerfile.includes(`FROM ${runtimeImage} AS runtime`) ||
-    !dockerfiles.includes("npm install -g npm@12.2.1")
+    !dockerfiles.includes("npm install -g npm@12.2.2")
   ) {
-    report.fail("Dockerfiles must use the pinned Node.js 24 build toolchain and minimal runtime image");
+    report.fail("Dockerfiles must use the pinned Node.js 26 build toolchain and minimal runtime image");
   } else if (
     runtimeStages.some((stage) => stage.includes("npm install") || stage.includes("bookworm-slim")) ||
     dockerfiles.includes('CMD ["npm", "run", "start"]') ||
@@ -586,7 +586,7 @@ function checkDeploymentExamples(cwd, version, report) {
       "Runtime stages must exclude npm and start the server and healthcheck directly with Node.js"
     );
   } else {
-    report.pass("Dockerfiles use a pinned minimal Node.js 24 runtime without npm");
+    report.pass("Dockerfiles use a pinned minimal Node.js 26 runtime without npm");
   }
 
   const nativeInstallRequired = [
