@@ -21,6 +21,7 @@ jobs:
       - run: npm install --global npm@12.2.1
       - run: npm ci
       - run: npm audit
+      - run: npm run compliance:check
       - run: npm run release:check
       - run: npm run test:docs
       - run: npm run lint
