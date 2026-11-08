@@ -41,6 +41,17 @@
     grid-template-columns: minmax(0, 1fr) 96px minmax(0, 1fr);
   }
 
+  .child-settings-row--external-source .child-settings-row__actions {
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .child-settings-row--external-source .toggle,
+  .child-settings-row--external-source .field--compact,
+  .child-settings-row--external-source .button {
+    width: 100%;
+  }
+
   .holiday-derive-form {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -145,13 +156,6 @@
     align-items: start;
     gap: 6px;
     padding: 10px 14px 8px;
-  }
-
-  .settings-section--calendar-feed .field-help-button {
-    width: 28px;
-    min-width: 28px;
-    height: 28px;
-    min-height: 28px;
   }
 
   .calendar-feed-scope-field .field-label-row {

@@ -194,26 +194,40 @@
 
 .field-help-button {
   align-items: center;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 999px;
+  background: transparent;
+  border: 0;
   color: var(--teal);
   cursor: pointer;
   display: inline-flex;
+  height: 44px;
+  justify-content: center;
+  min-height: 44px;
+  min-width: 44px;
+  padding: 0;
+  width: 44px;
+}
+
+.field-help-button__visual {
+  align-items: center;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  display: inline-flex;
   height: 28px;
   justify-content: center;
-  min-height: 28px;
-  min-width: 28px;
-  padding: 0;
   width: 28px;
 }
 
-.field-help-button:hover,
-.field-help-button:focus-visible {
+.field-help-button:hover .field-help-button__visual,
+.field-help-button:focus-visible .field-help-button__visual {
   background: var(--teal-soft);
   border-color: var(--teal);
+}
+
+.field-help-button:focus-visible {
   outline: 3px solid var(--color-focus-ring-control);
   outline-offset: 2px;
+  border-radius: 999px;
 }
 
 .requirement-badge {
@@ -247,12 +261,8 @@
 }
 
 .field-help-backdrop {
-  align-items: center;
-  background: var(--color-overlay-backdrop);
-  display: flex;
+  background: transparent;
   inset: 0;
-  justify-content: center;
-  padding: 1.25rem;
   position: fixed;
   z-index: 1200;
 }
@@ -260,13 +270,12 @@
 .field-help-dialog {
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 20px;
+  border-radius: 12px;
   box-shadow: var(--shadow-dialog);
-  max-height: min(760px, calc(100dvh - 2.5rem));
-  max-width: 620px;
+  max-width: 420px;
   overflow-y: auto;
-  padding: 1.35rem;
-  width: 100%;
+  padding: 1rem;
+  position: fixed;
 }
 
 .field-help-dialog__header {
@@ -277,56 +286,33 @@
 }
 
 .field-help-dialog__header h2 {
-  font-size: 1.35rem;
+  font-size: 1rem;
   margin: 0.45rem 0 0;
 }
 
 .field-help-dialog__summary {
   color: var(--ink);
-  font-size: 1.02rem;
+  font-size: 0.86rem;
   font-weight: 650;
-  line-height: 1.55;
-  margin: 1rem 0;
-}
-
-.field-help-details {
-  display: grid;
-  gap: 0.85rem;
-  margin: 0;
-}
-
-.field-help-details > div {
-  background: var(--surface-soft);
-  border-radius: 12px;
-  padding: 0.8rem 0.9rem;
-}
-
-.field-help-details dt {
-  color: var(--ink);
-  font-size: 0.78rem;
-  font-weight: 800;
-  letter-spacing: 0.03em;
-  margin-bottom: 0.25rem;
-  text-transform: uppercase;
-}
-
-.field-help-details dd {
-  color: var(--muted);
   line-height: 1.5;
-  margin: 0;
+  margin: 0.85rem 0 0;
 }
 
-.field-help-details ul {
-  margin: 0;
+.field-help-dialog__guidance,
+.field-help-dialog__points,
+.field-help-dialog__example {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.5;
+  margin: 0.65rem 0 0;
+}
+
+.field-help-dialog__points {
   padding-left: 1.15rem;
 }
 
-.field-help-dialog__notice {
-  border-top: 1px solid var(--line);
-  color: var(--muted);
-  font-size: 0.82rem;
-  margin: 1rem 0 0;
-  padding-top: 0.9rem;
+.field-help-dialog__example strong {
+  color: var(--ink);
 }
 
 .action-with-help {

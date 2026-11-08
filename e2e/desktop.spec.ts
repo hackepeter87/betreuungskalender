@@ -126,6 +126,8 @@ test("shows email notification preferences only with server capability", async (
   await openApp(page);
   await navigate(page, "settings");
   const preferences = page.getByTestId("notification-preferences");
+  await expect(preferences).toContainText("Erneute Erinnerung nach 4 Stunden");
+  await expect(preferences).toContainText("In 4 Stunden erinnern");
   const dueEmail = preferences.getByRole("checkbox", { name: "Betreuung bestätigen: E-Mail" });
   await expect(dueEmail).toBeDisabled();
   await expect(preferences.getByText(/keine verwendbare E-Mail-Adresse/)).toBeVisible();

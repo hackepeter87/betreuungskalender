@@ -1,4 +1,4 @@
-import { useCallback, useId, useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useCallback, useId, useRef, useState, type CSSProperties, type MouseEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import {
   getFieldHelp,
@@ -28,6 +28,7 @@ export function FieldHelpButton({
   const { locale } = useI18n();
   const { helpIconsVisible } = useHelpPreferences();
   const [open, setOpen] = useState(false);
+  const [position, setPosition] = useState<CSSProperties>();
   const titleId = useId();
   const help = getFieldHelp(fieldId);
   const triggerRef = useRef<HTMLButtonElement>(null);
@@ -57,10 +58,26 @@ export function FieldHelpButton({
           onClick={(event) => {
             stopLabelToggle(event);
             event.currentTarget.focus();
+            if (window.innerWidth >= 768) {
+              const rect = event.currentTarget.getBoundingClientRect();
+              const width = Math.min(420, window.innerWidth - 24);
+              const estimatedHeight = 300;
+              const top = rect.bottom + 8 + estimatedHeight <= window.innerHeight
+                ? rect.bottom + 8
+                : Math.max(12, rect.top - estimatedHeight - 8);
+              setPosition({
+                left: Math.min(window.innerWidth - width - 12, Math.max(12, rect.right - width)),
+                top,
+                maxHeight: window.innerHeight - top - 12,
+                width
+              });
+            } else {
+              setPosition(undefined);
+            }
             setOpen(true);
           }}
         >
-          <Icon name="info" size={16} />
+          <span className="field-help-button__visual"><Icon name="info" size={16} /></span>
         </button>
       </span>
 
@@ -74,6 +91,7 @@ export function FieldHelpButton({
               <section
                 ref={dialogRef}
                 className="field-help-dialog"
+                style={position}
                 role="dialog"
                 aria-modal="true"
                 aria-labelledby={titleId}
@@ -102,48 +120,19 @@ export function FieldHelpButton({
 
                 <p className="field-help-dialog__summary">{help.shortHelp}</p>
 
-                <dl className="field-help-details">
-                  <div>
-                    <dt>{copy(locale, "fieldHelp", "why")}</dt>
-                    <dd>{help.whyRelevant}</dd>
-                  </div>
-                  <div>
-                    <dt>{copy(locale, "fieldHelp", "usage")}</dt>
-                    <dd>{help.usedFor}</dd>
-                  </div>
-                  <div>
-                    <dt>{copy(locale, "fieldHelp", "guidance")}</dt>
-                    <dd>{help.inputGuidance}</dd>
-                  </div>
-                  {help.commonMistakes?.length ? (
-                    <div>
-                      <dt>{copy(locale, "fieldHelp", "mistakes")}</dt>
-                      <dd>
-                        <ul>
-                          {help.commonMistakes.map((mistake) => (
-                            <li key={mistake}>{mistake}</li>
-                          ))}
-                        </ul>
-                      </dd>
-                    </div>
-                  ) : null}
-                  {help.examples?.length ? (
-                    <div>
-                      <dt>{copy(locale, "fieldHelp", "example")}</dt>
-                      <dd>{help.examples.join(" · ")}</dd>
-                    </div>
-                  ) : null}
-                  {help.relatedReportSection ? (
-                    <div>
-                      <dt>{copy(locale, "fieldHelp", "reportLink")}</dt>
-                      <dd>{help.relatedReportSection}</dd>
-                    </div>
-                  ) : null}
-                </dl>
-
-                <p className="field-help-dialog__notice">
-                  {copy(locale, "fieldHelp", "notice")}
-                </p>
+                {help.inputGuidance !== help.shortHelp ? (
+                  <p className="field-help-dialog__guidance">{help.inputGuidance}</p>
+                ) : null}
+                {help.commonMistakes?.length ? (
+                  <ul className="field-help-dialog__points">
+                    {help.commonMistakes.map((mistake) => <li key={mistake}>{mistake}</li>)}
+                  </ul>
+                ) : null}
+                {help.examples?.length ? (
+                  <p className="field-help-dialog__example">
+                    <strong>{copy(locale, "fieldHelp", "example")}:</strong> {help.examples.join(" · ")}
+                  </p>
+                ) : null}
               </section>
             </div>,
             document.body

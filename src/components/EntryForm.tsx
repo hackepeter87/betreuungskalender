@@ -28,6 +28,7 @@ import { FieldHelpButton, FieldHelpLabel } from "./FieldHelp";
 import { Icon } from "./Icon";
 import { isValidTimedRange } from "../../shared/temporal";
 import { DateTimeRange } from "./DateTimeRange";
+import { DateTimeFieldGroup } from "./DateTimeFieldGroup";
 import { omitUndefinedValues } from "../../shared/objects";
 
 interface EntryFormProps {
@@ -643,44 +644,40 @@ export function EntryForm({
             </div>
             {fieldErrors.actualChildren ? <p className="field-error" id="actual-children-error">{fieldErrors.actualChildren}</p> : null}
           </fieldset>
-          <div className="datetime-grid">
-            <label className="field">
-              <span>{copy(locale, "confirmation", "actualStart")}</span>
-              <input data-testid="entry-actual-start-date" type="date" value={actualStartDate} onChange={(event) => setActualStartDate(event.target.value)} />
-            </label>
-            <label className="field">
-              <span>{copy(locale, "confirmation", "actualStartTime")}</span>
-              <input data-testid="entry-actual-start-time" type="time" value={actualStartTime} onChange={(event) => setActualStartTime(event.target.value)} />
-            </label>
-            <label className="field">
-              <span>{copy(locale, "confirmation", "actualEnd")}</span>
-              <input
-                type="date"
-                data-testid="entry-actual-end-date"
-                value={actualEndDate}
-                min={actualStartDate}
-                aria-invalid={actualRangeInvalid || Boolean(fieldErrors.actualEndDateTime)}
-                aria-describedby={actualRangeInvalid ? "actual-range-error" : undefined}
-                onChange={(event) => {
+          <div className="date-time-field-grid">
+            <DateTimeFieldGroup
+              groupLabel={copy(locale, "confirmation", "actualStart")}
+              dateLabel={copy(locale, "common", "date")}
+              timeLabel={copy(locale, "common", "time")}
+              dateInput={{ "data-testid": "entry-actual-start-date", value: actualStartDate, onChange: (event) => setActualStartDate(event.target.value) }}
+              timeInput={{ "data-testid": "entry-actual-start-time", value: actualStartTime, onChange: (event) => setActualStartTime(event.target.value) }}
+            />
+            <DateTimeFieldGroup
+              groupLabel={copy(locale, "confirmation", "actualEnd")}
+              dateLabel={copy(locale, "common", "date")}
+              timeLabel={copy(locale, "common", "time")}
+              dateInput={{
+                "data-testid": "entry-actual-end-date",
+                value: actualEndDate,
+                min: actualStartDate,
+                "aria-invalid": actualRangeInvalid || Boolean(fieldErrors.actualEndDateTime),
+                "aria-describedby": actualRangeInvalid ? "actual-range-error" : undefined,
+                onChange: (event) => {
                   setActualEndDate(event.target.value);
                   setFieldErrors((errors) => ({ ...errors, actualEndDateTime: "" }));
-                }}
-              />
-            </label>
-            <label className="field">
-              <span>{copy(locale, "confirmation", "actualEndTime")}</span>
-              <input
-                type="time"
-                data-testid="entry-actual-end-time"
-                value={actualEndTime}
-                aria-invalid={actualRangeInvalid || Boolean(fieldErrors.actualEndDateTime)}
-                aria-describedby={actualRangeInvalid ? "actual-range-error" : undefined}
-                onChange={(event) => {
+                }
+              }}
+              timeInput={{
+                "data-testid": "entry-actual-end-time",
+                value: actualEndTime,
+                "aria-invalid": actualRangeInvalid || Boolean(fieldErrors.actualEndDateTime),
+                "aria-describedby": actualRangeInvalid ? "actual-range-error" : undefined,
+                onChange: (event) => {
                   setActualEndTime(event.target.value);
                   setFieldErrors((errors) => ({ ...errors, actualEndDateTime: "" }));
-                }}
-              />
-            </label>
+                }
+              }}
+            />
           </div>
           {actualRangeInvalid || fieldErrors.actualEndDateTime ? <p className="field-error" id="actual-range-error">{copy(locale, "entryForm", "endAfterStart")}</p> : null}
           {data.careParties.length ? (
@@ -698,46 +695,44 @@ export function EntryForm({
 
       <details className="form-section form-section--collapsible" open>
         <summary className="form-section__summary">{copy(locale, "entryForm", "period")}</summary>
-        <div className="datetime-grid">
-          <label className="field">
-            <FieldHelpLabel fieldId="careEntry.startDateTime">{copy(locale, "entryForm", "startDate")}</FieldHelpLabel>
-            <input data-testid="entry-start-date" type="date" required value={startDate} onChange={(event) => setStartDate(event.target.value)} />
-          </label>
-          <label className="field">
-            <FieldHelpLabel fieldId="careEntry.startDateTime">{copy(locale, "entryForm", "startTime")}</FieldHelpLabel>
-            <input data-testid="entry-start-time" type="time" required value={startTime} onChange={(event) => setStartTime(event.target.value)} />
-          </label>
-          <label className="field">
-            <FieldHelpLabel fieldId="careEntry.endDateTime">{copy(locale, "entryForm", "endDate")}</FieldHelpLabel>
-            <input
-              type="date"
-              data-testid="entry-end-date"
-              required
-              min={startDate}
-              value={endDate}
-              aria-invalid={rangeInvalid || Boolean(fieldErrors.endDateTime)}
-              aria-describedby={rangeInvalid ? "entry-range-error" : undefined}
-              onChange={(event) => {
+        <div className="date-time-field-grid">
+          <DateTimeFieldGroup
+            groupLabel={copy(locale, "common", "start")}
+            dateLabel={copy(locale, "common", "date")}
+            timeLabel={copy(locale, "common", "time")}
+            helpId="careEntry.startDateTime"
+            dateInput={{ "data-testid": "entry-start-date", required: true, value: startDate, onChange: (event) => setStartDate(event.target.value) }}
+            timeInput={{ "data-testid": "entry-start-time", required: true, value: startTime, onChange: (event) => setStartTime(event.target.value) }}
+          />
+          <DateTimeFieldGroup
+            groupLabel={copy(locale, "common", "end")}
+            dateLabel={copy(locale, "common", "date")}
+            timeLabel={copy(locale, "common", "time")}
+            helpId="careEntry.endDateTime"
+            dateInput={{
+              "data-testid": "entry-end-date",
+              required: true,
+              min: startDate,
+              value: endDate,
+              "aria-invalid": rangeInvalid || Boolean(fieldErrors.endDateTime),
+              "aria-describedby": rangeInvalid ? "entry-range-error" : undefined,
+              onChange: (event) => {
                 setEndDate(event.target.value);
                 setFieldErrors((errors) => ({ ...errors, endDateTime: "" }));
-              }}
-            />
-          </label>
-          <label className="field">
-            <FieldHelpLabel fieldId="careEntry.endDateTime">{copy(locale, "entryForm", "endTime")}</FieldHelpLabel>
-            <input
-              type="time"
-              data-testid="entry-end-time"
-              required
-              value={endTime}
-              aria-invalid={rangeInvalid || Boolean(fieldErrors.endDateTime)}
-              aria-describedby={rangeInvalid ? "entry-range-error" : undefined}
-              onChange={(event) => {
+              }
+            }}
+            timeInput={{
+              "data-testid": "entry-end-time",
+              required: true,
+              value: endTime,
+              "aria-invalid": rangeInvalid || Boolean(fieldErrors.endDateTime),
+              "aria-describedby": rangeInvalid ? "entry-range-error" : undefined,
+              onChange: (event) => {
                 setEndTime(event.target.value);
                 setFieldErrors((errors) => ({ ...errors, endDateTime: "" }));
-              }}
-            />
-          </label>
+              }
+            }}
+          />
         </div>
         {rangeInvalid || fieldErrors.endDateTime ? <p className="field-error" id="entry-range-error">{copy(locale, "entryForm", "endAfterStart")}</p> : null}
         {!scheduler ? <div className="toggle-row">

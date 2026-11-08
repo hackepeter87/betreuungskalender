@@ -506,24 +506,24 @@ test("keeps critical mobile pages within the viewport", async ({
   await expect(entryForm).toBeVisible();
   const entryFormBox = await entryForm.boundingBox();
   expect(entryFormBox).toBeTruthy();
-  for (const field of await entryForm.locator(".datetime-grid input").all()) {
+  for (const field of await entryForm.locator(".date-time-field-grid input").all()) {
     const fieldBox = await field.boundingBox();
     expect(fieldBox).toBeTruthy();
-    expect(fieldBox!.height).toBeLessThanOrEqual(42);
+    expect(fieldBox!.height).toBeGreaterThanOrEqual(43.5);
     expect(fieldBox!.x).toBeGreaterThanOrEqual(entryFormBox!.x - 1);
     expect(fieldBox!.x + fieldBox!.width).toBeLessThanOrEqual(entryFormBox!.x + entryFormBox!.width + 1);
   }
   for (const helpButton of await entryForm.locator(".field-help-button").all()) {
     const helpButtonBox = await helpButton.boundingBox();
     expect(helpButtonBox).toBeTruthy();
-    expect(helpButtonBox!.width).toBeLessThanOrEqual(30);
-    expect(helpButtonBox!.height).toBeLessThanOrEqual(30);
+    expect(helpButtonBox!.width).toBeGreaterThanOrEqual(43.5);
+    expect(helpButtonBox!.height).toBeGreaterThanOrEqual(43.5);
     expect(helpButtonBox!.x + helpButtonBox!.width).toBeLessThanOrEqual(entryFormBox!.x + entryFormBox!.width + 1);
   }
   for (const toggle of await entryForm.locator(".toggle-row .toggle").all()) {
     const toggleBox = await toggle.boundingBox();
     expect(toggleBox).toBeTruthy();
-    expect(toggleBox!.height).toBeLessThanOrEqual(38);
+    expect(toggleBox!.height).toBeGreaterThanOrEqual(43.5);
     expect(toggleBox!.x + toggleBox!.width).toBeLessThanOrEqual(entryFormBox!.x + entryFormBox!.width + 1);
   }
   for (const section of await entryForm.locator(".form-section--collapsible").all()) {
@@ -645,8 +645,8 @@ test("keeps critical mobile pages within the viewport", async ({
   const feedHelpButton = calendarFeedManager.locator(".calendar-feed-scope-field .field-help-button").first();
   const feedHelpButtonBox = await feedHelpButton.boundingBox();
   expect(feedHelpButtonBox).toBeTruthy();
-  expect(feedHelpButtonBox!.width).toBeLessThanOrEqual(30);
-  expect(feedHelpButtonBox!.height).toBeLessThanOrEqual(30);
+  expect(feedHelpButtonBox!.width).toBeGreaterThanOrEqual(43.5);
+  expect(feedHelpButtonBox!.height).toBeGreaterThanOrEqual(43.5);
   await expectNoDocumentHorizontalOverflow(page);
 
   await navigate(page, "holidays");

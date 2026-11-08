@@ -72,13 +72,44 @@
 }
 
 .form-grid,
-.datetime-grid {
+.date-time-field-grid {
   display: grid;
   gap: 12px;
 }
 
 .form-grid {
   grid-template-columns: repeat(3, 1fr);
+}
+
+.date-time-field-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.date-time-field-group {
+  display: grid;
+  min-width: 0;
+  gap: 10px;
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--color-surface-subtle);
+}
+
+.date-time-field-group > legend {
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  color: var(--color-text-control);
+  font-size: 0.72rem;
+  font-weight: 800;
+}
+
+.date-time-field-group__fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  min-width: 0;
 }
 
 .field {
@@ -111,7 +142,7 @@
 
 .field input,
 .field select {
-  min-height: 40px;
+  min-height: 44px;
 }
 
 .field textarea {
@@ -134,6 +165,7 @@
   font-weight: 700;
   line-height: 1.25;
   cursor: pointer;
+  min-height: 44px;
 }
 
 .toggle input {
@@ -191,6 +223,7 @@
   color: var(--color-text-control);
   font-size: 0.69rem;
   font-weight: 700;
+  min-height: 44px;
 }
 
 .check-row input {
@@ -384,10 +417,6 @@
   display: grid;
   gap: 12px;
   margin-top: 12px;
-}
-
-.datetime-grid {
-  grid-template-columns: repeat(4, 1fr);
 }
 
 .toggle-row {

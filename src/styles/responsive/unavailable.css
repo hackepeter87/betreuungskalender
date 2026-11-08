@@ -28,12 +28,8 @@
     background: var(--color-surface-overlay);
   }
 
-  .unavailable-time-fields {
-    grid-template-columns: 1fr;
-  }
-
   .unavailable-toggle-card {
-    grid-template-columns: auto minmax(0, 1fr) 34px;
+    grid-template-columns: auto minmax(0, 1fr);
     gap: 8px;
     padding: 9px 10px;
   }
@@ -55,17 +51,11 @@
     font-size: 16px;
   }
 
-  .unavailable-time-group {
-    padding: 12px;
-  }
-
   .unavailable-toggle-card__label {
     font-size: 0.66rem;
     line-height: 1.25;
   }
 
-  .unavailable-time-grid,
-  .unavailable-time-group,
   .scope-choice-grid,
   .external-block-fields {
     grid-template-columns: 1fr;

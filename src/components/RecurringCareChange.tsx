@@ -9,6 +9,7 @@ import { useAppStore } from "../store/AppStore";
 import type { CareEntry, ContactRule } from "../types";
 import { isValidTimedRange } from "../../shared/temporal";
 import { Icon } from "./Icon";
+import { DateTimeFieldGroup } from "./DateTimeFieldGroup";
 
 function dateTimeParts(value: string): { date: string; time: string } {
   const [date = "", time = "00:00"] = value.split("T");
@@ -185,23 +186,21 @@ export function RecurringCareSeriesForm({
 
       <fieldset className="form-section">
         <legend>{copy(locale, "recurringCareChange", "schedule")}</legend>
-        <div className="datetime-grid">
-          <label className="field">
-            <span>{copy(locale, "entryForm", "startDate")}</span>
-            <input data-testid="series-start-date" type="date" value={startDate} onChange={(event) => { setStartDate(event.target.value); clearPreview(); }} />
-          </label>
-          <label className="field">
-            <span>{copy(locale, "entryForm", "startTime")}</span>
-            <input data-testid="series-start-time" type="time" value={startTime} onChange={(event) => { setStartTime(event.target.value); clearPreview(); }} />
-          </label>
-          <label className="field">
-            <span>{copy(locale, "entryForm", "endDate")}</span>
-            <input className={rangeInvalid ? "input--warning" : ""} data-testid="series-end-date" type="date" value={endDate} onChange={(event) => { setEndDate(event.target.value); clearPreview(); }} />
-          </label>
-          <label className="field">
-            <span>{copy(locale, "entryForm", "endTime")}</span>
-            <input className={rangeInvalid ? "input--warning" : ""} data-testid="series-end-time" type="time" value={endTime} onChange={(event) => { setEndTime(event.target.value); clearPreview(); }} />
-          </label>
+        <div className="date-time-field-grid">
+          <DateTimeFieldGroup
+            groupLabel={copy(locale, "common", "start")}
+            dateLabel={copy(locale, "common", "date")}
+            timeLabel={copy(locale, "common", "time")}
+            dateInput={{ "data-testid": "series-start-date", value: startDate, onChange: (event) => { setStartDate(event.target.value); clearPreview(); } }}
+            timeInput={{ "data-testid": "series-start-time", value: startTime, onChange: (event) => { setStartTime(event.target.value); clearPreview(); } }}
+          />
+          <DateTimeFieldGroup
+            groupLabel={copy(locale, "common", "end")}
+            dateLabel={copy(locale, "common", "date")}
+            timeLabel={copy(locale, "common", "time")}
+            dateInput={{ className: rangeInvalid ? "input--warning" : "", "data-testid": "series-end-date", value: endDate, min: startDate, "aria-invalid": rangeInvalid, onChange: (event) => { setEndDate(event.target.value); clearPreview(); } }}
+            timeInput={{ className: rangeInvalid ? "input--warning" : "", "data-testid": "series-end-time", value: endTime, "aria-invalid": rangeInvalid, onChange: (event) => { setEndTime(event.target.value); clearPreview(); } }}
+          />
         </div>
         {rangeInvalid ? <p className="field-error">{copy(locale, "entryForm", "endAfterStart")}</p> : null}
         {data.careParties.length ? (
