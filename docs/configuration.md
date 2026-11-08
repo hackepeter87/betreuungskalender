@@ -119,7 +119,20 @@ does not weaken authentication for any other API. It remains unavailable until
 the application has recorded a valid versioned demo seed. Enabling the flag
 does not seed, reset, publish, or replace existing data. The initial controlled
 demo contract is SQLite-only; normal PostgreSQL operation is unchanged while
-the flag remains disabled.
+the flag remains disabled. When it is enabled, every write body is limited to
+64 KiB, active native-OIDC sessions are capped at 20 without evicting existing
+sessions, and persisted care entries are capped at 2,000. Public projection
+reads, login starts, and authenticated writes have additional per-minute
+global limits; authenticated writes are also limited per session. Exceeding a
+request budget returns `429` with `Retry-After`.
+
+Controlled demo mode disables invitation flows, notification email and push
+delivery, public calendar feeds, external calendar writes, imports, restores,
+portable transfers, privacy actions, demo-data loading, and settings changes.
+These restrictions apply at the server boundary, including direct API calls.
+The notification delivery sweep is not started. Member administration remains
+available to the owner so tester access can be granted and revoked explicitly.
+Do not use the controlled demo flag as an ordinary staging profile.
 
 SQLite's native backup action applies only to SQLite. PostgreSQL installations
 need an independently tested logical database backup and restore procedure;

@@ -9,6 +9,7 @@ import type {
   ContactRuleWeekday
 } from "../../shared/api.js";
 import { omitUndefinedValues } from "../../shared/objects.js";
+import { config } from "../config.js";
 import {
   expandContactRule,
   type ExpandedContactRuleEntry
@@ -20,6 +21,7 @@ import {
   recordDomainAudit,
   syncPersistedChildJunction
 } from "./domainPersistence.js";
+import { assertDemoCareEntryCapacity } from "./demoModeLimits.js";
 
 const indexWeekdays: ContactRuleWeekday[] = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
 
@@ -377,6 +379,7 @@ async function insertGeneratedEntry(input: {
   confirmationSuppressed?: boolean;
   recordAudit?: boolean;
 }): Promise<void> {
+  await assertDemoCareEntryCapacity(input.database, config.demoModeEnabled);
   const id = makeId("entry");
   const durationMinutes = Math.round(
     (Date.parse(input.expanded.endDateTime) - Date.parse(input.expanded.startDateTime)) / 60000

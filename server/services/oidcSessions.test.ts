@@ -7,6 +7,7 @@ import Database from "better-sqlite3";
 import { migrateDatabase } from "../db/migrationRunner.js";
 import { createSqlitePersistenceRuntime } from "../db/runtime.js";
 import {
+  OidcSessionLimitError,
   OidcSessionStore,
   oidcSessionTokenForTesting
 } from "./oidcSessions.js";
@@ -51,6 +52,52 @@ test("OIDC sessions store only a hash of the opaque browser token", async () => 
     assert.equal(row.session_hash, oidcSessionTokenForTesting.hashSessionToken(token));
     assert.notEqual(row.session_hash, token);
     assert.equal(row.expires_at, "2026-01-01T01:00:00.000Z");
+  } finally {
+    cleanup();
+  }
+});
+
+test("OIDC session capacity rejects excess sessions without evicting active users", async () => {
+  const { database, cleanup } = testDatabase();
+  try {
+    const runtime = createSqlitePersistenceRuntime(database);
+    const store = new OidcSessionStore(runtime.query, { maxActiveSessions: 2 });
+    const now = new Date("2026-01-01T00:00:00.000Z");
+    const first = await store.create("subject-1", 3600, now);
+    const second = await store.create("subject-2", 3600, now);
+
+    await assert.rejects(
+      store.create("subject-3", 3600, now),
+      (error: unknown) => error instanceof OidcSessionLimitError
+    );
+    assert.equal((await store.findByToken(first.token, now))?.externalSubject, "subject-1");
+    assert.equal((await store.findByToken(second.token, now))?.externalSubject, "subject-2");
+
+    await store.revokeByToken(first.token, new Date("2026-01-01T00:00:01.000Z"));
+    await assert.doesNotReject(store.create(
+      "subject-3",
+      3600,
+      new Date("2026-01-01T00:00:02.000Z")
+    ));
+  } finally {
+    cleanup();
+  }
+});
+
+test("concurrent OIDC session creation cannot overrun the configured capacity", async () => {
+  const { database, cleanup } = testDatabase();
+  try {
+    const store = new OidcSessionStore(createSqlitePersistenceRuntime(database).query, {
+      maxActiveSessions: 1
+    });
+    const results = await Promise.allSettled([
+      store.create("subject-1", 3600, new Date("2026-01-01T00:00:00.000Z")),
+      store.create("subject-2", 3600, new Date("2026-01-01T00:00:00.000Z"))
+    ]);
+    assert.equal(results.filter((result) => result.status === "fulfilled").length, 1);
+    assert.equal(results.filter((result) =>
+      result.status === "rejected" && result.reason instanceof OidcSessionLimitError
+    ).length, 1);
   } finally {
     cleanup();
   }

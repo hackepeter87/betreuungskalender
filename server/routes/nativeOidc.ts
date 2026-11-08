@@ -15,7 +15,11 @@ import {
   applyMembershipRole,
   type MembershipResolution
 } from "../services/memberships.js";
-import { OidcSessionStore, type OidcSessionRecord } from "../services/oidcSessions.js";
+import {
+  OidcSessionLimitError,
+  OidcSessionStore,
+  type OidcSessionRecord
+} from "../services/oidcSessions.js";
 import { OidcLoginStateStore } from "../services/oidcLoginStates.js";
 import {
   OwnerSetupTokenError,
@@ -164,6 +168,9 @@ function notFound(reply: FastifyReply) {
 
 function sanitizedError(error: unknown): NativeOidcError {
   if (error instanceof NativeOidcError) return error;
+  if (error instanceof OidcSessionLimitError) {
+    return new NativeOidcError(error.code, error.statusCode, error.message);
+  }
   if (error instanceof OwnerSetupTokenError) {
     return new NativeOidcError(error.code, error.statusCode, error.message);
   }
