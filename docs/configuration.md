@@ -46,6 +46,7 @@ precedence. Never commit production `.env` files.
 | `OIDC_GROUPS_CLAIM` | Native OIDC claim containing group or role values | `groups` | Optional for `AUTH_MODE=native-oidc` | `groups` | Stored as external identity metadata; app memberships remain authoritative for workspace access |
 | `OIDC_DISPLAY_NAME_CLAIM` | Native OIDC claim used as the current display name | `preferred_username` | Optional for `AUTH_MODE=native-oidc` | `preferred_username` | Presentation only; the stable `sub` remains the technical identity and is never part of portable exports |
 | `OIDC_LOGIN_STATE_TTL_SECONDS` | Native OIDC login transaction lifetime | `600` | Optional for `AUTH_MODE=native-oidc` | `600` | Short-lived state, nonce, and PKCE verifier records limit replay windows |
+| `OIDC_PROXY_URL` | Explicit proxy origin for native OIDC transport | `http://oidc-proxy.internal:3128` | Optional for `AUTH_MODE=native-oidc` | None | When set, discovery, JWKS and token requests use this proxy and may target only the HTTPS authority from `OIDC_ISSUER_URL` on port 443 |
 | `OWNER_SETUP_TOKEN_FILE` | Mounted file containing the one-time initial owner setup token | `/run/secrets/owner-setup-token` | Required when establishing a native-OIDC owner | Same | Keep the secret file mounted until the owner claim completes; do not place the token itself in app environment files |
 | `OWNER_SETUP_TOKEN_TTL_SECONDS` | Initial owner setup link lifetime from the secret file modification time | `86400` | Optional | `86400` | Replacing or removing the file invalidates an unfinished owner setup flow |
 | `SESSION_COOKIE_NAME` | Native OIDC opaque session cookie name | `betreuungskalender_session` | Optional for `AUTH_MODE=native-oidc` | `betreuungskalender_session` | Cookie value is opaque and never stores claims or tokens |
@@ -248,6 +249,17 @@ ignored by native mode and conflicting configuration is rejected.
 Native OIDC callback handling must not expose ID tokens, access tokens,
 refresh tokens, authorization codes, state, nonce, PKCE verifiers, raw claims,
 client secrets, or session identifiers to frontend JavaScript or logs.
+
+`OIDC_PROXY_URL` is an explicit, standard-off transport option for restricted
+deployments. It accepts only an HTTP(S) proxy origin without credentials, path,
+query, or fragment. When enabled, `OIDC_ISSUER_URL` must use HTTPS on port 443;
+all discovery, JWKS, and token traffic is routed through the configured proxy
+and restricted to that issuer authority. Redirects to another authority are
+rejected, and same-authority redirects are bounded. Ambient `HTTP_PROXY` or
+`HTTPS_PROXY` variables are intentionally not used. TLS, issuer, state, nonce,
+PKCE, callback, and claim validation remain unchanged. Proxy deployment,
+network policy, and activation are operator responsibilities outside this
+application setting.
 
 Native OIDC maps the stable `sub` claim to `app_users.external_subject`.
 `OIDC_GROUPS_CLAIM` selects the external group metadata claim and defaults to

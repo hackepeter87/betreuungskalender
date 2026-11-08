@@ -35,7 +35,8 @@ export interface OidcLibrary {
   discovery(
     issuer: URL,
     clientId: string,
-    clientSecret?: string
+    clientSecret?: string,
+    customFetch?: oidc.CustomFetch
   ): Promise<oidc.Configuration>;
   randomState(): string;
   randomNonce(): string;
@@ -61,8 +62,14 @@ export interface OidcLibrary {
 }
 
 const openidClientLibrary: OidcLibrary = {
-  discovery: (issuer, clientId, clientSecret) =>
-    oidc.discovery(issuer, clientId, clientSecret),
+  discovery: (issuer, clientId, clientSecret, customFetch) =>
+    oidc.discovery(
+      issuer,
+      clientId,
+      clientSecret,
+      undefined,
+      customFetch ? { [oidc.customFetch]: customFetch } : undefined
+    ),
   randomState: oidc.randomState,
   randomNonce: oidc.randomNonce,
   randomPKCECodeVerifier: oidc.randomPKCECodeVerifier,
@@ -109,18 +116,21 @@ export interface NativeOidcServiceOptions {
   config: NativeOidcConfig;
   loginStates: OidcLoginStateStore;
   library?: OidcLibrary;
+  customFetch?: oidc.CustomFetch;
 }
 
 export class NativeOidcService {
   readonly #config: NativeOidcConfig;
   readonly #loginStates: OidcLoginStateStore;
   readonly #library: OidcLibrary;
+  readonly #customFetch: oidc.CustomFetch | undefined;
   #discovered?: Promise<oidc.Configuration>;
 
   constructor(options: NativeOidcServiceOptions) {
     this.#config = options.config;
     this.#loginStates = options.loginStates;
     this.#library = options.library ?? openidClientLibrary;
+    this.#customFetch = options.customFetch;
   }
 
   async createLoginRedirect(
@@ -239,7 +249,8 @@ export class NativeOidcService {
     this.#discovered ??= this.#library.discovery(
       new URL(this.#required("issuerUrl", this.#config.issuerUrl)),
       this.#required("clientId", this.#config.clientId),
-      this.#config.clientSecret
+      this.#config.clientSecret,
+      this.#customFetch
     );
     return this.#discovered;
   }

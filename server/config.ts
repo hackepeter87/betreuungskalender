@@ -131,6 +131,59 @@ export function validateDemoModeConfig(input: DemoModeValidationInput): void {
   }
 }
 
+export interface OidcProxyValidationInput {
+  authMode: AuthMode;
+  issuerUrl?: string;
+  proxyUrl?: string;
+}
+
+export function validateOidcProxyConfig(input: OidcProxyValidationInput): void {
+  const proxyValue = input.proxyUrl?.trim();
+  if (!proxyValue) return;
+  if (input.authMode !== "native-oidc") {
+    throw new Error("OIDC_PROXY_URL requires AUTH_MODE=native-oidc.");
+  }
+
+  let issuer: URL;
+  try {
+    issuer = new URL(input.issuerUrl ?? "");
+  } catch {
+    throw new Error("OIDC proxy transport requires a valid OIDC_ISSUER_URL.");
+  }
+  if (
+    issuer.protocol !== "https:"
+    || (issuer.port && issuer.port !== "443")
+    || issuer.username
+    || issuer.password
+    || issuer.search
+    || issuer.hash
+  ) {
+    throw new Error(
+      "OIDC proxy transport requires an HTTPS OIDC_ISSUER_URL on port 443."
+    );
+  }
+
+  let proxy: URL;
+  try {
+    proxy = new URL(proxyValue);
+  } catch {
+    throw new Error(
+      "OIDC_PROXY_URL must be an HTTP(S) origin without credentials, path, query, or fragment."
+    );
+  }
+  const isOriginOnly = (proxy.protocol === "http:" || proxy.protocol === "https:")
+    && !proxy.username
+    && !proxy.password
+    && (proxy.pathname === "/" || proxy.pathname === "")
+    && !proxy.search
+    && !proxy.hash;
+  if (!isOriginOnly) {
+    throw new Error(
+      "OIDC_PROXY_URL must be an HTTP(S) origin without credentials, path, query, or fragment."
+    );
+  }
+}
+
 export function validateMetricsConfig(input: MetricsValidationInput): void {
   if (input.enabled && !input.bearerTokenFile?.trim()) {
     throw new Error("METRICS_ENABLED=true requires METRICS_BEARER_TOKEN_FILE.");
@@ -279,6 +332,7 @@ export const config = {
   oidcClientSecret: process.env.OIDC_CLIENT_SECRET?.trim() || undefined,
   oidcRedirectUri: process.env.OIDC_REDIRECT_URI?.trim() || undefined,
   oidcPostLogoutRedirectUri: process.env.OIDC_POST_LOGOUT_REDIRECT_URI?.trim() || undefined,
+  oidcProxyUrl: process.env.OIDC_PROXY_URL?.trim() || undefined,
   oidcScopes: textEnv(process.env.OIDC_SCOPES, "openid email profile"),
   oidcGroupsClaim: textEnv(process.env.OIDC_GROUPS_CLAIM, "groups"),
   oidcDisplayNameClaim: textEnv(process.env.OIDC_DISPLAY_NAME_CLAIM, "preferred_username"),
@@ -370,6 +424,12 @@ validateAuthModeConfig({
   ...(config.oidcIssuerUrl ? { oidcIssuerUrl: config.oidcIssuerUrl } : {}),
   ...(config.oidcClientId ? { oidcClientId: config.oidcClientId } : {}),
   ...(config.oidcRedirectUri ? { oidcRedirectUri: config.oidcRedirectUri } : {})
+});
+
+validateOidcProxyConfig({
+  authMode: config.authMode,
+  ...(config.oidcIssuerUrl ? { issuerUrl: config.oidcIssuerUrl } : {}),
+  ...(config.oidcProxyUrl ? { proxyUrl: config.oidcProxyUrl } : {})
 });
 
 validateMetricsConfig({

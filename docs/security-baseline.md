@@ -56,6 +56,9 @@ access control, and incident response.
   owner identity explicitly once ownership has been established.
 - Native OIDC uses Authorization Code + PKCE through `openid-client`,
   server-side state/nonce/verifier storage, and opaque hashed session tokens.
+- The optional native-OIDC proxy transport is disabled by default. When enabled,
+  it routes discovery, JWKS, and token requests through one explicit proxy and
+  rejects targets or redirects outside the configured HTTPS issuer authority.
 - Trusted-proxy authentication remains available as a rollback mode but is not
   accepted as a bypass in native OIDC mode.
 - Controlled demo mode is SQLite- and native-OIDC-only in its initial contract.

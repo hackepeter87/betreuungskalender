@@ -5,9 +5,61 @@ import {
   validateDatabaseConfig,
   validateDemoModeConfig,
   validateMetricsConfig,
+  validateOidcProxyConfig,
   type AuthModeValidationInput,
   type DatabaseValidationInput
 } from "./config.js";
+
+test("OIDC proxy validation is disabled by default", () => {
+  assert.doesNotThrow(() => validateOidcProxyConfig({ authMode: "local" }));
+});
+
+test("OIDC proxy validation requires native OIDC and a pinned HTTPS issuer", () => {
+  assert.throws(
+    () => validateOidcProxyConfig({
+      authMode: "local",
+      proxyUrl: "http://oidc-proxy.internal:3128"
+    }),
+    /OIDC_PROXY_URL requires AUTH_MODE=native-oidc/
+  );
+  for (const issuerUrl of [
+    "http://idp.example.test/realms/demo",
+    "https://idp.example.test:8443/realms/demo",
+    "https://user:secret@idp.example.test/realms/demo",
+    "https://idp.example.test/realms/demo#fragment"
+  ]) {
+    assert.throws(
+      () => validateOidcProxyConfig({
+        authMode: "native-oidc",
+        issuerUrl,
+        proxyUrl: "http://oidc-proxy.internal:3128"
+      }),
+      /OIDC proxy transport requires an HTTPS OIDC_ISSUER_URL on port 443/
+    );
+  }
+});
+
+test("OIDC proxy validation rejects credentials and non-origin proxy URLs", () => {
+  const base = {
+    authMode: "native-oidc" as const,
+    issuerUrl: "https://idp.example.test/realms/demo"
+  };
+  for (const proxyUrl of [
+    "http://user:secret@oidc-proxy.internal:3128",
+    "http://oidc-proxy.internal:3128/path",
+    "http://oidc-proxy.internal:3128/?mode=open",
+    "file:///run/proxy.sock"
+  ]) {
+    assert.throws(
+      () => validateOidcProxyConfig({ ...base, proxyUrl }),
+      /OIDC_PROXY_URL must be an HTTP\(S\) origin without credentials, path, query, or fragment/
+    );
+  }
+  assert.doesNotThrow(() => validateOidcProxyConfig({
+    ...base,
+    proxyUrl: "http://oidc-proxy.internal:3128"
+  }));
+});
 
 function validationInput(
   overrides: Partial<AuthModeValidationInput> = {}

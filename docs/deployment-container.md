@@ -217,6 +217,8 @@ OIDC_REDIRECT_URI=https://app.example.net/auth/callback
 OIDC_SCOPES=openid email profile
 OIDC_GROUPS_CLAIM=groups
 OIDC_REQUIRE_ROLE_CLAIM=true
+# Optional restricted-egress transport; omit for normal direct OIDC traffic.
+# OIDC_PROXY_URL=http://oidc-proxy.internal:3128
 WEB_PUSH_SUBJECT=mailto:admin@example.invalid
 WEB_PUSH_PUBLIC_KEY=
 WEB_PUSH_PRIVATE_KEY=
