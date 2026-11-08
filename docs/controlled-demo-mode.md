@@ -82,6 +82,20 @@ free text, tokens, or infrastructure details. This status confirms only what
 the application served; it does not prove that a browser or another system
 processed or displayed the data.
 
+## Reproducible application validation
+
+Run `npm run test:demo-mode` for the focused application checks. The command
+covers the public projection, authorization and membership boundaries, bounded
+requests and datasets, atomic reset behavior, native OIDC sessions, pinned OIDC
+transport, protected lifecycle status, and disabled-mode regressions. The
+regular browser, security-runtime, SQLite, PostgreSQL, container, Helm, and
+release checks remain separate mandatory gates.
+
+The focused check validates application behavior only. It does not validate a
+cluster network policy, an external identity provider, a calendar client, an
+SMTP service, or an infrastructure rollout, and it does not authorize enabling
+controlled demo mode.
+
 ## Backup, restore, and rollback
 
 Normal SQLite backup and restore procedures still apply. A restored database
