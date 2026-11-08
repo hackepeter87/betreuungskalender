@@ -133,6 +133,11 @@ Only a validated owner-setup or invitation context can establish the matching
 membership during onboarding.
 Native mode rejects conflicting `TRUST_PROXY_AUTH=true` configuration and does
 not accept proxy identity headers as an API authentication bypass.
+The optional `OIDC_PROXY_URL` transport is fail-closed and does not read ambient
+proxy environment variables. It accepts one explicit proxy origin and permits
+OIDC network requests only to the HTTPS authority declared by
+`OIDC_ISSUER_URL`; cross-authority redirects are rejected. This application
+control does not replace egress filtering or proxy-side destination policy.
 
 Controlled demo mode is a separate, disabled-by-default application contract.
 It requires SQLite, native OIDC, normal authentication, and active local

@@ -9,6 +9,7 @@ import {
   serializeSessionCookie
 } from "../cookies.js";
 import { NativeOidcError, NativeOidcService } from "../nativeOidc.js";
+import { createPinnedOidcFetch } from "../oidcProxyTransport.js";
 import type { DatabaseExecutor, PersistenceRuntime } from "../db/runtime.js";
 import {
   applyMembershipRole,
@@ -55,7 +56,10 @@ type NativeOidcRouteConfig = Pick<
   | "allowedOrigin"
 > & Partial<Pick<
   typeof appConfig,
-  "ownerSetupTokenFile" | "ownerSetupTokenTtlSeconds" | "oidcDisplayNameClaim"
+  | "ownerSetupTokenFile"
+  | "ownerSetupTokenTtlSeconds"
+  | "oidcDisplayNameClaim"
+  | "oidcProxyUrl"
 >>;
 
 interface NativeOidcRoutesOptions {
@@ -290,6 +294,15 @@ export async function nativeOidcRoutes(
     ...authRateLimit,
     preHandler: browserRequestOriginGuard(options.config.allowedOrigin)
   };
+  const oidcTransport = !options.service && options.config.oidcProxyUrl
+    ? createPinnedOidcFetch({
+        issuerUrl: options.config.oidcIssuerUrl ?? "",
+        proxyUrl: options.config.oidcProxyUrl
+      })
+    : undefined;
+  if (oidcTransport) {
+    app.addHook("onClose", async () => oidcTransport.close());
+  }
   const service = options.service ?? new NativeOidcService({
     config: omitUndefinedValues({
       issuerUrl: options.config.oidcIssuerUrl,
@@ -302,7 +315,8 @@ export async function nativeOidcRoutes(
       displayNameClaim: options.config.oidcDisplayNameClaim ?? "preferred_username",
       loginStateTtlSeconds: options.config.oidcLoginStateTtlSeconds
     }),
-    loginStates: new OidcLoginStateStore(persistence)
+    loginStates: new OidcLoginStateStore(persistence),
+    ...(oidcTransport ? { customFetch: oidcTransport.fetch } : {})
   });
   const sessions = options.sessions ?? new OidcSessionStore(persistence.query);
   const upsertUser = options.upsertUser ?? (

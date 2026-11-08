@@ -161,6 +161,30 @@ test("native OIDC login stores server-side state and redirects with PKCE and non
   }
 });
 
+test("native OIDC discovery receives the configured transport", async () => {
+  const { database, cleanup } = testDatabase();
+  let receivedFetch: Parameters<OidcLibrary["discovery"]>[3];
+  const customFetch = async () => new Response(null, { status: 200 });
+  try {
+    const service = new NativeOidcService({
+      config: nativeConfig(),
+      loginStates: new OidcLoginStateStore(persistenceFor(database)),
+      customFetch,
+      library: fakeLibrary({
+        discovery: async (_issuer, _clientId, _secret, transport) => {
+          receivedFetch = transport;
+          return {} as Configuration;
+        }
+      })
+    });
+
+    await service.createLoginRedirect();
+    assert.equal(receivedFetch, customFetch);
+  } finally {
+    cleanup();
+  }
+});
+
 test("native OIDC login stores only hashed onboarding context", async () => {
   const { database, cleanup } = testDatabase();
   try {

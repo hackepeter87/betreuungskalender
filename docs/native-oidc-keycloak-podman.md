@@ -90,6 +90,7 @@ TRUST_PROXY_AUTH=false
 AUTH_LOGOUT_URL=
 
 OIDC_ISSUER_URL=https://idp.example.net/realms/example
+OIDC_PROXY_URL=
 OIDC_CLIENT_ID=betreuungskalender
 OIDC_CLIENT_SECRET=CHANGE_ME
 OIDC_REDIRECT_URI=https://app.example.net/auth/callback
