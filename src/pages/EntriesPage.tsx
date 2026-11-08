@@ -72,14 +72,19 @@ export function EntriesPage({
       <div className="page-header">
         <div>
           <p className="page-header__context">{copy(locale, "entries", "context")}</p>
-          <h1>{copy(locale, "entries", "title", { month: formatMonth(monthKey, intlLocale) })}</h1>
+          <div className="action-with-help">
+            <h1>{copy(locale, "entries", "title", { month: formatMonth(monthKey, intlLocale) })}</h1>
+            <FieldHelpButton fieldId="analytics.month" showRequirement={false} />
+          </div>
         </div>
         <div className="page-header__actions">
           <MonthToolbar monthKey={monthKey} onChange={onMonthChange} />
-          {canCreateAppointments ? <button className="button button--primary desktop-only" type="button" onClick={onNewEntry} disabled={!canWrite}>
-            <Icon name="plus" />
-            {copy(locale, "entries", "createEntry")}
-          </button> : null}
+          <div className="form-actions__right">
+            {canCreateAppointments ? <button className="button button--primary desktop-only" type="button" onClick={onNewEntry} disabled={!canWrite}>
+              <Icon name="plus" />
+              {copy(locale, "entries", "createEntry")}
+            </button> : null}
+          </div>
         </div>
       </div>
 

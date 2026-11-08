@@ -73,8 +73,12 @@
 
   .month-toolbar__picker {
     min-width: 0;
-    min-height: 44px;
     flex: 1;
+  }
+
+  .month-toolbar__today {
+    flex-basis: 54px;
+    padding-inline: 6px;
   }
 
   .calendar-panel {
@@ -92,10 +96,6 @@
   .calendar-day {
     min-height: 96px;
     padding: 4px 3px;
-  }
-
-  .month-toolbar__today {
-    display: none;
   }
 
   .calendar-day__number {

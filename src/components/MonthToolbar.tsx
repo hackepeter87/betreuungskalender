@@ -1,5 +1,4 @@
 import { addMonths, formatMonth, toMonthKey } from "../lib/date";
-import { FieldHelpButton } from "./FieldHelp";
 import { Icon } from "./Icon";
 import { useI18n } from "../i18n/I18nProvider";
 import { copy } from "../i18n/catalog";
@@ -12,8 +11,23 @@ export function MonthToolbar({
   onChange: (monthKey: string) => void;
 }) {
   const { locale, intlLocale } = useI18n();
+  const currentMonth = toMonthKey(new Date());
   return (
-    <div className="month-toolbar" aria-label={copy(locale, "monthToolbar", "label")}>
+    <div
+      className="month-toolbar"
+      role="group"
+      aria-label={copy(locale, "monthToolbar", "label")}
+      data-testid="month-toolbar"
+    >
+      <button
+        className="button button--quiet month-toolbar__today"
+        type="button"
+        data-testid="month-toolbar-today"
+        onClick={() => onChange(currentMonth)}
+        disabled={monthKey === currentMonth}
+      >
+        {copy(locale, "common", "today")}
+      </button>
       <button
         className="icon-button icon-button--bordered"
         type="button"
@@ -32,7 +46,6 @@ export function MonthToolbar({
           aria-label={copy(locale, "monthToolbar", "choose")}
         />
       </label>
-      <FieldHelpButton fieldId="analytics.month" showRequirement={false} />
       <button
         className="icon-button icon-button--bordered"
         type="button"
@@ -41,11 +54,6 @@ export function MonthToolbar({
       >
         <Icon name="chevronRight" />
       </button>
-      {monthKey !== toMonthKey(new Date()) ? (
-        <button className="button button--quiet month-toolbar__today" type="button" onClick={() => onChange(toMonthKey(new Date()))}>
-          {copy(locale, "common", "today")}
-        </button>
-      ) : null}
     </div>
   );
 }

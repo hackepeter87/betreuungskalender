@@ -18,6 +18,74 @@ test.beforeEach(async ({ request }) => {
   await resetApp(request);
 });
 
+test("keeps month navigation stable across pages and viewport sizes", async ({ page }) => {
+  await openApp(page);
+
+  for (const width of [320, 390, 768, 1280, 1440, 1920]) {
+    await page.setViewportSize({ width, height: width < 768 ? 844 : 900 });
+    await page.reload();
+    await expect(page.locator("main")).toBeVisible();
+
+    for (const destination of ["dashboard", "calendar", "entries"] as const) {
+      await navigate(page, destination);
+
+      const toolbar = page.getByTestId("month-toolbar");
+      const today = page.getByTestId("month-toolbar-today");
+      const previous = page.getByRole("button", { name: "Vorheriger Monat" });
+      const picker = page.getByTestId("month-picker");
+      const next = page.getByRole("button", { name: "Nächster Monat" });
+
+      await expect(toolbar).toBeVisible();
+      await expect(today).toBeVisible();
+      await expect(today).toBeDisabled();
+      await expect(toolbar.locator(":scope > *")).toHaveCount(4);
+      await expect(toolbar.locator(":scope > *").nth(0)).toHaveAttribute("data-testid", "month-toolbar-today");
+      await expect(toolbar.locator(":scope > *").nth(1)).toHaveAttribute("aria-label", "Vorheriger Monat");
+      await expect(toolbar.locator(":scope > *").nth(2).locator("input")).toHaveAttribute("data-testid", "month-picker");
+      await expect(toolbar.locator(":scope > *").nth(3)).toHaveAttribute("aria-label", "Nächster Monat");
+      await expect(toolbar.locator(".field-help-trigger")).toHaveCount(0);
+      await expect(toolbar.locator("xpath=..").locator(":scope > .form-actions__right")).toHaveCount(1);
+
+      if (width <= 768) {
+        const targetHeights = await toolbar.locator(":scope > *").evaluateAll((elements) =>
+          elements.map((element) => element.getBoundingClientRect().height)
+        );
+        expect(targetHeights.every((height) => height >= 44)).toBe(true);
+      }
+
+      const currentLayout = await toolbar.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return { width: rect.width, height: rect.height };
+      });
+      if (destination === "dashboard") {
+        await previous.focus();
+        await page.keyboard.press("Enter");
+      } else {
+        await previous.click();
+      }
+      await expect(today).toBeEnabled();
+      const previousLayout = await toolbar.evaluate((element) => {
+        const rect = element.getBoundingClientRect();
+        return { width: rect.width, height: rect.height };
+      });
+      expect(Math.abs(previousLayout.width - currentLayout.width)).toBeLessThanOrEqual(1);
+      expect(Math.abs(previousLayout.height - currentLayout.height)).toBeLessThanOrEqual(1);
+
+      if (destination === "dashboard") {
+        await today.focus();
+        await page.keyboard.press("Enter");
+      } else {
+        await today.click();
+      }
+      await expect(today).toBeDisabled();
+      await expect(previous).toBeVisible();
+      await expect(picker).toBeVisible();
+      await expect(next).toBeVisible();
+      await expectNoDocumentHorizontalOverflow(page);
+    }
+  }
+});
+
 test("shows email notification preferences only with server capability", async ({ page }) => {
   let recipientAvailable = false;
   let savedEmailPreference = false;
