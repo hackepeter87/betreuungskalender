@@ -43,9 +43,11 @@ export const publicDemoRoutes: FastifyPluginAsync<PublicDemoRoutesOptions> = asy
         return reply.code(400).send({ error: "invalid_request" });
       }
       try {
-        return await publicDemoProjection(
-          app.persistence.query,
-          omitUndefinedValues(parsed.data)
+        return await app.persistence.transaction((database) =>
+          publicDemoProjection(
+            database,
+            omitUndefinedValues(parsed.data)
+          )
         );
       } catch (error) {
         if (error instanceof PublicDemoProjectionError) {

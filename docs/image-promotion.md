@@ -113,9 +113,12 @@ only; keep the variable unset or `false` in production.
 This administrative loader is not the controlled public demonstration mode.
 `DEMO_MODE_ENABLED=true` is a separate, disabled-by-default contract and rejects
 startup when the administrative loader is enabled. It also remains unavailable
-until an application-managed versioned seed exists. Publishing or promoting an
-image never authorizes activation, data replacement, or public exposure; those
-steps require their own operator acceptance and rollout gates.
+until the exact supported fictional identity set can be verified. After
+activation, the application resets fictional domain data hourly at the full UTC
+hour and invalidates application sessions. Publishing or promoting an image
+never authorizes activation, data replacement, or public exposure; those steps
+require their own operator acceptance and rollout gates. See
+[Controlled demo mode](controlled-demo-mode.md) for preparation and recovery.
 
 ## GitHub promotion workflow
 
