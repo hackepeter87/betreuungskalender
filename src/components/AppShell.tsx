@@ -90,6 +90,7 @@ function AuthSessionCard({
   testIdPrefix,
   loggingOut,
   onLogout,
+  onSessionTransition,
   t
 }: {
   session: ApiSession;
@@ -98,6 +99,7 @@ function AuthSessionCard({
   testIdPrefix?: string;
   loggingOut: boolean;
   onLogout: () => void;
+  onSessionTransition: () => void;
   t: (key: TranslationKey) => string;
 }) {
   const testId = (name: "auth-session" | "auth-logout" | "auth-login") =>
@@ -131,6 +133,7 @@ function AuthSessionCard({
               className="session-card__logout"
               data-testid={testId("auth-logout")}
               href={session.logoutUrl}
+              onClick={onSessionTransition}
             >
               {t("auth.logout")}
             </a>
@@ -165,11 +168,13 @@ function MobileAuthMenu({
   session,
   loggingOut,
   onLogout,
+  onSessionTransition,
   t
 }: {
   session: ApiSession;
   loggingOut: boolean;
   onLogout: () => void;
+  onSessionTransition: () => void;
   t: (key: TranslationKey) => string;
 }) {
   const [open, setOpen] = useState(false);
@@ -234,7 +239,10 @@ function MobileAuthMenu({
                   data-testid="mobile-auth-logout"
                   role="menuitem"
                   href={session.logoutUrl}
-                  onClick={() => setOpen(false)}
+                  onClick={() => {
+                    setOpen(false);
+                    onSessionTransition();
+                  }}
                 >
                   {t("auth.logout")}
                 </a>
@@ -385,6 +393,7 @@ export function AppShell({
     error,
     canWrite,
     reload,
+    prepareForSessionTransition,
     clearError
   } = useAppStore();
 
@@ -404,6 +413,7 @@ export function AppShell({
 
   const logout = async () => {
     if (!session.logoutUrl) return;
+    prepareForSessionTransition();
     setLoggingOut(true);
     try {
       const logout = await logoutSession(session.logoutUrl);
@@ -493,6 +503,7 @@ export function AppShell({
                 session={session}
                 loggingOut={loggingOut}
                 onLogout={() => void logout()}
+                onSessionTransition={prepareForSessionTransition}
                 t={t}
               />
             </div>
@@ -501,6 +512,7 @@ export function AppShell({
               session={session}
               loggingOut={loggingOut}
               onLogout={() => void logout()}
+              onSessionTransition={prepareForSessionTransition}
               t={t}
             />
           )}
@@ -550,6 +562,7 @@ export function AppShell({
               session={session}
               loggingOut={loggingOut}
               onLogout={() => void logout()}
+              onSessionTransition={prepareForSessionTransition}
               t={t}
             />
             {!setupMode && activePage !== "calendar" ? (
@@ -639,6 +652,7 @@ export function AppShell({
               testIdPrefix="mobile-more"
               loggingOut={loggingOut}
               onLogout={() => void logout()}
+              onSessionTransition={prepareForSessionTransition}
               t={t}
             />
             <div className="mobile-more-sheet__grid">

@@ -36,6 +36,10 @@ Selected member data scopes also constrain actor-label resolution and every
 full care-entry projection. Hidden records and care-party references must not
 introduce identifiers or display names into scoped responses.
 
+The browser clears all user-scoped in-memory state before logout or account
+replacement and coordinates this transition across open tabs. The coordination
+signal contains no identity, token, or domain data.
+
 Owner-approved privacy actions require a fresh no-store preview and execute in
 one transaction. Their technical result records contain stable action codes
 and aggregate counts, not previous authentication subjects or personal
