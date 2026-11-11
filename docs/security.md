@@ -197,7 +197,10 @@ requested part of a report snapshot. The normal application startup does not
 receive the audit log. Cursor-based audit responses are bounded, not cached,
 and require `audit:view`. Display-name resolution accepts only a bounded list of
 actor IDs referenced by domain records and returns no email addresses, claims,
-or unrelated accounts.
+or unrelated accounts. For members with a selected care-data scope, actor
+labels are derived only from records visible in that scope; globally visible
+records remain global. Full care-entry, conflict, confirmation, and report
+projections omit care-party references outside the same scope.
 
 The current review baseline, implemented controls, residual risks, and deferred
 security work are summarized in [security-baseline.md](security-baseline.md).

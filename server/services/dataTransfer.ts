@@ -471,7 +471,7 @@ export async function exportDomainData(
 
   const entries = entryRows.map((entry) => {
     const id = String(entry.id);
-    return {
+    const projected: DataRecord = {
       ...boolFields(entry, [
         "overnight", "schoolHandover", "holiday", "weekend", "additionalCare", "hasEvidence"
       ]),
@@ -480,6 +480,19 @@ export async function exportDomainData(
       trips: tripsByEntry.get(id) ?? [],
       costs: costsByEntry.get(id) ?? []
     };
+    if (carePartyIds) {
+      const visible = new Set(carePartyIds);
+      if (typeof projected.responsiblePartyId === "string" && !visible.has(projected.responsiblePartyId)) {
+        delete projected.responsiblePartyId;
+      }
+      if (
+        typeof projected.actualResponsiblePartyId === "string" &&
+        !visible.has(projected.actualResponsiblePartyId)
+      ) {
+        delete projected.actualResponsiblePartyId;
+      }
+    }
+    return projected;
   });
 
   const settings = await exportedSettings(database);

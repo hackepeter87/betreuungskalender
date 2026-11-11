@@ -1,8 +1,11 @@
 import type { FastifyInstance } from "fastify";
+import { sql } from "kysely";
 import { z } from "zod";
 import type { ApiActorLabel, ApiAuditEntry, ApiAuditPage } from "../../shared/api.js";
+import type { RequestUser } from "../auth.js";
 import { config } from "../config.js";
 import type { DatabaseExecutor } from "../db/runtime.js";
+import { effectiveCareDataScope } from "../services/careDataScopes.js";
 
 const readLimit = {
   config: { permission: "audit:view" as const, rateLimit: { max: config.rateLimitMax, timeWindow: config.rateLimitWindowMs } }
@@ -140,9 +143,52 @@ async function auditEntries(
 
 async function referencedActorIds(
   database: DatabaseExecutor,
-  requestedIds: readonly string[]
+  requestedIds: readonly string[],
+  user: RequestUser | undefined
 ): Promise<Set<string>> {
   if (!requestedIds.length) return new Set();
+  const scope = await effectiveCareDataScope(user, database);
+  if (scope.type === "selected") {
+    const requested = requestedIds.map((id) => sql`${id}`);
+    const visibleActorQueries = [
+      sql`SELECT created_by AS id FROM children WHERE deleted_at IS NULL`,
+      sql`SELECT updated_by AS id FROM children WHERE deleted_at IS NULL`,
+      sql`SELECT created_by AS id FROM holiday_periods WHERE deleted_at IS NULL`,
+      sql`SELECT updated_by AS id FROM holiday_periods WHERE deleted_at IS NULL`
+    ];
+    if (scope.carePartyIds.length) {
+      const parties = scope.carePartyIds.map((id) => sql`${id}`);
+      const effectiveParty = sql`CASE
+        WHEN entry.status IN ('completed', 'partial')
+          AND entry.actual_responsible_party_id IS NOT NULL
+          THEN entry.actual_responsible_party_id
+        ELSE entry.responsible_party_id
+      END`;
+      visibleActorQueries.push(
+        sql`SELECT created_by AS id FROM care_parties WHERE deleted_at IS NULL AND id IN (${sql.join(parties)})`,
+        sql`SELECT updated_by AS id FROM care_parties WHERE deleted_at IS NULL AND id IN (${sql.join(parties)})`,
+        sql`SELECT entry.created_by AS id FROM care_entries AS entry WHERE entry.deleted_at IS NULL AND ${effectiveParty} IN (${sql.join(parties)})`,
+        sql`SELECT entry.updated_by AS id FROM care_entries AS entry WHERE entry.deleted_at IS NULL AND ${effectiveParty} IN (${sql.join(parties)})`,
+        sql`SELECT trip.created_by AS id FROM trips AS trip INNER JOIN care_entries AS entry ON entry.id = trip.care_entry_id AND entry.deleted_at IS NULL WHERE trip.deleted_at IS NULL AND ${effectiveParty} IN (${sql.join(parties)})`,
+        sql`SELECT trip.updated_by AS id FROM trips AS trip INNER JOIN care_entries AS entry ON entry.id = trip.care_entry_id AND entry.deleted_at IS NULL WHERE trip.deleted_at IS NULL AND ${effectiveParty} IN (${sql.join(parties)})`,
+        sql`SELECT cost.created_by AS id FROM costs AS cost INNER JOIN care_entries AS entry ON entry.id = cost.care_entry_id AND entry.deleted_at IS NULL WHERE cost.deleted_at IS NULL AND ${effectiveParty} IN (${sql.join(parties)})`,
+        sql`SELECT cost.updated_by AS id FROM costs AS cost INNER JOIN care_entries AS entry ON entry.id = cost.care_entry_id AND entry.deleted_at IS NULL WHERE cost.deleted_at IS NULL AND ${effectiveParty} IN (${sql.join(parties)})`,
+        sql`SELECT created_by AS id FROM unavailable_periods WHERE deleted_at IS NULL AND responsible_party_id IN (${sql.join(parties)})`,
+        sql`SELECT updated_by AS id FROM unavailable_periods WHERE deleted_at IS NULL AND responsible_party_id IN (${sql.join(parties)})`,
+        sql`SELECT created_by AS id FROM contact_rules WHERE deleted_at IS NULL AND responsible_party_id IN (${sql.join(parties)})`,
+        sql`SELECT updated_by AS id FROM contact_rules WHERE deleted_at IS NULL AND responsible_party_id IN (${sql.join(parties)})`,
+        sql`SELECT pattern.created_by AS id FROM contact_patterns AS pattern INNER JOIN contact_rules AS rule ON rule.source_contact_pattern_id = pattern.id AND rule.deleted_at IS NULL WHERE pattern.deleted_at IS NULL AND rule.responsible_party_id IN (${sql.join(parties)})`,
+        sql`SELECT pattern.updated_by AS id FROM contact_patterns AS pattern INNER JOIN contact_rules AS rule ON rule.source_contact_pattern_id = pattern.id AND rule.deleted_at IS NULL WHERE pattern.deleted_at IS NULL AND rule.responsible_party_id IN (${sql.join(parties)})`
+      );
+    }
+    const rows = await sql<{ id: string }>`
+      SELECT DISTINCT id
+      FROM (${sql.join(visibleActorQueries, sql` UNION ALL `)}) AS visible_actor_ids
+      WHERE id IN (${sql.join(requested)})
+      LIMIT ${requestedIds.length}
+    `.execute(database);
+    return new Set(rows.rows.map((row) => row.id));
+  }
   const rows = await Promise.all([
     ...(["children", "care_parties", "care_entries", "trips", "costs", "holiday_periods", "unavailable_periods", "contact_patterns", "contact_rules"] as const)
       .flatMap((table) => (["created_by", "updated_by"] as const).map((column) =>
@@ -204,7 +250,7 @@ export async function auditRoutes(app: FastifyInstance): Promise<void> {
     if (!ids.length) {
       return [];
     }
-    const referenced = await referencedActorIds(app.persistence.query, ids);
+    const referenced = await referencedActorIds(app.persistence.query, ids, request.user);
     const visibleIds = ids.filter((id) => referenced.has(id));
     if (!visibleIds.length) return [];
     const [users, actors] = await Promise.all([

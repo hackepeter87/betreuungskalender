@@ -32,6 +32,10 @@ Workspace membership is the authorization source for native OIDC users.
 Removing a membership also invalidates that identity's active application
 sessions; restoring membership requires a new login.
 
+Selected member data scopes also constrain actor-label resolution and every
+full care-entry projection. Hidden records and care-party references must not
+introduce identifiers or display names into scoped responses.
+
 Owner-approved privacy actions require a fresh no-store preview and execute in
 one transaction. Their technical result records contain stable action codes
 and aggregate counts, not previous authentication subjects or personal
