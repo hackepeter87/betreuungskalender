@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import Fastify from "fastify";
 import type { RequestUser } from "./auth.js";
-import { createSqlitePersistenceRuntime } from "./db/runtime.js";
+import { createSqlitePersistenceRuntime, type DatabaseExecutor } from "./db/runtime.js";
+import { clearDomainData } from "./routes/appData.js";
 import { privacyActionRoutes } from "./routes/privacyActions.js";
 import {
   executePrivacyAction,
@@ -15,6 +16,7 @@ import {
 } from "./services/privacyActions.js";
 import { hasWorkspaceAccess } from "./services/memberships.js";
 import { acceptInvitation, createInvitation } from "./services/invitations.js";
+import { currentPrivacyActionDataGeneration } from "./services/privacyActionState.js";
 import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "./services/users.js";
 
 async function database() {
@@ -128,6 +130,31 @@ function completeRevocationRequest() {
       { category: "domain_relationships", action: "delete" },
       { category: "runtime_channels", action: "revoke" }
     ]
+  });
+}
+
+async function insertGenerationFixtureChild(
+  database: DatabaseExecutor
+) {
+  await database.insertInto("children").values({
+    id: "generation-child",
+    name: "Fictional generation child",
+    birth_month: 4,
+    birth_year: 2020,
+    color: "#123456",
+    created_by: "owner-user",
+    updated_by: "owner-user",
+    created_at: "2026-01-01T00:00:00.000Z",
+    updated_at: "2026-01-01T00:00:00.000Z",
+    deleted_at: null
+  }).execute();
+}
+
+function generationFixtureRequest() {
+  return parsePrivacyActionPreviewRequest({
+    subjectType: "child",
+    subjectId: "generation-child",
+    actions: [{ category: "profile", action: "anonymize" }]
   });
 }
 
@@ -381,6 +408,85 @@ test("privacy execution revokes access and detaches identity atomically and idem
     );
     assert.equal(accepted.acceptedUserId, newUserId);
     assert.equal(await hasWorkspaceAccess(newUserId, runtime.query), true);
+  } finally {
+    await runtime.close();
+  }
+});
+
+test("domain replacement requires a fresh privacy action evaluation", async () => {
+  const runtime = await database();
+  try {
+    insertOwner(runtime);
+    await insertGenerationFixtureChild(runtime.query);
+    const request = generationFixtureRequest();
+    const firstPreview = await previewPrivacyAction(request, "owner-user", runtime.query);
+    const first = await executePrivacyAction(
+      { ...request, fingerprint: firstPreview.fingerprint },
+      "owner-user",
+      runtime,
+      "2026-10-10T12:00:00.000Z"
+    );
+
+    await runtime.transaction(async (database) => {
+      await clearDomainData(database);
+      await insertGenerationFixtureChild(database);
+    });
+
+    const secondPreview = await previewPrivacyAction(request, "owner-user", runtime.query);
+    assert.notEqual(secondPreview.fingerprint, firstPreview.fingerprint);
+    const second = await executePrivacyAction(
+      { ...request, fingerprint: secondPreview.fingerprint },
+      "owner-user",
+      runtime,
+      "2026-10-10T12:01:00.000Z"
+    );
+    assert.notEqual(second.id, first.id);
+    assert.deepEqual(
+      (await runtime.query.selectFrom("privacy_action_runs")
+        .select("data_generation")
+        .orderBy("data_generation")
+        .execute()).map(({ data_generation }) => Number(data_generation)),
+      [0, 1]
+    );
+  } finally {
+    await runtime.close();
+  }
+});
+
+test("failed domain replacement rolls back the privacy action generation", async () => {
+  const runtime = await database();
+  try {
+    insertOwner(runtime);
+    await insertGenerationFixtureChild(runtime.query);
+    const request = generationFixtureRequest();
+    const preview = await previewPrivacyAction(request, "owner-user", runtime.query);
+    const first = await executePrivacyAction(
+      { ...request, fingerprint: preview.fingerprint },
+      "owner-user",
+      runtime,
+      "2026-10-10T12:00:00.000Z"
+    );
+    const generation = await currentPrivacyActionDataGeneration(runtime.query);
+
+    await assert.rejects(
+      runtime.transaction(async (database) => {
+        await clearDomainData(database);
+        throw new Error("replacement failed");
+      }),
+      /replacement failed/
+    );
+
+    assert.equal(await currentPrivacyActionDataGeneration(runtime.query), generation);
+    const repeated = await executePrivacyAction(
+      { ...request, fingerprint: preview.fingerprint },
+      "owner-user",
+      runtime,
+      "2026-10-10T12:01:00.000Z"
+    );
+    assert.equal(repeated.id, first.id);
+    assert.equal(Number((await runtime.query.selectFrom("privacy_action_runs")
+      .select(({ fn }) => fn.count<number>("id").as("count"))
+      .executeTakeFirstOrThrow()).count), 1);
   } finally {
     await runtime.close();
   }

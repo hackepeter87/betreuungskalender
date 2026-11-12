@@ -71,6 +71,7 @@ import {
   parsePrivacyActionPreviewRequest,
   previewPrivacyAction
 } from "./services/privacyActions.js";
+import { currentPrivacyActionDataGeneration } from "./services/privacyActionState.js";
 import { completeFirstUseSetup } from "./services/setupBootstrap.js";
 import { findAuthenticatedUserBySubject, upsertAuthenticatedUser } from "./services/users.js";
 
@@ -754,6 +755,70 @@ async function privacyActionExecutionSummary(runtime: PersistenceRuntime) {
   };
 }
 
+async function privacyActionGenerationSummary(runtime: PersistenceRuntime) {
+  const owner = user("privacy-generation-owner", "admin");
+  await upsertAuthenticatedUser(owner, runtime.query, timestamp);
+  await insertOwnerSetting(runtime, owner.id);
+  const insertChild = (database: typeof runtime.query) => database.insertInto("children").values({
+    id: "privacy-generation-child",
+    name: "Fictional generation child",
+    birth_month: 4,
+    birth_year: 2020,
+    color: "#123456",
+    created_by: owner.id,
+    updated_by: owner.id,
+    created_at: timestamp,
+    updated_at: timestamp,
+    deleted_at: null
+  }).execute();
+  await insertChild(runtime.query);
+  const request = parsePrivacyActionPreviewRequest({
+    subjectType: "child",
+    subjectId: "privacy-generation-child",
+    actions: [{ category: "profile", action: "anonymize" }]
+  });
+  const firstPreview = await previewPrivacyAction(request, owner.id, runtime.query);
+  const first = await executePrivacyAction(
+    { ...request, fingerprint: firstPreview.fingerprint },
+    owner.id,
+    runtime,
+    timestamp
+  );
+  await runtime.transaction(async (database) => {
+    await clearDomainData(database);
+    await insertChild(database);
+  });
+  const secondPreview = await previewPrivacyAction(request, owner.id, runtime.query);
+  const second = await executePrivacyAction(
+    { ...request, fingerprint: secondPreview.fingerprint },
+    owner.id,
+    runtime,
+    "2026-07-01T09:01:00.000Z"
+  );
+  const generationBeforeRollback = await currentPrivacyActionDataGeneration(runtime.query);
+  await assert.rejects(runtime.transaction(async (database) => {
+    await clearDomainData(database);
+    throw new Error("generation rollback fixture");
+  }), /generation rollback fixture/);
+  const repeated = await executePrivacyAction(
+    { ...request, fingerprint: secondPreview.fingerprint },
+    owner.id,
+    runtime,
+    "2026-07-01T09:02:00.000Z"
+  );
+  return {
+    fingerprintsChanged: firstPreview.fingerprint !== secondPreview.fingerprint,
+    actionIdsChanged: first.id !== second.id,
+    generations: (await runtime.query.selectFrom("privacy_action_runs")
+      .select("data_generation")
+      .orderBy("data_generation")
+      .execute()).map(({ data_generation }) => Number(data_generation)),
+    generationBeforeRollback,
+    generationAfterRollback: await currentPrivacyActionDataGeneration(runtime.query),
+    repeatedSecondAction: repeated.id === second.id
+  };
+}
+
 async function privacyAnonymizationSummary(runtime: PersistenceRuntime) {
   const owner = user("privacy-anonymization-owner", "admin");
   const target = user("privacy-anonymization-target", "parent");
@@ -1433,6 +1498,30 @@ test("PostgreSQL produces the same application results as SQLite", {
       runApplicationScenario(postgres)
     ]);
     assert.deepEqual(withoutDriver(postgresResult), withoutDriver(sqliteResult));
+  } finally {
+    await Promise.all([sqlite.close(), postgres.close()]);
+  }
+});
+
+test("privacy action generation binding remains equivalent on SQLite and PostgreSQL", {
+  skip: !postgresConfigured
+}, async () => {
+  const sqlite = await sqliteRuntime();
+  const postgres = await postgresRuntime();
+  try {
+    const [sqliteResult, postgresResult] = await Promise.all([
+      privacyActionGenerationSummary(sqlite),
+      privacyActionGenerationSummary(postgres)
+    ]);
+    assert.deepEqual(postgresResult, sqliteResult);
+    assert.deepEqual(sqliteResult, {
+      fingerprintsChanged: true,
+      actionIdsChanged: true,
+      generations: [0, 1],
+      generationBeforeRollback: 1,
+      generationAfterRollback: 1,
+      repeatedSecondAction: true
+    });
   } finally {
     await Promise.all([sqlite.close(), postgres.close()]);
   }

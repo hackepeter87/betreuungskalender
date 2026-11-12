@@ -354,7 +354,11 @@ other members are not affected.
 
 Owner-approved privacy actions use a separate preview fingerprint and recheck
 the current owner, selected subject, dependencies, and database state inside
-one transaction. Identity detachment revokes selected memberships, sessions,
+one transaction. The preview and any reusable completed result are also bound
+to the current domain-data generation. In-app replacement or deletion advances
+that generation atomically, so recreated data cannot reuse an earlier result;
+a failed replacement rolls the generation back with the data. Identity
+detachment revokes selected memberships, sessions,
 feeds, notification channels, and current assignments before replacing the
 authentication subject with a reserved non-authenticating tombstone. The
 previous subject, address, and display values are not copied into the technical

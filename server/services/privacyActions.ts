@@ -18,6 +18,10 @@ import {
   applyPrivacyDomainErasure
 } from "./privacyDomainErasure.js";
 import { detachedAuthenticationSubjectPrefix } from "./users.js";
+import {
+  claimPrivacyActionDataGeneration,
+  currentPrivacyActionDataGeneration
+} from "./privacyActionState.js";
 
 interface InventoryCategory {
   code: PrivacyActionCategoryCode;
@@ -283,6 +287,7 @@ export async function previewPrivacyAction(
   actorId: string,
   database: DatabaseExecutor
 ): Promise<PrivacyActionPreviewResponse> {
+  const dataGeneration = await currentPrivacyActionDataGeneration(database);
   const categories = await inventory(request, database);
   const selections = new Map(request.actions.map((selection) => [selection.category, selection.action]));
   const blockerCodes = new Set<string>();
@@ -347,7 +352,7 @@ export async function previewPrivacyAction(
   const canonicalState = categories.map((category) => ({ code: category.code, references: [...category.references].sort() }));
   const result = blockerCodes.size > 0 ? "blocked" : warningCodes.size > 0 ? "warnings" : "ready";
   return {
-    fingerprint: fingerprint({ request, canonicalState }),
+    fingerprint: fingerprint({ dataGeneration, request, canonicalState }),
     result,
     subject: { type: request.subjectType, id: request.subjectId },
     categories: categoryResponse,
@@ -423,6 +428,7 @@ function resultFromRow(row: {
 async function completedResultByFingerprint(
   fingerprintValue: string,
   actorId: string,
+  dataGeneration: number,
   database: DatabaseExecutor
 ): Promise<PrivacyActionResultResponse | undefined> {
   const row = await database.selectFrom("privacy_action_runs")
@@ -432,6 +438,7 @@ async function completedResultByFingerprint(
     ])
     .where("preview_fingerprint", "=", fingerprintValue)
     .where("actor_user_id", "=", actorId)
+    .where("data_generation", "=", dataGeneration)
     .where("status", "=", "completed")
     .executeTakeFirst();
   return row ? resultFromRow(row) : undefined;
@@ -628,11 +635,15 @@ export async function executePrivacyAction(
   persistence: PersistenceRuntime,
   timestamp = new Date().toISOString()
 ): Promise<PrivacyActionResultResponse> {
-  const existing = await completedResultByFingerprint(request.fingerprint, actorId, persistence.query);
-  if (existing) return existing;
   try {
     return await persistence.transaction(async (database) => {
-      const repeated = await completedResultByFingerprint(request.fingerprint, actorId, database);
+      const dataGeneration = await claimPrivacyActionDataGeneration(database);
+      const repeated = await completedResultByFingerprint(
+        request.fingerprint,
+        actorId,
+        dataGeneration,
+        database
+      );
       if (repeated) return repeated;
       const previewRequest: PrivacyActionPreviewRequest = {
         subjectType: request.subjectType,
@@ -650,6 +661,7 @@ export async function executePrivacyAction(
         id: actionId,
         preview_fingerprint: request.fingerprint,
         actor_user_id: actorId,
+        data_generation: dataGeneration,
         subject_type: request.subjectType,
         action_codes_json: JSON.stringify(actionCodes),
         affected_counts_json: "{}",
@@ -688,12 +700,23 @@ export async function executePrivacyAction(
         completed_at: timestamp,
         updated_at: timestamp
       }).where("id", "=", actionId).execute();
-      const result = await completedResultByFingerprint(request.fingerprint, actorId, database);
+      const result = await completedResultByFingerprint(
+        request.fingerprint,
+        actorId,
+        dataGeneration,
+        database
+      );
       if (!result) throw new Error("Privacy action result was not stored.");
       return result;
     });
   } catch (error) {
-    const repeated = await completedResultByFingerprint(request.fingerprint, actorId, persistence.query);
+    const currentGeneration = await currentPrivacyActionDataGeneration(persistence.query);
+    const repeated = await completedResultByFingerprint(
+      request.fingerprint,
+      actorId,
+      currentGeneration,
+      persistence.query
+    );
     if (repeated) return repeated;
     throw error;
   }

@@ -392,6 +392,7 @@ interface PrivacyActionRunsTable {
   id: string;
   preview_fingerprint: string;
   actor_user_id: string;
+  data_generation: number;
   subject_type: string;
   action_codes_json: string;
   affected_counts_json: string;
@@ -400,6 +401,12 @@ interface PrivacyActionRunsTable {
   started_at: string;
   completed_at: NullableText;
   created_at: string;
+  updated_at: string;
+}
+
+interface PrivacyActionStateTable {
+  id: string;
+  data_generation: number;
   updated_at: string;
 }
 
@@ -498,6 +505,7 @@ export interface DatabaseSchema {
   owner_setup_tokens: OwnerSetupTokensTable;
   push_subscriptions: PushSubscriptionsTable;
   privacy_action_runs: PrivacyActionRunsTable;
+  privacy_action_state: PrivacyActionStateTable;
   recovery_admin_credentials: RecoveryAdminCredentialsTable;
   recovery_admin_sessions: RecoveryAdminSessionsTable;
   schema_migrations: SchemaMigrationsTable;
@@ -542,6 +550,7 @@ export const databaseTableNames = [
   "owner_setup_tokens",
   "push_subscriptions",
   "privacy_action_runs",
+  "privacy_action_state",
   "recovery_admin_credentials",
   "recovery_admin_sessions",
   "schema_migrations",

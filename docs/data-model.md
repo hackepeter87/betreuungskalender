@@ -526,7 +526,11 @@ Privacy-action previews inventory direct relationships without persisting a
 run or copying subject attributes. Executed actions store one minimal
 `privacy_action_runs` record containing a generated action ID, the tested
 fingerprint, executing owner ID, stable action codes, aggregate affected-row
-counts, status, and timestamps. The record does not contain the prior
+counts, domain-data generation, status, and timestamps. The singleton
+`privacy_action_state` row tracks that generation independently of replaceable
+domain data. Domain replacement or deletion advances it atomically, preventing
+a completed result from being reused for recreated data. The record does not
+contain the prior
 authentication subject, names, email addresses, free-text justification, or
 domain content.
 
@@ -598,3 +602,9 @@ attributes without inventing a replacement date. The SQLite migration rebuilds
 only the `children` table under the migration runner's explicit
 foreign-key-off mode and verifies all foreign keys before committing. The
 PostgreSQL migration drops the two `NOT NULL` constraints.
+
+Migration `038_privacy_action_data_generation` adds the singleton generation
+state and binds privacy-action idempotency to it. Existing runs and installations
+start at generation zero; no domain records or existing action results are
+removed. Later in-app domain replacement and deletion advance the generation
+inside their existing transaction.

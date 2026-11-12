@@ -47,7 +47,8 @@ const expectedMigrations = [
   "034_care_confirmation_email_deliveries",
   "035_privacy_action_runs",
   "036_nullable_child_birth_attributes",
-  "037_explicit_member_data_scopes"
+  "037_explicit_member_data_scopes",
+  "038_privacy_action_data_generation"
 ];
 
 test("explicit member data scopes preserve legacy access deterministically", async () => {
