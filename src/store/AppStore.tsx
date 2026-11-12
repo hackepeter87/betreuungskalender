@@ -83,6 +83,7 @@ interface AppStoreValue {
   openConfirmations: CareConfirmationRequest[];
   notificationPreferences: NotificationPreferencesResponse | null;
   reload: () => Promise<boolean>;
+  prepareForSessionTransition: () => void;
   clearError: () => void;
   saveChild: (input: ChildInput) => Promise<boolean>;
   removeChild: (id: string) => Promise<boolean>;
@@ -145,6 +146,24 @@ const defaultSession: ApiSession = {
   }
 };
 
+const sessionTransitionStorageKey = "betreuungskalender:session-transition";
+type SessionTransitionState = "idle" | "awaiting-change" | "complete";
+
+function authenticatedIdentity(session: ApiSession): string | undefined {
+  return session.authenticated ? session.user?.id : undefined;
+}
+
+function publishSessionTransition(phase: "start" | "complete"): void {
+  try {
+    window.localStorage.setItem(sessionTransitionStorageKey, JSON.stringify({
+      phase,
+      nonce: window.crypto.randomUUID()
+    }));
+  } catch {
+    // Cross-tab coordination is best effort; the current tab is cleared directly.
+  }
+}
+
 function requiresLogin(session: ApiSession): boolean {
   return session.authRequired && !session.authenticated;
 }
@@ -171,6 +190,9 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [openConfirmations, setOpenConfirmations] = useState<CareConfirmationRequest[]>([]);
   const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferencesResponse | null>(null);
   const dataRef = useRef(data);
+  const sessionRef = useRef(session);
+  const sessionTransitionStateRef = useRef<SessionTransitionState>("idle");
+  const sessionTransitionOwnerRef = useRef(false);
   const serverStatusRef = useRef(serverStatus);
   dataRef.current = data;
   serverStatusRef.current = serverStatus;
@@ -189,23 +211,62 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
-  const setUnauthenticatedState = useCallback((nextSession: ApiSession) => {
+  const clearDomainState = useCallback(() => {
     const empty = createEmptyData();
     dataRef.current = empty;
     setData(empty);
     setActorLabels({});
     setOpenConfirmations([]);
     setNotificationPreferences(null);
+  }, []);
+
+  const setUnauthenticatedState = useCallback((nextSession: ApiSession) => {
+    clearDomainState();
+    sessionRef.current = nextSession;
     setSession(nextSession);
     setServerStatus("online");
     setError(null);
-  }, []);
+  }, [clearDomainState]);
+
+  const prepareForSessionTransition = useCallback(() => {
+    sessionTransitionStateRef.current = "awaiting-change";
+    sessionTransitionOwnerRef.current = true;
+    clearDomainState();
+    setIsLoading(false);
+    setError(null);
+    publishSessionTransition("start");
+  }, [clearDomainState]);
 
   const reloadInternal = useCallback(
     async (silent = false): Promise<boolean> => {
       if (!silent) setIsLoading(true);
+      let nextSession: ApiSession;
       try {
-        const nextSession = await loadSession();
+        nextSession = await loadSession();
+      } catch (reason) {
+        clearDomainState();
+        handleError(reason);
+        if (!silent) setIsLoading(false);
+        return false;
+      }
+      try {
+        const previousSession = sessionRef.current;
+        const identityChanged = authenticatedIdentity(previousSession) !== authenticatedIdentity(nextSession);
+        if (sessionTransitionStateRef.current === "awaiting-change" && !identityChanged) {
+          sessionRef.current = nextSession;
+          setSession(nextSession);
+          setServerStatus("online");
+          setError(null);
+          return true;
+        }
+        if (identityChanged || sessionTransitionStateRef.current === "complete") {
+          clearDomainState();
+          const notifyOtherTabs = identityChanged && sessionTransitionOwnerRef.current;
+          sessionTransitionStateRef.current = "idle";
+          sessionTransitionOwnerRef.current = false;
+          if (notifyOtherTabs) publishSessionTransition("complete");
+        }
+        sessionRef.current = nextSession;
         setSession(nextSession);
         if (requiresLogin(nextSession)) {
           setUnauthenticatedState(nextSession);
@@ -247,6 +308,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         if (reason instanceof ApiError && reason.status === 401) {
           try {
             const nextSession = await loadSession();
+            sessionRef.current = nextSession;
             setSession(nextSession);
             if (requiresLogin(nextSession)) {
               setUnauthenticatedState(nextSession);
@@ -262,7 +324,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         if (!silent) setIsLoading(false);
       }
     },
-    [handleError, setUnauthenticatedState]
+    [clearDomainState, handleError, setUnauthenticatedState]
   );
 
   const reload = useCallback(() => reloadInternal(false), [reloadInternal]);
@@ -283,8 +345,25 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       setServerStatus("offline");
       setError(SERVER_UNAVAILABLE_MESSAGE);
     };
+    const sessionTransition = (event: StorageEvent) => {
+      if (event.key !== sessionTransitionStorageKey || !event.newValue) return;
+      let phase: unknown;
+      try {
+        phase = (JSON.parse(event.newValue) as { phase?: unknown }).phase;
+      } catch {
+        return;
+      }
+      if (phase !== "start" && phase !== "complete") return;
+      sessionTransitionStateRef.current = phase === "start" ? "awaiting-change" : "complete";
+      sessionTransitionOwnerRef.current = false;
+      clearDomainState();
+      setIsLoading(false);
+      setError(null);
+      if (phase === "complete") void reloadInternal(false);
+    };
     window.addEventListener("online", online);
     window.addEventListener("offline", offline);
+    window.addEventListener("storage", sessionTransition);
     const interval = window.setInterval(async () => {
       const available = await checkServer();
       if (!available) {
@@ -297,9 +376,10 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
     return () => {
       window.removeEventListener("online", online);
       window.removeEventListener("offline", offline);
+      window.removeEventListener("storage", sessionTransition);
       window.clearInterval(interval);
     };
-  }, [reloadInternal]);
+  }, [clearDomainState, reloadInternal]);
 
   const performWrite = useCallback(
     async <T,>(operation: () => Promise<T>, failureValue: T): Promise<T> => {
@@ -832,6 +912,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         (!session.authRequired || session.authenticated) &&
         (session.permissions ? sessionCan(session, "appointments:create") : true),
       reload,
+      prepareForSessionTransition,
       clearError: () => setError(null),
       saveChild,
       removeChild,
@@ -876,6 +957,7 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       loadEdgeCaseDemo,
       notificationPreferences,
       openConfirmations,
+      prepareForSessionTransition,
       recordBackupExport,
       registerPushSubscription,
       reload,

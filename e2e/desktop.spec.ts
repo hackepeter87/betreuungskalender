@@ -1570,6 +1570,121 @@ test("uses native OIDC POST logout and returns to unauthenticated state", async 
   await expect(page).toHaveURL(/\/provider-logout-test$/);
 });
 
+test("clears previous account data across tabs before the replacement session loads", async ({
+  context,
+  page,
+  request
+}) => {
+  const childResponse = await request.post("/api/children", {
+    data: {
+      name: "Altes Konto Testkind",
+      birthMonth: 4,
+      birthYear: 2018,
+      color: "#087f7b"
+    }
+  });
+  expect(childResponse.ok()).toBeTruthy();
+  const child = await childResponse.json() as { id: string };
+  const partiesResponse = await request.get("/api/care-parties");
+  const parties = await partiesResponse.json() as Array<{ id: string }>;
+  const entryResponse = await request.post("/api/care-entries", {
+    data: {
+      startDateTime: "2030-07-04T08:00:00.000Z",
+      endDateTime: "2030-07-04T17:00:00.000Z",
+      childIds: [child.id],
+      responsiblePartyId: parties[0]?.id,
+      status: "planned",
+      careScope: "full_day",
+      overnight: false,
+      schoolHandover: false,
+      holiday: false,
+      weekend: false,
+      additionalCare: false,
+      notes: "Nur für das alte Konto",
+      hasEvidence: false,
+      trips: [],
+      costs: []
+    }
+  });
+  expect(entryResponse.ok()).toBeTruthy();
+
+  let activeUser = "account-a";
+  let failSessionRefresh = false;
+  const installSessionRoute = async (target: typeof page) => {
+    await target.route("**/api/session", async (route) => {
+      if (failSessionRefresh) {
+        await route.fulfill({
+          status: 503,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "service_unavailable" })
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          authRequired: true,
+          authenticated: true,
+          setup: { complete: true, required: false },
+          workspaceAccess: true,
+          workspaceRole: "admin",
+          isOwner: true,
+          user: {
+            id: activeUser,
+            displayName: activeUser,
+            role: "admin"
+          },
+          logoutUrl: "/auth/logout"
+        })
+      });
+    });
+  };
+
+  const secondTab = await context.newPage();
+  await installSessionRoute(page);
+  await installSessionRoute(secondTab);
+  await openApp(page);
+  await openApp(secondTab);
+  await navigate(secondTab, "settings");
+  await expect(secondTab.getByText("Altes Konto Testkind", { exact: true })).toBeVisible();
+
+  activeUser = "account-b";
+  await page.evaluate(() => {
+    window.localStorage.setItem("betreuungskalender:session-transition", JSON.stringify({
+      phase: "start",
+      nonce: "account-change"
+    }));
+  });
+
+  await expect(secondTab.getByText("Altes Konto Testkind", { exact: true })).toBeHidden();
+  await navigate(secondTab, "backup");
+  const downloadPromise = secondTab.waitForEvent("download");
+  await secondTab.getByTestId("export-entries-csv").click();
+  const download = await downloadPromise;
+  const downloadPath = await download.path();
+  expect(downloadPath).toBeTruthy();
+  expect(await readFile(downloadPath!, "utf8")).not.toContain("Nur für das alte Konto");
+
+  await page.evaluate(() => {
+    window.localStorage.setItem("betreuungskalender:session-transition", JSON.stringify({
+      phase: "complete",
+      nonce: "account-change-complete"
+    }));
+  });
+  await expect(secondTab.getByTestId("auth-session")).toContainText("account-b");
+  await navigate(secondTab, "settings");
+  await expect(secondTab.getByText("Altes Konto Testkind", { exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => {
+    const value = window.localStorage.getItem("betreuungskalender:session-transition");
+    return value ? (JSON.parse(value) as { nonce?: string }).nonce : undefined;
+  })).toBe("account-change-complete");
+
+  failSessionRefresh = true;
+  await secondTab.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect(secondTab.getByText("Altes Konto Testkind", { exact: true })).toBeHidden();
+});
+
 test("keeps the shell quiet in local development without authentication", async ({
   page
 }) => {

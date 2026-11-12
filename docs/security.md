@@ -35,7 +35,12 @@ Depending on use, the application may store:
 The React UI reads and writes domain data only through the Fastify API and its
 selected operational database. SQLite remains the default; PostgreSQL is an
 explicit optional backend. Browser local storage is limited to non-sensitive
-UI preferences; it is not a domain-data store or backup surface.
+UI preferences and a non-identifying session-transition signal; it is not a
+domain-data store or backup surface. Logout and authenticated-account changes
+clear the in-memory domain store before another identity can render or export
+data. Open tabs coordinate that clearing without storing account identifiers,
+tokens, or domain content. A failed session refresh also clears the previous
+account's in-memory data.
 
 ## Exports and backups
 
