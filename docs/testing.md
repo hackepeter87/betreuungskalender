@@ -25,6 +25,11 @@ npm run security:check
 It combines `npm audit --audit-level=high`,
 `npm run test:security-runtime`, and `npm run release:check`.
 
+The image-scanning workflow is fail-closed for high and critical findings. Its
+SARIF upload runs even when the scanner rejects an image, so a failed gate does
+not discard the review evidence. Local npm checks do not replace the container
+scan because operating-system packages come from the pinned runtime image.
+
 ## Release smoke automation
 
 Playwright covers desktop, iPhone, and iPad projects. The synthetic calendar
