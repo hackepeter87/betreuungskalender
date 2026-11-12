@@ -16,10 +16,15 @@ import { sql } from "kysely";
 import type { DatabaseExecutor } from "../db/runtime.js";
 import {
   assertCanUsePersistedCareParty,
+  assertCanUsePersistedCarePartiesInScope,
+  assertCanUsePersistedCarePartyInScope,
   assertPersistedCareParty,
   assertPersistedChildren,
+  claimCurrentScopedRecord,
   getPersistedDefaultResponsiblePartyId,
   isCarePartyAccessError,
+  isCurrentRecordChangedError,
+  lockPersistedCareDataScope,
   markDomainClosedMonthsChanged,
   recordDomainAudit,
   recordDomainFieldChanges,
@@ -1289,31 +1294,52 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.put<{ Params: { id: string } }>("/api/care-entries/:id", editLimit, async (request, reply) => {
-    const existing = await getEntry(app.persistence.query, request.params.id);
-    if (!existing) return reply.code(404).send({ error: "not_found" });
-    try {
-      await assertCanUseCareEntry(app.persistence.query, request.user, existing);
-    } catch (error) {
-      if (isCarePartyAccessError(error)) return reply.code(403).send({ error: "forbidden" });
-      throw error;
-    }
     const scheduler = request.user?.workspaceRole === "scheduler";
     const parsed = scheduler
       ? schedulerCareEntryInputSchema.safeParse(request.body)
       : careEntryInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
-    const input = scheduler
-      ? schedulingInput(parsed.data as ReturnType<typeof schedulerCareEntryInputSchema.parse>, existing)
-      : parsed.data as ReturnType<typeof careEntryInputSchema.parse>;
-    if (!(await schedulerWriteAllowed(app.persistence.query, request.user, input.responsiblePartyId ?? "", input.startDateTime, existing))) return schedulerForbidden(reply);
     try {
-      const updated = await app.persistence.transaction((database) =>
-        persistEntry(database, request.params.id, input, request.userEmail, existing, request.user)
-      );
+      const updated = await app.persistence.transaction(async (database) => {
+        const scope = await lockPersistedCareDataScope(database, request.user);
+        const existing = await getEntry(database, request.params.id);
+        if (!existing) return undefined;
+        const input = scheduler
+          ? schedulingInput(parsed.data as ReturnType<typeof schedulerCareEntryInputSchema.parse>, existing)
+          : parsed.data as ReturnType<typeof careEntryInputSchema.parse>;
+        await assertCanUsePersistedCarePartiesInScope(
+          database,
+          scope,
+          [
+            effectiveCareEntryPartyId(existing),
+            effectiveCareEntryPartyId({
+              status: input.status,
+              responsiblePartyId: input.responsiblePartyId ?? existing.responsiblePartyId,
+              actualResponsiblePartyId: input.actualResponsiblePartyId ?? existing.actualResponsiblePartyId
+            })
+          ]
+        );
+        await claimCurrentScopedRecord(database, "care_entries", existing.id, existing.updatedAt);
+        if (!(await schedulerWriteAllowed(
+          database,
+          request.user,
+          input.responsiblePartyId ?? "",
+          input.startDateTime,
+          existing
+        ))) {
+          return "scheduler-forbidden" as const;
+        }
+        return persistEntry(database, request.params.id, input, request.userEmail, existing, request.user);
+      });
+      if (!updated) return reply.code(404).send({ error: "not_found" });
+      if (updated === "scheduler-forbidden") return schedulerForbidden(reply);
       return scheduler
         ? await getScheduleEntry(app.persistence.query, request.params.id, request.user)
         : await projectEntryForUser(app.persistence.query, request.user, updated);
     } catch (error) {
+      if (isCurrentRecordChangedError(error)) {
+        return reply.code(409).send({ error: "record_changed" });
+      }
       if (isCarePartyAccessError(error)) {
         return reply.code(403).send({ error: "forbidden" });
       }
@@ -1331,50 +1357,64 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.delete<{ Params: { id: string } }>("/api/care-entries/:id", deleteLimit, async (request, reply) => {
-    const existing = await getEntry(app.persistence.query, request.params.id);
-    if (!existing) return reply.code(404).send({ error: "not_found" });
     try {
-      await assertCanUseCareEntry(app.persistence.query, request.user, existing);
+      const deleted = await app.persistence.transaction(async (database) => {
+        const scope = await lockPersistedCareDataScope(database, request.user);
+        const existing = await getEntry(database, request.params.id);
+        if (!existing) return false;
+        await assertCanUsePersistedCarePartyInScope(
+          database,
+          scope,
+          effectiveCareEntryPartyId(existing)
+        );
+        await claimCurrentScopedRecord(database, "care_entries", existing.id, existing.updatedAt);
+        const timestamp = nowIso();
+        await database.updateTable("care_entries")
+          .set({ deleted_at: timestamp, updated_at: timestamp, updated_by: request.userEmail })
+          .where("id", "=", request.params.id)
+          .where("deleted_at", "is", null)
+          .execute();
+        await database.updateTable("care_entry_children")
+          .set({ deleted_at: timestamp, updated_at: timestamp })
+          .where("care_entry_id", "=", request.params.id).where("deleted_at", "is", null).execute();
+        await database.updateTable("care_entry_actual_children")
+          .set({ deleted_at: timestamp, updated_at: timestamp })
+          .where("care_entry_id", "=", request.params.id).where("deleted_at", "is", null).execute();
+        await database.updateTable("trips")
+          .set({ deleted_at: timestamp, updated_by: request.userEmail, updated_at: timestamp })
+          .where("care_entry_id", "=", request.params.id).where("deleted_at", "is", null).execute();
+        await database.updateTable("costs")
+          .set({ deleted_at: timestamp, updated_by: request.userEmail, updated_at: timestamp })
+          .where("care_entry_id", "=", request.params.id).where("deleted_at", "is", null).execute();
+        await recordDomainAudit(database, {
+          userEmail: request.userEmail,
+          entityType: "care_entry",
+          entityId: request.params.id,
+          action: "deleted",
+          oldValue: existing
+        });
+        await markDomainClosedMonthsChanged(
+          database,
+          request.userEmail,
+          "care_entry",
+          request.params.id,
+          existing.startDateTime.slice(0, 10),
+          existing.endDateTime.slice(0, 10),
+          timestamp
+        );
+        return true;
+      });
+      return deleted
+        ? reply.code(204).send()
+        : reply.code(404).send({ error: "not_found" });
     } catch (error) {
+      if (isCurrentRecordChangedError(error)) {
+        return reply.code(409).send({ error: "record_changed" });
+      }
       if (isCarePartyAccessError(error)) {
         return reply.code(403).send({ error: "forbidden" });
       }
       return reply.code(400).send({ error: "invalid_relation", message: error instanceof Error ? error.message : String(error) });
     }
-    const timestamp = nowIso();
-    await app.persistence.transaction(async (database) => {
-      await database.updateTable("care_entries")
-        .set({ deleted_at: timestamp, updated_at: timestamp, updated_by: request.userEmail })
-        .where("id", "=", request.params.id).execute();
-      await database.updateTable("care_entry_children")
-        .set({ deleted_at: timestamp, updated_at: timestamp })
-        .where("care_entry_id", "=", request.params.id).where("deleted_at", "is", null).execute();
-      await database.updateTable("care_entry_actual_children")
-        .set({ deleted_at: timestamp, updated_at: timestamp })
-        .where("care_entry_id", "=", request.params.id).where("deleted_at", "is", null).execute();
-      await database.updateTable("trips")
-        .set({ deleted_at: timestamp, updated_by: request.userEmail, updated_at: timestamp })
-        .where("care_entry_id", "=", request.params.id).where("deleted_at", "is", null).execute();
-      await database.updateTable("costs")
-        .set({ deleted_at: timestamp, updated_by: request.userEmail, updated_at: timestamp })
-        .where("care_entry_id", "=", request.params.id).where("deleted_at", "is", null).execute();
-      await recordDomainAudit(database, {
-        userEmail: request.userEmail,
-        entityType: "care_entry",
-        entityId: request.params.id,
-        action: "deleted",
-        oldValue: existing
-      });
-      await markDomainClosedMonthsChanged(
-        database,
-        request.userEmail,
-        "care_entry",
-        request.params.id,
-        existing.startDateTime.slice(0, 10),
-        existing.endDateTime.slice(0, 10),
-        timestamp
-      );
-    });
-    return reply.code(204).send();
   });
 }

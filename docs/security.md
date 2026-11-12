@@ -264,6 +264,13 @@ response without record details. Scoped report snapshots omit global audit
 history rather than exposing audit fields that cannot be safely projected to a
 single care-data scope.
 
+Scoped updates and deletions of care entries, recurring-care rules, and
+unavailability records lock the current membership scope and relevant domain
+records before applying a change. Source and destination care-party access is
+checked against that transaction state. A concurrent record change returns a
+generic conflict, and the transaction rolls back without audit or child-record
+side effects.
+
 Membership and invitation access changes use an owner-only preview. The server
 derives fixed capability codes from the same role-permission model used for
 authorization and binds the proposed role and care-data scope to a fingerprint

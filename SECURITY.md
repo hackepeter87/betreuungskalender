@@ -36,6 +36,11 @@ Selected member data scopes also constrain actor-label resolution and every
 full care-entry projection. Hidden records and care-party references must not
 introduce identifiers or display names into scoped responses.
 
+Updates and deletions of scoped care entries, recurring-care rules, and
+unavailability records re-read and authorize the current stored record inside
+the mutation transaction. Concurrent scope or record changes fail without
+partial writes.
+
 The browser clears all user-scoped in-memory state before logout or account
 replacement and coordinates this transition across open tabs. The coordination
 signal contains no identity, token, or domain data.

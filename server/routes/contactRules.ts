@@ -5,10 +5,15 @@ import { omitUndefinedValues } from "../../shared/objects.js";
 import { config } from "../config.js";
 import {
   assertCanUsePersistedCareParty,
+  assertCanUsePersistedCarePartiesInScope,
+  assertCanUsePersistedCarePartyInScope,
   assertPersistedCareParty,
   assertPersistedChildren,
+  claimCurrentScopedRecord,
   getPersistedDefaultResponsiblePartyId,
   isCarePartyAccessError,
+  isCurrentRecordChangedError,
+  lockPersistedCareDataScope,
   recordDomainAudit,
   recordDomainFieldChanges,
   scopedPersistedCarePartyIds
@@ -121,14 +126,14 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.put<{ Params: { id: string } }>("/api/contact-rules/:id", writeLimit, async (request, reply) => {
-    const before = await getContactRule(request.params.id, app.persistence.query);
-    if (!before) return reply.code(404).send({ error: "not_found" });
     const parsed = contactRuleInputSchema.safeParse(request.body);
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     const timestamp = nowIso();
     try {
-      return await app.persistence.transaction(async (database) => {
-        await assertCanUsePersistedCareParty(database, request.user, before.responsiblePartyId);
+      const updated = await app.persistence.transaction(async (database) => {
+        const scope = await lockPersistedCareDataScope(database, request.user);
+        const before = await getContactRule(request.params.id, database);
+        if (!before) return undefined;
         const rule = omitUndefinedValues({
           ...parsed.data,
           responsiblePartyId: parsed.data.responsiblePartyId ?? before.responsiblePartyId ??
@@ -136,7 +141,12 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
         });
         await assertPersistedChildren(database, rule.childIds);
         await assertPersistedCareParty(database, rule.responsiblePartyId);
-        await assertCanUsePersistedCareParty(database, request.user, rule.responsiblePartyId);
+        await assertCanUsePersistedCarePartiesInScope(
+          database,
+          scope,
+          [before.responsiblePartyId, rule.responsiblePartyId]
+        );
+        await claimCurrentScopedRecord(database, "contact_rules", before.id, before.updatedAt);
         const saved = await upsertContactRule({
           id: request.params.id,
           rule: omitUndefinedValues({ ...rule, sourceContactPatternId: before.sourceContactPatternId }),
@@ -162,7 +172,11 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
         });
         return { ...await getContactRule(request.params.id, database), syncSummary };
       });
+      return updated ?? reply.code(404).send({ error: "not_found" });
     } catch (error) {
+      if (isCurrentRecordChangedError(error)) {
+        return reply.code(409).send({ error: "record_changed" });
+      }
       if (isDemoDatasetLimitError(error)) return reply.code(409).send({ error: error.code });
       if (isCarePartyAccessError(error)) {
         return reply.code(403).send({ error: "forbidden" });
@@ -197,17 +211,19 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.post<{ Params: { id: string } }>("/api/contact-rules/:id/sync", writeLimit, async (request, reply) => {
-    const rule = await getContactRule(request.params.id, app.persistence.query);
-    if (!rule) return reply.code(404).send({ error: "not_found" });
     try {
-      await assertCanUsePersistedCareParty(app.persistence.query, request.user, rule.responsiblePartyId);
       const ranged = request.body && Object.keys(request.body as object).length
         ? syncInputSchema.safeParse(request.body)
         : undefined;
       if (ranged && !ranged.success) {
         return reply.code(400).send({ error: "validation_error", issues: ranged.error.issues });
       }
-      return await app.persistence.transaction(async (database) => {
+      const synced = await app.persistence.transaction(async (database) => {
+        const scope = await lockPersistedCareDataScope(database, request.user);
+        const rule = await getContactRule(request.params.id, database);
+        if (!rule) return undefined;
+        await assertCanUsePersistedCarePartyInScope(database, scope, rule.responsiblePartyId);
+        await claimCurrentScopedRecord(database, "contact_rules", rule.id, rule.updatedAt);
         const syncSummary = await syncContactRule(request.params.id, {
           database,
           userEmail: request.userEmail,
@@ -221,7 +237,11 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
         });
         return { ...await getContactRule(request.params.id, database), syncSummary };
       });
+      return synced ?? reply.code(404).send({ error: "not_found" });
     } catch (error) {
+      if (isCurrentRecordChangedError(error)) {
+        return reply.code(409).send({ error: "record_changed" });
+      }
       if (isContactRuleSyncPreviewChangedError(error)) {
         return reply.code(409).send({ error: "contact_rule_sync_preview_changed" });
       }
@@ -266,9 +286,9 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send({ error: "validation_error", issues: parsed.error.issues });
     try {
       return await app.persistence.transaction(async (database) => {
+        const scope = await lockPersistedCareDataScope(database, request.user);
         const rule = await getContactRule(request.params.id, database);
         if (!rule) return reply.code(404).send({ error: "not_found" });
-        await assertCanUsePersistedCareParty(database, request.user, rule.responsiblePartyId);
         const proposedPartyId = parsed.data.scope === "occurrence"
           ? parsed.data.proposedEntry.responsiblePartyId
           : parsed.data.proposedRule.responsiblePartyId;
@@ -277,7 +297,12 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
           : parsed.data.proposedRule.childIds;
         await assertPersistedChildren(database, proposedChildIds);
         await assertPersistedCareParty(database, proposedPartyId);
-        await assertCanUsePersistedCareParty(database, request.user, proposedPartyId);
+        await assertCanUsePersistedCarePartiesInScope(
+          database,
+          scope,
+          [rule.responsiblePartyId, proposedPartyId]
+        );
+        await claimCurrentScopedRecord(database, "contact_rules", rule.id, rule.updatedAt);
         return await applyContactRuleChange({
           ruleId: request.params.id,
           request: parsed.data,
@@ -286,6 +311,9 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
         });
       });
     } catch (error) {
+      if (isCurrentRecordChangedError(error)) {
+        return reply.code(409).send({ error: "record_changed" });
+      }
       if (isContactRuleChangePreviewChangedError(error)) {
         return reply.code(409).send({ error: "contact_rule_change_preview_changed" });
       }
@@ -296,11 +324,40 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.delete<{ Params: { id: string } }>("/api/contact-rules/:id", writeLimit, async (request, reply) => {
-    const before = await getContactRule(request.params.id, app.persistence.query);
-    if (!before) return reply.code(404).send({ error: "not_found" });
     try {
-      await assertCanUsePersistedCareParty(app.persistence.query, request.user, before.responsiblePartyId);
+      const deleted = await app.persistence.transaction(async (database) => {
+        const scope = await lockPersistedCareDataScope(database, request.user);
+        const before = await getContactRule(request.params.id, database);
+        if (!before) return false;
+        await assertCanUsePersistedCarePartyInScope(database, scope, before.responsiblePartyId);
+        await claimCurrentScopedRecord(database, "contact_rules", before.id, before.updatedAt);
+        const timestamp = nowIso();
+        await database.updateTable("contact_rules")
+          .set({ deleted_at: timestamp, updated_by: request.userEmail, updated_at: timestamp })
+          .where("id", "=", request.params.id)
+          .where("deleted_at", "is", null)
+          .execute();
+        await database.updateTable("contact_rule_children")
+          .set({ deleted_at: timestamp, updated_at: timestamp })
+          .where("contact_rule_id", "=", request.params.id)
+          .where("deleted_at", "is", null)
+          .execute();
+        await recordDomainAudit(database, {
+          userEmail: request.userEmail,
+          entityType: "contact_rule",
+          entityId: request.params.id,
+          action: "deleted",
+          oldValue: before
+        });
+        return true;
+      });
+      return deleted
+        ? reply.code(204).send()
+        : reply.code(404).send({ error: "not_found" });
     } catch (error) {
+      if (isCurrentRecordChangedError(error)) {
+        return reply.code(409).send({ error: "record_changed" });
+      }
       if (isCarePartyAccessError(error)) {
         return reply.code(403).send({ error: "forbidden" });
       }
@@ -309,25 +366,5 @@ export async function contactRuleRoutes(app: FastifyInstance): Promise<void> {
         message: error instanceof Error ? error.message : String(error)
       });
     }
-    const timestamp = nowIso();
-    await app.persistence.transaction(async (database) => {
-      await database.updateTable("contact_rules")
-        .set({ deleted_at: timestamp, updated_by: request.userEmail, updated_at: timestamp })
-        .where("id", "=", request.params.id)
-        .execute();
-      await database.updateTable("contact_rule_children")
-        .set({ deleted_at: timestamp, updated_at: timestamp })
-        .where("contact_rule_id", "=", request.params.id)
-        .where("deleted_at", "is", null)
-        .execute();
-      await recordDomainAudit(database, {
-        userEmail: request.userEmail,
-        entityType: "contact_rule",
-        entityId: request.params.id,
-        action: "deleted",
-        oldValue: before
-      });
-    });
-    return reply.code(204).send();
   });
 }
