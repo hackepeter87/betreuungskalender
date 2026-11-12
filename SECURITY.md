@@ -48,7 +48,10 @@ signal contains no identity, token, or domain data.
 Owner-approved privacy actions require a fresh no-store preview and execute in
 one transaction. Their technical result records contain stable action codes
 and aggregate counts, not previous authentication subjects or personal
-content. Approved profile anonymization uses collision-resistant neutral labels,
+content. Reusable results are bound to the current domain-data generation;
+replacement or deletion of the application data advances that generation in
+the same transaction and therefore requires a fresh evaluation. Approved
+profile anonymization uses collision-resistant neutral labels,
 removes child birth attributes, clears directly linked identifying audit
 snapshots, and neutralizes mapped transfer actors. It never searches or
 rewrites free text heuristically.

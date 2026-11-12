@@ -87,6 +87,13 @@ follow the [backup and restore reconciliation](operator-data-lifecycle.md#backup
 procedure first. Existing backup files are expired as whole generations under
 the operator policy; the application does not rewrite them selectively.
 
+In-app domain-data replacement and deletion advance a technical privacy-action
+generation in the same database transaction. Completed privacy-action results
+from an earlier generation are retained as minimal history but cannot authorize
+or satisfy a new action against recreated data. This guard does not replace the
+operator reconciliation required after restoring an older complete database
+backup.
+
 ## PostgreSQL backup and restore
 
 The SQLite scripts refuse PostgreSQL and do not create a PostgreSQL backup.

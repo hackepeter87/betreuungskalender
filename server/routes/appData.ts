@@ -8,6 +8,7 @@ import {
   recordDomainAudit
 } from "../services/domainPersistence.js";
 import { normalizeClientSettings } from "../services/settings.js";
+import { advancePrivacyActionDataGeneration } from "../services/privacyActionState.js";
 import {
   appDataImportSchema,
   carePartyInputSchema,
@@ -97,6 +98,7 @@ function optionalDeviationType(record: DataRecord): string | null {
 }
 
 export async function clearDomainData(database: DatabaseExecutor): Promise<void> {
+  await advancePrivacyActionDataGeneration(database, nowIso());
   const tables = [
     "care_entry_actual_children",
     "care_entry_children",
