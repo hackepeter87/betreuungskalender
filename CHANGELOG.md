@@ -6,6 +6,49 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.36.0] - 2026-11-12
+
+### Added
+
+- Add an optional, disabled-by-default controlled demonstration mode with
+  bounded public projections, explicit tester authorization, transactional
+  resets, and protected operational status.
+- Add a reviewed third-party software inventory, license policy, notices, and
+  source/image SBOM checks to the release process.
+
+### Changed
+
+- Move the supported runtime baseline to Node.js 26 LTS with npm 12.2.2 and
+  retain a bounded Node.js 24 rollback-compatibility check for this release.
+- Stabilize personal calendar-feed lifecycle controls and diagnostics without
+  rotating existing active feed URLs.
+- Consolidate month navigation, form guidance, responsive layouts, and
+  accessibility behavior across calendar and settings workflows.
+- Update compatible application, build, browser-test, container-scan, and
+  GitHub Actions dependencies after compatibility and vulnerability review.
+
+### Security and privacy
+
+- Revalidate care-data scopes transactionally before scoped mutations and
+  clear obsolete browser identity state when account relationships change.
+- Bind completed privacy actions to the current domain-data generation so an
+  earlier result cannot be reused after an in-application replacement or
+  deletion.
+- Restrict the optional demonstration mode to explicit allowlisted operations,
+  bounded data, rate limits, and fail-closed reset behavior.
+- Retire remaining legacy authentication-proxy artifacts from current operator
+  documentation and deployment examples.
+
+### Compatibility
+
+- Apply migration `038` on SQLite and PostgreSQL to track the domain-data
+  generation used by privacy-action previews and completed results.
+- Existing calendar feed tokens and event identifiers remain valid unless they
+  are explicitly replaced, revoked, or lose their authorized membership.
+- Demo mode remains disabled by default and this release does not authorize
+  infrastructure activation or public exposure.
+- Existing SQLite and PostgreSQL installations remain supported.
+
 ## [1.35.4] - 2026-10-31
 
 ### Fixed
