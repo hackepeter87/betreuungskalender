@@ -2,8 +2,8 @@
 
 ## Requirements
 
-- Node.js 24.15 or newer in the supported LTS line
-- npm 12 or newer
+- Node.js 26.13 or newer in the supported LTS line
+- npm 12.2.2 or newer
 - Build tools required by `better-sqlite3` if a prebuilt binary is unavailable
 - A writable directory for SQLite and backups, or a supported PostgreSQL 16-18
   database with a mounted password file

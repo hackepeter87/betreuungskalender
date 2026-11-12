@@ -14,7 +14,7 @@ The repository supports these container paths:
   image-based testing and production channels
   where machines pull `testing` or `production` without local image builds.
 
-Both runtime images use a digest-pinned minimal Node.js 24 runtime. Build tools,
+Both runtime images use a digest-pinned minimal Node.js 26 runtime. Build tools,
 the package manager, and a shell remain in build stages and are not copied into
 the final image. The runtime installs production dependencies only, keeps the
 existing numeric UID/GID `1000`, and includes a direct Node.js healthcheck. This

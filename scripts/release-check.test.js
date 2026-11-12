@@ -260,7 +260,7 @@ test("allows only required dependency install scripts", () => {
   });
 });
 
-test("pins the required npm version in Node-based GitHub workflows", () => {
+test("pins the required Node and npm versions in Node-based GitHub workflows", () => {
   const approvedSetupNodeStep =
     "- uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0";
   const workflowPaths = [
@@ -289,10 +289,31 @@ test("pins the required npm version in Node-based GitHub workflows", () => {
         .find((line) => /^\s*-\s+(?:uses|run|name):/u.test(line));
       assert.equal(
         nextStep?.trim(),
-        "- run: npm install --global npm@12.2.1",
-        `${workflowPath} must pin npm 12.2.1 immediately after every setup-node step`
+        "- run: npm install --global npm@12.2.2",
+        `${workflowPath} must pin npm 12.2.2 immediately after every setup-node step`
       );
     }
+  }
+
+  for (const workflowPath of workflowPaths.filter((path) => !path.endsWith("release.yml"))) {
+    const workflow = readFileSync(resolve(workflowPath), "utf8");
+    assert.match(workflow, /node-version: 26\.13\.1/u);
+    assert.doesNotMatch(workflow, /node-version: 24\.22\.1/u);
+  }
+
+  const releaseWorkflow = readFileSync(resolve(".github/workflows/release.yml"), "utf8");
+  assert.match(releaseWorkflow, /name: Node 24 rollback compatibility/u);
+  assert.match(releaseWorkflow, /node-version: 26\.13\.1/u);
+  assert.match(releaseWorkflow, /node-version: 24\.22\.1/u);
+  for (const command of [
+    "npm run typecheck",
+    "npm run build",
+    "npm test",
+    "node dist-server/server/index.js",
+    "node scripts/backup.js",
+    "node scripts/restore-check.js"
+  ]) {
+    assert.match(releaseWorkflow, new RegExp(command.replaceAll(".", "\\."), "u"));
   }
 });
 
@@ -340,21 +361,21 @@ test("direct Compose example does not trust proxy identity headers", () => {
   assert.equal(parseEnvValue(envExample, "TRUST_PROXY_AUTH"), "false");
   assert.match(
     dockerfile,
-    /FROM node:24\.22\.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS build/
+    /FROM node:26\.13\.1-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1 AS build/
   );
   assert.match(
     releaseDockerfile,
-    /FROM node:24\.22\.1-bookworm-slim@sha256:55fb5f5a527ea2c5c4a95f963e48ef90aa38c7b346054fdc8ee9957a2b55d205 AS production-deps/
+    /FROM node:26\.13\.1-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1 AS production-deps/
   );
   assert.match(
     dockerfile,
-    /FROM gcr\.io\/distroless\/nodejs24-debian13:nonroot@sha256:cb606325b7ec4af55462cb0b424a53b452a5b4a894ffe841fcf1048d216fb9f8 AS runtime/
+    /FROM gcr\.io\/distroless\/nodejs26-debian13:nonroot@sha256:767ffb7e2ffa9f4280f1af7b99f7f0a1cafb79d0dcc0e0d3aba43843748008a5 AS runtime/
   );
   assert.match(
     releaseDockerfile,
-    /FROM gcr\.io\/distroless\/nodejs24-debian13:nonroot@sha256:cb606325b7ec4af55462cb0b424a53b452a5b4a894ffe841fcf1048d216fb9f8 AS runtime/
+    /FROM gcr\.io\/distroless\/nodejs26-debian13:nonroot@sha256:767ffb7e2ffa9f4280f1af7b99f7f0a1cafb79d0dcc0e0d3aba43843748008a5 AS runtime/
   );
-  assert.match(`${dockerfile}\n${releaseDockerfile}`, /npm install -g npm@12\.2\.1/);
+  assert.match(`${dockerfile}\n${releaseDockerfile}`, /npm install -g npm@12\.2\.2/);
   assert.doesNotMatch(`${dockerfile}\n${releaseDockerfile}`, /CMD \["npm", "run", "start"\]/);
   assert.match(`${dockerfile}\n${releaseDockerfile}`, /CMD \["dist-server\/server\/index\.js"\]/);
   assert.match(
