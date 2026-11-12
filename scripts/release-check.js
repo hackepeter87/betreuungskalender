@@ -562,9 +562,9 @@ function checkDeploymentExamples(cwd, version, report) {
 
   const dockerfiles = `${dockerfile}\n${releaseDockerfile}`;
   const buildImage =
-    "node:26.13.0-bookworm-slim@sha256:add5c17c14752c54d2f3d519ec46a3815684d41c33f198bcb09fb998f7dcbf68";
+    "node:26.13.1-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1";
   const runtimeImage =
-    "gcr.io/distroless/nodejs26-debian13:nonroot@sha256:9b945e92c1b5463a4b75f11e8417515e4bea7355f6adfd79ec220fbbe905dda8";
+    "gcr.io/distroless/nodejs26-debian13:nonroot@sha256:767ffb7e2ffa9f4280f1af7b99f7f0a1cafb79d0dcc0e0d3aba43843748008a5";
   const runtimeStages = [dockerfile, releaseDockerfile].map((content) =>
     content.slice(content.lastIndexOf(" AS runtime"))
   );

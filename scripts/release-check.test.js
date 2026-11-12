@@ -297,13 +297,13 @@ test("pins the required Node and npm versions in Node-based GitHub workflows", (
 
   for (const workflowPath of workflowPaths.filter((path) => !path.endsWith("release.yml"))) {
     const workflow = readFileSync(resolve(workflowPath), "utf8");
-    assert.match(workflow, /node-version: 26\.13\.0/u);
+    assert.match(workflow, /node-version: 26\.13\.1/u);
     assert.doesNotMatch(workflow, /node-version: 24\.22\.1/u);
   }
 
   const releaseWorkflow = readFileSync(resolve(".github/workflows/release.yml"), "utf8");
   assert.match(releaseWorkflow, /name: Node 24 rollback compatibility/u);
-  assert.match(releaseWorkflow, /node-version: 26\.13\.0/u);
+  assert.match(releaseWorkflow, /node-version: 26\.13\.1/u);
   assert.match(releaseWorkflow, /node-version: 24\.22\.1/u);
   for (const command of [
     "npm run typecheck",
@@ -361,19 +361,19 @@ test("direct Compose example does not trust proxy identity headers", () => {
   assert.equal(parseEnvValue(envExample, "TRUST_PROXY_AUTH"), "false");
   assert.match(
     dockerfile,
-    /FROM node:26\.13\.0-bookworm-slim@sha256:add5c17c14752c54d2f3d519ec46a3815684d41c33f198bcb09fb998f7dcbf68 AS build/
+    /FROM node:26\.13\.1-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1 AS build/
   );
   assert.match(
     releaseDockerfile,
-    /FROM node:26\.13\.0-bookworm-slim@sha256:add5c17c14752c54d2f3d519ec46a3815684d41c33f198bcb09fb998f7dcbf68 AS production-deps/
+    /FROM node:26\.13\.1-bookworm-slim@sha256:5df79989ed685e09f0a98019db4cebfb22fb9df1a53c0161664a011f7ff6b0f1 AS production-deps/
   );
   assert.match(
     dockerfile,
-    /FROM gcr\.io\/distroless\/nodejs26-debian13:nonroot@sha256:9b945e92c1b5463a4b75f11e8417515e4bea7355f6adfd79ec220fbbe905dda8 AS runtime/
+    /FROM gcr\.io\/distroless\/nodejs26-debian13:nonroot@sha256:767ffb7e2ffa9f4280f1af7b99f7f0a1cafb79d0dcc0e0d3aba43843748008a5 AS runtime/
   );
   assert.match(
     releaseDockerfile,
-    /FROM gcr\.io\/distroless\/nodejs26-debian13:nonroot@sha256:9b945e92c1b5463a4b75f11e8417515e4bea7355f6adfd79ec220fbbe905dda8 AS runtime/
+    /FROM gcr\.io\/distroless\/nodejs26-debian13:nonroot@sha256:767ffb7e2ffa9f4280f1af7b99f7f0a1cafb79d0dcc0e0d3aba43843748008a5 AS runtime/
   );
   assert.match(`${dockerfile}\n${releaseDockerfile}`, /npm install -g npm@12\.2\.2/);
   assert.doesNotMatch(`${dockerfile}\n${releaseDockerfile}`, /CMD \["npm", "run", "start"\]/);
