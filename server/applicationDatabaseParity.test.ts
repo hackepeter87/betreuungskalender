@@ -47,6 +47,10 @@ import {
   listTransferActors
 } from "./services/dataTransfer.js";
 import { createEdgeCaseDemoData } from "./services/demoFixtures.js";
+import {
+  claimCurrentScopedRecord,
+  isCurrentRecordChangedError
+} from "./services/domainPersistence.js";
 import { acceptInvitation, createInvitation, listInvitations } from "./services/invitations.js";
 import { invitationCareDataScope, membershipCareDataScope } from "./services/careDataScopes.js";
 import {
@@ -208,6 +212,56 @@ async function domainSummary(runtime: PersistenceRuntime) {
     monthClosures: data.monthClosures.map((closing) => String(closing.monthKey ?? "")).sort(),
     settings: data.settings
   };
+}
+
+async function scopedMutationClaimSummary(runtime: PersistenceRuntime) {
+  await runtime.query.insertInto("care_entries").values({
+    id: "scoped-claim-entry",
+    start_datetime: "2026-11-14T08:00:00.000Z",
+    end_datetime: "2026-11-14T18:00:00.000Z",
+    status: "planned",
+    care_scope: "full_day",
+    overnight: 0,
+    holiday: 0,
+    duration_minutes: 600,
+    created_by: "scoped-claim-actor",
+    updated_by: "scoped-claim-actor",
+    created_at: timestamp,
+    updated_at: timestamp,
+    deleted_at: null
+  }).execute();
+  const changedAt = "2026-07-01T08:01:00.000Z";
+  await runtime.query.updateTable("care_entries")
+    .set({ updated_at: changedAt })
+    .where("id", "=", "scoped-claim-entry")
+    .execute();
+
+  let staleCode = "none";
+  try {
+    await runtime.transaction((database) =>
+      claimCurrentScopedRecord(database, "care_entries", "scoped-claim-entry", timestamp)
+    );
+  } catch (error) {
+    if (!isCurrentRecordChangedError(error)) throw error;
+    staleCode = error.code;
+  }
+
+  await assert.rejects(
+    runtime.transaction(async (database) => {
+      await claimCurrentScopedRecord(database, "care_entries", "scoped-claim-entry", changedAt);
+      await database.updateTable("care_entries")
+        .set({ notes: "must roll back" })
+        .where("id", "=", "scoped-claim-entry")
+        .execute();
+      throw new Error("rollback fixture");
+    }),
+    /rollback fixture/
+  );
+  const row = await runtime.query.selectFrom("care_entries")
+    .select(["updated_at", "notes"])
+    .where("id", "=", "scoped-claim-entry")
+    .executeTakeFirstOrThrow();
+  return { staleCode, updatedAt: row.updated_at, notes: row.notes };
 }
 
 async function transferAuditSummary(runtime: PersistenceRuntime) {
@@ -1516,6 +1570,35 @@ test("care-confirmation email delivery state remains equivalent on SQLite and Po
         errorCode: null
       }
     });
+  } finally {
+    await Promise.all([sqlite.close(), postgres.close()]);
+  }
+});
+
+test("scoped mutation claims reject stale state and roll back on SQLite", async () => {
+  const sqlite = await sqliteRuntime();
+  try {
+    assert.deepEqual(await scopedMutationClaimSummary(sqlite), {
+      staleCode: "record_changed",
+      updatedAt: "2026-07-01T08:01:00.000Z",
+      notes: null
+    });
+  } finally {
+    await sqlite.close();
+  }
+});
+
+test("scoped mutation claims remain equivalent on SQLite and PostgreSQL", {
+  skip: !postgresConfigured
+}, async () => {
+  const sqlite = await sqliteRuntime();
+  const postgres = await postgresRuntime();
+  try {
+    const [sqliteResult, postgresResult] = await Promise.all([
+      scopedMutationClaimSummary(sqlite),
+      scopedMutationClaimSummary(postgres)
+    ]);
+    assert.deepEqual(postgresResult, sqliteResult);
   } finally {
     await Promise.all([sqlite.close(), postgres.close()]);
   }

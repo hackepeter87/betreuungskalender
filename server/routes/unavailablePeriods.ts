@@ -4,12 +4,17 @@ import { omitUndefinedValues } from "../../shared/objects.js";
 import { config } from "../config.js";
 import {
   assertCanUsePersistedCareParty,
+  assertCanUsePersistedCarePartiesInScope,
+  assertCanUsePersistedCarePartyInScope,
   assertPersistedCareParty,
   assertPersistedChildren,
+  claimCurrentScopedRecord,
   markDomainClosedMonthsChanged,
   recordDomainAudit,
   recordDomainFieldChanges,
   isCarePartyAccessError,
+  isCurrentRecordChangedError,
+  lockPersistedCareDataScope,
   scopedPersistedCarePartyIds,
   syncPersistedChildJunction
 } from "../services/domainPersistence.js";
@@ -185,14 +190,6 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
     "/api/unavailable-periods/:id",
     writeLimit,
     async (request, reply) => {
-      const before = await getPeriod(app.persistence.query, request.params.id);
-      if (!before) return reply.code(404).send({ error: "not_found" });
-      try {
-        await assertCanUsePersistedCareParty(app.persistence.query, request.user, before.responsiblePartyId);
-      } catch (error) {
-        if (isCarePartyAccessError(error)) return reply.code(403).send({ error: "forbidden" });
-        throw error;
-      }
       const parsed = unavailablePeriodInputSchema.safeParse(request.body);
       if (!parsed.success) {
         return reply.code(400).send({
@@ -202,58 +199,69 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
       }
       try {
         const timestamp = nowIso();
-        return await app.persistence.transaction(async (database) => {
-        await validateRelations(database, omitUndefinedValues(parsed.data));
-        await assertCanUsePersistedCareParty(database, request.user, before.responsiblePartyId);
-        await assertCanUsePersistedCareParty(database, request.user, parsed.data.responsiblePartyId);
-        await database.updateTable("unavailable_periods").set({
-          start_datetime: parsed.data.startDateTime,
-          end_datetime: parsed.data.endDateTime,
-          scope: parsed.data.scope,
-          responsible_party_id: parsed.data.responsiblePartyId ?? null,
-          category: parsed.data.category,
-          duty_related: Number(parsed.data.dutyRelated),
-          affects_contact: Number(parsed.data.affectsContact),
-          affects_holidays: Number(parsed.data.affectsHolidays),
-          location: parsed.data.location ?? null,
-          notes: parsed.data.notes ?? null,
-          has_evidence: Number(parsed.data.hasEvidence),
-          evidence_reference: parsed.data.evidenceReference ?? null,
-          updated_by: request.userEmail,
-          updated_at: timestamp,
-          deleted_at: null
-        }).where("id", "=", request.params.id).execute();
-        await syncPersistedChildJunction(database, { table: "unavailable_period_children", owner: "unavailable_period_id" }, request.params.id, parsed.data.childIds, timestamp);
-        const after = await getPeriod(database, request.params.id);
-        if (after) {
-          await recordDomainFieldChanges(
+        const updated = await app.persistence.transaction(async (database) => {
+          const scope = await lockPersistedCareDataScope(database, request.user);
+          const before = await getPeriod(database, request.params.id);
+          if (!before) return undefined;
+          await validateRelations(database, omitUndefinedValues(parsed.data));
+          await assertCanUsePersistedCarePartiesInScope(
+            database,
+            scope,
+            [before.responsiblePartyId, parsed.data.responsiblePartyId]
+          );
+          await claimCurrentScopedRecord(database, "unavailable_periods", before.id, before.updatedAt);
+          await database.updateTable("unavailable_periods").set({
+            start_datetime: parsed.data.startDateTime,
+            end_datetime: parsed.data.endDateTime,
+            scope: parsed.data.scope,
+            responsible_party_id: parsed.data.responsiblePartyId ?? null,
+            category: parsed.data.category,
+            duty_related: Number(parsed.data.dutyRelated),
+            affects_contact: Number(parsed.data.affectsContact),
+            affects_holidays: Number(parsed.data.affectsHolidays),
+            location: parsed.data.location ?? null,
+            notes: parsed.data.notes ?? null,
+            has_evidence: Number(parsed.data.hasEvidence),
+            evidence_reference: parsed.data.evidenceReference ?? null,
+            updated_by: request.userEmail,
+            updated_at: timestamp,
+            deleted_at: null
+          }).where("id", "=", request.params.id).where("deleted_at", "is", null).execute();
+          await syncPersistedChildJunction(database, { table: "unavailable_period_children", owner: "unavailable_period_id" }, request.params.id, parsed.data.childIds, timestamp);
+          const after = await getPeriod(database, request.params.id);
+          if (after) {
+            await recordDomainFieldChanges(
+              database,
+              request.userEmail,
+              "unavailable_period",
+              request.params.id,
+              before,
+              after,
+              ["updatedAt", "updatedBy", "warnings"]
+            );
+          }
+          const dates = [
+            before.startDateTime.slice(0, 10),
+            before.endDateTime.slice(0, 10),
+            parsed.data.startDateTime.slice(0, 10),
+            parsed.data.endDateTime.slice(0, 10)
+          ].sort();
+          await markDomainClosedMonthsChanged(
             database,
             request.userEmail,
             "unavailable_period",
             request.params.id,
-            before,
-            after,
-            ["updatedAt", "updatedBy", "warnings"]
+            dates[0] ?? parsed.data.startDateTime.slice(0, 10),
+            dates.at(-1) ?? parsed.data.endDateTime.slice(0, 10),
+            timestamp
           );
-        }
-        const dates = [
-          before.startDateTime.slice(0, 10),
-          before.endDateTime.slice(0, 10),
-          parsed.data.startDateTime.slice(0, 10),
-          parsed.data.endDateTime.slice(0, 10)
-        ].sort();
-        await markDomainClosedMonthsChanged(
-          database,
-          request.userEmail,
-          "unavailable_period",
-          request.params.id,
-          dates[0] ?? parsed.data.startDateTime.slice(0, 10),
-          dates.at(-1) ?? parsed.data.endDateTime.slice(0, 10),
-          timestamp
-        );
-        return after;
-      });
+          return after;
+        });
+        return updated ?? reply.code(404).send({ error: "not_found" });
       } catch (error) {
+        if (isCurrentRecordChangedError(error)) {
+          return reply.code(409).send({ error: "record_changed" });
+        }
         if (isCarePartyAccessError(error)) {
           return reply.code(403).send({ error: "forbidden" });
         }
@@ -269,11 +277,47 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
     "/api/unavailable-periods/:id",
     writeLimit,
     async (request, reply) => {
-      const before = await getPeriod(app.persistence.query, request.params.id);
-      if (!before) return reply.code(404).send({ error: "not_found" });
       try {
-        await assertCanUsePersistedCareParty(app.persistence.query, request.user, before.responsiblePartyId);
+        const deleted = await app.persistence.transaction(async (database) => {
+          const scope = await lockPersistedCareDataScope(database, request.user);
+          const before = await getPeriod(database, request.params.id);
+          if (!before) return false;
+          await assertCanUsePersistedCarePartyInScope(database, scope, before.responsiblePartyId);
+          await claimCurrentScopedRecord(database, "unavailable_periods", before.id, before.updatedAt);
+          const timestamp = nowIso();
+          await database.updateTable("unavailable_periods")
+            .set({ deleted_at: timestamp, updated_at: timestamp, updated_by: request.userEmail })
+            .where("id", "=", request.params.id)
+            .where("deleted_at", "is", null).execute();
+          await database.updateTable("unavailable_period_children")
+            .set({ deleted_at: timestamp, updated_at: timestamp })
+            .where("unavailable_period_id", "=", request.params.id)
+            .where("deleted_at", "is", null).execute();
+          await recordDomainAudit(database, {
+            userEmail: request.userEmail,
+            entityType: "unavailable_period",
+            entityId: request.params.id,
+            action: "deleted",
+            oldValue: before
+          });
+          await markDomainClosedMonthsChanged(
+            database,
+            request.userEmail,
+            "unavailable_period",
+            request.params.id,
+            before.startDateTime.slice(0, 10),
+            before.endDateTime.slice(0, 10),
+            timestamp
+          );
+          return true;
+        });
+        return deleted
+          ? reply.code(204).send()
+          : reply.code(404).send({ error: "not_found" });
       } catch (error) {
+        if (isCurrentRecordChangedError(error)) {
+          return reply.code(409).send({ error: "record_changed" });
+        }
         if (isCarePartyAccessError(error)) {
           return reply.code(403).send({ error: "forbidden" });
         }
@@ -282,33 +326,6 @@ export async function unavailablePeriodRoutes(app: FastifyInstance): Promise<voi
           message: error instanceof Error ? error.message : String(error)
         });
       }
-      const timestamp = nowIso();
-      await app.persistence.transaction(async (database) => {
-        await database.updateTable("unavailable_periods")
-          .set({ deleted_at: timestamp, updated_at: timestamp, updated_by: request.userEmail })
-          .where("id", "=", request.params.id).execute();
-        await database.updateTable("unavailable_period_children")
-          .set({ deleted_at: timestamp, updated_at: timestamp })
-          .where("unavailable_period_id", "=", request.params.id)
-          .where("deleted_at", "is", null).execute();
-        await recordDomainAudit(database, {
-          userEmail: request.userEmail,
-          entityType: "unavailable_period",
-          entityId: request.params.id,
-          action: "deleted",
-          oldValue: before
-        });
-        await markDomainClosedMonthsChanged(
-          database,
-          request.userEmail,
-          "unavailable_period",
-          request.params.id,
-          before.startDateTime.slice(0, 10),
-          before.endDateTime.slice(0, 10),
-          timestamp
-        );
-      });
-      return reply.code(204).send();
     }
   );
 }

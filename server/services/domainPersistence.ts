@@ -1,6 +1,6 @@
 import { sql } from "kysely";
 import type { RequestUser } from "../auth.js";
-import { effectiveCareDataScope } from "./careDataScopes.js";
+import { effectiveCareDataScope, type CareDataScope } from "./careDataScopes.js";
 import type { DatabaseExecutor } from "../db/runtime.js";
 import type { ApiAppSettings } from "../../shared/api.js";
 import { normalizeSettingsValues, settingsDefaults } from "./settingsContract.js";
@@ -293,6 +293,23 @@ export class CarePartyAccessError extends Error {
   }
 }
 
+export class CurrentRecordChangedError extends Error {
+  readonly code = "record_changed";
+  readonly statusCode = 409;
+
+  constructor() {
+    super("Der Datensatz wurde zwischenzeitlich geändert.");
+    this.name = "CurrentRecordChangedError";
+  }
+}
+
+export function isCurrentRecordChangedError(
+  error: unknown
+): error is CurrentRecordChangedError {
+  return error instanceof CurrentRecordChangedError ||
+    (error instanceof Error && (error as { code?: string }).code === "record_changed");
+}
+
 export function isCarePartyAccessError(error: unknown): error is CarePartyAccessError {
   return error instanceof CarePartyAccessError ||
     (error instanceof Error && (error as { code?: string }).code === "forbidden");
@@ -321,6 +338,93 @@ export async function assertCanUsePersistedCareParty(
   }
   if (scopedPartyIds && !scopedPartyIds.includes(carePartyId)) {
     throw new CarePartyAccessError();
+  }
+}
+
+export async function lockPersistedCareDataScope(
+  database: DatabaseExecutor,
+  user: RequestUser | undefined
+): Promise<CareDataScope> {
+  if (
+    !user ||
+    user.isOwner ||
+    user.workspaceRole === "admin" ||
+    (!user.workspaceRole && user.role === "admin")
+  ) {
+    return { type: "all" };
+  }
+
+  await database.updateTable("app_memberships")
+    .set({ updated_at: sql.ref("updated_at") })
+    .where("user_id", "=", user.id)
+    .where("deleted_at", "is", null)
+    .execute();
+  await database.updateTable("app_user_care_party_assignments")
+    .set({ updated_at: sql.ref("updated_at") })
+    .where("user_id", "=", user.id)
+    .where("deleted_at", "is", null)
+    .execute();
+
+  return effectiveCareDataScope(user, database);
+}
+
+export async function assertCanUsePersistedCarePartyInScope(
+  database: DatabaseExecutor,
+  scope: CareDataScope,
+  carePartyId: string | undefined
+): Promise<void> {
+  await assertCanUsePersistedCarePartiesInScope(database, scope, [carePartyId]);
+}
+
+export async function assertCanUsePersistedCarePartiesInScope(
+  database: DatabaseExecutor,
+  scope: CareDataScope,
+  carePartyIds: Array<string | undefined>
+): Promise<void> {
+  if (scope.type === "selected" && carePartyIds.some((id) => !id)) {
+    throw new CarePartyAccessError();
+  }
+  const ids = [...new Set(carePartyIds.filter((id): id is string => Boolean(id)))].sort();
+  if (scope.type === "selected" && ids.some((id) => !scope.carePartyIds.includes(id))) {
+    throw new CarePartyAccessError();
+  }
+  if (ids.length === 0) return;
+  const claimed = await database.updateTable("care_parties")
+    .set({ updated_at: sql.ref("updated_at") })
+    .where("id", "in", ids)
+    .where("deleted_at", "is", null)
+    .executeTakeFirst();
+  if (Number(claimed.numUpdatedRows) !== ids.length) throw new CarePartyAccessError();
+}
+
+export async function claimCurrentScopedRecord(
+  database: DatabaseExecutor,
+  table: "care_entries" | "contact_rules" | "unavailable_periods",
+  id: string,
+  updatedAt: string
+): Promise<void> {
+  const claim = table === "care_entries"
+    ? database.updateTable("care_entries")
+      .set({ updated_at: sql.ref("updated_at") })
+      .where("id", "=", id)
+      .where("updated_at", "=", updatedAt)
+      .where("deleted_at", "is", null)
+      .executeTakeFirst()
+    : table === "contact_rules"
+      ? database.updateTable("contact_rules")
+        .set({ updated_at: sql.ref("updated_at") })
+        .where("id", "=", id)
+        .where("updated_at", "=", updatedAt)
+        .where("deleted_at", "is", null)
+        .executeTakeFirst()
+      : database.updateTable("unavailable_periods")
+        .set({ updated_at: sql.ref("updated_at") })
+        .where("id", "=", id)
+        .where("updated_at", "=", updatedAt)
+        .where("deleted_at", "is", null)
+        .executeTakeFirst();
+  if (Number((await claim).numUpdatedRows) !== 1) {
+    throw new CurrentRecordChangedError();
   }
 }
 
