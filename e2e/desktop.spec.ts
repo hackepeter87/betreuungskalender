@@ -1675,6 +1675,10 @@ test("clears previous account data across tabs before the replacement session lo
   await expect(secondTab.getByTestId("auth-session")).toContainText("account-b");
   await navigate(secondTab, "settings");
   await expect(secondTab.getByText("Altes Konto Testkind", { exact: true })).toBeVisible();
+  await expect.poll(() => page.evaluate(() => {
+    const value = window.localStorage.getItem("betreuungskalender:session-transition");
+    return value ? (JSON.parse(value) as { nonce?: string }).nonce : undefined;
+  })).toBe("account-change-complete");
 
   failSessionRefresh = true;
   await secondTab.evaluate(() => window.dispatchEvent(new Event("online")));

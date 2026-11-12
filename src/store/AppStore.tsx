@@ -147,6 +147,7 @@ const defaultSession: ApiSession = {
 };
 
 const sessionTransitionStorageKey = "betreuungskalender:session-transition";
+type SessionTransitionState = "idle" | "awaiting-change" | "complete";
 
 function authenticatedIdentity(session: ApiSession): string | undefined {
   return session.authenticated ? session.user?.id : undefined;
@@ -190,7 +191,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferencesResponse | null>(null);
   const dataRef = useRef(data);
   const sessionRef = useRef(session);
-  const sessionTransitionPendingRef = useRef(false);
+  const sessionTransitionStateRef = useRef<SessionTransitionState>("idle");
+  const sessionTransitionOwnerRef = useRef(false);
   const serverStatusRef = useRef(serverStatus);
   dataRef.current = data;
   serverStatusRef.current = serverStatus;
@@ -227,7 +229,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
   }, [clearDomainState]);
 
   const prepareForSessionTransition = useCallback(() => {
-    sessionTransitionPendingRef.current = true;
+    sessionTransitionStateRef.current = "awaiting-change";
+    sessionTransitionOwnerRef.current = true;
     clearDomainState();
     setIsLoading(false);
     setError(null);
@@ -249,17 +252,18 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
       try {
         const previousSession = sessionRef.current;
         const identityChanged = authenticatedIdentity(previousSession) !== authenticatedIdentity(nextSession);
-        if (sessionTransitionPendingRef.current && !identityChanged) {
+        if (sessionTransitionStateRef.current === "awaiting-change" && !identityChanged) {
           sessionRef.current = nextSession;
           setSession(nextSession);
           setServerStatus("online");
           setError(null);
           return true;
         }
-        if (identityChanged) {
+        if (identityChanged || sessionTransitionStateRef.current === "complete") {
           clearDomainState();
-          const notifyOtherTabs = sessionTransitionPendingRef.current || previousSession.authenticated;
-          sessionTransitionPendingRef.current = false;
+          const notifyOtherTabs = identityChanged && sessionTransitionOwnerRef.current;
+          sessionTransitionStateRef.current = "idle";
+          sessionTransitionOwnerRef.current = false;
           if (notifyOtherTabs) publishSessionTransition("complete");
         }
         sessionRef.current = nextSession;
@@ -350,7 +354,8 @@ export function AppStoreProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (phase !== "start" && phase !== "complete") return;
-      sessionTransitionPendingRef.current = true;
+      sessionTransitionStateRef.current = phase === "start" ? "awaiting-change" : "complete";
+      sessionTransitionOwnerRef.current = false;
       clearDomainState();
       setIsLoading(false);
       setError(null);
