@@ -9,6 +9,7 @@ import test from "node:test";
 import Database from "better-sqlite3";
 import type {
   ApiCalendarFeedStatus,
+  ApiCareEntry,
   ApiCareConflictPreview,
   ApiCareParty,
   ApiChild,
@@ -591,16 +592,21 @@ test("workspace roles enforce restricted projections and scheduler writes", asyn
   );
   assert.deepEqual(actualPartySchedule.map(({ id }) => id), ["entry-visible-by-actual-party"]);
   assert.equal(actualPartySchedule[0]?.responsibleParty?.id, assignedParty.id);
-  assert.deepEqual((await jsonRequest<Array<{ id: string }>>(
+  const scopedEntries = await jsonRequest<ApiCareEntry[]>(
     baseUrl,
     "/api/care-entries?startDate=2030-07-08&endDate=2030-07-08",
     editorHeaders
-  )).map(({ id }) => id), ["entry-visible-by-actual-party"]);
-  assert.equal((await request(
+  );
+  assert.deepEqual(scopedEntries.map(({ id }) => id), ["entry-visible-by-actual-party"]);
+  assert.equal(scopedEntries[0]?.responsiblePartyId, undefined);
+  assert.equal(scopedEntries[0]?.actualResponsiblePartyId, assignedParty.id);
+  const scopedEntry = await jsonRequest<ApiCareEntry>(
     baseUrl,
     "/api/care-entries/entry-visible-by-actual-party",
     editorHeaders
-  )).status, 200);
+  );
+  assert.equal(scopedEntry.responsiblePartyId, undefined);
+  assert.equal(scopedEntry.actualResponsiblePartyId, assignedParty.id);
   await expectGenericForbidden(await request(
     baseUrl,
     "/api/care-entries/entry-hidden-by-actual-party",
@@ -621,7 +627,7 @@ test("workspace roles enforce restricted projections and scheduler writes", asyn
   assert.equal(editorFeedBody.includes("entry-visible-by-actual-party@betreuungskalender"), true);
   assert.equal(editorFeedBody.includes("entry-hidden-by-actual-party@betreuungskalender"), false);
   const scopedReport = await jsonRequest<{
-    data: { careParties: Array<{ id: string }>; entries: Array<{ id: string }> };
+    data: { careParties: Array<{ id: string }>; entries: ApiCareEntry[] };
   }>(
     baseUrl,
     "/api/reports/snapshot?startDate=2030-07-08&endDate=2030-07-08",
@@ -629,6 +635,8 @@ test("workspace roles enforce restricted projections and scheduler writes", asyn
   );
   assert.deepEqual(scopedReport.data.careParties.map(({ id }) => id), [assignedParty.id]);
   assert.deepEqual(scopedReport.data.entries.map(({ id }) => id), ["entry-visible-by-actual-party"]);
+  assert.equal(scopedReport.data.entries[0]?.responsiblePartyId, undefined);
+  assert.equal(scopedReport.data.entries[0]?.actualResponsiblePartyId, assignedParty.id);
   assert.deepEqual(await jsonRequest(baseUrl, "/api/month-closings", editorHeaders), []);
   await expectGenericForbidden(await request(baseUrl, "/api/month-closings", editorHeaders, {
     method: "POST",

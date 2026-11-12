@@ -25,6 +25,22 @@ export function effectiveCareEntryPartyId(
   return entry.responsiblePartyId ?? undefined;
 }
 
+export function projectCareEntryPartyReferences<T extends CareEntryScopeFields>(
+  entry: T,
+  scope: CareDataScope
+): T {
+  if (scope.type === "all") return entry;
+  const visible = new Set(scope.carePartyIds);
+  const { responsiblePartyId, actualResponsiblePartyId, ...rest } = entry;
+  return {
+    ...rest,
+    ...(responsiblePartyId && visible.has(responsiblePartyId) ? { responsiblePartyId } : {}),
+    ...(actualResponsiblePartyId && visible.has(actualResponsiblePartyId)
+      ? { actualResponsiblePartyId }
+      : {})
+  } as T;
+}
+
 export function effectiveCareEntryPartyExpression(alias: string) {
   return sql<string | null>`CASE
     WHEN ${sql.ref(`${alias}.status`)} IN ('completed', 'partial')

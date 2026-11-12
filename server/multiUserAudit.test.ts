@@ -568,6 +568,26 @@ test("explicit member scopes restrict care entries and contact rules", async (t)
     headers: alphaHeaders,
     body: JSON.stringify(alphaEntryInput)
   });
+  const betaEntry = await jsonRequest<ApiCareEntry>(baseUrl, "/api/care-entries", {
+    method: "POST",
+    headers: betaHeaders,
+    body: JSON.stringify({
+      ...alphaEntryInput,
+      responsiblePartyId: betaParty.id,
+      startDateTime: "2026-07-05T08:00:00.000Z",
+      endDateTime: "2026-07-05T17:00:00.000Z"
+    })
+  });
+  const scopedActorLabels = await jsonRequest<Array<{ id: string; displayName: string }>>(
+    baseUrl,
+    "/api/actor-labels/resolve",
+    {
+      method: "POST",
+      headers: alphaHeaders,
+      body: JSON.stringify({ ids: [alphaEntry.createdBy, betaEntry.createdBy] })
+    }
+  );
+  assert.deepEqual(scopedActorLabels, [{ id: alphaEntry.createdBy, displayName: "Alpha Parent" }]);
 
   await expectStatus(baseUrl, `/api/care-entries/${alphaEntry.id}`, 403, {
     method: "PUT",

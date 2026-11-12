@@ -25,6 +25,11 @@ import {
 } from "./careConflicts.js";
 import { bool, makeId, nowIso } from "./common.js";
 import {
+  type CareDataScope,
+  effectiveCareDataScope,
+  projectCareEntryPartyReferences
+} from "./careDataScopes.js";
+import {
   assertCanUsePersistedCareParty,
   assertPersistedCareParty,
   assertPersistedChildren,
@@ -217,14 +222,15 @@ async function linkedChildIds(
 
 async function mapEntry(
   database: DatabaseExecutor,
-  row: EntryRow
+  row: EntryRow,
+  scope: CareDataScope = { type: "all" }
 ): Promise<ApiCareConfirmationRequest["entry"]> {
   const [childIds, actualChildIds] = await Promise.all([
     linkedChildIds(database, "care_entry_children", row.id),
     linkedChildIds(database, "care_entry_actual_children", row.id)
   ]);
   const unconfirmed = row.status === "planned" && !row.confirmed_at && Date.parse(row.end_datetime) < Date.now();
-  return omitUndefinedValues({
+  return projectCareEntryPartyReferences(omitUndefinedValues({
     id: row.id,
     generatedByPatternId: optional(row.generated_by_pattern_id),
     ruleOccurrenceDate: optional(row.rule_occurrence_date),
@@ -272,13 +278,14 @@ async function mapEntry(
     updatedAt: row.updated_at,
     trips: [],
     costs: []
-  });
+  }), scope);
 }
 
 async function mapRequest(
   database: DatabaseExecutor,
   row: RequestRow,
-  entry: EntryRow
+  entry: EntryRow,
+  scope: CareDataScope = { type: "all" }
 ): Promise<ApiCareConfirmationRequest> {
   return omitUndefinedValues({
     id: row.id,
@@ -292,7 +299,7 @@ async function mapRequest(
     nextReminderAt: optional(row.next_reminder_at),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    entry: await mapEntry(database, entry)
+    entry: await mapEntry(database, entry, scope)
   });
 }
 
@@ -857,6 +864,7 @@ export async function listOpenCareConfirmations(
   if (!conflictIds) return [];
   const user = typeof userOrId === "string" ? await currentUserForId(runtime.query, userOrId) : userOrId;
   if (!user) return [];
+  const scope = await effectiveCareDataScope(user, runtime.query);
   const rows = await runtime.query.selectFrom("care_confirmation_requests")
     .selectAll()
     .where("user_id", "=", user.id)
@@ -890,7 +898,7 @@ export async function listOpenCareConfirmations(
       continue;
     }
     if (await canAccessConfirmation(runtime.query, user, entry)) {
-      visible.push(await mapRequest(runtime.query, row, entry));
+      visible.push(await mapRequest(runtime.query, row, entry, scope));
     }
   }
   if (staleRequestIds.length) {
@@ -1033,7 +1041,10 @@ export async function answerCareConfirmation(
     );
     const updated = await getRequest(database, requestId);
     if (!updated) throw new Error("Bestätigungsanfrage wurde nicht gefunden.");
-    return mapRequest(database, updated, after);
+    const scope = currentUser
+      ? await effectiveCareDataScope(currentUser, database)
+      : { type: "all" as const };
+    return mapRequest(database, updated, after, scope);
   });
   return result;
 }
@@ -1069,6 +1080,9 @@ export async function remindCareConfirmationLater(
       .executeTakeFirst();
     if (result.numUpdatedRows === 0n) throw confirmationNoLongerActionableError();
     const updated = await getRequest(database, requestId);
-    return updated ? mapRequest(database, updated, entry) : undefined;
+    const scope = currentUser
+      ? await effectiveCareDataScope(currentUser, database)
+      : { type: "all" as const };
+    return updated ? mapRequest(database, updated, entry, scope) : undefined;
   });
 }

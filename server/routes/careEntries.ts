@@ -39,7 +39,8 @@ import { bool, makeId, nowIso } from "../services/common.js";
 import {
   effectiveCareDataScope,
   effectiveCareEntryPartyExpression,
-  effectiveCareEntryPartyId
+  effectiveCareEntryPartyId,
+  projectCareEntryPartyReferences
 } from "../services/careDataScopes.js";
 import { retireOpenCareConfirmationRequests } from "../services/careConfirmations.js";
 import {
@@ -415,6 +416,14 @@ async function getEntry(database: DatabaseExecutor, id: string): Promise<ApiCare
     .where("deleted_at", "is", null)
     .executeTakeFirst() as EntryRow | undefined;
   return row ? mapEntry(database, row) : undefined;
+}
+
+async function projectEntryForUser(
+  database: DatabaseExecutor,
+  user: RequestUser | undefined,
+  entry: ApiCareEntry
+): Promise<ApiCareEntry> {
+  return projectCareEntryPartyReferences(entry, await effectiveCareDataScope(user, database));
 }
 
 async function getConflictPreviewEntry(
@@ -993,10 +1002,13 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
         endDateTime: input.endDateTime,
         childIds: input.childIds
       }, app.persistence.query, request.query.entryId, scopedPartyIds);
+      const projectionScope = scopedPartyIds
+        ? { type: "selected" as const, carePartyIds: scopedPartyIds }
+        : { type: "all" as const };
       const items = (await Promise.all(preview.conflicts.map(async (conflict) => {
         const conflictingId = conflict.entryIds.find((id) => id !== "__care_conflict_candidate__");
         const entry = conflictingId ? await getConflictPreviewEntry(app.persistence.query, conflictingId) : undefined;
-        return entry ? [{ conflict, entry }] : [];
+        return entry ? [{ conflict, entry: projectCareEntryPartyReferences(entry, projectionScope) }] : [];
       }))).flat();
       return { fingerprint: preview.fingerprint, items };
     }
@@ -1050,7 +1062,7 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
             existing.endDateTime.slice(0, 10),
             timestamp
           );
-          return updated;
+          return projectEntryForUser(database, request.user, updated);
         });
       } catch (error) {
         if (isCarePartyAccessError(error)) {
@@ -1212,7 +1224,13 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
             .limit(MAX_WORKSPACE_QUERY_RECORDS + 1).execute() as EntryRow[],
           MAX_WORKSPACE_QUERY_RECORDS
         );
-        return await mapEntries(app.persistence.query, rows);
+        const entries = await mapEntries(app.persistence.query, rows);
+        return scopedPartyIds
+          ? entries.map((entry) => projectCareEntryPartyReferences(entry, {
+            type: "selected",
+            carePartyIds: scopedPartyIds
+          }))
+          : entries;
       } catch (error) {
         if (error instanceof WorkspaceQueryLimitError) return workspaceQueryFailure(reply);
         throw error;
@@ -1225,7 +1243,7 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
     if (!entry) return reply.code(404).send({ error: "not_found" });
     try {
       await assertCanUseCareEntry(app.persistence.query, request.user, entry);
-      return entry;
+      return projectEntryForUser(app.persistence.query, request.user, entry);
     } catch (error) {
       if (isCarePartyAccessError(error)) return reply.code(403).send({ error: "forbidden" });
       throw error;
@@ -1249,7 +1267,7 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
       );
       return reply.code(201).send(scheduler
         ? await getScheduleEntry(app.persistence.query, id, request.user)
-        : created);
+        : await projectEntryForUser(app.persistence.query, request.user, created));
     } catch (error) {
       if (isDemoDatasetLimitError(error)) {
         return reply.code(409).send({ error: error.code });
@@ -1294,7 +1312,7 @@ export async function careEntryRoutes(app: FastifyInstance): Promise<void> {
       );
       return scheduler
         ? await getScheduleEntry(app.persistence.query, request.params.id, request.user)
-        : updated;
+        : await projectEntryForUser(app.persistence.query, request.user, updated);
     } catch (error) {
       if (isCarePartyAccessError(error)) {
         return reply.code(403).send({ error: "forbidden" });
