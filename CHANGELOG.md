@@ -6,6 +6,30 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.36.1] - 2026-11-14
+
+### Fixed
+
+- Keep mobile page actions, native form controls, help triggers, calendar-feed
+  status, report metadata, audit rows, and recurring-care controls within their
+  owning layout at narrow viewport widths.
+- Present odd-sized summary groups as complete label/value rows instead of
+  leaving visually empty metric cells.
+- Reserve the fixed mobile navigation area once so final content and actions
+  retain consistent closing space.
+
+### Accessibility and testing
+
+- Add Chromium and WebKit layout contracts at 320 and 390 CSS pixels and
+  refresh the reviewed visual baselines for the affected surfaces.
+
+### Compatibility
+
+- No database migration or product-logic change is included.
+- Existing SQLite and PostgreSQL installations, APIs, authentication,
+  authorization, backups, transfers, calendar feeds, and event identifiers
+  remain compatible.
+
 ## [1.36.0] - 2026-11-12
 
 ### Added
