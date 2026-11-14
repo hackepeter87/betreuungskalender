@@ -22,4 +22,9 @@
   .report-document {
     padding: 20px 14px;
   }
+
+  .report-document__header dl div {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
 }
