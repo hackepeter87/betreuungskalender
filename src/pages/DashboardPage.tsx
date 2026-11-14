@@ -152,7 +152,7 @@ export function DashboardPage({
             <FieldHelpButton fieldId="analytics.month" showRequirement={false} />
           </div>
         </div>
-        <div className="page-header__actions">
+        <div className="page-header__actions dashboard-page-header__actions">
           <MonthToolbar monthKey={monthKey} onChange={onMonthChange} />
           <div className="form-actions__right">
             {canCloseMonth ? <span className="action-with-help action-with-help--header">

@@ -131,6 +131,8 @@
 .field select,
 .field textarea {
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   padding: 8px 10px;
   border: 1px solid var(--line-strong);
   border-radius: 6px;

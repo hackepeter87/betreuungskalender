@@ -175,7 +175,7 @@
 
   .app-shell--sidebar-collapsed .main {
     margin-left: 0;
-    padding-bottom: 66px;
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
   }
 
   .mobile-header {
@@ -264,7 +264,7 @@
   .main {
     min-height: 100dvh;
     margin-left: 0;
-    padding-bottom: calc(96px + env(safe-area-inset-bottom));
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
   }
 
   .offline-banner {

@@ -162,12 +162,12 @@ function NotificationPreferencesSection() {
         </div>
         <div className={`notification-preferences-table${showEmailPreferences ? " notification-preferences-table--email" : ""}`}>
           <div className="notification-preferences-row notification-preferences-row--head">
-            <span>{copy(locale, "notifications", "event")}</span>
-            <span>{copy(locale, "notifications", "inApp")}</span>
             <span className="notification-preferences-row__channel">
-              {copy(locale, "notifications", "push")}
+              {copy(locale, "notifications", "event")}
               <FieldHelpButton fieldId="settings.notificationChannels" showRequirement={false} />
             </span>
+            <span>{copy(locale, "notifications", "inApp")}</span>
+            <span>{copy(locale, "notifications", "push")}</span>
             {showEmailPreferences ? <span>{copy(locale, "notifications", "email")}</span> : null}
           </div>
           {preferences.map((preference) => (
@@ -838,14 +838,21 @@ function CalendarFeedManager() {
           <h3>{copy(locale, "calendarFeed", "statusTitle")}</h3>
           <div className="calendar-feed-status data-actions">
             <span className={`status-pill ${status.active ? "status-pill--ok" : ""}`}>
+              {status.active
+                ? copy(locale, "calendarFeed", "activeLabel")
+                : status.state === "revoked"
+                  ? copy(locale, "calendarFeed", "revokedLabel")
+                  : copy(locale, "calendarFeed", "inactiveLabel")}
+            </span>
+            <small>
               {status.active && status.createdAt
                 ? copy(locale, "calendarFeed", "active", {
                     date: formatDateTime(status.createdAt, intlLocale)
                   })
                 : status.state === "revoked"
                   ? copy(locale, "calendarFeed", "revoked")
-                : copy(locale, "calendarFeed", "inactive")}
-            </span>
+                  : copy(locale, "calendarFeed", "inactive")}
+            </small>
             <small>
               {status.lastUsedAt
                 ? copy(locale, "calendarFeed", "lastUsed", {
