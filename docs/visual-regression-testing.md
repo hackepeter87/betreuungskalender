@@ -15,6 +15,29 @@ It fixes browser time, locale, timezone, reduced-motion behavior, animation
 timing, runtime metadata, and generated report identifiers. Baselines must not
 contain real names, schedules, instance identifiers, URLs, exports, or secrets.
 
+## Mobile layout contract
+
+The mobile contract is structural as well as visual. At 320 and 390 CSS pixels:
+
+- controls, help triggers, labels, values, and borders stay inside their owning
+  page, panel, row, or field;
+- page-level overflow is not hidden to make a failing component appear valid;
+- the application shell reserves the fixed bottom-navigation space once, while
+  individual pages retain only their normal closing space;
+- compact toolbars keep stable control order and dimensions, while commands
+  move to a separate row when they need more room;
+- odd summary counts use a deliberate final label/value row instead of a large
+  visually empty grid cell;
+- long synthetic identifiers and report metadata reflow without obscuring
+  labels or adjacent values; and
+- the notification layout is tested with every supported channel visible.
+
+`e2e/mobile-layout.spec.ts` checks these contracts in Chromium and WebKit. It
+uses real application routes and the disposable E2E database; API interception
+is limited to enabling the optional notification-channel capability with
+fictional values. Route screenshots remain useful review evidence, but they do
+not replace geometric containment and accessibility assertions.
+
 ## Reviewing a change
 
 Run the visual suite before updating images:
@@ -45,7 +68,7 @@ docker run --rm --user "$(id -u):$(id -g)" \
   -v "$PWD:/work" \
   -v /tmp/betreuungskalender-visual-node_modules:/work/node_modules \
   -w /work \
-  mcr.microsoft.com/playwright:v1.64.1-noble \
+  mcr.microsoft.com/playwright:v1.65.0-noble \
   bash -lc 'npm ci && npx playwright test e2e/visual-regression.spec.ts --update-snapshots'
 ```
 

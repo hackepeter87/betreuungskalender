@@ -162,8 +162,7 @@
   }
 
   .page {
-    padding: 20px 14px calc(112px + env(safe-area-inset-bottom));
-    overflow-x: hidden;
+    padding: 20px 14px 24px;
   }
 
   .privacy-card {
@@ -177,7 +176,7 @@
 
   .page-header {
     min-height: 0;
-    align-items: stretch;
+    align-items: flex-start;
     flex-direction: column;
     gap: 14px;
     margin-bottom: 18px;
@@ -295,7 +294,6 @@
   body,
   #root {
     max-width: 100%;
-    overflow-x: hidden;
   }
 
   body {

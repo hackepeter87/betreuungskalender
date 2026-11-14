@@ -24,6 +24,11 @@
 }
 
 @media (max-width: 767px) {
+  .dashboard-page-header__actions .form-actions__right {
+    display: block;
+    width: 100%;
+  }
+
   .dashboard-confirmation-panel .confirmation-list {
     grid-template-columns: 1fr;
   }

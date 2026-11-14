@@ -4,4 +4,11 @@
     width: 100%;
     min-width: 0;
   }
+
+  .audit-table td {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+    text-align: left;
+  }
+
 }
