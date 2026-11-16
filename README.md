@@ -523,3 +523,11 @@ Read [CONTRIBUTING.md](CONTRIBUTING.md) and
 Use GitHub Issues for bugs and feature requests. Never post real names,
 addresses, schedules, court documents, screenshots with personal data,
 backups, SQLite files, PDFs, CSVs, authentication tokens, or secrets.
+
+### Private external-calendar destinations
+
+External calendar fetches remain public-only by default. Operators using split DNS
+can configure exact DNS-hostname/private-IP pairs through
+`EXTERNAL_CALENDAR_PRIVATE_TARGETS`. This is a narrow HTTPS/443 exception, not a
+private-network bypass. See [the configuration and testing procedure](docs/configuration.md#private-external-calendar-destinations)
+before enabling it; every DNS answer and redirect must satisfy the destination policy.

@@ -1,3 +1,4 @@
+import { parseExternalCalendarPrivateTargets } from "./externalCalendarPolicy.js";
 import { config as loadEnvironment } from "dotenv";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -307,6 +308,7 @@ const databaseDriver = databaseDriverEnv(process.env.DATABASE_DRIVER);
 const postgresTlsMode = postgresTlsModeEnv(process.env.POSTGRES_TLS_MODE);
 
 export const config = {
+  externalCalendarPrivateTargets: parseExternalCalendarPrivateTargets(process.env.EXTERNAL_CALENDAR_PRIVATE_TARGETS),
   nodeEnv: process.env.NODE_ENV ?? "development",
   host: process.env.HOST ?? "127.0.0.1",
   port: numberEnv(process.env.PORT, 3000),

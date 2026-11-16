@@ -3,7 +3,7 @@ import Fastify from "fastify";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import { gzipSync } from "node:zlib";
 import { createSqlitePersistenceRuntime, type PersistenceRuntime } from "./db/runtime.js";
 import {
@@ -19,6 +19,7 @@ import {
   redactExternalCalendarFeedUrl,
   visibleExternalCalendarEvents
 } from "./services/externalCalendars.js";
+import { config } from "./config.js";
 import { externalCalendarRoutes } from "./routes/externalCalendars.js";
 
 const calendar = (event: string) => `BEGIN:VCALENDAR\r\nVERSION:2.0\r\n${event}\r\nEND:VCALENDAR\r\n`;
@@ -439,5 +440,196 @@ test("rolls back event replacement when the target source does not exist", async
     );
     assert.equal((await listExternalCalendarSources(runtime.query)).length, 0);
     assert.equal((await listExternalCalendarBackupEvents(runtime.query)).length, 0);
+  });
+});
+
+function privatePolicy(t: TestContext, addresses = ["10.77.0.10"]): void {
+  const previous = Object.getOwnPropertyDescriptor(config, "externalCalendarPrivateTargets")!;
+  Object.defineProperty(config, "externalCalendarPrivateTargets", {
+    ...previous, value: [{ hostname: "calendar.example.test", addresses }]
+  });
+  t.after(() => { Object.defineProperty(config, "externalCalendarPrivateTargets", previous); });
+}
+
+// Synthetic private-unicast fixtures; no deployment destinations.
+test("exact private calendar policy permits only the configured host/address pair", async (t) => {
+  privatePolicy(t);
+  let requests = 0;
+  const request: ExternalCalendarFetchDependencies["request"] = async (url, address) => {
+    requests += 1;
+    assert.equal(url.hostname, "calendar.example.test");
+    assert.equal(address.address, "10.77.0.10");
+    return response(calendar(event(42)));
+  };
+  assert.equal(await fetchExternalCalendarFeedContent("https://calendar.example.test/feed.ics",
+    dependencies(request, async () => [{ address: "10.77.0.10", family: 4 }])) , calendar(event(42)));
+  for (const url of ["https://other.example.test/feed.ics", "https://calendar.example.test:8443/feed.ics",
+    "https://10.77.0.10/feed.ics", "http://calendar.example.test/feed.ics"]) {
+    await assert.rejects(fetchExternalCalendarFeedContent(url,
+      dependencies(request, async () => [{ address: "10.77.0.10", family: 4 }])));
+  }
+  for (const addresses of [[], ["10.77.0.11"], ["10.77.0.10", "10.77.0.11"],
+    ["10.77.0.10", "192.0.2.10"], ["192.0.2.10"], ["127.0.0.1"], ["169.254.1.1"]]) {
+    await assert.rejects(fetchExternalCalendarFeedContent("https://calendar.example.test/feed.ics",
+      dependencies(request, async () => addresses.map(address => ({ address, family: 4 })))));
+  }
+  // A configured host may not silently fall back to an otherwise public answer.
+  await assert.rejects(fetchExternalCalendarFeedContent("https://calendar.example.test/feed.ics",
+    dependencies(request)));
+  await assert.rejects(fetchExternalCalendarFeedContent("https://calendar.example.test./feed.ics",
+    dependencies(async () => response("must not bypass the configured host policy"))));
+  // The exception does not restrict unrelated public feeds.
+  assert.equal(await fetchExternalCalendarFeedContent("https://public.example.test/feed.ics",
+    dependencies(async () => response("public feed"))), "public feed");
+  assert.equal(requests, 1);
+});
+
+test("private calendar redirects are checked again and never reuse DNS approval", async (t) => {
+  privatePolicy(t);
+  const requested: string[] = [];
+  const deps = dependencies(async (url, address) => {
+    requested.push(address.address);
+    return url.pathname === "/start" ? response("", { statusCode: 302, headers: { location: "/feed" } }) : response("feed");
+  }, async () => [{ address: "10.77.0.10", family: 4 }]);
+  assert.equal(await fetchExternalCalendarFeedContent("https://calendar.example.test/start", deps), "feed");
+  assert.deepEqual(requested, ["10.77.0.10", "10.77.0.10"]);
+  for (const location of ["https://other.example.test/feed", "https://10.77.0.10/feed",
+    "http://calendar.example.test/feed", "https://calendar.example.test:8443/feed"]) {
+    let calls = 0;
+    await assert.rejects(fetchExternalCalendarFeedContent("https://calendar.example.test/start",
+      dependencies(async () => { calls++; return response("", { statusCode: 302, headers: { location } }); },
+        async () => [{ address: "10.77.0.10", family: 4 }])));
+    assert.equal(calls, 1);
+  }
+  let resolutions = 0;
+  let calls = 0;
+  await assert.rejects(fetchExternalCalendarFeedContent("https://calendar.example.test/start", dependencies(
+    async () => { calls++; return response("", { statusCode: 302, headers: { location: "/feed" } }); },
+    async () => [{ address: ++resolutions === 1 ? "10.77.0.10" : "10.77.0.11", family: 4 }])));
+  assert.equal(calls, 1);
+  assert.equal(resolutions, 2);
+});
+
+test("default HTTPS transport keeps the approved address pinned and the DNS hostname intact", async (t) => {
+  const https = await import("node:https");
+  const dns = await import("node:dns/promises");
+  const { syncBuiltinESMExports } = await import("node:module");
+  const { EventEmitter } = await import("node:events");
+  const { Readable } = await import("node:stream");
+  privatePolicy(t);
+  t.after(() => {
+    t.mock.restoreAll();
+    syncBuiltinESMExports();
+  });
+  let resolutions = 0;
+  t.mock.method(dns.default, "lookup", async () => {
+    resolutions++;
+    return [{ address: resolutions === 1 ? "10.77.0.10" : "10.77.0.11", family: 4 }];
+  });
+  t.mock.method(https.default, "request", (url: URL, options: import("node:https").RequestOptions,
+    callback: (response: import("node:http").IncomingMessage) => void) => {
+    assert.equal(url.hostname, "calendar.example.test");
+    assert.equal(options.rejectUnauthorized, undefined); // Node's certificate validation stays enabled.
+    assert.equal(options.servername, undefined); // Node derives SNI/verification from the original URL.
+    assert.ok(options.lookup);
+    options.lookup(url.hostname, {}, (error, address, family) => {
+      assert.equal(error, null);
+      assert.equal(address, "10.77.0.10");
+      assert.equal(family, 4);
+    });
+    options.lookup(url.hostname, { all: true }, (error, addresses) => {
+      assert.equal(error, null);
+      assert.deepEqual(addresses, [{ address: "10.77.0.10", family: 4 }]);
+    });
+    const stream = Object.assign(Readable.from([Buffer.from("synthetic feed")]), { statusCode: 200, headers: {} });
+    const request = Object.assign(new EventEmitter(), { end() {
+      queueMicrotask(() => callback(stream as import("node:http").IncomingMessage));
+    } });
+    return request;
+  });
+  syncBuiltinESMExports();
+  assert.equal(await fetchExternalCalendarFeedContent("https://calendar.example.test/feed"), "synthetic feed");
+  assert.equal(resolutions, 1);
+});
+
+test("approved private feed failures expose no transport credentials or calendar content", async (t) => {
+  privatePolicy(t);
+  const secretUrl = "https://calendar.example.test/PRIVATE_PATH?token=PRIVATE_TOKEN";
+  await assert.rejects(fetchExternalCalendarFeedContent(secretUrl, dependencies(async () => {
+    throw new Error(`${secretUrl} PRIVATE_CONTENT PRIVATE_PASSWORD`);
+  }, async () => [{ address: "10.77.0.10", family: 4 }])), (error: unknown) => {
+    assert.ok(error instanceof ExternalCalendarError);
+    assert.equal(error.message, "Calendar feed could not be fetched.");
+    assert.equal(error.cause, undefined);
+    assert.doesNotMatch(JSON.stringify(error) + error.stack, /PRIVATE_|calendar\.example\.test/);
+    return true;
+  });
+});
+
+
+test("exact private policy supports canonical IPv6 ULA and multiple approved answers", async (t) => {
+  privatePolicy(t, ["fd12:3456::10", "10.77.0.10"]);
+  assert.equal(await fetchExternalCalendarFeedContent("https://calendar.example.test/feed", dependencies(
+    async (_url, address) => { assert.equal(address.family, 6); return response("feed"); },
+    async () => [{ address: "fd12:3456:0:0:0:0:0:10", family: 6 }, { address: "10.77.0.10", family: 4 }]
+  )), "feed");
+  for (const address of ["fd12:3456::11", "::ffff:10.77.0.10", "fe80::1%eth0", "::1"]) {
+    await assert.rejects(fetchExternalCalendarFeedContent("https://calendar.example.test/feed", dependencies(
+      async () => { assert.fail("unapproved IPv6 must not reach transport"); },
+      async () => [{ address, family: 6 }]
+    )));
+  }
+});
+
+test("public redirects may enter only an explicitly approved private calendar destination", async (t) => {
+  privatePolicy(t);
+  const publicResolve = dependencies(async () => response("")).resolve;
+  const requested: string[] = [];
+  assert.equal(await fetchExternalCalendarFeedContent("https://public.example.test/start", dependencies(
+    async (url) => {
+      requested.push(url.hostname);
+      return url.hostname === "public.example.test"
+        ? response("", { statusCode: 302, headers: { location: "https://calendar.example.test/feed" } })
+        : response("feed");
+    }, async hostname => hostname === "calendar.example.test"
+      ? [{ address: "10.77.0.10", family: 4 }] : publicResolve(hostname)
+  )), "feed");
+  assert.deepEqual(requested, ["public.example.test", "calendar.example.test"]);
+});
+
+test("feed route errors and request diagnostics do not expose private URL or content", async (t) => {
+  const dns = await import("node:dns/promises");
+  const https = await import("node:https");
+  const { syncBuiltinESMExports } = await import("node:module");
+  const { Writable } = await import("node:stream");
+  const { LogController } = await import("fastify");
+  const { installRequestDiagnostics, logRedactionPaths } = await import("./logging.js");
+  privatePolicy(t);
+  t.mock.method(dns.default, "lookup", async () => [{ address: "10.77.0.10", family: 4 }]);
+  t.mock.method(https.default, "request", () => {
+    throw new Error("https://calendar.example.test/PRIVATE_PATH?token=PRIVATE_TOKEN PRIVATE_CONTENT PRIVATE_PASSWORD");
+  });
+  syncBuiltinESMExports();
+  t.after(() => { t.mock.restoreAll(); syncBuiltinESMExports(); });
+  await withRuntime(async runtime => {
+    let logs = "";
+    const stream = new Writable({ write(chunk, _encoding, callback) { logs += String(chunk); callback(); } });
+    const app = Fastify({
+      logController: new LogController({ disableRequestLogging: true }),
+      logger: { stream, redact: { paths: [...logRedactionPaths], censor: "[redacted]" } }
+    });
+    app.decorate("persistence", runtime);
+    installRequestDiagnostics(app);
+    await app.register(externalCalendarRoutes);
+    try {
+      const result = await app.inject({ method: "POST", url: "/api/external-calendars/feed", payload: {
+        name: "Synthetic calendar", color: "#087f7b", sourceType: "overlay",
+        url: "https://calendar.example.test/PRIVATE_PATH?token=PRIVATE_TOKEN"
+      } });
+      assert.equal(result.statusCode, 400);
+      assert.deepEqual(result.json(), { error: "external_calendar_fetch_failed" });
+      assert.ok(logs.length > 0);
+      assert.doesNotMatch(result.body + logs, /PRIVATE_|calendar\.example\.test/);
+    } finally { await app.close(); }
   });
 });

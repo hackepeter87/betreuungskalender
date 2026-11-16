@@ -68,3 +68,12 @@ supported-date and maximum-duration limits as regular care entries.
 
 CSV exports encode stored text as inert spreadsheet content. They can still
 contain sensitive domain data and require the same protection as other exports.
+
+External-calendar fetching is public-only unless an operator explicitly configures
+`EXTERNAL_CALENDAR_PRIVATE_TARGETS`. Each exception binds an exact DNS hostname to
+exact RFC1918/ULA addresses on HTTPS port 443. URL IP literals, unexpected or mixed
+DNS answers and unapproved redirect destinations remain blocked. The transport
+pins the validated address and retains hostname-based TLS verification. Operators
+must trust the complete allowed HTTPS virtual host and restrict network egress;
+this does not grant exceptions to OIDC, push or other outbound clients. See
+[configuration](docs/configuration.md#private-external-calendar-destinations).

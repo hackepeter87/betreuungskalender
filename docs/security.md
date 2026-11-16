@@ -221,8 +221,20 @@ untrusted input. The server parses ICS data with `ical.js`, rejects oversized
 calendars, excessive event counts, unsupported recurrence rules, invalid date
 ranges, and overlong text fields, and returns only generic error codes for
 rejected sources. URL feeds must use HTTPS. Every literal address and every DNS
-result must be a public unicast address; mixed public/private DNS answers are
-rejected. The selected address is pinned to the HTTPS request, and every
+result must be a public unicast address by default; mixed public/private DNS
+answers are rejected. The optional `EXTERNAL_CALENDAR_PRIVATE_TARGETS` policy
+permits exact DNS-hostname/private-address pairs on HTTPS port 443 only. For a
+configured hostname, **all** DNS answers must be explicitly allowed private
+addresses, including when other answers are public. Bare IPv4 RFC1918 and IPv6
+ULA addresses are supported; URL IP literals, CIDR entries, wildcard hosts,
+loopback, link-local, mapped IPv6, scoped IPv6 and other reserved ranges are not
+exceptions. Invalid policy configuration prevents startup with a generic error.
+This trusts every path served by the allowed virtual host, not only a particular
+calendar URL. Only trusted operators can change this environment configuration;
+calendar users cannot supply it through the API. An approved server must not act
+as a proxy to other services. Network policy remains a separate exact-IP/port
+boundary. Public redirect destinations retain the existing public-only policy;
+private destinations require their own exact mapping. The selected address is pinned to the HTTPS request, and every
 redirect is resolved and checked again before it is followed. Redirect count,
 the complete fetch duration, transferred bytes, decompressed bytes, and parsed
 event counts are bounded. Feed URLs are shown only in redacted form because

@@ -6,6 +6,13 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+### Added
+
+- Allow operators to opt into exact DNS-hostname/private-IP mappings for external
+  HTTPS calendar imports and refreshes on port 443, with strict startup
+  validation, per-redirect DNS checks and pinned connections. The default
+  public-only SSRF policy remains unchanged.
+
 ## [1.36.2] - 2026-11-16
 
 ### Fixed
