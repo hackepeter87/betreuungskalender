@@ -4,6 +4,7 @@ import { expandContactRule } from "../shared/contactRuleExpansion";
 import {
   buildEventSegment,
   buildPresetRecurrence,
+  contactRulePreviewRange,
   effectiveContactRuleEndDate,
   inferRepeatPreset
 } from "../src/lib/contactRuleEditor";
@@ -124,6 +125,32 @@ test("applies explicit and implicit series end conditions", () => {
   assert.equal(effectiveContactRuleEndDate("never", "2026-10-02", "never", ""), "2026-10-02");
   assert.equal(effectiveContactRuleEndDate("weekly", "2026-10-02", "never", ""), undefined);
   assert.equal(effectiveContactRuleEndDate("weekly", "2026-10-02", "on-date", "2026-12-31"), "2026-12-31");
+});
+
+test("aligns the default preview with the series instead of the current year", () => {
+  assert.deepEqual(contactRulePreviewRange("2027-01-08"), {
+    startDate: "2027-01-08",
+    endDate: "2027-12-31"
+  });
+  assert.deepEqual(contactRulePreviewRange("2027-01-08", "2027-06-30"), {
+    startDate: "2027-01-08",
+    endDate: "2027-06-30"
+  });
+  assert.deepEqual(contactRulePreviewRange("2027-01-08", "2027-01-08"), {
+    startDate: "2027-01-08",
+    endDate: "2027-01-08"
+  });
+});
+
+test("keeps the configured rolling preview horizon deterministic", () => {
+  assert.deepEqual(contactRulePreviewRange("2026-11-20", undefined, 6), {
+    startDate: "2026-11-20",
+    endDate: "2027-04-30"
+  });
+  assert.deepEqual(contactRulePreviewRange(""), {
+    startDate: "",
+    endDate: ""
+  });
 });
 
 const recurringRule: ContactRule = {
