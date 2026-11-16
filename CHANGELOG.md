@@ -6,6 +6,32 @@ project follows semantic versioning where practical.
 
 ## [Unreleased]
 
+## [1.36.2] - 2026-11-16
+
+### Fixed
+
+- Describe the recurring-care workflow as care planning instead of a
+  target-versus-actual comparison.
+- Align the initial calendar preview with the first appointment and supported
+  synchronization horizon instead of an unrelated calendar year.
+- Preserve deliberately selected preview dates while explaining disjoint
+  periods and offering an explicit alignment action.
+- Let the editor and calendar preview size independently without stretching an
+  empty preview panel to the full form height.
+
+### Accessibility and testing
+
+- Cover future series, manual preview ranges, explicit realignment and
+  responsive layouts at phone, tablet and desktop widths.
+- Preserve keyboard operation, accessible names, focus visibility and reflow.
+
+### Compatibility
+
+- No database migration, recurrence-rule change or event-identity change is
+  included.
+- Existing SQLite and PostgreSQL installations, APIs, authentication,
+  authorization, backups, transfers and calendar feeds remain compatible.
+
 ## [1.36.1] - 2026-11-14
 
 ### Fixed
