@@ -13,6 +13,7 @@ import {
   buildEventSegment,
   buildPresetRecurrence,
   contactRuleDayOffset,
+  contactRulePreviewRange,
   effectiveContactRuleEndDate,
   inferRepeatPreset,
   type ContactRuleRepeatPreset
@@ -25,7 +26,6 @@ import {
   formatShortDate,
   formatTime,
   localDate,
-  rangeForYear,
   toDateKey
 } from "../lib/date";
 import { statusLabels } from "../lib/labels";
@@ -232,8 +232,6 @@ export function ContactPage({
   } = useAppStore();
   const { locale, intlLocale } = useI18n();
   const existingRule = data.contactRules[0];
-  const currentYear = new Date().getFullYear();
-  const defaultRange = rangeForYear(currentYear);
   const existingBuilder = recurrenceBuilderFromRule(existingRule);
   const existingSegment = existingRule?.segments[0];
   const initialStartDate = existingRule?.startDate ?? nextFriday();
@@ -241,6 +239,21 @@ export function ContactPage({
   const initialRepeatPreset = existingRule
     ? inferRepeatPreset(existingRule)
     : "biweekly";
+  const initialEndCondition = existingRule?.endDate && initialRepeatPreset !== "never"
+    ? "on-date"
+    : "never";
+  const initialEndDate = initialEndCondition === "on-date" ? existingRule?.endDate ?? "" : "";
+  const initialSeriesEndDate = effectiveContactRuleEndDate(
+    initialRepeatPreset,
+    initialStartDate,
+    initialEndCondition,
+    initialEndDate
+  );
+  const initialPreviewRange = contactRulePreviewRange(
+    initialStartDate,
+    initialSeriesEndDate,
+    existingRule?.syncHorizonMonths ?? 12
+  );
   const [ruleId, setRuleId] = useState(existingRule?.id);
   const [name, setName] = useState(existingRule?.name ?? "");
   const [startDate, setStartDate] = useState(initialStartDate);
@@ -248,12 +261,8 @@ export function ContactPage({
   const [firstStartTime, setFirstStartTime] = useState(existingSegment?.startTime ?? "16:00");
   const [firstEndTime, setFirstEndTime] = useState(existingSegment?.endTime ?? "18:00");
   const [repeatPreset, setRepeatPreset] = useState<ContactRuleRepeatPreset>(initialRepeatPreset);
-  const [endCondition, setEndCondition] = useState<"never" | "on-date">(
-    existingRule?.endDate && initialRepeatPreset !== "never" ? "on-date" : "never"
-  );
-  const [endDate, setEndDate] = useState(
-    existingRule?.endDate && initialRepeatPreset !== "never" ? existingRule.endDate : ""
-  );
+  const [endCondition, setEndCondition] = useState<"never" | "on-date">(initialEndCondition);
+  const [endDate, setEndDate] = useState(initialEndDate);
   const [frequency, setFrequency] = useState<RecurrenceFrequency>(existingBuilder.frequency);
   const [interval, setInterval] = useState(existingBuilder.interval);
   const [monthlyMode, setMonthlyMode] = useState<MonthlyMode>(existingBuilder.monthlyMode);
@@ -287,8 +296,9 @@ export function ContactPage({
       ""
   );
   const [active, setActive] = useState(existingRule?.active ?? true);
-  const [generationStart, setGenerationStart] = useState(defaultRange.startDate);
-  const [generationEnd, setGenerationEnd] = useState(defaultRange.endDate);
+  const [generationStart, setGenerationStart] = useState(initialPreviewRange.startDate);
+  const [generationEnd, setGenerationEnd] = useState(initialPreviewRange.endDate);
+  const [previewRangeCustomized, setPreviewRangeCustomized] = useState(false);
   const [message, setMessage] = useState("");
   const [historicalPreview, setHistoricalPreview] = useState<ApiContactRuleSyncPreview | null>(null);
   const [historicalPreviewConfirmed, setHistoricalPreviewConfirmed] = useState(false);
@@ -319,6 +329,10 @@ export function ContactPage({
   const seriesEndDate = effectiveContactRuleEndDate(repeatPreset, startDate, endCondition, endDate);
   const seriesRangeValid = repeatPreset === "never" || endCondition === "never" || Boolean(
     seriesEndDate && startDate && seriesEndDate >= startDate
+  );
+  const previewRangeValid = Boolean(generationStart && generationEnd && generationStart <= generationEnd);
+  const previewRangeOutsideSeries = previewRangeValid && Boolean(
+    generationEnd < startDate || (seriesEndDate && generationStart > seriesEndDate)
   );
   const effectiveSegments = useMemo(
     () => repeatPreset === "custom"
@@ -438,11 +452,54 @@ export function ContactPage({
       ? copy(locale, "contactFlow", "untilDate", { date: formatDate(seriesEndDate, intlLocale) })
       : copy(locale, "contactFlow", "withoutEndDate")
   });
+  const invalidateHistoricalPreview = () => {
+    setHistoricalPreview(null);
+    setHistoricalPreviewConfirmed(false);
+  };
+  const alignPreviewRange = (
+    nextStartDate = startDate,
+    nextRepeatPreset = repeatPreset,
+    nextEndCondition = endCondition,
+    nextEndDate = endDate
+  ) => {
+    const nextSeriesEndDate = effectiveContactRuleEndDate(
+      nextRepeatPreset,
+      nextStartDate,
+      nextEndCondition,
+      nextEndDate
+    );
+    const nextRange = contactRulePreviewRange(
+      nextStartDate,
+      nextSeriesEndDate,
+      existingRule?.syncHorizonMonths ?? 12
+    );
+    setGenerationStart(nextRange.startDate);
+    setGenerationEnd(nextRange.endDate);
+    setPreviewRangeCustomized(false);
+    invalidateHistoricalPreview();
+  };
   const updateFirstStartDate = (nextStartDate: string) => {
     const currentOffset = Math.max(0, contactRuleDayOffset(startDate, firstEndDate));
     setStartDate(nextStartDate);
     if (/^\d{4}-\d{2}-\d{2}$/.test(nextStartDate) && Number.isFinite(currentOffset)) {
       setFirstEndDate(addDays(nextStartDate, currentOffset));
+    }
+    if (!previewRangeCustomized) alignPreviewRange(nextStartDate);
+  };
+  const updateRepeatPreset = (nextRepeatPreset: ContactRuleRepeatPreset) => {
+    setRepeatPreset(nextRepeatPreset);
+    if (!previewRangeCustomized) alignPreviewRange(startDate, nextRepeatPreset);
+  };
+  const updateEndCondition = (nextEndCondition: "never" | "on-date") => {
+    setEndCondition(nextEndCondition);
+    if (!previewRangeCustomized) {
+      alignPreviewRange(startDate, repeatPreset, nextEndCondition, endDate);
+    }
+  };
+  const updateSeriesEndDate = (nextEndDate: string) => {
+    setEndDate(nextEndDate);
+    if (!previewRangeCustomized) {
+      alignPreviewRange(startDate, repeatPreset, endCondition, nextEndDate);
     }
   };
   const updateSegment = (id: string, next: Partial<ApiContactRuleSegment>) => {
@@ -554,11 +611,6 @@ export function ContactPage({
     );
   };
 
-  const invalidateHistoricalPreview = () => {
-    setHistoricalPreview(null);
-    setHistoricalPreviewConfirmed(false);
-  };
-
   const previewHistoricalSync = async () => {
     if (!ruleId) {
       setMessage(copy(locale, "contactFlow", "saveFirst"));
@@ -590,10 +642,10 @@ export function ContactPage({
   };
 
   return (
-    <div className="page" data-testid="page-contact">
+    <div className="page contact-page" data-testid="page-contact">
       <div className="page-header">
         <div>
-          <p className="page-header__context">{copy(locale, "contact", "context")}</p>
+          <p className="page-header__context">{copy(locale, "contactFlow", "context")}</p>
           <h1>{copy(locale, "contactFlow", "pageTitle")}</h1>
         </div>
         <button className="button button--secondary no-print" type="button" onClick={onNewEntry} disabled={!canWrite || isSaving}>
@@ -609,7 +661,7 @@ export function ContactPage({
         </section>
       ) : null}
 
-      <div className="two-column-layout">
+      <div className="two-column-layout contact-workspace">
         <form className="panel rule-form" data-mobile-step={mobileRuleStep} onSubmit={saveRule}>
           <div className="panel__header">
             <div>
@@ -710,7 +762,7 @@ export function ContactPage({
               <legend className="field-label-row"><span>{copy(locale, "contactFlow", "repeat")}</span></legend>
               <label className="field recurrence-builder__wide">
                 <span>{copy(locale, "contactFlow", "repeat")}</span>
-                <select data-testid="contact-repeat-preset" value={repeatPreset} onChange={(event) => setRepeatPreset(event.target.value as ContactRuleRepeatPreset)}>
+                <select data-testid="contact-repeat-preset" value={repeatPreset} onChange={(event) => updateRepeatPreset(event.target.value as ContactRuleRepeatPreset)}>
                   <option value="never">{copy(locale, "contactFlow", "repeatNever")}</option>
                   <option value="weekly">{copy(locale, "contactFlow", "repeatWeekly")}</option>
                   <option value="biweekly">{copy(locale, "contactFlow", "repeatBiweekly")}</option>
@@ -722,15 +774,15 @@ export function ContactPage({
                 <div className="field recurrence-builder__wide">
                   <span>{copy(locale, "contactFlow", "seriesEnd")}</span>
                   <div className="segmented-control" role="group" aria-label={copy(locale, "contactFlow", "seriesEnd")}>
-                    <button className={endCondition === "never" ? "is-active" : ""} type="button" onClick={() => setEndCondition("never")}>{copy(locale, "contactFlow", "withoutEndDate")}</button>
-                    <button className={endCondition === "on-date" ? "is-active" : ""} type="button" onClick={() => setEndCondition("on-date")}>{copy(locale, "contactFlow", "endOnDate")}</button>
+                    <button className={endCondition === "never" ? "is-active" : ""} type="button" onClick={() => updateEndCondition("never")}>{copy(locale, "contactFlow", "withoutEndDate")}</button>
+                    <button className={endCondition === "on-date" ? "is-active" : ""} type="button" onClick={() => updateEndCondition("on-date")}>{copy(locale, "contactFlow", "endOnDate")}</button>
                   </div>
                 </div>
               ) : null}
               {repeatPreset !== "never" && endCondition === "on-date" ? (
                 <label className="field recurrence-builder__wide">
                   <span>{copy(locale, "contactFlow", "seriesEndDate")}</span>
-                  <input data-testid="contact-pattern-end-date" type="date" min={startDate} required aria-invalid={!seriesRangeValid} value={endDate} onChange={(event) => setEndDate(event.target.value)} />
+                  <input data-testid="contact-pattern-end-date" type="date" min={startDate} required aria-invalid={!seriesRangeValid} value={endDate} onChange={(event) => updateSeriesEndDate(event.target.value)} />
                   {!seriesRangeValid ? <span className="field-error" role="alert">{copy(locale, "contactFlow", "invalidSeriesEnd")}</span> : null}
                 </label>
               ) : null}
@@ -897,7 +949,7 @@ export function ContactPage({
           </div>
         </form>
 
-        <section className="panel generator-panel">
+        <section className="panel generator-panel contact-preview-panel">
           <div className="panel__header">
             <div>
               <h2>{copy(locale, "contact", "generateTitle")}</h2>
@@ -917,6 +969,7 @@ export function ContactPage({
                 <FieldHelpLabel fieldId="contactPattern.generationRange">{copy(locale, "common", "from")}</FieldHelpLabel>
                 <input data-testid="contact-generation-start" type="date" value={generationStart} onChange={(event) => {
                   setGenerationStart(event.target.value);
+                  setPreviewRangeCustomized(true);
                   invalidateHistoricalPreview();
                 }} />
               </label>
@@ -924,15 +977,23 @@ export function ContactPage({
                 <FieldHelpLabel fieldId="contactPattern.generationRange">{copy(locale, "common", "to")}</FieldHelpLabel>
                 <input data-testid="contact-generation-end" type="date" value={generationEnd} onChange={(event) => {
                   setGenerationEnd(event.target.value);
+                  setPreviewRangeCustomized(true);
                   invalidateHistoricalPreview();
                 }} />
               </label>
             </div>
             <div className="contact-generation-preview" data-testid="contact-generation-preview">
               <div className="contact-generation-preview__summary">
-                <strong>{copy(locale, "contact", "previewTitle")}</strong>
+                <div className="field-label-row">
+                  <strong>{copy(locale, "contact", "previewTitle")}</strong>
+                  <FieldHelpButton fieldId="contactPattern.duplicatePrevention" showRequirement={false} />
+                </div>
                 <span>
-                  {previewEntries.length
+                  {!previewRangeValid
+                    ? copy(locale, "contact", "invalidRange")
+                    : previewRangeOutsideSeries
+                      ? copy(locale, "contactFlow", "previewOutsideSeries")
+                      : previewEntries.length
                     ? copy(locale, "contact", "previewCount", { count: previewEntries.length })
                     : copy(locale, "contact", "previewEmpty")}
                 </span>
@@ -975,7 +1036,26 @@ export function ContactPage({
                   </article>
                 ))}
                 {previewCalendarItems.length === 0 ? (
-                  <p className="empty-copy">{copy(locale, "contact", "previewEmpty")}</p>
+                  <div>
+                    <p className="empty-copy" role="status">
+                      {!previewRangeValid
+                        ? copy(locale, "contact", "invalidRange")
+                        : previewRangeOutsideSeries
+                          ? copy(locale, "contactFlow", "previewOutsideSeriesDescription")
+                          : copy(locale, "contact", "previewEmpty")}
+                    </p>
+                    {previewRangeOutsideSeries ? (
+                      <button
+                        className="button button--secondary"
+                        data-testid="contact-preview-align"
+                        type="button"
+                        onClick={() => alignPreviewRange()}
+                      >
+                        <Icon name="repeat" size={17} />
+                        {copy(locale, "contactFlow", "previewAlign")}
+                      </button>
+                    ) : null}
+                  </div>
                 ) : null}
                 {hiddenPreviewItems > 0 ? (
                   <p className="contact-preview-more">
@@ -1036,7 +1116,6 @@ export function ContactPage({
                 ) : null}
               </details>
             ) : null}
-            <FieldHelpButton fieldId="contactPattern.duplicatePrevention" showRequirement={false} />
             {message ? <p className="inline-message" role="status" data-testid="contact-message">{message}</p> : null}
           </div>
         </section>

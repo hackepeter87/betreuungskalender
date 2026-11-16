@@ -12,6 +12,26 @@ function dateAtNoon(date: string): Date {
   return new Date(`${date}T12:00:00Z`);
 }
 
+function endOfRollingMonthRange(startDate: string, months: number): string {
+  const [year = 0, month = 1] = startDate.split("-").map(Number);
+  const end = new Date(Date.UTC(year, month - 1 + months, 0, 12));
+  return end.toISOString().slice(0, 10);
+}
+
+export function contactRulePreviewRange(
+  startDate: string,
+  seriesEndDate?: string,
+  syncHorizonMonths = 12
+): { startDate: string; endDate: string } {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+    return { startDate, endDate: seriesEndDate ?? "" };
+  }
+  return {
+    startDate,
+    endDate: seriesEndDate ?? endOfRollingMonthRange(startDate, syncHorizonMonths)
+  };
+}
+
 export function contactRuleWeekday(date: string): ContactRuleWeekday {
   return weekdays[dateAtNoon(date).getUTCDay()] ?? "SU";
 }

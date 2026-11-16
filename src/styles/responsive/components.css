@@ -145,10 +145,6 @@
     grid-template-columns: 1fr;
   }
 
-  .two-column-layout {
-    grid-template-columns: 1fr;
-  }
-
   .entry-form .toggle-row {
     display: grid;
     grid-template-columns: 1fr;

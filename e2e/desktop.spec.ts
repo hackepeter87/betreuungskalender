@@ -2407,6 +2407,32 @@ test("keeps care views usable when the conflict overview is incomplete", async (
   await expect(page.getByTestId("care-conflicts-limited")).toBeVisible();
 });
 
+test("keeps the recurring-care preview aligned with a future series", async ({ page }) => {
+  await openApp(page);
+  await createChild(page, "Vorschau Kind");
+
+  await navigate(page, "contact");
+  await expect(page.getByText("Betreuungsplanung", { exact: true })).toBeVisible();
+  await page.getByTestId("contact-pattern-start-date").fill("2030-01-04");
+
+  await expect(page.getByTestId("contact-generation-start")).toHaveValue("2030-01-04");
+  await expect(page.getByTestId("contact-generation-end")).toHaveValue("2030-12-31");
+  await expect(page.getByTestId("contact-preview-new-occurrence").first()).toBeVisible();
+
+  await page.getByTestId("contact-generation-start").fill("2029-01-01");
+  await page.getByTestId("contact-generation-end").fill("2029-12-31");
+  await expect(page.getByTestId("contact-generation-preview")).toContainText(
+    "In diesem Zeitraum kann die Serie keine Termine enthalten"
+  );
+
+  await page.getByTestId("contact-pattern-start-date").fill("2031-01-03");
+  await expect(page.getByTestId("contact-generation-start")).toHaveValue("2029-01-01");
+  await page.getByTestId("contact-preview-align").click();
+  await expect(page.getByTestId("contact-generation-start")).toHaveValue("2031-01-03");
+  await expect(page.getByTestId("contact-generation-end")).toHaveValue("2031-12-31");
+  await expect(page.getByTestId("contact-preview-new-occurrence").first()).toBeVisible();
+});
+
 test("creates a weekly multi-day care series with calendar preview", async ({
   page,
   request

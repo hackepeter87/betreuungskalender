@@ -203,6 +203,7 @@ const de = {
     completedDescription: "Der technische Lauf {id} wurde abgeschlossen. Externe Kopien bleiben gemäß dem Betreiberverfahren zu prüfen."
   },
   contactFlow: {
+    context: "Betreuungsplanung",
     pageTitle: "Wiederkehrende Betreuung",
     editorTitle: "Betreuungsserie anlegen",
     editorDescription: "Lege den ersten Termin fest und wähle anschließend, wie er wiederholt werden soll.",
@@ -232,6 +233,9 @@ const de = {
     untilDate: "bis {date}",
     invalidEventRange: "Das Ende des ersten Termins muss nach seinem Beginn liegen.",
     invalidSeriesEnd: "Das Serienende darf nicht vor dem ersten Termin liegen.",
+    previewOutsideSeries: "Zeitraum liegt außerhalb der Serie",
+    previewOutsideSeriesDescription: "In diesem Zeitraum kann die Serie keine Termine enthalten. Richte die Vorschau wieder am ersten Termin und am Serienende aus.",
+    previewAlign: "Vorschau an Serie ausrichten",
     advancedRecurrence: "Benutzerdefinierte Wiederholung",
     advancedRecurrenceDescription: "Nur für abweichende Rhythmen, mehrere Wochentage oder mehrere Zeitspannen.",
     summaryTitle: "So wird die Serie angelegt",
@@ -958,6 +962,7 @@ const en = {
     "completedDescription": "Technical run {id} completed. External copies still require review under the operator procedure."
   },
   "contactFlow": {
+    "context": "Care planning",
     "pageTitle": "Recurring care",
     "editorTitle": "Create care series",
     "editorDescription": "Set the first event, then choose how it should repeat.",
@@ -987,6 +992,9 @@ const en = {
     "untilDate": "until {date}",
     "invalidEventRange": "The first event must end after it starts.",
     "invalidSeriesEnd": "The series end cannot be before the first event.",
+    "previewOutsideSeries": "Period is outside the series",
+    "previewOutsideSeriesDescription": "The series cannot contain dates in this period. Align the preview with the first event and series end.",
+    "previewAlign": "Align preview with series",
     "advancedRecurrence": "Custom recurrence",
     "advancedRecurrenceDescription": "Use this only for different intervals, multiple weekdays, or multiple time spans.",
     "summaryTitle": "This series will be created",
