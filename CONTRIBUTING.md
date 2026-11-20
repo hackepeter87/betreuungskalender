@@ -54,6 +54,9 @@ npm run test
 npm run build
 ```
 
+Agent-assisted contributions follow the project-scoped roles and delegation
+contract in [`docs/agent-collaboration.md`](docs/agent-collaboration.md).
+
 ## Branches and commits
 
 - Use short branches such as `feat/calendar-filter`, `fix/backup-check`, or

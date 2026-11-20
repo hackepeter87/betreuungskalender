@@ -48,6 +48,29 @@ an immediate mitigation. Keep that mitigation minimal, create the retrospective
 issue and roadmap entry immediately, and do not merge or release until the
 normal acceptance gates are restored.
 
+## Agent collaboration
+
+- The main agent owns planning, architecture and product decisions, ambiguous
+  failures, integration, required checks, and the complete acceptance result.
+- Delegate a substantial, well-bounded subtask when doing so reduces total
+  work. Bundle related routine work; do not create an agent for every trivial
+  step. Use deterministic formatters, codemods, or scripts first.
+- Use `explorer` for read-only repository reconnaissance, `mechanic` for a
+  confirmed change in explicitly assigned files, and `reviewer` for targeted
+  risk-based review. Their models are fixed in `.codex/agents/`; do not rely on
+  inheritance from the main model.
+- Run no more than three subagents concurrently. Give each only the required
+  files, constraints, expected result, and checks. Avoid full chat histories,
+  repeated repository scans, and unbounded logs.
+- Give writing agents non-overlapping file ownership. Sequence overlapping or
+  dependent work. Subagents report changed files, checks, and blockers briefly.
+- After one failed attempt, decide whether a targeted retry is worthwhile.
+  After two failures on the same problem, the main agent reassesses or takes
+  over.
+- If a configured model is unavailable, name the replacement and disclose any
+  cost-class change before use. The main agent reviews and integrates every
+  delegated result.
+
 ## Project structure
 
 - `src/`: React and TypeScript frontend.
