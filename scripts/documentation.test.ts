@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import Fastify from "fastify";
 import { protectedApplicationRoutePlugins } from "../server/applicationRoutes.js";
 
@@ -21,6 +21,16 @@ async function filesBelow(directory: string, extension: string): Promise<string[
     const relativePath = path.posix.join(directory, entry.name);
     if (entry.isDirectory()) return filesBelow(relativePath, extension);
     return entry.isFile() && entry.name.endsWith(extension) ? [relativePath] : [];
+  }));
+  return files.flat().sort();
+}
+
+async function allFilesBelow(directory: string): Promise<string[]> {
+  const entries = await readdir(path.join(projectRoot, directory), { withFileTypes: true });
+  const files = await Promise.all(entries.map(async (entry) => {
+    const relativePath = path.posix.join(directory, entry.name);
+    if (entry.isDirectory()) return allFilesBelow(relativePath);
+    return entry.isFile() ? [relativePath] : [];
   }));
   return files.flat().sort();
 }
@@ -90,8 +100,8 @@ test("documented npm run commands exist", async () => {
 test("current operator artifacts do not restore the retired authentication proxy topology", async () => {
   const currentFiles = [
     ...(await currentMarkdownFiles()),
-    ...(await filesBelow("deploy", ".yml")),
-    ...(await filesBelow("deploy", ".example")),
+    ...(await allFilesBelow("deploy")),
+    ".github/workflows/release.yml",
     "scripts/container-postgres-smoke.sh",
     "scripts/update.js"
   ];
@@ -104,22 +114,72 @@ test("current operator artifacts do not restore the retired authentication proxy
   }
 
   assert.deepEqual(obsoleteReferences, []);
+  assert.match(
+    await readFile(path.join(projectRoot, "docs/adr/0001-post-1.0-auth-architecture.md"), "utf8"),
+    pattern,
+    "historical decision records must remain outside the current-contract scan"
+  );
 });
 
-test("runtime environment variables are documented", async () => {
-  const [configSource, configurationGuide, environmentExample] = await Promise.all([
+test("runtime and operational environment variables match the active configuration guide", async () => {
+  const [configSource, configurationGuide] = await Promise.all([
     readFile(path.join(projectRoot, "server/config.ts"), "utf8"),
-    readFile(path.join(projectRoot, "docs/configuration.md"), "utf8"),
-    readFile(path.join(projectRoot, ".env.example"), "utf8")
+    readFile(path.join(projectRoot, "docs/configuration.md"), "utf8")
   ]);
-  const documented = `${configurationGuide}\n${environmentExample}`;
   const runtimeVariables = new Set(
     [...configSource.matchAll(/process\.env\.([A-Z][A-Z0-9_]*)/g)].map((match) => match[1])
   );
+  const operationalVariables = new Set([
+    "APP_COMPOSE_FILE",
+    "APP_RELEASE_DIR",
+    "APP_RELEASE_VERSION",
+    "BACKUP_RETENTION_DAYS",
+    "HEALTHCHECK_URL",
+    "HOST_BIND_ADDRESS",
+    "HOST_PORT",
+    "POSTGRES_ADMIN_PASSWORD_FILE"
+  ]);
+  const supportedVariables = new Set([...runtimeVariables, ...operationalVariables]);
+  const documentedVariables = new Set(
+    [...configurationGuide.matchAll(/^\| `([A-Z][A-Z0-9_]*)` \|/gmu)].map((match) => match[1])
+  );
+
   assert.ok(runtimeVariables.size > 50, "server/config.ts environment inventory is unexpectedly empty");
+  assert.ok(documentedVariables.size > 70, "configuration guide environment inventory is unexpectedly empty");
   assert.deepEqual(
-    [...runtimeVariables].filter((name) => !new RegExp(`\\b${name}\\b`).test(documented)).sort(),
-    []
+    [...supportedVariables].filter((name) => !documentedVariables.has(name)).sort(),
+    [],
+    "supported environment variables must be present in the configuration table"
+  );
+  assert.deepEqual(
+    [...documentedVariables].filter((name) => !supportedVariables.has(name)).sort(),
+    [],
+    "configuration table variables must belong to the runtime or explicit operational contract"
+  );
+  assert.match(
+    configurationGuide,
+    /^\| `APP_RELEASE_VERSION` \|[^\n]*\| `X\.Y\.Z` \|/mu,
+    "release version examples must use the maintained placeholder instead of a stale concrete release"
+  );
+});
+
+test("release archive uses only explicit runtime and deployment inputs", async () => {
+  const releaseWorkflow = await readFile(
+    path.join(projectRoot, ".github/workflows/release.yml"),
+    "utf8"
+  );
+  const { releaseArchiveUsesExplicitRuntimeInputs } = await import(
+    pathToFileURL(path.join(projectRoot, "scripts/release-check.js")).href
+  );
+  assert.equal(
+    releaseArchiveUsesExplicitRuntimeInputs(releaseWorkflow),
+    true,
+    "release archive inputs must be explicit and complete"
+  );
+  assert.doesNotMatch(
+    releaseWorkflow,
+    /\bdist dist-server scripts deploy charts\b/u,
+    "release archives must not include the complete scripts and deploy directories"
   );
 });
 

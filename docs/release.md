@@ -96,9 +96,9 @@ Pushing a `v*` tag starts `.github/workflows/release.yml`. The workflow:
 - runs `npm run release:check:strict` before packaging;
 - builds and starts the production container, then checks `/api/health`;
 - creates `betreuungskalender-vX.Y.Z.tar.gz` and a SHA-256 checksum;
-- includes the Helm chart, minimal runtime `Dockerfile.release`,
-  `deploy/compose.yml`, and operational update/verification scripts required by
-  the supported Compose update path;
+- includes the Helm chart, minimal runtime `Dockerfile.release`, explicitly
+  named supported Compose examples, and only the operational backup, update,
+  health and runtime-verification scripts required by those paths;
 - confirms that `docs/release-notes/vX.Y.Z.md` is present in the archive; and
 - stores the archive, checksum, and release notes as GitHub Actions artifacts
   for 14 days.

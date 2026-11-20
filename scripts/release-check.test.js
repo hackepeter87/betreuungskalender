@@ -17,24 +17,30 @@ import {
   parseEnvValue,
   isValidSemver,
   releaseNotesPathForVersion,
-  releaseArchiveIncludesHelmChart,
+  releaseArchiveUsesExplicitRuntimeInputs,
   releaseWorkflowPublishesHelmChart,
   releaseTagForVersion
 } from "./release-check.js";
 
-test("reads Helm appVersion and requires the chart in release archives", () => {
+test("reads Helm appVersion and requires explicit release archive inputs", () => {
   assert.equal(helmChartAppVersion('appVersion: "1.19.0"\n'), "1.19.0");
   assert.equal(helmChartAppVersion("appVersion: 1.19.0\n"), "1.19.0");
   assert.equal(helmChartAppVersion("version: 0.1.0\n"), undefined);
   assert.equal(
-    releaseArchiveIncludesHelmChart(
-      "dist dist-server scripts deploy charts Dockerfile.release package.json"
+    releaseArchiveUsesExplicitRuntimeInputs(
+      `tar -czf release.tar.gz \\
+        dist dist-server scripts/backup.js scripts/restore-check.js scripts/healthcheck.js \\
+        scripts/runtime-verify.js scripts/update.js deploy/compose.yml deploy/compose.postgres.yml \\
+        deploy/compose.testing.yml deploy/compose.production.yml deploy/app.env.demo.example \\
+        deploy/postgres/init/001-create-application-role.sh charts Dockerfile.release package.json \\
+        package-lock.json .env.example README.md LICENSE CHANGELOG.md docs artifacts/compliance
+      sha256sum release.tar.gz`
     ),
     true
   );
   assert.equal(
-    releaseArchiveIncludesHelmChart(
-      "dist dist-server scripts deploy Dockerfile.release package.json"
+    releaseArchiveUsesExplicitRuntimeInputs(
+      "tar -czf release.tar.gz dist dist-server scripts deploy charts Dockerfile.release package.json sha256sum release.tar.gz"
     ),
     false
   );
