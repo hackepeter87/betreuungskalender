@@ -178,6 +178,15 @@ test("allows reviewed image locations and warns for malformed or unexpected imag
   }
 });
 
+test("rejects a syntactically valid but unreferenced visual baseline", () => {
+  assert.equal(
+    isImageOutsideScreenshotDirectory(
+      "e2e/visual-regression.spec.ts-snapshots/notifications-visual-390-linux.png"
+    ),
+    true
+  );
+});
+
 test("reports exact missing gitignore safety rules", () => {
   const complete = REQUIRED_GITIGNORE_RULES.join("\n");
   assert.deepEqual(findMissingGitignoreRules(complete), []);

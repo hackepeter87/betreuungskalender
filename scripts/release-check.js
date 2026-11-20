@@ -135,7 +135,35 @@ const SCREENSHOT_DIRECTORY = "docs/assets/screenshots/";
 const PUBLIC_ICON_DIRECTORY = "public/icons/";
 const IMAGE_PATTERN = /\.(?:png|jpe?g|webp)$/i;
 const REVIEWED_VISUAL_BASELINE_PATTERN =
-  /^e2e\/(?:appearance|visual-regression)\.spec\.ts-snapshots\/[a-z0-9]+(?:-[a-z0-9]+)*-visual-(?:320|390|768|1280|1440|1920)-(?:darwin|linux)\.png$/;
+  /^(?<directory>e2e\/(?:appearance|visual-regression)\.spec\.ts-snapshots\/)(?<stem>[a-z0-9]+(?:-[a-z0-9]+)*)-visual-(?:320|390|768|1280|1440|1920)-(?:darwin|linux)\.png$/;
+// Keep this map aligned with the committed generated baseline state. Filename shape alone is not sufficient.
+const REVIEWED_VISUAL_BASELINE_STEMS = new Map([
+  [
+    "e2e/appearance.spec.ts-snapshots/",
+    new Set([
+      "dark-calendar",
+      "dark-dashboard",
+      "dark-entry-validation",
+      "dark-report",
+      "dark-settings",
+      "light-entry-validation"
+    ])
+  ],
+  [
+    "e2e/visual-regression.spec.ts-snapshots/",
+    new Set([
+      "backup",
+      "calendar",
+      "dashboard",
+      "navigation-collapsed",
+      "navigation-collapsed-popover",
+      "navigation-more-open",
+      "navigation-open",
+      "report",
+      "settings"
+    ])
+  ]
+]);
 
 function normalizePath(filePath) {
   return filePath.replaceAll("\\", "/").replace(/^\.\/+/, "");
@@ -215,11 +243,17 @@ export function classifySensitiveArtifact(filePath) {
 export function isImageOutsideScreenshotDirectory(filePath) {
   const normalized = normalizePath(filePath);
   const lower = normalized.toLowerCase();
+  const baselineMatch = REVIEWED_VISUAL_BASELINE_PATTERN.exec(normalized);
+  const isReviewedVisualBaseline =
+    baselineMatch !== null &&
+    REVIEWED_VISUAL_BASELINE_STEMS.get(baselineMatch.groups.directory)?.has(
+      baselineMatch.groups.stem
+    ) === true;
   return (
     IMAGE_PATTERN.test(normalized) &&
     !lower.startsWith(SCREENSHOT_DIRECTORY) &&
     !lower.startsWith(PUBLIC_ICON_DIRECTORY) &&
-    !REVIEWED_VISUAL_BASELINE_PATTERN.test(normalized)
+    !isReviewedVisualBaseline
   );
 }
 
