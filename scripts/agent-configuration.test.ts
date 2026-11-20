@@ -15,8 +15,10 @@ test("project subagent defaults stay bounded and economical", async () => {
   assert.match(config, /^\[agents\]$/mu);
   assert.match(config, /^enabled = true$/mu);
   assert.match(config, /^max_concurrent_threads_per_session = 3$/mu);
+  assert.match(config, /^max_depth = 1$/mu);
   assert.match(config, /^default_subagent_model = "gpt-5\.6-luna"$/mu);
   assert.match(config, /^default_subagent_reasoning_effort = "high"$/mu);
+  assert.match(config, /^multi_agent_v2 = false$/mu);
   assert.doesNotMatch(config, /^model\s*=/mu, "the project must not override the main model");
 });
 

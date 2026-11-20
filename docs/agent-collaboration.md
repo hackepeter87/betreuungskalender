@@ -52,9 +52,10 @@ dependent or overlapping changes run sequentially. At most three subagents run
 alongside the main agent. Reports remain short and cover evidence or changed
 files, checks, and unresolved problems. Only the main agent delegates. Each
 custom child profile explicitly forbids spawning further agents. The validated
-client does not expose a supported per-role capability switch or separate
-project setting for delegation depth, so this boundary is instructional and
-must also be enforced by main-agent review.
+client does not expose a supported per-role multi-agent capability switch. The
+project therefore pins the V1 multi-agent backend, disables V2, and sets
+`agents.max_depth = 1`; V2 in Codex 0.171.0 would ignore that depth limit. The
+instruction remains explicit and the main agent still reviews child output.
 
 A focused retry is allowed after one failed attempt. After two unsuccessful
 attempts on the same problem, the main agent reassesses the approach or takes
@@ -79,10 +80,10 @@ problems and must be assessed separately.
 
 `scripts/agent-configuration.test.ts` provides the deterministic repository
 gate. It checks the concurrency default, explicit role models and reasoning,
-exact role identifiers, supported disabled child capabilities, and the explicit
-instruction against nested delegation. Client schema acceptance and
-account-specific model availability remain runtime checks because CI does not
-install or authenticate Codex.
+the V1 depth boundary, exact role identifiers, supported disabled child
+capabilities, and the explicit instruction against nested delegation. Client
+schema acceptance and account-specific model availability remain runtime checks
+because CI does not install or authenticate Codex.
 
 The agent files establish the **configured** model assignment. Runtime
 confirmation requires a newly started session that invokes the named agent and
