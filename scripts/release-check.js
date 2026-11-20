@@ -107,6 +107,7 @@ const CRITICAL_PROJECT_PATHS = [
   "docs/adr/0006-kubernetes-helm-deployment.md",
   "docs/release.md",
   "docs/third-party-software.md",
+  "scripts/release-archive.js",
   "deploy/compose.yml",
   "deploy/compose.postgres.yml",
   "deploy/postgres/init/001-create-application-role.sh",
@@ -291,44 +292,12 @@ export function helmChartAppVersion(content) {
   return content.match(/^appVersion:\s*["']?([^"'\s]+)["']?\s*$/m)?.[1];
 }
 
-const RELEASE_ARCHIVE_INPUTS = [
-  "dist",
-  "dist-server",
-  "scripts/backup.js",
-  "scripts/restore-check.js",
-  "scripts/healthcheck.js",
-  "scripts/runtime-verify.js",
-  "scripts/update.js",
-  "deploy/compose.yml",
-  "deploy/compose.postgres.yml",
-  "deploy/compose.testing.yml",
-  "deploy/compose.production.yml",
-  "deploy/app.env.demo.example",
-  "deploy/postgres/init/001-create-application-role.sh",
-  "charts",
-  "Dockerfile.release",
-  "package.json",
-  "package-lock.json",
-  ".env.example",
-  "README.md",
-  "LICENSE",
-  "CHANGELOG.md",
-  "docs",
-  "artifacts/compliance"
-];
-
-export function releaseArchiveUsesExplicitRuntimeInputs(content) {
-  const start = content.indexOf("tar -czf");
-  const end = content.indexOf("sha256sum", start);
-  if (start < 0 || end < 0) return false;
-  const tokens = content
-    .slice(start, end)
-    .replace(/\\\r?\n/gu, " ")
-    .trim()
-    .split(/\s+/u);
-  const inputs = tokens.slice(3);
-  return inputs.length === RELEASE_ARCHIVE_INPUTS.length
-    && RELEASE_ARCHIVE_INPUTS.every((entry) => inputs.includes(entry));
+export function releaseWorkflowUsesArchiveBuilder(content) {
+  const invocation = /node\s+scripts\/release-archive\.js\s+["']betreuungskalender-\$\{GITHUB_REF_NAME\}\.tar\.gz["']\s+["']\$\{GITHUB_REF_NAME\}["']/gu;
+  const matches = content.match(invocation) ?? [];
+  return matches.length === 1
+    && !/\btar\s+-[^\n]*[cz][^\n]*f\b/u.test(content)
+    && !/\bsha256sum\b/u.test(content);
 }
 
 export function releaseWorkflowPublishesHelmChart(content) {
@@ -817,8 +786,8 @@ function checkHelmDeployment(cwd, packageJson, version, report) {
     report.fail("package.json must define the Helm chart validation script");
   } else if (!releaseWorkflow.includes("npm run test:helm")) {
     report.fail("release workflow must validate the Helm chart before packaging");
-  } else if (!releaseArchiveUsesExplicitRuntimeInputs(releaseWorkflow)) {
-    report.fail("release workflow must use the complete explicit runtime archive input list");
+  } else if (!releaseWorkflowUsesArchiveBuilder(releaseWorkflow)) {
+    report.fail("release workflow must use the verified runtime archive builder exactly once");
   } else {
     report.pass("Helm chart validation and release archive integration are configured");
   }

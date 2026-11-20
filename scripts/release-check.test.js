@@ -1,6 +1,14 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import {
   REQUIRED_DOCKERIGNORE_RULES,
@@ -17,32 +25,92 @@ import {
   parseEnvValue,
   isValidSemver,
   releaseNotesPathForVersion,
-  releaseArchiveUsesExplicitRuntimeInputs,
+  releaseWorkflowUsesArchiveBuilder,
   releaseWorkflowPublishesHelmChart,
   releaseTagForVersion
 } from "./release-check.js";
+import {
+  createReleaseArchive,
+  RELEASE_ARCHIVE_INPUTS,
+  validateReleaseArchiveEntries
+} from "./release-archive.js";
 
-test("reads Helm appVersion and requires explicit release archive inputs", () => {
+test("reads Helm appVersion and requires the verified release archive builder", () => {
   assert.equal(helmChartAppVersion('appVersion: "1.19.0"\n'), "1.19.0");
   assert.equal(helmChartAppVersion("appVersion: 1.19.0\n"), "1.19.0");
   assert.equal(helmChartAppVersion("version: 0.1.0\n"), undefined);
   assert.equal(
-    releaseArchiveUsesExplicitRuntimeInputs(
-      `tar -czf release.tar.gz \\
-        dist dist-server scripts/backup.js scripts/restore-check.js scripts/healthcheck.js \\
-        scripts/runtime-verify.js scripts/update.js deploy/compose.yml deploy/compose.postgres.yml \\
-        deploy/compose.testing.yml deploy/compose.production.yml deploy/app.env.demo.example \\
-        deploy/postgres/init/001-create-application-role.sh charts Dockerfile.release package.json \\
-        package-lock.json .env.example README.md LICENSE CHANGELOG.md docs artifacts/compliance
-      sha256sum release.tar.gz`
+    releaseWorkflowUsesArchiveBuilder(
+      `run: >-
+        node scripts/release-archive.js
+        "betreuungskalender-\${GITHUB_REF_NAME}.tar.gz"
+        "\${GITHUB_REF_NAME}"`
     ),
     true
   );
   assert.equal(
-    releaseArchiveUsesExplicitRuntimeInputs(
-      "tar -czf release.tar.gz dist dist-server scripts deploy charts Dockerfile.release package.json sha256sum release.tar.gz"
+    releaseWorkflowUsesArchiveBuilder(
+      `run: |
+        node scripts/release-archive.js "betreuungskalender-\${GITHUB_REF_NAME}.tar.gz" "\${GITHUB_REF_NAME}"
+        tar -czf "betreuungskalender-\${GITHUB_REF_NAME}.tar.gz" dist`
     ),
     false
+  );
+});
+
+test("release archive member validation uses the shared explicit manifest", () => {
+  const entries = RELEASE_ARCHIVE_INPUTS.map((entry) => `${entry}/`);
+  entries.push("docs/release-notes/v1.36.2.md");
+  assert.deepEqual(
+    validateReleaseArchiveEntries(entries, "v1.36.2"),
+    {
+      missing: [],
+      unexpected: [],
+      releaseNotesPath: "docs/release-notes/v1.36.2.md",
+      releaseNotesPresent: true
+    }
+  );
+
+  const withUnexpected = [...entries, "secrets/private.env"];
+  assert.deepEqual(
+    validateReleaseArchiveEntries(withUnexpected, "v1.36.2").unexpected,
+    ["secrets/private.env"]
+  );
+  assert.equal(
+    validateReleaseArchiveEntries(entries.filter((entry) => entry !== "charts/"), "v1.36.2")
+      .missing.includes("charts"),
+    true
+  );
+});
+
+test("release archive builder creates a verified archive and checksum", async (context) => {
+  const root = mkdtempSync(join(tmpdir(), "betreuungskalender-release-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const directoryInputs = new Set(["dist", "dist-server", "charts", "docs", "artifacts/compliance"]);
+
+  for (const input of RELEASE_ARCHIVE_INPUTS) {
+    const target = join(root, input);
+    if (directoryInputs.has(input)) {
+      mkdirSync(target, { recursive: true });
+      continue;
+    }
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, `${input}\n`, "utf8");
+  }
+  const releaseNotes = join(root, "docs/release-notes/v1.36.2.md");
+  mkdirSync(dirname(releaseNotes), { recursive: true });
+  writeFileSync(releaseNotes, "# v1.36.2\n", "utf8");
+
+  await createReleaseArchive({
+    cwd: root,
+    output: "betreuungskalender-v1.36.2.tar.gz",
+    releaseTag: "v1.36.2"
+  });
+
+  assert.equal(existsSync(join(root, "betreuungskalender-v1.36.2.tar.gz")), true);
+  assert.match(
+    readFileSync(join(root, "betreuungskalender-v1.36.2.tar.gz.sha256"), "utf8"),
+    /^[a-f0-9]{64}  betreuungskalender-v1\.36\.2\.tar\.gz\n$/u
   );
 });
 test("release workflow publishes and verifies the Helm OCI chart", () => {

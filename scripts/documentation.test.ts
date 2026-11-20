@@ -5,6 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import Fastify from "fastify";
+import ts from "typescript";
 import { protectedApplicationRoutePlugins } from "../server/applicationRoutes.js";
 
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
@@ -57,6 +58,52 @@ function localLinkTargets(markdown: string): string[] {
     );
 }
 
+function scriptEnvironmentVariables(source: string, fileName: string): string[] {
+  const sourceFile = ts.createSourceFile(
+    fileName,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    fileName.endsWith(".ts") ? ts.ScriptKind.TS : ts.ScriptKind.JS
+  );
+  const names = new Set<string>();
+  const isProcessEnv = (node: ts.Node): boolean =>
+    ts.isPropertyAccessExpression(node) &&
+    ts.isIdentifier(node.expression) &&
+    node.expression.text === "process" &&
+    node.name.text === "env";
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isPropertyAccessExpression(node) && isProcessEnv(node.expression)) {
+      names.add(node.name.text);
+    } else if (ts.isElementAccessExpression(node) && isProcessEnv(node.expression)) {
+      const argument = node.argumentExpression;
+      if (argument && ts.isStringLiteral(argument) && /^[A-Z][A-Z0-9_]*$/u.test(argument.text)) {
+        names.add(argument.text);
+      }
+    } else if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === "get" &&
+      ts.isCallExpression(node.expression.expression) &&
+      ts.isIdentifier(node.expression.expression.expression) &&
+      node.expression.expression.expression.text === "parseEnv"
+    ) {
+      const argument = node.arguments[0];
+      if (argument && ts.isStringLiteral(argument) && /^[A-Z][A-Z0-9_]*$/u.test(argument.text)) {
+        names.add(argument.text);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return [...names];
+}
+
+function composeEnvironmentVariables(source: string): string[] {
+  return [...source.matchAll(/(?<!\$)\$\{([A-Z][A-Z0-9_]*)/gu)].map((match) => match[1]);
+}
+
 async function sha256(file: string): Promise<string> {
   return createHash("sha256").update(await readFile(path.join(projectRoot, file))).digest("hex");
 }
@@ -98,13 +145,16 @@ test("documented npm run commands exist", async () => {
 });
 
 test("current operator artifacts do not restore the retired authentication proxy topology", async () => {
-  const currentFiles = [
+  const currentFiles = [...new Set([
     ...(await currentMarkdownFiles()),
     ...(await allFilesBelow("deploy")),
-    ".github/workflows/release.yml",
+    ...(await allFilesBelow(".github/workflows")),
+    ...(await allFilesBelow("charts")),
+    ".env.example",
+    "Dockerfile.release",
     "scripts/container-postgres-smoke.sh",
     "scripts/update.js"
-  ];
+  ])];
   const obsoleteReferences: string[] = [];
   const pattern = /oauth2-proxy|compose\.oidc|\.env\.oidc/iu;
 
@@ -122,29 +172,39 @@ test("current operator artifacts do not restore the retired authentication proxy
 });
 
 test("runtime and operational environment variables match the active configuration guide", async () => {
-  const [configSource, configurationGuide] = await Promise.all([
-    readFile(path.join(projectRoot, "server/config.ts"), "utf8"),
-    readFile(path.join(projectRoot, "docs/configuration.md"), "utf8")
+  const runtimeSourceFiles = [
+    "server/config.ts",
+    "scripts/backup.js",
+    "scripts/restore-check.js",
+    "scripts/healthcheck.js",
+    "scripts/runtime-verify.js",
+    "scripts/update.js"
+  ];
+  const composeSourceFiles = [
+    "deploy/compose.yml",
+    "deploy/compose.postgres.yml",
+    "deploy/compose.testing.yml",
+    "deploy/compose.production.yml"
+  ];
+  const [configurationGuide, runtimeSources, composeSources] = await Promise.all([
+    readFile(path.join(projectRoot, "docs/configuration.md"), "utf8"),
+    Promise.all(runtimeSourceFiles.map(async (file) => ({
+      file,
+      source: await readFile(path.join(projectRoot, file), "utf8")
+    }))),
+    Promise.all(composeSourceFiles.map((file) => readFile(path.join(projectRoot, file), "utf8")))
   ]);
   const runtimeVariables = new Set(
-    [...configSource.matchAll(/process\.env\.([A-Z][A-Z0-9_]*)/g)].map((match) => match[1])
+    runtimeSources.flatMap(({ file, source }) => scriptEnvironmentVariables(source, file))
   );
-  const operationalVariables = new Set([
-    "APP_COMPOSE_FILE",
-    "APP_RELEASE_DIR",
-    "APP_RELEASE_VERSION",
-    "BACKUP_RETENTION_DAYS",
-    "HEALTHCHECK_URL",
-    "HOST_BIND_ADDRESS",
-    "HOST_PORT",
-    "POSTGRES_ADMIN_PASSWORD_FILE"
-  ]);
-  const supportedVariables = new Set([...runtimeVariables, ...operationalVariables]);
+  const composeVariables = new Set(composeSources.flatMap(composeEnvironmentVariables));
+  const supportedVariables = new Set([...runtimeVariables, ...composeVariables]);
   const documentedVariables = new Set(
     [...configurationGuide.matchAll(/^\| `([A-Z][A-Z0-9_]*)` \|/gmu)].map((match) => match[1])
   );
 
-  assert.ok(runtimeVariables.size > 50, "server/config.ts environment inventory is unexpectedly empty");
+  assert.ok(runtimeVariables.size > 50, "runtime environment inventory is unexpectedly empty");
+  assert.ok(composeVariables.size > 5, "Compose environment inventory is unexpectedly empty");
   assert.ok(documentedVariables.size > 70, "configuration guide environment inventory is unexpectedly empty");
   assert.deepEqual(
     [...supportedVariables].filter((name) => !documentedVariables.has(name)).sort(),
@@ -168,13 +228,13 @@ test("release archive uses only explicit runtime and deployment inputs", async (
     path.join(projectRoot, ".github/workflows/release.yml"),
     "utf8"
   );
-  const { releaseArchiveUsesExplicitRuntimeInputs } = await import(
+  const { releaseWorkflowUsesArchiveBuilder } = await import(
     pathToFileURL(path.join(projectRoot, "scripts/release-check.js")).href
   );
   assert.equal(
-    releaseArchiveUsesExplicitRuntimeInputs(releaseWorkflow),
+    releaseWorkflowUsesArchiveBuilder(releaseWorkflow),
     true,
-    "release archive inputs must be explicit and complete"
+    "release workflow must use the verified archive builder"
   );
   assert.doesNotMatch(
     releaseWorkflow,

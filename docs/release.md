@@ -99,6 +99,8 @@ Pushing a `v*` tag starts `.github/workflows/release.yml`. The workflow:
 - includes the Helm chart, minimal runtime `Dockerfile.release`, explicitly
   named supported Compose examples, and only the operational backup, update,
   health and runtime-verification scripts required by those paths;
+- creates the archive and checksum through `scripts/release-archive.js`, then
+  verifies the resulting member list against the same explicit manifest;
 - confirms that `docs/release-notes/vX.Y.Z.md` is present in the archive; and
 - stores the archive, checksum, and release notes as GitHub Actions artifacts
   for 14 days.
