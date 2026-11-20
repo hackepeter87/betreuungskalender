@@ -63,7 +63,8 @@ normal acceptance gates are restored.
   files, constraints, expected result, and checks. Avoid full chat histories,
   repeated repository scans, and unbounded logs.
 - Only the main agent delegates. Subagents must not spawn or delegate to other
-  agents.
+  agents; the current client enforces this through instructions and main-agent
+  review rather than a per-role capability switch.
 - Give writing agents non-overlapping file ownership. Sequence overlapping or
   dependent work. Subagents report changed files, checks, and blockers briefly.
 - After one failed attempt, decide whether a targeted retry is worthwhile.

@@ -20,7 +20,7 @@ test("project subagent defaults stay bounded and economical", async () => {
   assert.doesNotMatch(config, /^model\s*=/mu, "the project must not override the main model");
 });
 
-test("named roles pin models and cannot delegate further", async () => {
+test("named roles pin models and explicitly forbid further delegation", async () => {
   const roles = {
     explorer: "gpt-5.6-luna",
     mechanic: "gpt-5.6-luna",
@@ -29,6 +29,7 @@ test("named roles pin models and cannot delegate further", async () => {
 
   for (const [role, model] of Object.entries(roles)) {
     const config = await read(`.codex/agents/${role}.toml`);
+    assert.match(config, new RegExp(`^name = "${role}"$`, "mu"), role);
     assert.match(config, new RegExp(`^model = "${model.replaceAll(".", "\\.")}"$`, "mu"), role);
     assert.match(config, /^model_reasoning_effort = "high"$/mu, role);
     assert.match(config, /spawn or delegate to other agents/iu, role);
@@ -36,12 +37,11 @@ test("named roles pin models and cannot delegate further", async () => {
       "apps",
       "plugins",
       "memories",
-      "request_permissions_tool",
-      "multi_agent",
-      "multi_agent_v2"
+      "request_permissions_tool"
     ]) {
       assert.match(config, new RegExp(`^${capability} = false$`, "mu"), `${role}: ${capability}`);
     }
+    assert.doesNotMatch(config, /^multi_agent(?:_v2)?\s*=/mu, `${role}: unsupported feature override`);
     assert.match(config, /^include_instructions = false$/mu, role);
     assert.match(config, /^enabled = false$/mu, `${role}: bundled skills`);
   }

@@ -1,4 +1,4 @@
-name = "Reviewer"
+name = "reviewer"
 description = "Risk-based review of correctness, behavior, failure cases, and tests."
 model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
@@ -13,8 +13,6 @@ apps = false
 plugins = false
 memories = false
 request_permissions_tool = false
-multi_agent = false
-multi_agent_v2 = false
 
 [skills]
 include_instructions = false
