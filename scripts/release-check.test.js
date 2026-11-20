@@ -50,7 +50,13 @@ test("reads Helm appVersion and requires the verified release archive builder", 
         run: >-
           node scripts/release-archive.js
           "betreuungskalender-\${GITHUB_REF_NAME}.tar.gz"
-          "\${GITHUB_REF_NAME}"`
+          "\${GITHUB_REF_NAME}"
+      - uses: actions/upload-artifact@pinned
+        with:
+          path: |
+            betreuungskalender-\${{ github.ref_name }}.tar.gz
+            betreuungskalender-\${{ github.ref_name }}.tar.gz.sha256
+          if-no-files-found: error`
     ),
     true
   );
@@ -60,9 +66,14 @@ test("reads Helm appVersion and requires the verified release archive builder", 
   artifact:
     steps:
       - name: Create runtime archive
-        run: |
-          node scripts/release-archive.js "betreuungskalender-\${GITHUB_REF_NAME}.tar.gz" "\${GITHUB_REF_NAME}"
-          gtar --create --gzip --file "betreuungskalender-\${GITHUB_REF_NAME}.tar.gz" dist`
+        run: node scripts/release-archive.js "betreuungskalender-\${GITHUB_REF_NAME}.tar.gz" "\${GITHUB_REF_NAME}"
+      - run: gtar --create --gzip --file "betreuungskalender-\${GITHUB_REF_NAME}.tar.gz" dist
+      - uses: actions/upload-artifact@pinned
+        with:
+          path: |
+            betreuungskalender-\${{ github.ref_name }}.tar.gz
+            betreuungskalender-\${{ github.ref_name }}.tar.gz.sha256
+          if-no-files-found: error`
     ),
     false
   );

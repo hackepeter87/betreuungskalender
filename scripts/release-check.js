@@ -302,11 +302,24 @@ export function releaseWorkflowUsesArchiveBuilder(content) {
   }
   const steps = workflow?.jobs?.artifact?.steps;
   if (!Array.isArray(steps)) return false;
-  const builderSteps = steps.filter((step) => step?.name === "Create runtime archive");
-  if (builderSteps.length !== 1 || typeof builderSteps[0]?.run !== "string") return false;
-  const command = builderSteps[0].run.trim().replace(/\s+/gu, " ");
+  const builderIndexes = steps.flatMap((step, index) =>
+    step?.name === "Create runtime archive" ? [index] : []
+  );
+  if (builderIndexes.length !== 1) return false;
+  const builderIndex = builderIndexes[0];
+  const builderStep = steps[builderIndex];
+  const uploadStep = steps[builderIndex + 1];
+  if (typeof builderStep?.run !== "string" || typeof uploadStep?.uses !== "string") return false;
+  const command = builderStep.run.trim().replace(/\s+/gu, " ");
+  const uploadPaths = typeof uploadStep.with?.path === "string"
+    ? new Set(uploadStep.with.path.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean))
+    : new Set();
   return command ===
-    'node scripts/release-archive.js "betreuungskalender-${GITHUB_REF_NAME}.tar.gz" "${GITHUB_REF_NAME}"';
+    'node scripts/release-archive.js "betreuungskalender-${GITHUB_REF_NAME}.tar.gz" "${GITHUB_REF_NAME}"' &&
+    uploadStep.uses.startsWith("actions/upload-artifact@") &&
+    uploadStep.with?.["if-no-files-found"] === "error" &&
+    uploadPaths.has("betreuungskalender-${{ github.ref_name }}.tar.gz") &&
+    uploadPaths.has("betreuungskalender-${{ github.ref_name }}.tar.gz.sha256");
 }
 
 export function releaseWorkflowPublishesHelmChart(content) {

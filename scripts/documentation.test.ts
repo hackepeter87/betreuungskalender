@@ -173,6 +173,7 @@ test("documented npm run commands exist", async () => {
 
 test("current operator artifacts do not restore the retired authentication proxy topology", async () => {
   const currentFiles = [...new Set([
+    ...(await currentMarkdownFiles()),
     ...(await existingReleaseArchiveSourceFiles()).filter((file) =>
       !historicalDocumentationDirectories.some((directory) => file.startsWith(directory))
     ),
