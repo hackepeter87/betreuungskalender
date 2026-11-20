@@ -4,7 +4,7 @@ model = "gpt-5.6-luna"
 model_reasoning_effort = "high"
 model_verbosity = "low"
 developer_instructions = """
-Implement only the explicitly assigned result within the stated file ownership. Follow confirmed repository patterns and acceptance criteria. Prefer existing deterministic formatters, codemods, and scripts for fully specified transformations. Do not broaden scope, modify overlapping files, make architecture or product decisions, or perform external writes. Run only the requested focused checks. Report changed files, checks, and unresolved conflicts concisely. Stop and return the decision to the main agent when requirements conflict or a new architecture decision is necessary.
+Implement only the explicitly assigned result within the stated file ownership. Follow confirmed repository patterns and acceptance criteria. Prefer existing deterministic formatters, codemods, and scripts for fully specified transformations. Do not broaden scope, modify overlapping files, make architecture or product decisions, perform external writes, or spawn or delegate to other agents. Run only the requested focused checks. Report changed files, checks, and unresolved conflicts concisely. Stop and return the decision to the main agent when requirements conflict or a new architecture decision is necessary.
 """
 
 [features]
@@ -13,6 +13,8 @@ apps = false
 plugins = false
 memories = false
 request_permissions_tool = false
+multi_agent = false
+multi_agent_v2 = false
 
 [skills]
 include_instructions = false

@@ -4,7 +4,7 @@ model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
 model_verbosity = "low"
 developer_instructions = """
-Review the assigned change without editing files or performing external writes. Prioritize correctness, behavioral regressions, failure handling, security and privacy boundaries, and missing tests according to the stated risk. Report concrete findings first, ordered by severity, with file and line references and user or operational impact. Avoid style-only findings. If no issue is found, say so and name any residual test gap or uncertainty. Keep the result concise.
+Review the assigned change without editing files or performing external writes. Do not spawn or delegate to other agents. Prioritize correctness, behavioral regressions, failure handling, security and privacy boundaries, and missing tests according to the stated risk. Report concrete findings first, ordered by severity, with file and line references and user or operational impact. Avoid style-only findings. If no issue is found, say so and name any residual test gap or uncertainty. Keep the result concise.
 """
 
 [features]
@@ -13,6 +13,8 @@ apps = false
 plugins = false
 memories = false
 request_permissions_tool = false
+multi_agent = false
+multi_agent_v2 = false
 
 [skills]
 include_instructions = false

@@ -26,12 +26,13 @@ model selected for the current assignment.
 | `mechanic` | `gpt-5.6-luna` | `high` | Bounded changes that follow a confirmed pattern and explicit file ownership |
 | `reviewer` | `gpt-5.6-sol` | `high` | Targeted review where correctness or regression risk warrants a stronger model |
 
-The requested candidate `gpt-6-luna` was not present in the model catalog of
-the validated client. `gpt-5.6-luna` is the explicit lower-cost fallback for
-routine roles. This changes the model generation and advertised cost class; no
-numerical saving is claimed without measured usage data. The project default
-for any otherwise unspecified subagent is also `gpt-5.6-luna` with `high`
-reasoning, which prevents silent inheritance of the main model.
+The requested candidate `gpt-6-luna` was not present in the account-scoped
+model catalog returned by `codex debug models` during validation.
+`gpt-5.6-luna` is therefore the explicit lower-cost fallback for routine roles.
+This changes the model generation and advertised cost class; no numerical
+saving is claimed without measured usage data. The project default for any
+otherwise unspecified subagent is also `gpt-5.6-luna` with `high` reasoning,
+which prevents silent inheritance of the main model.
 
 Agent files can disable unnecessary tools and instructions, but they cannot
 override the parent session's sandbox or approval policy. The explorer's
@@ -49,7 +50,10 @@ Every delegated request includes only the necessary files, binding rules,
 expected result, and checks. Writing agents receive non-overlapping ownership;
 dependent or overlapping changes run sequentially. At most three subagents run
 alongside the main agent. Reports remain short and cover evidence or changed
-files, checks, and unresolved problems.
+files, checks, and unresolved problems. Only the main agent delegates. Each
+custom child profile disables the client's multi-agent features and explicitly
+forbids spawning further agents; the validated client does not expose a
+separate project setting for delegation depth.
 
 A focused retry is allowed after one failed attempt. After two unsuccessful
 attempts on the same problem, the main agent reassesses the approach or takes
@@ -71,6 +75,12 @@ codex -C /path/to/betreuungskalender --strict-config doctor --summary
 `config.load` check proves that the installed client accepted the project
 schema. Other `doctor` checks can still report unrelated user-state or network
 problems and must be assessed separately.
+
+`scripts/agent-configuration.test.ts` provides the deterministic repository
+gate. It checks the concurrency default, explicit role models and reasoning,
+disabled child capabilities, and the prohibition on nested delegation. Client
+schema acceptance and account-specific model availability remain runtime
+checks because CI does not install or authenticate Codex.
 
 The agent files establish the **configured** model assignment. Runtime
 confirmation requires a newly started session that invokes the named agent and

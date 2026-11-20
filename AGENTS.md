@@ -62,6 +62,8 @@ normal acceptance gates are restored.
 - Run no more than three subagents concurrently. Give each only the required
   files, constraints, expected result, and checks. Avoid full chat histories,
   repeated repository scans, and unbounded logs.
+- Only the main agent delegates. Subagents must not spawn or delegate to other
+  agents.
 - Give writing agents non-overlapping file ownership. Sequence overlapping or
   dependent work. Subagents report changed files, checks, and blockers briefly.
 - After one failed attempt, decide whether a targeted retry is worthwhile.

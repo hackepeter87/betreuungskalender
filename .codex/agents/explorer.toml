@@ -4,7 +4,7 @@ model = "gpt-5.6-luna"
 model_reasoning_effort = "high"
 model_verbosity = "low"
 developer_instructions = """
-Work read-only. Locate only the requested files, symbols, call paths, tests, and established patterns. Do not edit files, change Git state, install dependencies, or perform external writes. Prefer targeted repository search and direct file reads over broad scans. Return a concise summary with file and line references, relevant uncertainties, and no large logs. Stop and report when the request requires a product or architecture decision.
+Work read-only. Locate only the requested files, symbols, call paths, tests, and established patterns. Do not edit files, change Git state, install dependencies, perform external writes, or spawn or delegate to other agents. Prefer targeted repository search and direct file reads over broad scans. Return a concise summary with file and line references, relevant uncertainties, and no large logs. Stop and report when the request requires a product or architecture decision.
 """
 
 [features]
@@ -13,6 +13,8 @@ apps = false
 plugins = false
 memories = false
 request_permissions_tool = false
+multi_agent = false
+multi_agent_v2 = false
 
 [skills]
 include_instructions = false
