@@ -10,7 +10,7 @@ async function read(relativePath: string): Promise<string> {
   return readFile(path.join(projectRoot, relativePath), "utf8");
 }
 
-test("project subagent defaults stay bounded and economical", async () => {
+test("project subagent defaults stay economical with a V1 depth guard", async () => {
   const config = await read(".codex/config.toml");
   assert.match(config, /^\[agents\]$/mu);
   assert.match(config, /^enabled = true$/mu);
@@ -18,8 +18,22 @@ test("project subagent defaults stay bounded and economical", async () => {
   assert.match(config, /^max_depth = 1$/mu);
   assert.match(config, /^default_subagent_model = "gpt-5\.6-luna"$/mu);
   assert.match(config, /^default_subagent_reasoning_effort = "high"$/mu);
-  assert.match(config, /^multi_agent_v2 = false$/mu);
+  assert.doesNotMatch(config, /^multi_agent_v2\s*=/mu, "a local flag cannot pin V1 for every model");
   assert.doesNotMatch(config, /^model\s*=/mu, "the project must not override the main model");
+});
+
+test("guidance discloses that V2 does not enforce the depth guard", async () => {
+  const [agents, documentation] = await Promise.all([
+    read("AGENTS.md"),
+    read("docs/agent-collaboration.md")
+  ]);
+
+  for (const guidance of [agents, documentation]) {
+    assert.match(guidance, /max_depth = 1/iu);
+    assert.match(guidance, /V2/iu);
+    assert.match(guidance, /ignore/iu);
+    assert.match(guidance, /main-agent review/iu);
+  }
 });
 
 test("named roles pin models and explicitly forbid further delegation", async () => {

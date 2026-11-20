@@ -53,9 +53,12 @@ alongside the main agent. Reports remain short and cover evidence or changed
 files, checks, and unresolved problems. Only the main agent delegates. Each
 custom child profile explicitly forbids spawning further agents. The validated
 client does not expose a supported per-role multi-agent capability switch. The
-project therefore pins the V1 multi-agent backend, disables V2, and sets
-`agents.max_depth = 1`; V2 in Codex 0.171.0 would ignore that depth limit. The
-instruction remains explicit and the main agent still reviews child output.
+project sets `agents.max_depth = 1` as an additional guard when the client
+selects the V1 backend. Codex 0.171.0 can select V2 from model metadata despite
+local feature preferences, and V2 ignores that depth limit. Nested delegation
+therefore cannot be disabled technically for every configured model in this
+client version. The explicit child instruction and main-agent review are the
+binding controls in that case.
 
 A focused retry is allowed after one failed attempt. After two unsuccessful
 attempts on the same problem, the main agent reassesses the approach or takes
@@ -80,10 +83,11 @@ problems and must be assessed separately.
 
 `scripts/agent-configuration.test.ts` provides the deterministic repository
 gate. It checks the concurrency default, explicit role models and reasoning,
-the V1 depth boundary, exact role identifiers, supported disabled child
-capabilities, and the explicit instruction against nested delegation. Client
-schema acceptance and account-specific model availability remain runtime checks
-because CI does not install or authenticate Codex.
+the V1-only depth guard, exact role identifiers, supported disabled child
+capabilities, the documented V2 limitation, and the explicit instruction
+against nested delegation. Client schema acceptance and account-specific model
+availability remain runtime checks because CI does not install or authenticate
+Codex.
 
 The agent files establish the **configured** model assignment. Runtime
 confirmation requires a newly started session that invokes the named agent and

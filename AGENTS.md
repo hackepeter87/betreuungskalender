@@ -63,8 +63,10 @@ normal acceptance gates are restored.
   files, constraints, expected result, and checks. Avoid full chat histories,
   repeated repository scans, and unbounded logs.
 - Only the main agent delegates. Subagents must not spawn or delegate to other
-  agents. Project configuration pins the V1 backend and a depth of one; the
-  instruction and main-agent review remain mandatory.
+  agents. `agents.max_depth = 1` is an additional guard when Codex selects the
+  V1 backend; Codex 0.171.0 ignores it under V2 and exposes no supported
+  per-role delegation switch. The instruction and main-agent review are the
+  binding controls in that case.
 - Give writing agents non-overlapping file ownership. Sequence overlapping or
   dependent work. Subagents report changed files, checks, and blockers briefly.
 - After one failed attempt, decide whether a targeted retry is worthwhile.
