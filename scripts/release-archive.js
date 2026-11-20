@@ -1,6 +1,12 @@
 import { createHash } from "node:crypto";
-import { createReadStream, existsSync, writeFileSync } from "node:fs";
-import { basename, resolve } from "node:path";
+import {
+  createReadStream,
+  existsSync,
+  lstatSync,
+  readdirSync,
+  writeFileSync
+} from "node:fs";
+import { basename, join, resolve } from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
@@ -34,20 +40,37 @@ function normalizeArchiveEntry(entry) {
   return entry.replace(/^\.\//u, "").replace(/\/$/u, "");
 }
 
-export function validateReleaseArchiveEntries(entries, releaseTag) {
+export function collectReleaseArchiveEntries(cwd) {
+  const entries = [];
+  const visit = (relativePath) => {
+    const absolutePath = resolve(cwd, relativePath);
+    const metadata = lstatSync(absolutePath);
+    if (metadata.isSymbolicLink()) {
+      throw new Error(`Release archive inputs must not contain symbolic links: ${relativePath}`);
+    }
+    entries.push(normalizeArchiveEntry(relativePath));
+    if (!metadata.isDirectory()) return;
+    for (const child of readdirSync(absolutePath).sort()) {
+      visit(join(relativePath, child));
+    }
+  };
+
+  for (const input of RELEASE_ARCHIVE_INPUTS) visit(input);
+  return entries;
+}
+
+export function validateReleaseArchiveEntries(entries, expectedEntries, releaseTag) {
   const normalized = entries.map(normalizeArchiveEntry).filter(Boolean);
-  const belongsToInput = (entry, input) =>
-    entry === input || entry.startsWith(`${input}/`);
-  const missing = RELEASE_ARCHIVE_INPUTS.filter(
-    (input) => !normalized.some((entry) => belongsToInput(entry, input))
-  );
-  const unexpected = normalized.filter(
-    (entry) => !RELEASE_ARCHIVE_INPUTS.some((input) => belongsToInput(entry, input))
-  );
+  const expected = expectedEntries.map(normalizeArchiveEntry).filter(Boolean);
+  const actualSet = new Set(normalized);
+  const expectedSet = new Set(expected);
+  const missing = expected.filter((entry) => !actualSet.has(entry));
+  const unexpected = normalized.filter((entry) => !expectedSet.has(entry));
+  const duplicates = normalized.filter((entry, index) => normalized.indexOf(entry) !== index);
   const releaseNotesPath = `docs/release-notes/${releaseTag}.md`;
   const releaseNotesPresent = normalized.includes(releaseNotesPath);
 
-  return { missing, unexpected, releaseNotesPath, releaseNotesPresent };
+  return { missing, unexpected, duplicates, releaseNotesPath, releaseNotesPresent };
 }
 
 async function sha256(file) {
@@ -75,17 +98,20 @@ export async function createReleaseArchive({ cwd, output, releaseTag }) {
     throw new Error(`Missing release archive inputs: ${missingInputs.join(", ")}`);
   }
 
+  const expectedEntries = collectReleaseArchiveEntries(cwd);
   runTar(["-czf", output, ...RELEASE_ARCHIVE_INPUTS], cwd);
   const entries = runTar(["-tzf", output], cwd).split(/\r?\n/u).filter(Boolean);
-  const validation = validateReleaseArchiveEntries(entries, releaseTag);
+  const validation = validateReleaseArchiveEntries(entries, expectedEntries, releaseTag);
   if (
     validation.missing.length > 0 ||
     validation.unexpected.length > 0 ||
+    validation.duplicates.length > 0 ||
     !validation.releaseNotesPresent
   ) {
     throw new Error(
       `Invalid release archive: missing=${validation.missing.join(",") || "none"}; ` +
       `unexpected=${validation.unexpected.join(",") || "none"}; ` +
+      `duplicates=${validation.duplicates.join(",") || "none"}; ` +
       `releaseNotes=${validation.releaseNotesPresent ? "present" : validation.releaseNotesPath}`
     );
   }

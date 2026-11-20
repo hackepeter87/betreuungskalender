@@ -7,6 +7,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import Fastify from "fastify";
 import ts from "typescript";
 import { protectedApplicationRoutePlugins } from "../server/applicationRoutes.js";
+import { RELEASE_ARCHIVE_INPUTS } from "./release-archive.js";
 
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const historicalDocumentationDirectories = [
@@ -15,6 +16,8 @@ const historicalDocumentationDirectories = [
   "docs/release-notes/",
   "docs/release-smoke-tests/"
 ];
+const generatedReleaseArtifactDirectories = ["dist/", "dist-server/", "artifacts/compliance/"];
+const historicalReleaseArtifactFiles = new Set(["CHANGELOG.md"]);
 
 async function filesBelow(directory: string, extension: string): Promise<string[]> {
   const entries = await readdir(path.join(projectRoot, directory), { withFileTypes: true });
@@ -101,7 +104,31 @@ function scriptEnvironmentVariables(source: string, fileName: string): string[] 
 }
 
 function composeEnvironmentVariables(source: string): string[] {
-  return [...source.matchAll(/(?<!\$)\$\{([A-Z][A-Z0-9_]*)/gu)].map((match) => match[1]);
+  return [
+    ...source.matchAll(/(?<!\$)\$(?:\{([A-Z][A-Z0-9_]*)[^}]*\}|([A-Z][A-Z0-9_]*))/gu)
+  ].map((match) => match[1] ?? match[2]);
+}
+
+test("Compose environment inventory covers braced and unbraced variables", () => {
+  assert.deepEqual(
+    composeEnvironmentVariables("${BRACED:-fallback}\n$UNBRACED\n$${ESCAPED}\n$$ALSO_ESCAPED\n"),
+    ["BRACED", "UNBRACED"]
+  );
+});
+
+async function existingReleaseArchiveSourceFiles(): Promise<string[]> {
+  const files = await Promise.all(RELEASE_ARCHIVE_INPUTS.map(async (input) => {
+    try {
+      const metadata = await stat(path.join(projectRoot, input));
+      return metadata.isDirectory() ? allFilesBelow(input) : [input];
+    } catch {
+      return [];
+    }
+  }));
+  return files.flat().filter((file) =>
+    !generatedReleaseArtifactDirectories.some((directory) => file.startsWith(directory)) &&
+    !historicalReleaseArtifactFiles.has(file)
+  ).sort();
 }
 
 async function sha256(file: string): Promise<string> {
@@ -146,14 +173,11 @@ test("documented npm run commands exist", async () => {
 
 test("current operator artifacts do not restore the retired authentication proxy topology", async () => {
   const currentFiles = [...new Set([
-    ...(await currentMarkdownFiles()),
-    ...(await allFilesBelow("deploy")),
+    ...(await existingReleaseArchiveSourceFiles()).filter((file) =>
+      !historicalDocumentationDirectories.some((directory) => file.startsWith(directory))
+    ),
     ...(await allFilesBelow(".github/workflows")),
-    ...(await allFilesBelow("charts")),
-    ".env.example",
-    "Dockerfile.release",
-    "scripts/container-postgres-smoke.sh",
-    "scripts/update.js"
+    "scripts/container-postgres-smoke.sh"
   ])];
   const obsoleteReferences: string[] = [];
   const pattern = /oauth2-proxy|compose\.oidc|\.env\.oidc/iu;

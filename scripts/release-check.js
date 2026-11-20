@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse as parseYaml } from "yaml";
 
 export const REQUIRED_GITIGNORE_RULES = [
   ".env",
@@ -293,11 +294,19 @@ export function helmChartAppVersion(content) {
 }
 
 export function releaseWorkflowUsesArchiveBuilder(content) {
-  const invocation = /node\s+scripts\/release-archive\.js\s+["']betreuungskalender-\$\{GITHUB_REF_NAME\}\.tar\.gz["']\s+["']\$\{GITHUB_REF_NAME\}["']/gu;
-  const matches = content.match(invocation) ?? [];
-  return matches.length === 1
-    && !/\btar\s+-[^\n]*[cz][^\n]*f\b/u.test(content)
-    && !/\bsha256sum\b/u.test(content);
+  let workflow;
+  try {
+    workflow = parseYaml(content);
+  } catch {
+    return false;
+  }
+  const steps = workflow?.jobs?.artifact?.steps;
+  if (!Array.isArray(steps)) return false;
+  const builderSteps = steps.filter((step) => step?.name === "Create runtime archive");
+  if (builderSteps.length !== 1 || typeof builderSteps[0]?.run !== "string") return false;
+  const command = builderSteps[0].run.trim().replace(/\s+/gu, " ");
+  return command ===
+    'node scripts/release-archive.js "betreuungskalender-${GITHUB_REF_NAME}.tar.gz" "${GITHUB_REF_NAME}"';
 }
 
 export function releaseWorkflowPublishesHelmChart(content) {

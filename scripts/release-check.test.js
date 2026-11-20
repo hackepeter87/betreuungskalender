@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   mkdirSync,
@@ -30,6 +31,7 @@ import {
   releaseTagForVersion
 } from "./release-check.js";
 import {
+  collectReleaseArchiveEntries,
   createReleaseArchive,
   RELEASE_ARCHIVE_INPUTS,
   validateReleaseArchiveEntries
@@ -41,45 +43,57 @@ test("reads Helm appVersion and requires the verified release archive builder", 
   assert.equal(helmChartAppVersion("version: 0.1.0\n"), undefined);
   assert.equal(
     releaseWorkflowUsesArchiveBuilder(
-      `run: >-
-        node scripts/release-archive.js
-        "betreuungskalender-\${GITHUB_REF_NAME}.tar.gz"
-        "\${GITHUB_REF_NAME}"`
+      `jobs:
+  artifact:
+    steps:
+      - name: Create runtime archive
+        run: >-
+          node scripts/release-archive.js
+          "betreuungskalender-\${GITHUB_REF_NAME}.tar.gz"
+          "\${GITHUB_REF_NAME}"`
     ),
     true
   );
   assert.equal(
     releaseWorkflowUsesArchiveBuilder(
-      `run: |
-        node scripts/release-archive.js "betreuungskalender-\${GITHUB_REF_NAME}.tar.gz" "\${GITHUB_REF_NAME}"
-        tar -czf "betreuungskalender-\${GITHUB_REF_NAME}.tar.gz" dist`
+      `jobs:
+  artifact:
+    steps:
+      - name: Create runtime archive
+        run: |
+          node scripts/release-archive.js "betreuungskalender-\${GITHUB_REF_NAME}.tar.gz" "\${GITHUB_REF_NAME}"
+          gtar --create --gzip --file "betreuungskalender-\${GITHUB_REF_NAME}.tar.gz" dist`
     ),
     false
   );
 });
 
 test("release archive member validation uses the shared explicit manifest", () => {
-  const entries = RELEASE_ARCHIVE_INPUTS.map((entry) => `${entry}/`);
-  entries.push("docs/release-notes/v1.36.2.md");
+  const entries = ["dist/", "docs/", "docs/release-notes/", "docs/release-notes/v1.36.2.md"];
   assert.deepEqual(
-    validateReleaseArchiveEntries(entries, "v1.36.2"),
+    validateReleaseArchiveEntries(entries, entries, "v1.36.2"),
     {
       missing: [],
       unexpected: [],
+      duplicates: [],
       releaseNotesPath: "docs/release-notes/v1.36.2.md",
       releaseNotesPresent: true
     }
   );
 
-  const withUnexpected = [...entries, "secrets/private.env"];
+  const withUnexpected = [...entries, "docs/compose.oidc.yml"];
   assert.deepEqual(
-    validateReleaseArchiveEntries(withUnexpected, "v1.36.2").unexpected,
-    ["secrets/private.env"]
+    validateReleaseArchiveEntries(withUnexpected, entries, "v1.36.2").unexpected,
+    ["docs/compose.oidc.yml"]
   );
   assert.equal(
-    validateReleaseArchiveEntries(entries.filter((entry) => entry !== "charts/"), "v1.36.2")
-      .missing.includes("charts"),
+    validateReleaseArchiveEntries(entries.filter((entry) => entry !== "dist/"), entries, "v1.36.2")
+      .missing.includes("dist"),
     true
+  );
+  assert.deepEqual(
+    validateReleaseArchiveEntries([...entries, "dist/"], entries, "v1.36.2").duplicates,
+    ["dist"]
   );
 });
 
@@ -100,6 +114,7 @@ test("release archive builder creates a verified archive and checksum", async (c
   const releaseNotes = join(root, "docs/release-notes/v1.36.2.md");
   mkdirSync(dirname(releaseNotes), { recursive: true });
   writeFileSync(releaseNotes, "# v1.36.2\n", "utf8");
+  const expectedEntries = collectReleaseArchiveEntries(root);
 
   await createReleaseArchive({
     cwd: root,
@@ -107,10 +122,13 @@ test("release archive builder creates a verified archive and checksum", async (c
     releaseTag: "v1.36.2"
   });
 
-  assert.equal(existsSync(join(root, "betreuungskalender-v1.36.2.tar.gz")), true);
-  assert.match(
-    readFileSync(join(root, "betreuungskalender-v1.36.2.tar.gz.sha256"), "utf8"),
-    /^[a-f0-9]{64}  betreuungskalender-v1\.36\.2\.tar\.gz\n$/u
+  const archive = join(root, "betreuungskalender-v1.36.2.tar.gz");
+  assert.equal(existsSync(archive), true);
+  assert.ok(expectedEntries.includes("docs/release-notes/v1.36.2.md"));
+  const digest = createHash("sha256").update(readFileSync(archive)).digest("hex");
+  assert.equal(
+    readFileSync(`${archive}.sha256`, "utf8"),
+    `${digest}  betreuungskalender-v1.36.2.tar.gz\n`
   );
 });
 test("release workflow publishes and verifies the Helm OCI chart", () => {
