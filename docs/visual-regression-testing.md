@@ -79,5 +79,23 @@ must approve the image diff together with the code change.
 Failure screenshots, traces, reports, downloads, and test databases remain in
 ignored output directories and are never committed.
 
+## Repository artifact classification
+
+The release safety check distinguishes reviewed image assets from unexpected
+files instead of allowing images by extension alone:
+
+| Location | Purpose | Repository rule |
+| --- | --- | --- |
+| `docs/assets/screenshots/` | Public documentation screenshots | Reviewed against the documented Linux references and protected by checksum tests |
+| `public/icons/` | Published application icons | Limited to the maintained product assets |
+| `e2e/appearance.spec.ts-snapshots/` | Deterministic appearance baselines | Only `*-visual-<viewport>-<platform>.png` files for the maintained viewports and `linux` or `darwin` are classified as reviewed |
+| `e2e/visual-regression.spec.ts-snapshots/` | Deterministic layout baselines | Uses the same bounded filename, viewport and platform contract |
+| `test-results/`, `playwright-report/`, `blob-report/` | Generated failure evidence and reports | Ignored and never committed |
+
+Images in other locations, new snapshot directories, unsupported platform
+suffixes or malformed baseline names remain visible warnings. This
+classification does not replace the required visual and privacy review of an
+intentional baseline change.
+
 The [documentation screenshot guide](screenshots.md) reuses two reviewed Linux
 references. It does not introduce another fixture or capture pipeline.

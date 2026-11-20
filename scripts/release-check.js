@@ -134,6 +134,8 @@ const SEMVER_PATTERN =
 const SCREENSHOT_DIRECTORY = "docs/assets/screenshots/";
 const PUBLIC_ICON_DIRECTORY = "public/icons/";
 const IMAGE_PATTERN = /\.(?:png|jpe?g|webp)$/i;
+const REVIEWED_VISUAL_BASELINE_PATTERN =
+  /^e2e\/(?:appearance|visual-regression)\.spec\.ts-snapshots\/[a-z0-9]+(?:-[a-z0-9]+)*-visual-(?:320|390|768|1280|1440|1920)-(?:darwin|linux)\.png$/;
 
 function normalizePath(filePath) {
   return filePath.replaceAll("\\", "/").replace(/^\.\/+/, "");
@@ -212,10 +214,12 @@ export function classifySensitiveArtifact(filePath) {
 
 export function isImageOutsideScreenshotDirectory(filePath) {
   const normalized = normalizePath(filePath);
+  const lower = normalized.toLowerCase();
   return (
     IMAGE_PATTERN.test(normalized) &&
-    !normalized.toLowerCase().startsWith(SCREENSHOT_DIRECTORY) &&
-    !normalized.toLowerCase().startsWith(PUBLIC_ICON_DIRECTORY)
+    !lower.startsWith(SCREENSHOT_DIRECTORY) &&
+    !lower.startsWith(PUBLIC_ICON_DIRECTORY) &&
+    !REVIEWED_VISUAL_BASELINE_PATTERN.test(normalized)
   );
 }
 
@@ -346,7 +350,7 @@ function formatArtifactList(artifacts) {
 function warnAboutImages(files, report) {
   for (const path of files.filter(isImageOutsideScreenshotDirectory)) {
     report.warn(
-      `Image file outside ${SCREENSHOT_DIRECTORY}: ${path}`,
+      `Image file outside reviewed documentation, icon, or visual-baseline locations: ${path}`,
       ["  Please verify that it contains no personal data."]
     );
   }

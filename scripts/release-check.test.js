@@ -132,7 +132,7 @@ test("does not classify ordinary code by generic backup or export words", () => 
   }
 });
 
-test("allows controlled documentation screenshots and icons and warns elsewhere", () => {
+test("allows reviewed image locations and warns for malformed or unexpected images", () => {
   const allowed = [
     "docs/assets/screenshots/dashboard-desktop.png",
     "docs/assets/screenshots/calendar-desktop.jpg",
@@ -146,17 +146,31 @@ test("allows controlled documentation screenshots and icons and warns elsewhere"
     "public/icons/apple-touch-icon.png",
     "public/icons/favicon-32.png"
   ];
+  const visualBaselines = [
+    "e2e/appearance.spec.ts-snapshots/dark-dashboard-visual-390-linux.png",
+    "e2e/appearance.spec.ts-snapshots/light-entry-validation-visual-1920-darwin.png",
+    "e2e/visual-regression.spec.ts-snapshots/calendar-visual-320-linux.png",
+    "e2e/visual-regression.spec.ts-snapshots/navigation-collapsed-popover-visual-1440-darwin.png"
+  ];
   const suspicious = [
     "dashboard.png",
     "public/private-calendar.jpg",
     "exports/scan.jpeg",
-    "tmp/report.webp"
+    "tmp/report.webp",
+    "e2e/mobile-layout.spec.ts-snapshots/calendar-visual-390-linux.png",
+    "e2e/visual-regression.spec.ts-snapshots/calendar.png",
+    "e2e/visual-regression.spec.ts-snapshots/calendar-visual-390-win32.png",
+    "e2e/visual-regression.spec.ts-snapshots/calendar-visual-390-linux.jpg",
+    "e2e/visual-regression.spec.ts-snapshots/Calendar-visual-390-linux.png"
   ];
 
   for (const path of allowed) {
     assert.equal(isImageOutsideScreenshotDirectory(path), false, path);
   }
   for (const path of icons) {
+    assert.equal(isImageOutsideScreenshotDirectory(path), false, path);
+  }
+  for (const path of visualBaselines) {
     assert.equal(isImageOutsideScreenshotDirectory(path), false, path);
   }
   for (const path of suspicious) {
