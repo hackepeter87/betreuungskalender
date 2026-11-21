@@ -79,5 +79,25 @@ must approve the image diff together with the code change.
 Failure screenshots, traces, reports, downloads, and test databases remain in
 ignored output directories and are never committed.
 
+## Repository artifact classification
+
+The release safety check distinguishes reviewed image assets from unexpected
+files instead of allowing images by extension alone:
+
+| Location | Purpose | Repository rule |
+| --- | --- | --- |
+| `docs/assets/screenshots/` | Public documentation screenshots | Reviewed against the documented Linux references and protected by checksum tests |
+| `public/icons/` | Published application icons | Limited to the maintained product assets |
+| `e2e/appearance.spec.ts-snapshots/` | Deterministic appearance baselines | Explicitly generated stems `dark-calendar`, `dark-dashboard`, `dark-entry-validation`, `dark-report`, `dark-settings`, and `light-entry-validation`; each still requires `-visual-<viewport>-<platform>.png` with a maintained viewport and `linux` or `darwin` |
+| `e2e/visual-regression.spec.ts-snapshots/` | Deterministic layout baselines | Explicitly generated stems `backup`, `calendar`, `dashboard`, `navigation-collapsed`, `navigation-collapsed-popover`, `navigation-more-open`, `navigation-open`, `report`, and `settings`; each still requires the same bounded viewport, platform, and PNG contract |
+| `test-results/`, `playwright-report/`, `blob-report/` | Generated failure evidence and reports | Ignored and never committed |
+
+The release check uses this explicit generated-state allowlist in addition to
+the filename, viewport, platform, and PNG contract. Images in other locations,
+new snapshot directories, unreferenced stems, unsupported platform suffixes or
+malformed baseline names remain visible warnings. This classification does not
+replace the required visual and privacy review of an intentional baseline
+change.
+
 The [documentation screenshot guide](screenshots.md) reuses two reviewed Linux
 references. It does not introduce another fixture or capture pipeline.
