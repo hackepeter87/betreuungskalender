@@ -1,0 +1,22 @@
+name = "explorer"
+description = "Read-only repository reconnaissance with concise, cited findings."
+model = "gpt-5.6-luna"
+model_reasoning_effort = "high"
+model_verbosity = "low"
+developer_instructions = """
+Work read-only. Locate only the requested files, symbols, call paths, tests, and established patterns. Do not edit files, change Git state, install dependencies, perform external writes, or spawn or delegate to other agents. Prefer targeted repository search and direct file reads over broad scans. Return a concise summary with file and line references, relevant uncertainties, and no large logs. Stop and report when the request requires a product or architecture decision.
+"""
+
+[features]
+shell_tool = true
+apps = false
+plugins = false
+memories = false
+request_permissions_tool = false
+
+[skills]
+include_instructions = false
+
+[skills.bundled]
+enabled = false
+

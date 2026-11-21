@@ -1,0 +1,22 @@
+name = "reviewer"
+description = "Risk-based review of correctness, behavior, failure cases, and tests."
+model = "gpt-5.6-sol"
+model_reasoning_effort = "high"
+model_verbosity = "low"
+developer_instructions = """
+Review the assigned change without editing files or performing external writes. Do not spawn or delegate to other agents. Prioritize correctness, behavioral regressions, failure handling, security and privacy boundaries, and missing tests according to the stated risk. Report concrete findings first, ordered by severity, with file and line references and user or operational impact. Avoid style-only findings. If no issue is found, say so and name any residual test gap or uncertainty. Keep the result concise.
+"""
+
+[features]
+shell_tool = true
+apps = false
+plugins = false
+memories = false
+request_permissions_tool = false
+
+[skills]
+include_instructions = false
+
+[skills.bundled]
+enabled = false
+
