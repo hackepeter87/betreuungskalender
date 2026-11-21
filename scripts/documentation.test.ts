@@ -3,9 +3,11 @@ import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import Fastify from "fastify";
+import ts from "typescript";
 import { protectedApplicationRoutePlugins } from "../server/applicationRoutes.js";
+import { RELEASE_ARCHIVE_INPUTS } from "./release-archive.js";
 
 const projectRoot = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const historicalDocumentationDirectories = [
@@ -14,6 +16,8 @@ const historicalDocumentationDirectories = [
   "docs/release-notes/",
   "docs/release-smoke-tests/"
 ];
+const generatedReleaseArtifactDirectories = ["dist/", "dist-server/", "artifacts/compliance/"];
+const historicalReleaseArtifactFiles = new Set(["CHANGELOG.md"]);
 
 async function filesBelow(directory: string, extension: string): Promise<string[]> {
   const entries = await readdir(path.join(projectRoot, directory), { withFileTypes: true });
@@ -21,6 +25,16 @@ async function filesBelow(directory: string, extension: string): Promise<string[
     const relativePath = path.posix.join(directory, entry.name);
     if (entry.isDirectory()) return filesBelow(relativePath, extension);
     return entry.isFile() && entry.name.endsWith(extension) ? [relativePath] : [];
+  }));
+  return files.flat().sort();
+}
+
+async function allFilesBelow(directory: string): Promise<string[]> {
+  const entries = await readdir(path.join(projectRoot, directory), { withFileTypes: true });
+  const files = await Promise.all(entries.map(async (entry) => {
+    const relativePath = path.posix.join(directory, entry.name);
+    if (entry.isDirectory()) return allFilesBelow(relativePath);
+    return entry.isFile() ? [relativePath] : [];
   }));
   return files.flat().sort();
 }
@@ -45,6 +59,76 @@ function localLinkTargets(markdown: string): string[] {
       !target.startsWith("#") &&
       !/^[a-z][a-z0-9+.-]*:/iu.test(target)
     );
+}
+
+function scriptEnvironmentVariables(source: string, fileName: string): string[] {
+  const sourceFile = ts.createSourceFile(
+    fileName,
+    source,
+    ts.ScriptTarget.Latest,
+    true,
+    fileName.endsWith(".ts") ? ts.ScriptKind.TS : ts.ScriptKind.JS
+  );
+  const names = new Set<string>();
+  const isProcessEnv = (node: ts.Node): boolean =>
+    ts.isPropertyAccessExpression(node) &&
+    ts.isIdentifier(node.expression) &&
+    node.expression.text === "process" &&
+    node.name.text === "env";
+
+  const visit = (node: ts.Node): void => {
+    if (ts.isPropertyAccessExpression(node) && isProcessEnv(node.expression)) {
+      names.add(node.name.text);
+    } else if (ts.isElementAccessExpression(node) && isProcessEnv(node.expression)) {
+      const argument = node.argumentExpression;
+      if (argument && ts.isStringLiteral(argument) && /^[A-Z][A-Z0-9_]*$/u.test(argument.text)) {
+        names.add(argument.text);
+      }
+    } else if (
+      ts.isCallExpression(node) &&
+      ts.isPropertyAccessExpression(node.expression) &&
+      node.expression.name.text === "get" &&
+      ts.isCallExpression(node.expression.expression) &&
+      ts.isIdentifier(node.expression.expression.expression) &&
+      node.expression.expression.expression.text === "parseEnv"
+    ) {
+      const argument = node.arguments[0];
+      if (argument && ts.isStringLiteral(argument) && /^[A-Z][A-Z0-9_]*$/u.test(argument.text)) {
+        names.add(argument.text);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(sourceFile);
+  return [...names];
+}
+
+function composeEnvironmentVariables(source: string): string[] {
+  return [
+    ...source.matchAll(/(?<!\$)\$(?:\{([A-Z][A-Z0-9_]*)[^}]*\}|([A-Z][A-Z0-9_]*))/gu)
+  ].map((match) => match[1] ?? match[2]);
+}
+
+test("Compose environment inventory covers braced and unbraced variables", () => {
+  assert.deepEqual(
+    composeEnvironmentVariables("${BRACED:-fallback}\n$UNBRACED\n$${ESCAPED}\n$$ALSO_ESCAPED\n"),
+    ["BRACED", "UNBRACED"]
+  );
+});
+
+async function existingReleaseArchiveSourceFiles(): Promise<string[]> {
+  const files = await Promise.all(RELEASE_ARCHIVE_INPUTS.map(async (input) => {
+    try {
+      const metadata = await stat(path.join(projectRoot, input));
+      return metadata.isDirectory() ? allFilesBelow(input) : [input];
+    } catch {
+      return [];
+    }
+  }));
+  return files.flat().filter((file) =>
+    !generatedReleaseArtifactDirectories.some((directory) => file.startsWith(directory)) &&
+    !historicalReleaseArtifactFiles.has(file)
+  ).sort();
 }
 
 async function sha256(file: string): Promise<string> {
@@ -88,13 +172,14 @@ test("documented npm run commands exist", async () => {
 });
 
 test("current operator artifacts do not restore the retired authentication proxy topology", async () => {
-  const currentFiles = [
+  const currentFiles = [...new Set([
     ...(await currentMarkdownFiles()),
-    ...(await filesBelow("deploy", ".yml")),
-    ...(await filesBelow("deploy", ".example")),
-    "scripts/container-postgres-smoke.sh",
-    "scripts/update.js"
-  ];
+    ...(await existingReleaseArchiveSourceFiles()).filter((file) =>
+      !historicalDocumentationDirectories.some((directory) => file.startsWith(directory))
+    ),
+    ...(await allFilesBelow(".github/workflows")),
+    "scripts/container-postgres-smoke.sh"
+  ])];
   const obsoleteReferences: string[] = [];
   const pattern = /oauth2-proxy|compose\.oidc|\.env\.oidc/iu;
 
@@ -104,22 +189,82 @@ test("current operator artifacts do not restore the retired authentication proxy
   }
 
   assert.deepEqual(obsoleteReferences, []);
+  assert.match(
+    await readFile(path.join(projectRoot, "docs/adr/0001-post-1.0-auth-architecture.md"), "utf8"),
+    pattern,
+    "historical decision records must remain outside the current-contract scan"
+  );
 });
 
-test("runtime environment variables are documented", async () => {
-  const [configSource, configurationGuide, environmentExample] = await Promise.all([
-    readFile(path.join(projectRoot, "server/config.ts"), "utf8"),
+test("runtime and operational environment variables match the active configuration guide", async () => {
+  const runtimeSourceFiles = [
+    "server/config.ts",
+    "scripts/backup.js",
+    "scripts/restore-check.js",
+    "scripts/healthcheck.js",
+    "scripts/runtime-verify.js",
+    "scripts/update.js"
+  ];
+  const composeSourceFiles = [
+    "deploy/compose.yml",
+    "deploy/compose.postgres.yml",
+    "deploy/compose.testing.yml",
+    "deploy/compose.production.yml"
+  ];
+  const [configurationGuide, runtimeSources, composeSources] = await Promise.all([
     readFile(path.join(projectRoot, "docs/configuration.md"), "utf8"),
-    readFile(path.join(projectRoot, ".env.example"), "utf8")
+    Promise.all(runtimeSourceFiles.map(async (file) => ({
+      file,
+      source: await readFile(path.join(projectRoot, file), "utf8")
+    }))),
+    Promise.all(composeSourceFiles.map((file) => readFile(path.join(projectRoot, file), "utf8")))
   ]);
-  const documented = `${configurationGuide}\n${environmentExample}`;
   const runtimeVariables = new Set(
-    [...configSource.matchAll(/process\.env\.([A-Z][A-Z0-9_]*)/g)].map((match) => match[1])
+    runtimeSources.flatMap(({ file, source }) => scriptEnvironmentVariables(source, file))
   );
-  assert.ok(runtimeVariables.size > 50, "server/config.ts environment inventory is unexpectedly empty");
+  const composeVariables = new Set(composeSources.flatMap(composeEnvironmentVariables));
+  const supportedVariables = new Set([...runtimeVariables, ...composeVariables]);
+  const documentedVariables = new Set(
+    [...configurationGuide.matchAll(/^\| `([A-Z][A-Z0-9_]*)` \|/gmu)].map((match) => match[1])
+  );
+
+  assert.ok(runtimeVariables.size > 50, "runtime environment inventory is unexpectedly empty");
+  assert.ok(composeVariables.size > 5, "Compose environment inventory is unexpectedly empty");
+  assert.ok(documentedVariables.size > 70, "configuration guide environment inventory is unexpectedly empty");
   assert.deepEqual(
-    [...runtimeVariables].filter((name) => !new RegExp(`\\b${name}\\b`).test(documented)).sort(),
-    []
+    [...supportedVariables].filter((name) => !documentedVariables.has(name)).sort(),
+    [],
+    "supported environment variables must be present in the configuration table"
+  );
+  assert.deepEqual(
+    [...documentedVariables].filter((name) => !supportedVariables.has(name)).sort(),
+    [],
+    "configuration table variables must belong to the runtime or explicit operational contract"
+  );
+  assert.match(
+    configurationGuide,
+    /^\| `APP_RELEASE_VERSION` \|[^\n]*\| `X\.Y\.Z` \|/mu,
+    "release version examples must use the maintained placeholder instead of a stale concrete release"
+  );
+});
+
+test("release archive uses only explicit runtime and deployment inputs", async () => {
+  const releaseWorkflow = await readFile(
+    path.join(projectRoot, ".github/workflows/release.yml"),
+    "utf8"
+  );
+  const { releaseWorkflowUsesArchiveBuilder } = await import(
+    pathToFileURL(path.join(projectRoot, "scripts/release-check.js")).href
+  );
+  assert.equal(
+    releaseWorkflowUsesArchiveBuilder(releaseWorkflow),
+    true,
+    "release workflow must use the verified archive builder"
+  );
+  assert.doesNotMatch(
+    releaseWorkflow,
+    /\bdist dist-server scripts deploy charts\b/u,
+    "release archives must not include the complete scripts and deploy directories"
   );
 });
 

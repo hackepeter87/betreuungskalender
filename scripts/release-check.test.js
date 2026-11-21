@@ -1,6 +1,15 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { createHash } from "node:crypto";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import test from "node:test";
 import {
   REQUIRED_DOCKERIGNORE_RULES,
@@ -17,26 +26,120 @@ import {
   parseEnvValue,
   isValidSemver,
   releaseNotesPathForVersion,
-  releaseArchiveIncludesHelmChart,
+  releaseWorkflowUsesArchiveBuilder,
   releaseWorkflowPublishesHelmChart,
   releaseTagForVersion
 } from "./release-check.js";
+import {
+  collectReleaseArchiveEntries,
+  createReleaseArchive,
+  RELEASE_ARCHIVE_INPUTS,
+  validateReleaseArchiveEntries
+} from "./release-archive.js";
 
-test("reads Helm appVersion and requires the chart in release archives", () => {
+test("reads Helm appVersion and requires the verified release archive builder", () => {
   assert.equal(helmChartAppVersion('appVersion: "1.19.0"\n'), "1.19.0");
   assert.equal(helmChartAppVersion("appVersion: 1.19.0\n"), "1.19.0");
   assert.equal(helmChartAppVersion("version: 0.1.0\n"), undefined);
   assert.equal(
-    releaseArchiveIncludesHelmChart(
-      "dist dist-server scripts deploy charts Dockerfile.release package.json"
+    releaseWorkflowUsesArchiveBuilder(
+      `jobs:
+  artifact:
+    steps:
+      - name: Create runtime archive
+        run: >-
+          node scripts/release-archive.js
+          "betreuungskalender-\${GITHUB_REF_NAME}.tar.gz"
+          "\${GITHUB_REF_NAME}"
+      - uses: actions/upload-artifact@pinned
+        with:
+          path: |
+            betreuungskalender-\${{ github.ref_name }}.tar.gz
+            betreuungskalender-\${{ github.ref_name }}.tar.gz.sha256
+          if-no-files-found: error`
     ),
     true
   );
   assert.equal(
-    releaseArchiveIncludesHelmChart(
-      "dist dist-server scripts deploy Dockerfile.release package.json"
+    releaseWorkflowUsesArchiveBuilder(
+      `jobs:
+  artifact:
+    steps:
+      - name: Create runtime archive
+        run: node scripts/release-archive.js "betreuungskalender-\${GITHUB_REF_NAME}.tar.gz" "\${GITHUB_REF_NAME}"
+      - run: gtar --create --gzip --file "betreuungskalender-\${GITHUB_REF_NAME}.tar.gz" dist
+      - uses: actions/upload-artifact@pinned
+        with:
+          path: |
+            betreuungskalender-\${{ github.ref_name }}.tar.gz
+            betreuungskalender-\${{ github.ref_name }}.tar.gz.sha256
+          if-no-files-found: error`
     ),
     false
+  );
+});
+
+test("release archive member validation uses the shared explicit manifest", () => {
+  const entries = ["dist/", "docs/", "docs/release-notes/", "docs/release-notes/v1.36.2.md"];
+  assert.deepEqual(
+    validateReleaseArchiveEntries(entries, entries, "v1.36.2"),
+    {
+      missing: [],
+      unexpected: [],
+      duplicates: [],
+      releaseNotesPath: "docs/release-notes/v1.36.2.md",
+      releaseNotesPresent: true
+    }
+  );
+
+  const withUnexpected = [...entries, "docs/compose.oidc.yml"];
+  assert.deepEqual(
+    validateReleaseArchiveEntries(withUnexpected, entries, "v1.36.2").unexpected,
+    ["docs/compose.oidc.yml"]
+  );
+  assert.equal(
+    validateReleaseArchiveEntries(entries.filter((entry) => entry !== "dist/"), entries, "v1.36.2")
+      .missing.includes("dist"),
+    true
+  );
+  assert.deepEqual(
+    validateReleaseArchiveEntries([...entries, "dist/"], entries, "v1.36.2").duplicates,
+    ["dist"]
+  );
+});
+
+test("release archive builder creates a verified archive and checksum", async (context) => {
+  const root = mkdtempSync(join(tmpdir(), "betreuungskalender-release-"));
+  context.after(() => rmSync(root, { recursive: true, force: true }));
+  const directoryInputs = new Set(["dist", "dist-server", "charts", "docs", "artifacts/compliance"]);
+
+  for (const input of RELEASE_ARCHIVE_INPUTS) {
+    const target = join(root, input);
+    if (directoryInputs.has(input)) {
+      mkdirSync(target, { recursive: true });
+      continue;
+    }
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, `${input}\n`, "utf8");
+  }
+  const releaseNotes = join(root, "docs/release-notes/v1.36.2.md");
+  mkdirSync(dirname(releaseNotes), { recursive: true });
+  writeFileSync(releaseNotes, "# v1.36.2\n", "utf8");
+  const expectedEntries = collectReleaseArchiveEntries(root);
+
+  await createReleaseArchive({
+    cwd: root,
+    output: "betreuungskalender-v1.36.2.tar.gz",
+    releaseTag: "v1.36.2"
+  });
+
+  const archive = join(root, "betreuungskalender-v1.36.2.tar.gz");
+  assert.equal(existsSync(archive), true);
+  assert.ok(expectedEntries.includes("docs/release-notes/v1.36.2.md"));
+  const digest = createHash("sha256").update(readFileSync(archive)).digest("hex");
+  assert.equal(
+    readFileSync(`${archive}.sha256`, "utf8"),
+    `${digest}  betreuungskalender-v1.36.2.tar.gz\n`
   );
 });
 test("release workflow publishes and verifies the Helm OCI chart", () => {

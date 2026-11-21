@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse as parseYaml } from "yaml";
 
 export const REQUIRED_GITIGNORE_RULES = [
   ".env",
@@ -107,6 +108,7 @@ const CRITICAL_PROJECT_PATHS = [
   "docs/adr/0006-kubernetes-helm-deployment.md",
   "docs/release.md",
   "docs/third-party-software.md",
+  "scripts/release-archive.js",
   "deploy/compose.yml",
   "deploy/compose.postgres.yml",
   "deploy/postgres/init/001-create-application-role.sh",
@@ -291,8 +293,33 @@ export function helmChartAppVersion(content) {
   return content.match(/^appVersion:\s*["']?([^"'\s]+)["']?\s*$/m)?.[1];
 }
 
-export function releaseArchiveIncludesHelmChart(content) {
-  return /\bdist dist-server scripts deploy charts Dockerfile\.release\b/.test(content);
+export function releaseWorkflowUsesArchiveBuilder(content) {
+  let workflow;
+  try {
+    workflow = parseYaml(content);
+  } catch {
+    return false;
+  }
+  const steps = workflow?.jobs?.artifact?.steps;
+  if (!Array.isArray(steps)) return false;
+  const builderIndexes = steps.flatMap((step, index) =>
+    step?.name === "Create runtime archive" ? [index] : []
+  );
+  if (builderIndexes.length !== 1) return false;
+  const builderIndex = builderIndexes[0];
+  const builderStep = steps[builderIndex];
+  const uploadStep = steps[builderIndex + 1];
+  if (typeof builderStep?.run !== "string" || typeof uploadStep?.uses !== "string") return false;
+  const command = builderStep.run.trim().replace(/\s+/gu, " ");
+  const uploadPaths = typeof uploadStep.with?.path === "string"
+    ? new Set(uploadStep.with.path.split(/\r?\n/u).map((line) => line.trim()).filter(Boolean))
+    : new Set();
+  return command ===
+    'node scripts/release-archive.js "betreuungskalender-${GITHUB_REF_NAME}.tar.gz" "${GITHUB_REF_NAME}"' &&
+    uploadStep.uses.startsWith("actions/upload-artifact@") &&
+    uploadStep.with?.["if-no-files-found"] === "error" &&
+    uploadPaths.has("betreuungskalender-${{ github.ref_name }}.tar.gz") &&
+    uploadPaths.has("betreuungskalender-${{ github.ref_name }}.tar.gz.sha256");
 }
 
 export function releaseWorkflowPublishesHelmChart(content) {
@@ -781,8 +808,8 @@ function checkHelmDeployment(cwd, packageJson, version, report) {
     report.fail("package.json must define the Helm chart validation script");
   } else if (!releaseWorkflow.includes("npm run test:helm")) {
     report.fail("release workflow must validate the Helm chart before packaging");
-  } else if (!releaseArchiveIncludesHelmChart(releaseWorkflow)) {
-    report.fail("release workflow must include the Helm chart in the runtime archive");
+  } else if (!releaseWorkflowUsesArchiveBuilder(releaseWorkflow)) {
+    report.fail("release workflow must use the verified runtime archive builder exactly once");
   } else {
     report.pass("Helm chart validation and release archive integration are configured");
   }

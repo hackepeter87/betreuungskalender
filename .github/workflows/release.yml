@@ -42,15 +42,10 @@ jobs:
         uses: ./.github/actions/validate-container
 
       - name: Create runtime archive
-        run: |
-          tar -czf betreuungskalender-${GITHUB_REF_NAME}.tar.gz \
-            dist dist-server scripts deploy charts Dockerfile.release package.json \
-            package-lock.json .env.example README.md LICENSE CHANGELOG.md docs \
-            artifacts/compliance
-          sha256sum betreuungskalender-${GITHUB_REF_NAME}.tar.gz \
-            > betreuungskalender-${GITHUB_REF_NAME}.tar.gz.sha256
-          tar -tzf betreuungskalender-${GITHUB_REF_NAME}.tar.gz \
-            | grep -Fx "docs/release-notes/${GITHUB_REF_NAME}.md"
+        run: >-
+          node scripts/release-archive.js
+          "betreuungskalender-${GITHUB_REF_NAME}.tar.gz"
+          "${GITHUB_REF_NAME}"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:

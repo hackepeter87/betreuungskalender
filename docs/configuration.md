@@ -16,7 +16,7 @@ precedence. Never commit production `.env` files.
 | `NODE_ENV` | Runtime mode and production error handling | `production` | Recommended | `development` | Production hides internal error details |
 | `HOST` | Listener address | `127.0.0.1` | Optional | `127.0.0.1` | Use loopback when a local proxy is in front |
 | `PORT` | HTTP port | `3000` | Optional | `3000` | Expose only through the intended firewall/proxy |
-| `APP_RELEASE_VERSION` | Release Compose image tag | `1.22.0` | Required for `deploy/compose.yml` | None | Must match the extracted release package version |
+| `APP_RELEASE_VERSION` | Release Compose image tag | `X.Y.Z` | Required for `deploy/compose.yml` | None | Must match the extracted release package version |
 | `APP_RELEASE_DIR` | Release Compose build context | `/opt/svc_betreuung/betreuungskalender/releases/vX.Y.Z` | Required for `deploy/compose.yml` | None | Must point at the verified extracted release directory |
 | `APP_COMPOSE_FILE` | Compose file used by the archive update tool | `compose.yml` | Optional | `compose.yml` | Only the supported direct Compose layout is accepted |
 | `HOST_BIND_ADDRESS` | Host address published by release Compose | `127.0.0.1` | Recommended for `deploy/compose.yml` | `127.0.0.1` | Use loopback only when the reverse proxy is on the same host |
