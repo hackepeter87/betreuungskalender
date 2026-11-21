@@ -310,3 +310,29 @@ test("metrics validation requires a file-backed secret only when enabled", () =>
     bearerTokenFile: "/run/secrets/metrics/token"
   }));
 });
+
+
+test("calendar private targets are strictly validated at config startup", async () => {
+  const { execFileSync } = await import("node:child_process");
+  const run = (value?: string) => execFileSync(process.execPath, ["--import", "tsx", "--input-type=module", "-e",
+    'const {config}=await import("./server/config.ts"); console.log(JSON.stringify(config.externalCalendarPrivateTargets));'], {
+    env: { PATH: process.env.PATH, NODE_ENV: "test", AUTH_MODE: "local",
+      ...(value === undefined ? {} : { EXTERNAL_CALENDAR_PRIVATE_TARGETS: value }) }, encoding: "utf8", stdio: "pipe"
+  }).trim();
+  assert.equal(run(), "[]");
+  assert.equal(run("[]"), "[]");
+  const rule = { hostname: "calendar.example.test", addresses: ["10.77.0.10"] };
+  assert.deepEqual(JSON.parse(run(JSON.stringify([rule]))), [rule]);
+  assert.deepEqual(JSON.parse(run(JSON.stringify([{ hostname: "CALENDAR.example.test", addresses: ["fd12:3456:0:0:0:0:0:10"] }]))),
+    [{ hostname: "calendar.example.test", addresses: ["fd12:3456::10"] }]);
+  const invalid: unknown[] = [null, {}, [null], [rule, rule], [{ ...rule, extra: true }],
+    ...["", "*.example.test", "https://calendar.example.test", "calendar.example.test/path", "localhost", "calendar.local",
+      "10.77.0.10", "calendar.example.test:443", " calendar.example.test", "calendar.example.test.", "bad_.example.test"]
+      .map(hostname => [{ ...rule, hostname }]),
+    ...[[], [""], ["10.77.0.10/32"], ["10.77.0.0/24"], ["127.0.0.1"], ["169.254.1.1"], ["192.0.2.10"],
+      ["100.64.0.1"], ["::1"], ["fe80::1"], ["::ffff:10.77.0.10"], ["10.77.0.10", "10.77.0.10"], [42]]
+      .map(addresses => [{ ...rule, addresses }])];
+  for (const value of ["", " ", "not-json", ...invalid.map(v => JSON.stringify(v))]) {
+    assert.throws(() => run(value), /EXTERNAL_CALENDAR_PRIVATE_TARGETS/);
+  }
+});

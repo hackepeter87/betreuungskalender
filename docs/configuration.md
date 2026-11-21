@@ -14,6 +14,7 @@ precedence. Never commit production `.env` files.
 | Variable | Purpose | Example | Required | Default | Security relevance |
 | --- | --- | --- | --- | --- | --- |
 | `NODE_ENV` | Runtime mode and production error handling | `production` | Recommended | `development` | Production hides internal error details |
+| `EXTERNAL_CALENDAR_PRIVATE_TARGETS` | Exact private HTTPS calendar destinations | `[]` | Optional | Empty policy when unset | Strict startup validation; hostname AND every address must match; port 443 only |
 | `HOST` | Listener address | `127.0.0.1` | Optional | `127.0.0.1` | Use loopback when a local proxy is in front |
 | `PORT` | HTTP port | `3000` | Optional | `3000` | Expose only through the intended firewall/proxy |
 | `APP_RELEASE_VERSION` | Release Compose image tag | `X.Y.Z` | Required for `deploy/compose.yml` | None | Must match the extracted release package version |
@@ -424,3 +425,77 @@ non-sensitive JSON error.
 
 The default store is process-local. For a horizontally scaled deployment, use
 a shared rate-limit store as part of a separately reviewed deployment change.
+
+## Private external-calendar destinations
+
+This opt-in policy is only for server-side external-calendar imports and refreshes.
+It does not change OIDC, Web Push, browser access, inbound authentication, public
+calendar feeds or any other outbound service. Leave it unset or set it to `[]`
+for the existing public-only SSRF policy. An explicitly empty string is invalid.
+
+Example using synthetic destinations (replace privately with approved values):
+
+```dotenv
+EXTERNAL_CALENDAR_PRIVATE_TARGETS='[{"hostname":"calendar.example.test","addresses":["10.77.0.10"]}]'
+```
+
+Helm uses the existing configuration interface; merge with existing values:
+
+```yaml
+config:
+  EXTERNAL_CALENDAR_PRIVATE_TARGETS: '[{"hostname":"calendar.example.test","addresses":["10.77.0.10"]}]'
+```
+
+The value is a JSON array (at most 32 unique hostnames, 16 unique addresses each).
+Each object has exactly `hostname` and `addresses`. Use full ASCII DNS names
+without scheme, port, path, trailing dot, wildcard or whitespace; host comparison
+is case-insensitive. A trailing root dot in a feed URL still matches the same
+configured hostname and cannot bypass its address restriction. Use ASCII punycode for internationalized names. Localhost,
+`.localhost`, `.local` and IP hostnames are rejected. Addresses are bare IPv4
+RFC1918 or IPv6 ULA literals, normalized before comparison. CIDR notation,
+including `/32` and `/128`, is invalid here: bare IPs already denote exact hosts.
+Loopback, link-local, carrier-grade NAT, multicast, public, documentation,
+IPv4-mapped IPv6 and scoped addresses are not valid exception destinations.
+Malformed JSON, wrong types, extra fields, duplicate hosts/addresses and empty
+entries prevent startup without printing the rejected value.
+
+All A/AAAA answers returned by the system resolver must belong to the configured
+host's approved set. A subset is sufficient; an empty result or any additional
+answer (even public) is rejected. Unlisted hosts retain public-only validation.
+Every redirect repeats URL and DNS validation. The connection uses the validated
+address through the existing pinned lookup while retaining the URL hostname for
+HTTP Host, TLS SNI and certificate verification. A valid trusted certificate for
+that hostname is required; TLS verification is never disabled. Only HTTPS/443
+may use the private exception. Existing public-feed behavior is unchanged.
+
+The policy trusts all HTTPS paths on that virtual host. Do not allow a general
+forward proxy or a service that fetches arbitrary destinations for callers.
+Normal calendar authorization and demo-mode restrictions remain in force. Feed
+URLs can contain credentials in their path/query: keep them out of logs, public
+issues, screenshots and shell history.
+
+### Testing and network boundary
+
+1. Deploy the reviewed exact testing artifact with the exception absent; confirm
+   existing public feeds and private-target rejection.
+2. Verify split DNS from the application network. Record only sanitized pass/fail
+   evidence; every returned address must belong to the intended exact set.
+3. Add only the necessary application-pod egress rule to the approved IP on TCP
+   443. Keep DNS access to the cluster resolver and existing isolation intact.
+   In Kubernetes the address is expressed as `/32` (IPv4) or `/128` (IPv6), unlike
+   the application setting. No subnet grant is required. NetworkPolicy is IP/L4
+   filtering and does not enforce a hostname or TLS identity.
+4. Set the policy through the normal deployment workflow and restart the testing
+   application. Confirm allowed import and refresh, rejection for a different
+   hostname at the same private IP, unexpected/mixed DNS answers and unsafe
+   redirects. Confirm generic errors contain no complete feed URLs or contents.
+5. Check certificate validation, transport/size/time limits and existing public
+   feed behavior. Record the exact tested artifact and manual acceptance before
+   considering a separate production rollout.
+6. To disable, remove the variable or set `[]` and restart; remove the dedicated
+   egress rule if no longer needed. Existing imported data is not deleted.
+
+Do not widen an existing default-deny policy to a complete private subnet. The
+approved endpoint's availability, DNS correctness and TLS trust chain remain
+operator responsibilities. No release or deployment is performed by setting up
+these documentation examples.

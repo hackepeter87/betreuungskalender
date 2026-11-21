@@ -1,3 +1,4 @@
+import { config } from "../config.js";
 import { createHash, randomUUID } from "node:crypto";
 import { omitUndefinedValues } from "../../shared/objects.js";
 import { lookup } from "node:dns/promises";
@@ -294,7 +295,7 @@ function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
-async function resolvePublicAddress(
+async function resolveFeedAddress(
   url: URL,
   dependencies: ExternalCalendarFetchDependencies,
   signal: AbortSignal
@@ -303,7 +304,16 @@ async function resolvePublicAddress(
     dependencies.resolve(url.hostname.replace(/^\[/, "").replace(/\]$/, "")),
     signal
   );
-  if (addresses.length === 0 || addresses.some(({ address }) => !isPublicIpAddress(address))) {
+  const target = config.externalCalendarPrivateTargets.find(rule => rule.hostname === url.hostname.replace(/\.$/, ""));
+  const allowed = ({ address, family }: ExternalCalendarResolvedAddress) => {
+    if (isIP(address) !== family || address.includes("%")) return false;
+    if (!target) return isPublicIpAddress(address);
+    const parsed = ipaddr.parse(address);
+    return (parsed.range() === "private" || parsed.range() === "uniqueLocal") &&
+      target.addresses.includes(parsed.toString());
+  };
+  if ((target && (url.protocol !== "https:" || (url.port && url.port !== "443"))) ||
+    addresses.length === 0 || !addresses.every(allowed)) {
     throw new ExternalCalendarError("external_calendar_fetch_failed", "Calendar feed could not be fetched.");
   }
   return addresses[0] as ExternalCalendarResolvedAddress;
@@ -369,7 +379,7 @@ export async function fetchExternalCalendarFeedContent(
   const timeout = setTimeout(() => controller.abort(), dependencies.timeoutMs ?? FEED_FETCH_TIMEOUT_MS);
   try {
     for (let redirectCount = 0; redirectCount <= MAX_FEED_REDIRECTS; redirectCount += 1) {
-      const address = await resolvePublicAddress(url, dependencies, controller.signal);
+      const address = await resolveFeedAddress(url, dependencies, controller.signal);
       const response = await abortable(
         dependencies.request(url, address, controller.signal),
         controller.signal
