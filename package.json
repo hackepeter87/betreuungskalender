@@ -48,7 +48,7 @@
     "typecheck": "tsc -p tsconfig.server.json --noEmit --pretty false && tsc -b --pretty false"
   },
   "dependencies": {
-    "@fastify/cors": "^11.4.1",
+    "@fastify/cors": "^11.4.2",
     "@fastify/helmet": "^13.2.0",
     "@fastify/rate-limit": "^11.2.2",
     "@fastify/static": "^10.1.10",
