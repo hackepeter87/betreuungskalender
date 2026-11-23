@@ -22,7 +22,7 @@ RUN rm -rf node_modules && npm ci --omit=dev && npm cache clean --force
 RUN mkdir -p /runtime-layout/data /runtime-layout/backups && \
     chown -R 1000:1000 /runtime-layout
 
-FROM gcr.io/distroless/nodejs26-debian13:nonroot@sha256:767ffb7e2ffa9f4280f1af7b99f7f0a1cafb79d0dcc0e0d3aba43843748008a5 AS runtime
+FROM gcr.io/distroless/nodejs26-debian13:nonroot@sha256:ffa8a7545403036c94ec76674b5dbac2d425af2d679147cdf3e30180071487b7 AS runtime
 
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
